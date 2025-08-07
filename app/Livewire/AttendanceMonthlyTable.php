@@ -35,18 +35,25 @@ class AttendanceMonthlyTable extends DataTableComponent
 
     public function builder(): EloquentBuilder
     {
-        return Attendance::with('employee')
-        ->select(
-            'employee_id',
-            DB::raw("DATE_FORMAT(date, '%Y-%m') as attendance_month"),
-            DB::raw("SUM(CASE WHEN status = 'Present' THEN 1 ELSE 0 END) as present_days"),
-            DB::raw("SUM(CASE WHEN status = 'Absent' THEN 1 ELSE 0 END) as absent_days"),
-            DB::raw("SUM(CASE WHEN status = 'Leave' THEN 1 ELSE 0 END) as leave_days"),
-            DB::raw("COUNT(*) as total_days"),
-            DB::raw("SUM(worked_hours) as total_worked_hours"),
-            DB::raw("SUM(overtime_hours) as total_ot_hours")
-        )->groupBy('employee_id', DB::raw("DATE_FORMAT(date, '%Y-%m')"));
+        $orgId = auth()->user()->employee->organization_id ?? null;
+
+        return Attendance::query()
+            ->join('employees', 'attendances.employee_id', '=', 'employees.id')
+            ->where('employees.organization_id', $orgId)
+            ->with('employee')
+            ->select(
+                'attendances.employee_id',
+                DB::raw("DATE_FORMAT(attendances.date, '%Y-%m') as attendance_month"),
+                DB::raw("SUM(CASE WHEN attendances.status = 'Present' THEN 1 ELSE 0 END) as present_days"),
+                DB::raw("SUM(CASE WHEN attendances.status = 'Absent' THEN 1 ELSE 0 END) as absent_days"),
+                DB::raw("SUM(CASE WHEN attendances.status = 'Leave' THEN 1 ELSE 0 END) as leave_days"),
+                DB::raw("COUNT(*) as total_days"),
+                DB::raw("SUM(attendances.worked_hours) as total_worked_hours"),
+                DB::raw("SUM(attendances.overtime_hours) as total_ot_hours")
+            )
+            ->groupBy('attendances.employee_id', DB::raw("DATE_FORMAT(attendances.date, '%Y-%m')"));
     }
+
 
     public function columns(): array
     {

@@ -19,9 +19,14 @@ class OvertimeTable extends DataTableComponent
 
     public function builder(): Builder
     {
+        $orgId = auth()->user()->employee->organization_id ?? null;
+
         return Overtime::query()
             ->select('overtimes.*')
-            ->with(['employee', 'approver']);
+            ->with(['employee', 'approver'])
+            ->whereHas('employee', function ($q) use ($orgId) {
+                $q->where('organization_id', $orgId);
+            });
     }
 
     public function columns(): array

@@ -25,5 +25,23 @@ class Organization extends Model
     {
         return $this->hasMany(Service::class);
     }
+
+    public function settings()
+    {
+        return $this->hasMany(OrganizationSetting::class);
+    }
+
+    public function getSetting($key, $default = null)
+    {
+        return $this->settings->firstWhere('key', $key)?->value ?? $default;
+    }
+
+    public function setSetting($key, $value, $type = 'string')
+    {
+        return $this->settings()->updateOrCreate(
+            ['key' => $key],
+            ['value' => $value, 'type' => $type]
+        );
+    }
 }
 

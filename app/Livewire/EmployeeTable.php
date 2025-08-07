@@ -24,9 +24,12 @@ class EmployeeTable extends DataTableComponent
 
     public function builder(): \Illuminate\Database\Eloquent\Builder
     {
+        $orgId = auth()->user()->employee->organization_id ?? null;
+
         $query = Employee::query()
             ->select('employees.*')
-            ->with(['organization', 'employeeType']);
+            ->with(['organization', 'employeeType'])
+            ->where('organization_id', $orgId);
 
         if ($this->search !== null && $this->search !== '') {
             $query->where(function ($q) {

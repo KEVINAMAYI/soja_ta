@@ -1,8 +1,53 @@
 <?php
 
+use App\Models\Organization;
+use App\Models\OrganizationSetting;
+use Jantinnerezo\LivewireAlert\Facades\LivewireAlert;
 use Livewire\Volt\Component;
 
 new class extends Component {
+
+
+    public $settings;
+
+    public function mount()
+    {
+
+        $orgId = auth()->user()->employee?->organization_id;
+        $org = Organization::find($orgId);
+
+        $this->settings = $org->settings->mapWithKeys(function ($item) {
+            $value = $item->type === 'json' ? json_decode($item->value, true) : $item->value;
+            return [$item->key => $value];
+        })->toArray();
+
+    }
+
+
+    public function storeSettings()
+    {
+
+        $orgId = auth()->user()->employee?->organization_id;
+        $org = Organization::find($orgId);
+
+        foreach ($this->settings as $key => $value) {
+            $org->setSetting(
+                $key,
+                is_array($value) ? json_encode($value) : $value,
+                gettype($value)
+            );
+        }
+
+        LivewireAlert::title('Awesome!')
+            ->text('Organization settings updated successfully.')
+            ->success()
+            ->toast()
+            ->position('top-end')
+            ->show();
+
+    }
+
+
 }; ?>
 
 <div>
@@ -83,20 +128,20 @@ new class extends Component {
                 </li>
 
                 <!-- Security -->
-                <li class="nav-item" role="presentation">
-                    <button
-                        class="nav-link position-relative rounded-0 d-flex align-items-center justify-content-center bg-transparent fs-3 py-3"
-                        id="tab-security-tab"
-                        data-bs-toggle="pill"
-                        data-bs-target="#tab-holiday"
-                        type="button"
-                        role="tab"
-                        aria-controls="tab-security"
-                        aria-selected="false">
-                        <i class="ti ti-lock me-2 fs-6"></i>
-                        <span class="d-none d-md-block">Security</span>
-                    </button>
-                </li>
+                {{--                <li class="nav-item" role="presentation">--}}
+                {{--                    <button--}}
+                {{--                        class="nav-link position-relative rounded-0 d-flex align-items-center justify-content-center bg-transparent fs-3 py-3"--}}
+                {{--                        id="tab-security-tab"--}}
+                {{--                        data-bs-toggle="pill"--}}
+                {{--                        data-bs-target="#tab-holiday"--}}
+                {{--                        type="button"--}}
+                {{--                        role="tab"--}}
+                {{--                        aria-controls="tab-security"--}}
+                {{--                        aria-selected="false">--}}
+                {{--                        <i class="ti ti-lock me-2 fs-6"></i>--}}
+                {{--                        <span class="d-none d-md-block">Public Holidays</span>--}}
+                {{--                    </button>--}}
+                {{--                </li>--}}
             </ul>
 
             <div class="card-body">
@@ -117,8 +162,12 @@ new class extends Component {
                                         <div class="mb-3">
                                             <label for="dailyHours" class="form-label">Daily Required Hours</label>
                                             <div class="input-group">
-                                                <input type="number" step="0.1" class="form-control" id="dailyHours"
-                                                       placeholder="e.g. 8.0" required>
+                                                <!-- Daily Required Hours -->
+                                                <input type="number" step="0.1"
+                                                       wire:model.defer="settings.daily_required_hours"
+                                                       class="form-control"
+                                                       id="dailyHours"
+                                                       placeholder="e.g. 8.0">
                                                 <span class="input-group-text">hrs</span>
                                             </div>
                                         </div>
@@ -127,13 +176,14 @@ new class extends Component {
                                         <div class="row">
                                             <div class="col-md-6 mb-3">
                                                 <label for="startTime" class="form-label">Start Time</label>
-                                                <input type="time" class="form-control" id="startTime" value="09:00"
-                                                       required>
+                                                <input type="time" wire:model.defer="settings.start_time"
+                                                       class="form-control" id="startTime">>
                                             </div>
                                             <div class="col-md-6 mb-3">
                                                 <label for="endTime" class="form-label">End Time <span
                                                         class="text-muted">(optional)</span></label>
-                                                <input type="time" class="form-control" id="endTime" value="17:00">
+                                                <input type="time" wire:model.defer="settings.end_time"
+                                                       class="form-control" id="endTime">
                                             </div>
                                         </div>
                                     </div>
@@ -143,7 +193,7 @@ new class extends Component {
 
                             <!-- Save/Cancel Buttons -->
                             <div class="d-flex align-items-center justify-content-end gap-6 mt-4">
-                                <button class="btn btn-primary">Save</button>
+                                <button wire:click="storeSettings" class="btn btn-primary">Save</button>
                                 <button class="btn bg-danger-subtle text-danger">Cancel</button>
                             </div>
                         </div>
@@ -166,7 +216,8 @@ new class extends Component {
                                             <label for="minOtThreshold" class="form-label">Minimum OT Threshold</label>
                                             <div class="input-group">
                                                 <input type="number" step="0.1" class="form-control" id="minOtThreshold"
-                                                       placeholder="e.g. 1.0" required>
+                                                       placeholder="e.g. 1.0"
+                                                       wire:model.defer="settings.min_ot_threshold"/>
                                                 <span class="input-group-text">hrs</span>
                                             </div>
                                         </div>
@@ -185,7 +236,8 @@ new class extends Component {
                                             </div>
                                             <div class="form-check form-switch mb-0">
                                                 <input class="form-check-input" type="checkbox" role="switch"
-                                                       id="otApprovalSwitch" checked>
+                                                       id="otApprovalSwitch"
+                                                       wire:model.defer="settings.ot_requires_approval"/>
                                             </div>
                                         </div>
 
@@ -203,7 +255,8 @@ new class extends Component {
                                             </div>
                                             <div class="form-check form-switch mb-0">
                                                 <input class="form-check-input" type="checkbox" role="switch"
-                                                       id="otWeekendSwitch">
+                                                       id="otWeekendSwitch"
+                                                       wire:model.defer="settings.ot_allowed_on_weekends"/>
                                             </div>
                                         </div>
 
@@ -221,7 +274,7 @@ new class extends Component {
                                             </div>
                                             <div class="form-check form-switch mb-0">
                                                 <input class="form-check-input" type="checkbox" role="switch"
-                                                       id="autoOtSwitch" checked>
+                                                       id="autoOtSwitch" wire:model.defer="settings.auto_calculate_ot"/>
                                             </div>
                                         </div>
                                     </div>
@@ -231,7 +284,7 @@ new class extends Component {
                             <!-- Save / Cancel Buttons -->
                             <div class="col-12">
                                 <div class="d-flex align-items-center justify-content-end gap-6 mt-4">
-                                    <button class="btn btn-primary">Save</button>
+                                    <button wire:click="storeSettings" class="btn btn-primary">Save</button>
                                     <button class="btn bg-danger-subtle text-danger">Cancel</button>
                                 </div>
                             </div>
@@ -270,13 +323,15 @@ new class extends Component {
                                                     <td class="text-center">
                                                         <div class="form-check form-switch d-inline-block">
                                                             <input class="form-check-input" type="checkbox"
-                                                                   role="switch" id="lateCheckinEmployee" checked>
+                                                                   role="switch" id="lateCheckinEmployee"
+                                                                   wire:model.defer="settings.late_checkin_employee">
                                                         </div>
                                                     </td>
                                                     <td class="text-center">
                                                         <div class="form-check form-switch d-inline-block">
                                                             <input class="form-check-input" type="checkbox"
-                                                                   role="switch" id="lateCheckinAdmin" checked>
+                                                                   role="switch" id="lateCheckinAdmin"
+                                                                   wire:model.defer="settings.late_checkin_admin">
                                                         </div>
                                                     </td>
                                                 </tr>
@@ -287,13 +342,15 @@ new class extends Component {
                                                     <td class="text-center">
                                                         <div class="form-check form-switch d-inline-block">
                                                             <input class="form-check-input" type="checkbox"
-                                                                   role="switch" id="otApprovalEmployee" checked>
+                                                                   role="switch" id="otApprovalEmployee"
+                                                                   wire:model.defer="settings.ot_approval_employee">
                                                         </div>
                                                     </td>
                                                     <td class="text-center">
                                                         <div class="form-check form-switch d-inline-block">
                                                             <input class="form-check-input" type="checkbox"
-                                                                   role="switch" id="otApprovalAdmin" checked>
+                                                                   role="switch" id="otApprovalAdmin"
+                                                                   wire:model.defer="settings.ot_approval_admin">
                                                         </div>
                                                     </td>
                                                 </tr>
@@ -304,13 +361,15 @@ new class extends Component {
                                                     <td class="text-center">
                                                         <div class="form-check form-switch d-inline-block">
                                                             <input class="form-check-input" type="checkbox"
-                                                                   role="switch" id="missingCheckoutEmployee" checked>
+                                                                   role="switch" id="missingCheckoutEmployee"
+                                                                   wire:model.defer="settings.missing_checkout_employee">
                                                         </div>
                                                     </td>
                                                     <td class="text-center">
                                                         <div class="form-check form-switch d-inline-block">
                                                             <input class="form-check-input" type="checkbox"
-                                                                   role="switch" id="missingCheckoutAdmin" checked>
+                                                                   role="switch" id="missingCheckoutAdmin"
+                                                                   wire:model.defer="settings.missing_checkout_admin">
                                                         </div>
                                                     </td>
                                                 </tr>
@@ -320,8 +379,10 @@ new class extends Component {
 
                                         <!-- Save/Cancel Buttons -->
                                         <div class="d-flex align-items-center justify-content-end gap-6 mt-4">
-                                            <button class="btn btn-primary">Save</button>
-                                            <button class="btn bg-danger-subtle text-danger">Cancel</button>
+                                            <button wire:click="storeSettings" class="btn btn-primary">Save</button>
+                                            <button wire:click="resetSettings" class="btn bg-danger-subtle text-danger">
+                                                Cancel
+                                            </button>
                                         </div>
                                     </div>
                                 </div>
@@ -329,90 +390,93 @@ new class extends Component {
                         </div>
                     </div>
 
-                    <!-- Security Tab -->
-                    <div class="tab-pane fade"
-                         id="tab-holiday"
-                         role="tabpanel"
-                         aria-labelledby="tab-holiday"
-                         tabindex="0">
-                        <!-- Your security content remains unchanged -->
-                        <div>
-                            <div class="row justify-content-center">
-                                <div class="col-lg-10">
-                                    <div class="card border shadow-none">
-                                        <div class="card-body p-4">
-                                            <h4 class="card-title mb-4">🏝️ Public Holidays</h4>
-                                            <p class="card-subtitle mb-4">Manage company-wide holidays for automatic
-                                                absence logging and schedule planning.</p>
 
-                                            <div class="table-responsive">
-                                                <table class="table align-middle mb-0" id="holidaysTable">
-                                                    <thead class="table-light">
-                                                    <tr>
-                                                        <th style="width: 200px;">Date</th>
-                                                        <th>Occasion</th>
-                                                        <th style="width: 60px;"></th>
-                                                    </tr>
-                                                    </thead>
-                                                    <tbody>
-                                                    <tr>
-                                                        <td><input type="date" class="form-control" value="2025-08-10"/>
-                                                        </td>
-                                                        <td><input type="text" class="form-control"
-                                                                   value="Independence Day 🇰🇪"/></td>
-                                                        <td class="text-center">
-                                                            <button type="button" class="btn btn-sm btn-outline-danger"
-                                                                    onclick="this.closest('tr').remove();">
-                                                                <i class="ti ti-trash"></i>
-                                                            </button>
-                                                        </td>
-                                                    </tr>
-                                                    <tr>
-                                                        <td><input type="date" class="form-control" value="2025-08-15"/>
-                                                        </td>
-                                                        <td><input type="text" class="form-control"
-                                                                   value="Company Retreat 🏕️"/></td>
-                                                        <td class="text-center">
-                                                            <button type="button" class="btn btn-sm btn-outline-danger"
-                                                                    onclick="this.closest('tr').remove();">
-                                                                <i class="ti ti-trash"></i>
-                                                            </button>
-                                                        </td>
-                                                    </tr>
-                                                    <tr>
-                                                        <td><input type="date" class="form-control" value="2025-09-02"/>
-                                                        </td>
-                                                        <td><input type="text" class="form-control" value="Labour Day"/>
-                                                        </td>
-                                                        <td class="text-center">
-                                                            <button type="button" class="btn btn-sm btn-outline-danger"
-                                                                    onclick="this.closest('tr').remove();">
-                                                                <i class="ti ti-trash"></i>
-                                                            </button>
-                                                        </td>
-                                                    </tr>
-                                                    </tbody>
-                                                </table>
-                                            </div>
+                    <!-- public holidays Tab -->
+                    {{--                    <div class="tab-pane fade"--}}
+                    {{--                         id="tab-holiday"--}}
+                    {{--                         role="tabpanel"--}}
+                    {{--                         aria-labelledby="tab-holiday"--}}
+                    {{--                         tabindex="0">--}}
+                    {{--                        <!-- Your security content remains unchanged -->--}}
+                    {{--                        <div>--}}
+                    {{--                            <div class="row justify-content-center">--}}
+                    {{--                                <div class="col-lg-10">--}}
+                    {{--                                    <div class="card border shadow-none">--}}
+                    {{--                                        <div class="card-body p-4">--}}
+                    {{--                                            <h4 class="card-title mb-4">🏝️ Public Holidays</h4>--}}
+                    {{--                                            <p class="card-subtitle mb-4">Manage company-wide holidays for automatic--}}
+                    {{--                                                absence logging and schedule planning.</p>--}}
 
-                                            <div class="mt-4">
-                                                <button type="button" class="btn btn-outline-primary"
-                                                        onclick="addHolidayRow()">
-                                                    <i class="ti ti-plus me-1"></i> Add Holiday
-                                                </button>
-                                            </div>
-                                        </div>
-                                    </div>
+                    {{--                                            <div class="table-responsive">--}}
+                    {{--                                                <table class="table align-middle mb-0" id="holidaysTable">--}}
+                    {{--                                                    <thead class="table-light">--}}
+                    {{--                                                    <tr>--}}
+                    {{--                                                        <th style="width: 200px;">Date</th>--}}
+                    {{--                                                        <th>Occasion</th>--}}
+                    {{--                                                        <th style="width: 60px;"></th>--}}
+                    {{--                                                    </tr>--}}
+                    {{--                                                    </thead>--}}
+                    {{--                                                    <tbody>--}}
+                    {{--                                                    <tr>--}}
+                    {{--                                                        <td><input type="date" class="form-control" value="2025-08-10"/>--}}
+                    {{--                                                        </td>--}}
+                    {{--                                                        <td><input type="text" class="form-control"--}}
+                    {{--                                                                   value="Independence Day 🇰🇪"/></td>--}}
+                    {{--                                                        <td class="text-center">--}}
+                    {{--                                                            <button type="button" class="btn btn-sm btn-outline-danger"--}}
+                    {{--                                                                    onclick="this.closest('tr').remove();">--}}
+                    {{--                                                                <i class="ti ti-trash"></i>--}}
+                    {{--                                                            </button>--}}
+                    {{--                                                        </td>--}}
+                    {{--                                                    </tr>--}}
+                    {{--                                                    <tr>--}}
+                    {{--                                                        <td><input type="date" class="form-control" value="2025-08-15"/>--}}
+                    {{--                                                        </td>--}}
+                    {{--                                                        <td><input type="text" class="form-control"--}}
+                    {{--                                                                   value="Company Retreat 🏕️"/></td>--}}
+                    {{--                                                        <td class="text-center">--}}
+                    {{--                                                            <button type="button" class="btn btn-sm btn-outline-danger"--}}
+                    {{--                                                                    onclick="this.closest('tr').remove();">--}}
+                    {{--                                                                <i class="ti ti-trash"></i>--}}
+                    {{--                                                            </button>--}}
+                    {{--                                                        </td>--}}
+                    {{--                                                    </tr>--}}
+                    {{--                                                    <tr>--}}
+                    {{--                                                        <td><input type="date" class="form-control" value="2025-09-02"/>--}}
+                    {{--                                                        </td>--}}
+                    {{--                                                        <td><input type="text" class="form-control" value="Labour Day"/>--}}
+                    {{--                                                        </td>--}}
+                    {{--                                                        <td class="text-center">--}}
+                    {{--                                                            <button type="button" class="btn btn-sm btn-outline-danger"--}}
+                    {{--                                                                    onclick="this.closest('tr').remove();">--}}
+                    {{--                                                                <i class="ti ti-trash"></i>--}}
+                    {{--                                                            </button>--}}
+                    {{--                                                        </td>--}}
+                    {{--                                                    </tr>--}}
+                    {{--                                                    </tbody>--}}
+                    {{--                                                </table>--}}
+                    {{--                                            </div>--}}
 
-                                    <!-- Save/Cancel Buttons -->
-                                    <div class="d-flex align-items-center justify-content-end gap-6 mt-4">
-                                        <button class="btn btn-primary">Save</button>
-                                        <button class="btn bg-danger-subtle text-danger">Cancel</button>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+                    {{--                                            <div class="mt-4">--}}
+                    {{--                                                <button type="button" class="btn btn-outline-primary"--}}
+                    {{--                                                        onclick="addHolidayRow()">--}}
+                    {{--                                                    <i class="ti ti-plus me-1"></i> Add Holiday--}}
+                    {{--                                                </button>--}}
+                    {{--                                            </div>--}}
+                    {{--                                        </div>--}}
+                    {{--                                    </div>--}}
+
+                    {{--                                    <!-- Save/Cancel Buttons -->--}}
+                    {{--                                    <div class="d-flex align-items-center justify-content-end gap-6 mt-4">--}}
+                    {{--                                        <button class="btn btn-primary">Save</button>--}}
+                    {{--                                        <button class="btn bg-danger-subtle text-danger">Cancel</button>--}}
+                    {{--                                    </div>--}}
+                    {{--                                </div>--}}
+                    {{--                            </div>--}}
+                    {{--                        </div>--}}
+                    {{--                    </div>--}}
+
+
                 </div>
             </div>
         </div>
@@ -420,11 +484,6 @@ new class extends Component {
     </div>
 
 </div>
-
-
-@push('scripts')
-    <script src="assets/js/apps/contact.js"></script>
-@endpush
 
 
 

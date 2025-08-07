@@ -34,7 +34,11 @@ class EmployeeTypeTable extends DataTableComponent
 
     public function builder(): Builder
     {
-        $query = EmployeeType::query()->select('employee_types.*');
+
+        $orgId = auth()->user()->employee->organization_id ?? null;
+
+        $query = EmployeeType::query()->select('employee_types.*')
+            ->where('organization_id', $orgId);
 
         if ($this->search !== null && $this->search !== '') {
             $query->where(function ($q) {

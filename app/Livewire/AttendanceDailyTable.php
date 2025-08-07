@@ -19,9 +19,14 @@ class AttendanceDailyTable extends DataTableComponent
 
     public function builder(): \Illuminate\Database\Eloquent\Builder
     {
+        $orgId = auth()->user()->employee->organization_id ?? null;
+
         $query = Attendance::query()
             ->select('attendances.*')
-            ->with(['employee']);
+            ->with(['employee'])
+            ->whereHas('employee', function ($q) use ($orgId) {
+                $q->where('organization_id', $orgId);
+            });
 
         if ($this->search !== null && $this->search !== '') {
             $query->where(function ($q) {
