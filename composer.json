@@ -12,10 +12,12 @@
         "php": "^8.2",
         "jantinnerezo/livewire-alert": "^4.0",
         "laravel/framework": "^12.0",
+        "laravel/sanctum": "^4.0",
         "laravel/tinker": "^2.10.1",
         "livewire/flux": "^2.1.1",
         "livewire/volt": "^1.7.0",
-        "rappasoft/laravel-livewire-tables": "^3.7"
+        "rappasoft/laravel-livewire-tables": "^3.7",
+        "vinkla/hashids": "^13.0"
     },
     "require-dev": {
         "fakerphp/faker": "^1.23",

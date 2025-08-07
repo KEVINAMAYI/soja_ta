@@ -19,8 +19,10 @@ return new class extends Migration
             $table->time('start_time');
             $table->time('end_time');
             $table->decimal('hours', 5, 2);
+            $table->enum('status', ['pending', 'approved', 'rejected'])->default('pending');
             $table->foreignId('approved_by')->nullable()->constrained('users')->onDelete('set null');
             $table->text('reason')->nullable();
+            $table->text('rejected_reason')->nullable();
             $table->timestamps();
         });
 

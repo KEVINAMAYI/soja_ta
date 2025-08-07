@@ -50,7 +50,7 @@ new class extends Component {
             ]);
 
             // Create the employee
-            Employee::create([
+            $employee = Employee::create([
                 'name' => $this->name,
                 'email' => $this->email,
                 'phone' => $this->phone,
@@ -60,6 +60,11 @@ new class extends Component {
                 'active' => $this->active,
                 'user_id' => $user->id,
             ]);
+
+            // ✅ Generate and save QR Code string
+            $qrCodeString = $this->organization_id.$employee->id;
+            $employee->qr_code = $qrCodeString;
+            $employee->save();
 
             DB::commit();
 
@@ -77,6 +82,7 @@ new class extends Component {
 
 
         } catch (\Exception $e) {
+
 
             DB::rollBack();
             report($e);
@@ -279,6 +285,7 @@ new class extends Component {
 <div class="row">
     <div class="col-12">
         <div class="card card-body">
+
             {{-- Top Bar: Search + Create Button --}}
             <div class="d-flex flex-wrap justify-content-between align-items-center mb-3">
                 {{-- Left side: Optional Search (if added) --}}

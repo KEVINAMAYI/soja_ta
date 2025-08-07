@@ -750,6 +750,10 @@
 <script src="../assets/libs/bootstrap-datepicker/dist/js/bootstrap-datepicker.min.js"></script>
 <script src="../assets/js/forms/datepicker-init.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script src="../assets/js/apex-chart/apex.pie.init.js"></script>
+<script src="../assets/js/apex-chart/apex.bar.init.js"></script>
+
+
 
 <!-- Adds the Core Table Scripts -->
 @rappasoftTableScripts

@@ -5,7 +5,7 @@
         </a>
         <ul class="dropdown-menu" aria-labelledby="employee-actions">
             <li>
-                <a class="dropdown-item d-flex align-items-center gap-2" href="">
+                <a class="dropdown-item d-flex align-items-center gap-2" href="{{ route('employees.view') }}">
                     <iconify-icon icon="mdi:eye-outline" class="text-primary w-4 h-4"></iconify-icon>
                     <span>View</span>
                 </a>

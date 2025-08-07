@@ -22,6 +22,7 @@ class OrganizationTable extends DataTableComponent
 
             Column::make("Name", "name")
                 ->sortable(),
+
             Column::make("Created at", "created_at")
                 ->sortable(),
 
@@ -34,6 +35,15 @@ class OrganizationTable extends DataTableComponent
 
     public function builder(): Builder
     {
-        return Organization::query()->select('organizations.*');
+        $query =  Organization::query()->select('organizations.*');
+
+        if ($this->search !== null && $this->search !== '') {
+            $query->where(function ($q) {
+                $q->where('name', 'like', '%' . $this->search . '%');
+            });
+        }
+
+
+        return $query;
     }
 }

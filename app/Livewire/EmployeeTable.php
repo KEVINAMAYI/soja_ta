@@ -19,8 +19,6 @@ class EmployeeTable extends DataTableComponent
         $this->setPrimaryKey('id');
         $this->setSearchEnabled();
         $this->setEagerLoadAllRelationsStatus(true);
-
-
     }
 
 
@@ -48,18 +46,15 @@ class EmployeeTable extends DataTableComponent
 
             Column::make("Organization", "organization_id")
                 ->format(fn($value, $row) => $row->organization?->name ?? '—')
-                ->sortable()
-                ->searchable(),
+                ->sortable(),
 
             Column::make("Employee Type", "employee_type_id")
                 ->format(fn($value, $row) => $row->employeeType?->name ?? '—')
-                ->sortable()
-                ->searchable(),
+                ->sortable(),
 
             Column::make("Employee", "name")
                 ->label(fn($row) => view('livewire.admin.employees.contact', ['employee' => $row]))
-                ->sortable()
-                ->searchable(),
+                ->sortable(),
 
             BooleanColumn::make('Active')
                 ->sortable()

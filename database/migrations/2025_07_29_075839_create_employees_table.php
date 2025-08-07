@@ -20,6 +20,7 @@ return new class extends Migration
             $table->string('employee_number')->nullable()->unique();
             $table->string('email')->nullable();
             $table->string('phone')->nullable();
+            $table->string('qr_code')->nullable();
             $table->boolean('active')->default(true);
             $table->timestamps();
         });
