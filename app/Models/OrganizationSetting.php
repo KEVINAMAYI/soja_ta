@@ -8,9 +8,6 @@ class OrganizationSetting extends Model
 {
     protected $fillable = ['organization_id', 'key', 'value', 'type'];
 
-    protected $casts = [
-        'value' => 'json',
-    ];
 
     public function organization()
     {

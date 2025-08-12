@@ -65,18 +65,30 @@ class AttendanceController extends Controller
 
     public function QRCheckout(Request $request)
     {
-        $request->validate([
-            'qr_code' => 'required|string'
-        ]);
+        $request->validate(['qr_code' => 'required|string']);
 
         DB::beginTransaction();
 
         try {
 
-            $standardWorkingHours = 8;
+            // Fetch employee with organization
+            $employee = Employee::with('organization')
+                ->where('qr_code', $request->qr_code)
+                ->firstOrFail();
 
-            $employee = Employee::where('qr_code', $request->qr_code)->firstOrFail();
+            $organization = $employee->organization;
 
+            // Get settings with defaults
+            $standardWorkingHours = (float) $organization->getSetting('daily_required_hours', 8);
+            $overtimeThreshold    = (float) $organization->getSetting('min_ot_threshold', 0);
+
+            if (!$standardWorkingHours) {
+                return response()->json([
+                    'message' => 'Standard working hours not configured for this organization.'
+                ], 500);
+            }
+
+            // Get active attendance
             $attendance = Attendance::where('employee_id', $employee->id)
                 ->whereNull('check_out_time')
                 ->first();
@@ -87,53 +99,55 @@ class AttendanceController extends Controller
                 ], 409);
             }
 
-            //for testing
-            $checkOutTime = now()->addHours(9); // Simulate checkout after 9 hours
+            // Calculate worked & overtime hours
+            $checkOutTime   = now();
+            $checkInTime    = Carbon::parse($attendance->check_in_time);
+            $overtimeStart  = $checkInTime->copy()->addHours($standardWorkingHours);
+            $workedHours    = $checkInTime->diffInMinutes($checkOutTime) / 60;
+            $overtimeHours  = max(0, $overtimeStart->diffInMinutes($checkOutTime) / 60);
 
-//            $checkOutTime = now();
-            $checkInTime = Carbon::parse($attendance->check_in_time);
-
-            $overtimeStart = $checkInTime->copy()->addHours($standardWorkingHours);
-            $workedHours = $checkInTime->diffInMinutes($checkOutTime) / 60;
-            $overtimeHours = max(0, $overtimeStart->diffInMinutes($checkOutTime) / 60);
-
-            $attendance->update([
-                'check_out_time' => $checkOutTime,
-                'worked_hours' => round($workedHours, 2),
-                'overtime_hours' => round($overtimeHours, 2),
-            ]);
-
-
-            if ($overtimeHours > 0) {
-                Overtime::create([
-                    'employee_id' => $employee->id,
-                    'attendance_id' => $attendance->id,
-                    'date' => $checkOutTime->toDateString(),
-                    'start_time' => $overtimeStart->toTimeString(),
-                    'end_time' => $checkOutTime->toTimeString(),
-                    'hours' => round($overtimeHours, 2),
-                    'reason' => 'Auto-generated on checkout',
-                    'approved_by' => null,
-                ]);
+            // Apply overtime threshold
+            if ($overtimeHours < $overtimeThreshold) {
+                $overtimeHours = 0;
             }
 
+            // Update attendance
+            $attendance->update([
+                'check_out_time'  => $checkOutTime,
+                'worked_hours'    => round($workedHours, 2),
+                'overtime_hours'  => round($overtimeHours, 2),
+            ]);
+
+            // Create overtime record if eligible
+            if ($overtimeHours >= $overtimeThreshold) {
+                Overtime::create([
+                    'employee_id'   => $employee->id,
+                    'attendance_id' => $attendance->id,
+                    'date'          => $checkOutTime->toDateString(),
+                    'start_time'    => $overtimeStart->toTimeString(),
+                    'end_time'      => $checkOutTime->toTimeString(),
+                    'hours'         => round($overtimeHours, 2),
+                    'reason'        => 'Auto-generated on checkout',
+                    'approved_by'   => null,
+                ]);
+            }
 
             DB::commit();
 
             return response()->json([
                 'message' => 'Checked out successfully',
-                'data' => new AttendanceResource($attendance)
+                'data'    => new AttendanceResource($attendance)
             ], 200);
 
         } catch (\Exception $e) {
             DB::rollBack();
-
             return response()->json([
                 'message' => 'Failed to check out.',
-                'error' => $e->getMessage()
+                'error'   => $e->getMessage()
             ], 500);
         }
     }
+
 
 
 }

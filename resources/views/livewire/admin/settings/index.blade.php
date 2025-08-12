@@ -2,7 +2,9 @@
 
 use App\Models\Organization;
 use App\Models\OrganizationSetting;
+use Carbon\Carbon;
 use Jantinnerezo\LivewireAlert\Facades\LivewireAlert;
+use Livewire\Attributes\On;
 use Livewire\Volt\Component;
 
 new class extends Component {
@@ -21,11 +23,13 @@ new class extends Component {
             return [$item->key => $value];
         })->toArray();
 
+
     }
 
 
     public function storeSettings()
     {
+
 
         $orgId = auth()->user()->employee?->organization_id;
         $org = Organization::find($orgId);
@@ -45,6 +49,36 @@ new class extends Component {
             ->position('top-end')
             ->show();
 
+    }
+
+
+    #[On('set-end-time')]
+    public function calculateDailyHours(): void
+    {
+
+        $start = $this->settings['start_time'];
+        $end = $this->settings['end_time'];
+
+        if ($start && $end) {
+            try {
+
+                $startTime = Carbon::createFromFormat('H:i', $start);
+                $endTime = Carbon::createFromFormat('H:i', $end);
+
+                // Handle overnight shifts
+                if ($endTime->lessThanOrEqualTo($startTime)) {
+                    $endTime->addDay();
+                }
+
+                $hours = $startTime->diffInMinutes($endTime) / 60;
+
+                $this->settings['daily_required_hours'] = round($hours, 2);
+
+            } catch (\Exception $e) {
+                // Optional error handling
+                $this->settings['daily_required_hours'] = null;
+            }
+        }
     }
 
 
@@ -158,13 +192,30 @@ new class extends Component {
                                     <div class="card-body p-4">
                                         <h6 class="mb-3">Working Hours Policy</h6>
 
+                                        <!-- Start & End Time -->
+                                        <div class="row">
+                                            <div class="col-md-6 mb-3">
+                                                <label for="startTime" class="form-label">Start Time</label>
+                                                <input type="time" wire:model="settings.start_time"
+                                                       class="form-control" id="startTime">>
+                                            </div>
+                                            <div class="col-md-6 mb-3">
+                                                <label for="endTime" class="form-label">End Time <span
+                                                        class="text-muted">(optional)</span></label>
+                                                <input type="time"
+                                                       wire:change="$dispatch('set-end-time')"
+                                                       wire:model="settings.end_time"
+                                                       class="form-control" id="endTime">
+                                            </div>
+                                        </div>
+
                                         <!-- Daily Required Hours -->
                                         <div class="mb-3">
                                             <label for="dailyHours" class="form-label">Daily Required Hours</label>
                                             <div class="input-group">
                                                 <!-- Daily Required Hours -->
                                                 <input type="number" step="0.1"
-                                                       wire:model.defer="settings.daily_required_hours"
+                                                       wire:model="settings.daily_required_hours"
                                                        class="form-control"
                                                        id="dailyHours"
                                                        placeholder="e.g. 8.0">
@@ -172,20 +223,6 @@ new class extends Component {
                                             </div>
                                         </div>
 
-                                        <!-- Start & End Time -->
-                                        <div class="row">
-                                            <div class="col-md-6 mb-3">
-                                                <label for="startTime" class="form-label">Start Time</label>
-                                                <input type="time" wire:model.defer="settings.start_time"
-                                                       class="form-control" id="startTime">>
-                                            </div>
-                                            <div class="col-md-6 mb-3">
-                                                <label for="endTime" class="form-label">End Time <span
-                                                        class="text-muted">(optional)</span></label>
-                                                <input type="time" wire:model.defer="settings.end_time"
-                                                       class="form-control" id="endTime">
-                                            </div>
-                                        </div>
                                     </div>
                                 </div>
 
@@ -217,7 +254,7 @@ new class extends Component {
                                             <div class="input-group">
                                                 <input type="number" step="0.1" class="form-control" id="minOtThreshold"
                                                        placeholder="e.g. 1.0"
-                                                       wire:model.defer="settings.min_ot_threshold"/>
+                                                       wire:model="settings.min_ot_threshold"/>
                                                 <span class="input-group-text">hrs</span>
                                             </div>
                                         </div>
@@ -237,7 +274,7 @@ new class extends Component {
                                             <div class="form-check form-switch mb-0">
                                                 <input class="form-check-input" type="checkbox" role="switch"
                                                        id="otApprovalSwitch"
-                                                       wire:model.defer="settings.ot_requires_approval"/>
+                                                       wire:model="settings.ot_requires_approval"/>
                                             </div>
                                         </div>
 
@@ -256,7 +293,7 @@ new class extends Component {
                                             <div class="form-check form-switch mb-0">
                                                 <input class="form-check-input" type="checkbox" role="switch"
                                                        id="otWeekendSwitch"
-                                                       wire:model.defer="settings.ot_allowed_on_weekends"/>
+                                                       wire:model="settings.ot_allowed_on_weekends"/>
                                             </div>
                                         </div>
 
@@ -274,7 +311,7 @@ new class extends Component {
                                             </div>
                                             <div class="form-check form-switch mb-0">
                                                 <input class="form-check-input" type="checkbox" role="switch"
-                                                       id="autoOtSwitch" wire:model.defer="settings.auto_calculate_ot"/>
+                                                       id="autoOtSwitch" wire:model="settings.auto_calculate_ot"/>
                                             </div>
                                         </div>
                                     </div>
@@ -324,14 +361,14 @@ new class extends Component {
                                                         <div class="form-check form-switch d-inline-block">
                                                             <input class="form-check-input" type="checkbox"
                                                                    role="switch" id="lateCheckinEmployee"
-                                                                   wire:model.defer="settings.late_checkin_employee">
+                                                                   wire:model="settings.late_checkin_employee">
                                                         </div>
                                                     </td>
                                                     <td class="text-center">
                                                         <div class="form-check form-switch d-inline-block">
                                                             <input class="form-check-input" type="checkbox"
                                                                    role="switch" id="lateCheckinAdmin"
-                                                                   wire:model.defer="settings.late_checkin_admin">
+                                                                   wire:model="settings.late_checkin_admin">
                                                         </div>
                                                     </td>
                                                 </tr>
@@ -343,14 +380,14 @@ new class extends Component {
                                                         <div class="form-check form-switch d-inline-block">
                                                             <input class="form-check-input" type="checkbox"
                                                                    role="switch" id="otApprovalEmployee"
-                                                                   wire:model.defer="settings.ot_approval_employee">
+                                                                   wire:model="settings.ot_approval_employee">
                                                         </div>
                                                     </td>
                                                     <td class="text-center">
                                                         <div class="form-check form-switch d-inline-block">
                                                             <input class="form-check-input" type="checkbox"
                                                                    role="switch" id="otApprovalAdmin"
-                                                                   wire:model.defer="settings.ot_approval_admin">
+                                                                   wire:model="settings.ot_approval_admin">
                                                         </div>
                                                     </td>
                                                 </tr>
@@ -362,14 +399,14 @@ new class extends Component {
                                                         <div class="form-check form-switch d-inline-block">
                                                             <input class="form-check-input" type="checkbox"
                                                                    role="switch" id="missingCheckoutEmployee"
-                                                                   wire:model.defer="settings.missing_checkout_employee">
+                                                                   wire:model="settings.missing_checkout_employee">
                                                         </div>
                                                     </td>
                                                     <td class="text-center">
                                                         <div class="form-check form-switch d-inline-block">
                                                             <input class="form-check-input" type="checkbox"
                                                                    role="switch" id="missingCheckoutAdmin"
-                                                                   wire:model.defer="settings.missing_checkout_admin">
+                                                                   wire:model="settings.missing_checkout_admin">
                                                         </div>
                                                     </td>
                                                 </tr>
