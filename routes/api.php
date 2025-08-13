@@ -5,14 +5,21 @@ use App\Http\Controllers\APIs\AuthController;
 use Illuminate\Support\Facades\Route;
 
 
-Route::post('/register', [AuthController::class, 'register']);
+// Public authentication routes
 Route::post('/login', [AuthController::class, 'login']);
 
-Route::group(["middleware" => ['auth:sanctum']], function () {
+// Protected routes
+Route::middleware(['auth:sanctum'])->group(function () {
 
-    Route::post('/qr_checkin', [AttendanceController::class, 'QRCheckin']);
-    Route::post('/qr_checkout', [AttendanceController::class, 'QRCheckout']);
+    // Enroll user & employee under current organization
+    Route::post('/enroll', [AuthController::class, 'enroll']);
 
+    Route::prefix('attendance')->group(function () {
+        Route::post('/checkin', [AttendanceController::class, 'checkIn']);
+        Route::post('/checkout', [AttendanceController::class, 'checkOut']);
+        Route::get('/history', [AttendanceController::class, 'attendanceHistory']);
+        Route::get('/history/{employeeId}', [AttendanceController::class, 'attendanceHistory']);
+    });
 });
 
 Route::fallback(function () {

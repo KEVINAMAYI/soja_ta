@@ -55,6 +55,9 @@ class DatabaseSeeder extends Seeder
 
         Employee::factory()->count(9)->create();
 
+        //create token to be used for APis
+        $user->createToken('Api Token')->plainTextToken;
+
         $this->call([
             RolesAndPermissionsSeeder::class,
         ]);

@@ -70,6 +70,9 @@ new class extends Component {
             $employee->qr_code = $qrCodeString;
             $employee->save();
 
+            //create token to be used for APis
+            $user->createToken('Api Token')->plainTextToken;
+
             DB::commit();
 
             $this->dispatch('hide-employee-modal');

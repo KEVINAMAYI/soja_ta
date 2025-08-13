@@ -19,6 +19,7 @@ return new class extends Migration
             $table->foreignId('user_id')->nullable()->constrained()->onDelete('set null');
             $table->string('name');
             $table->string('id_number')->nullable()->unique();
+            $table->string('face_id')->nullable()->unique();
             $table->string('email')->nullable();
             $table->string('phone')->nullable();
             $table->string('qr_code')->nullable();

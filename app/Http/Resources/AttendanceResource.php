@@ -12,16 +12,22 @@ class AttendanceResource extends JsonResource
      *
      * @return array<string, mixed>
      */
-    public function toArray(Request $request): array
+    public function toArray(Request $request)
     {
         return [
-            'employee_id' => $this->employee_id,
-            'date' => $this->date,
-            'check_in_time' => optional($this->check_in_time)->format('H:i:s'),
-            'check_out_time' => optional($this->check_out_time)->format('H:i:s'),
-            'worked_hours' => $this->worked_hours,
-            'overtime_hours' => $this->overtime_hours,
+            'attendance_id' => $this->id,
+            'employee_id' => $this->employee->id,
+            'employee_name' => $this->employee->user->name,
+            'employee_email' => $this->employee->user->email,
+            'employee_phone' => $this->employee->phone,
+            'employee_id_number' => $this->employee->id_number,
+            'date' => $this->date ? $this->date->format('Y-m-d') : null,
+            'check_in_time' => $this->check_in_time ? $this->check_in_time->format('H:i:s') : null,
+            'check_out_time' => $this->check_out_time ? $this->check_out_time->format('H:i:s') : null,
+            'worked_hours' => (float)$this->worked_hours,
+            'overtime_hours' => (float)$this->overtime_hours,
             'status' => $this->status,
         ];
     }
+
 }
