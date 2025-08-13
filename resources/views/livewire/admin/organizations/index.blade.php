@@ -5,8 +5,11 @@ use Illuminate\Support\Facades\DB;
 use Livewire\Attributes\On;
 use Livewire\Volt\Component;
 use Jantinnerezo\LivewireAlert\Facades\LivewireAlert;
+use Livewire\WithFileUploads;
 
 new class extends Component {
+
+    use WithFileUploads;
 
     public $name;
     public $address;
@@ -28,7 +31,7 @@ new class extends Component {
             'phone_number' => 'required|string|max:255',
             'description' => 'nullable|string',
             'website' => 'nullable|url',
-            'logo_path' => 'nullable|string',
+            'logo_path' => 'nullable|file|mimes:jpg,jpeg,png,gif|max:2048',
         ];
     }
 
@@ -39,6 +42,8 @@ new class extends Component {
         try {
             DB::beginTransaction();
 
+            $logoPath = $this->logo_path ? $this->logo_path->store('logos', 'public') : null;
+
             Organization::create([
                 'name' => $this->name,
                 'address' => $this->address,
@@ -47,7 +52,7 @@ new class extends Component {
                 'phone_number' => $this->phone_number,
                 'description' => $this->description,
                 'website' => $this->website,
-                'logo_path' => $this->logo_path,
+                'logo_path' => $logoPath,
             ]);
 
             DB::commit();
@@ -101,6 +106,8 @@ new class extends Component {
         try {
             DB::beginTransaction();
 
+            $logoPath = $this->logo_path ? $this->logo_path->store('logos', 'public') : null;
+
             Organization::findOrFail($this->editId)->update([
                 'name' => $this->name,
                 'address' => $this->address,
@@ -109,7 +116,7 @@ new class extends Component {
                 'phone_number' => $this->phone_number,
                 'description' => $this->description,
                 'website' => $this->website,
-                'logo_path' => $this->logo_path,
+                'logo_path' => $logoPath,
             ]);
 
             DB::commit();

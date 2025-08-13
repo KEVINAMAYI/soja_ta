@@ -1,8 +1,31 @@
 <?php
 
+use App\Models\Organization;
 use Livewire\Volt\Component;
 
 new class extends Component {
+
+    public $organizationId;
+    public $org;
+
+    public function mount()
+    {
+        // Get the logged in user
+        $user = auth()->user();
+
+        // Ensure they have an employee record with an organization
+        if ($user && $user->employee && $user->employee->organization_id) {
+            $this->organizationId = $user->employee->organization_id;
+
+            // Fetch the organization
+            $this->org = Organization::findOrFail($this->organizationId);
+
+        } else {
+            abort(403, 'No organization found for this user.');
+        }
+    }
+
+
 }; ?>
 
 @push('styles')
@@ -131,7 +154,7 @@ new class extends Component {
                          aria-labelledby="tab-company-information-tab"
                          tabindex="0">
 
-                        <livewire:admin.organizations.edit/>
+                        <livewire:admin.organizations.edit :id="$org->id"/>
 
                     </div>
 
