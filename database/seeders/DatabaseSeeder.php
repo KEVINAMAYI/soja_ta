@@ -26,6 +26,7 @@ class DatabaseSeeder extends Seeder
 
         $department = Department::factory()->create([
             'name' => 'ICT',
+            'organization_id' => $organization->id
         ]);
 
         $employeeType = EmployeeType::factory()->create([
@@ -46,7 +47,7 @@ class DatabaseSeeder extends Seeder
             'employee_type_id' => $employeeType->id,
             'user_id' => $user->id,
             'name' => 'Test Employee',
-            'employee_number' => 'EMP999',
+            'id_number' => 'EMP999',
             'email' => 'test@example.com',
             'phone' => '0712345678',
             'active' => true,

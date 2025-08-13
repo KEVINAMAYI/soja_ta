@@ -23,9 +23,15 @@ new class extends Component {
         $this->validate();
 
         try {
+
             DB::beginTransaction();
 
-            Department::create(['name' => $this->name]);
+            $org = auth()->user()->employee->organization;
+
+            Department::create([
+                'name' => $this->name,
+                'organization_id' => $org->id
+            ]);
 
             DB::commit();
 
@@ -206,7 +212,8 @@ new class extends Component {
                     <div class="modal-body">
                         <div class="mb-3">
                             <label for="name" class="form-label">Department Name</label>
-                            <input type="text" wire:model="name" id="name" class="form-control" placeholder="Department Name"/>
+                            <input type="text" wire:model="name" id="name" class="form-control"
+                                   placeholder="Department Name"/>
                             @error('name') <small class="text-danger">{{ $message }}</small> @enderror
                         </div>
                     </div>

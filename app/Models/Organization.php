@@ -52,5 +52,11 @@ class Organization extends Model
             ['value' => $value, 'type' => $type]
         );
     }
+
+    public function departments()
+    {
+        return $this->hasMany(Department::class);
+    }
+
 }
 

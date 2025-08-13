@@ -55,6 +55,13 @@ class EmployeeTable extends DataTableComponent
                 ->label(fn($row) => view('livewire.admin.employees.contact', ['employee' => $row]))
                 ->sortable(),
 
+            Column::make("Id Number", "id_number")
+                ->sortable(),
+
+            Column::make("Department", "department_id")
+                ->format(fn($value, $row) => $row->department?->name ?? '—')
+                ->sortable(),
+
             BooleanColumn::make('Active')
                 ->sortable()
                 ->collapseOnMobile(),

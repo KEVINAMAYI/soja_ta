@@ -11,10 +11,11 @@ class Employee extends Model
 
     protected $fillable = [
         'organization_id',
+        'department_id',
         'employee_type_id',
         'user_id',
         'name',
-        'employee_number',
+        'id_number',
         'email',
         'phone',
         'status',
@@ -49,5 +50,11 @@ class Employee extends Model
     {
         return $this->hasMany(ServiceUsage::class);
     }
+
+    public function department()
+    {
+        return $this->belongsTo(Department::class);
+    }
+
 }
 

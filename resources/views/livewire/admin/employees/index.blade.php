@@ -12,24 +12,25 @@ use Livewire\Volt\Component;
 
 new class extends Component {
 
-    public $name, $email, $phone, $employee_type_id, $organization_id, $employee_number, $active = true;
-    public $editId, $employeeTypes, $organizations;
+    public $name, $email, $phone, $employee_type_id, $department_id, $id_number, $active = true;
+    public $editId, $employeeTypes, $departments;
 
     public function mount()
     {
         $this->employeeTypes = EmployeeType::all();
-        $this->organizations = Organization::all();
+        $this->departments = auth()->user()->employee->organization->departments;
+
     }
 
     public function rules()
     {
         return [
             'name' => 'required|string|max:255',
-            'email' => 'nullable|email',
+            'email' => 'nullable|email|unique:employees,email,' . $this->editId,
             'phone' => 'nullable|string|max:20',
             'employee_type_id' => 'required|exists:employee_types,id',
-            'organization_id' => 'required|exists:organizations,id',
-            'employee_number' => 'nullable|string|unique:employees,employee_number,' . $this->editId,
+            'department_id' => 'required|exists:departments,id',
+            'id_number' => 'required|string|unique:employees,id_number,' . $this->editId,
             'active' => 'boolean',
         ];
     }
@@ -41,6 +42,8 @@ new class extends Component {
         try {
 
             DB::beginTransaction();
+
+            $org_id = auth()->user()->employee->organization->id;
 
             // Create the user
             $user = User::create([
@@ -55,14 +58,15 @@ new class extends Component {
                 'email' => $this->email,
                 'phone' => $this->phone,
                 'employee_type_id' => $this->employee_type_id,
-                'organization_id' => $this->organization_id,
-                'employee_number' => $this->employee_number,
+                'organization_id' => auth()->user()->employee->organization->id,
+                'id_number' => $this->id_number,
                 'active' => $this->active,
                 'user_id' => $user->id,
+                'department_id' => $this->department_id,
             ]);
 
             // ✅ Generate and save QR Code string
-            $qrCodeString = $this->organization_id.$employee->id;
+            $qrCodeString = $org_id . $employee->id;
             $employee->qr_code = $qrCodeString;
             $employee->save();
 
@@ -109,8 +113,8 @@ new class extends Component {
         $this->email = $employee->email;
         $this->phone = $employee->phone;
         $this->employee_type_id = $employee->employee_type_id;
-        $this->organization_id = $employee->organization_id;
-        $this->employee_number = $employee->employee_number;
+        $this->department_id = $employee->department_id;
+        $this->id_number = $employee->id_number;
         $this->active = $employee->active;
 
         $this->dispatch('show-employee-modal');
@@ -132,8 +136,8 @@ new class extends Component {
                 'email' => $this->email,
                 'phone' => $this->phone,
                 'employee_type_id' => $this->employee_type_id,
-                'organization_id' => $this->organization_id,
-                'employee_number' => $this->employee_number,
+                'department_id' => $this->department_id,
+                'id_number' => $this->id_number,
                 'active' => $this->active,
             ]);
 
@@ -223,8 +227,7 @@ new class extends Component {
             'email',
             'phone',
             'employee_type_id',
-            'organization_id',
-            'employee_number',
+            'id_number',
             'active',
             'editId',
         ]);
@@ -354,20 +357,20 @@ new class extends Component {
 
                             <!-- Organization -->
                             <div class="col-md-6 mb-3">
-                                <select wire:model="organization_id" class="form-control">
-                                    <option value="">Select Organization</option>
-                                    @foreach ($organizations as $org)
-                                        <option value="{{ $org->id }}">{{ $org->name }}</option>
+                                <select wire:model="department_id" class="form-control">
+                                    <option value="">Select Department</option>
+                                    @foreach ($departments as $dept)
+                                        <option value="{{ $dept->id }}">{{ $dept->name }}</option>
                                     @endforeach
                                 </select>
-                                @error('organization_id') <small class="text-danger">{{ $message }}</small> @enderror
+                                @error('department_id') <small class="text-danger">{{ $message }}</small> @enderror
                             </div>
 
                             <!-- Employee Number -->
                             <div class="col-md-6 mb-3">
-                                <input type="text" wire:model="employee_number" class="form-control"
-                                       placeholder="Employee Number (optional)"/>
-                                @error('employee_number') <small class="text-danger">{{ $message }}</small> @enderror
+                                <input type="text" wire:model="id_number" class="form-control"
+                                       placeholder="ID Number"/>
+                                @error('id_number') <small class="text-danger">{{ $message }}</small> @enderror
                             </div>
 
                             <!-- Active Toggle -->
@@ -386,7 +389,9 @@ new class extends Component {
                         <button type="submit" class="btn btn-success">
                             {{ $editId ? 'Save' : 'Add' }}
                         </button>
-                        <button wire:click="$dispatch('discard-employee-modal')" type="button" class="btn btn-outline-danger" data-bs-dismiss="modal">Discard</button>
+                        <button wire:click="$dispatch('discard-employee-modal')" type="button"
+                                class="btn btn-outline-danger" data-bs-dismiss="modal">Discard
+                        </button>
                     </div>
                 </form>
             </div>

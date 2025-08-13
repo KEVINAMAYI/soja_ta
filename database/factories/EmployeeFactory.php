@@ -21,7 +21,7 @@ class EmployeeFactory extends Factory
             'employee_type_id' => EmployeeType::factory(),
             'user_id' => User::factory(),
             'name' => $this->faker->name(),
-            'employee_number' => $this->faker->unique()->numerify('EMP###'),
+            'id_number' => $this->faker->unique()->numerify('EMP###'),
             'email' => $this->faker->unique()->safeEmail(),
             'phone' => $this->faker->phoneNumber(),
             'active' => $this->faker->randomElement([0, 1]),
