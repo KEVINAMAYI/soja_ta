@@ -1,43 +1,37 @@
 <x-layouts.app :title="__('Dashboard')">
     <div class="row">
 
-        <div class="col-lg-12">
+        <div class="col-lg-12" >
             <div class="card text-bg-primary">
-                <div class="card-body">
+                <div class="card-body" >
                     <div class="row">
-                        <div class="col-sm-7">
-                            <div class="d-flex flex-column h-100 py-3"> {{-- Reduced padding for height --}}
-                                <div class="hstack gap-2">
-                <span class="d-flex align-items-center justify-content-center round-48 bg-white rounded flex-shrink-0">
-                    <iconify-icon icon="mdi:calendar-account-outline" class="fs-5 text-muted"></iconify-icon>
-                </span>
+                        <div class="col-sm-12">
+                            <div class="d-flex align-items-center justify-content-between"> {{-- Reduced vertical padding --}}
+
+                                <!-- Left: Icon + Welcome -->
+                                <div class="d-flex align-items-center gap-2">
+                                  <span class="d-flex align-items-center justify-content-center round-48 bg-white rounded flex-shrink-0"">
+                                     <iconify-icon icon="mdi:calendar-account-outline" class="fs-5 text-muted"></iconify-icon>
+                                    </span>
                                     <div>
-                                        <h6 class="text-white fs-5 mb-0">Welcome back, Kevin Amayi</h6>
+                                        <h6 class="text-white fs-6 mb-0">Welcome back, Kevin Amayi</h6>
                                         <small class="text-white-50">HR Administrator — Attendance System</small>
                                     </div>
                                 </div>
-                                <div class="mt-3 mt-sm-auto">
-                                    <div class="row">
-                                        <div class="col-6">
-                                            <span class="text-white-50">Today's Date</span>
-                                            <h5 class="mb-0 text-white mt-1 fs-6 fw-semibold">
-                                                {{ now()->format('l, d M Y') }}
-                                            </h5>
-                                        </div>
-                                        <div class="col-6 border-start border-light" style="--bs-border-opacity: .15;">
-                                            <span class="text-white-50">Total Employees</span>
-                                            <h5 class="mb-0 text-white mt-1 fs-6 fw-semibold">191</h5>
-                                        </div>
-                                    </div>
+
+                                <!-- Right: Date -->
+                                <div class="text-end">
+                                    <small class="text-white-50 d-block">Today's Date</small>
+                                    <h6 class="mb-0 text-white fs-6 fw-semibold">
+                                        {{ now()->format('l, d M Y') }}
+                                    </h6>
                                 </div>
+
                             </div>
                         </div>
 
-                        {{-- Right side illustration (optional) --}}
-                        <div class="col-sm-5 text-center text-md-end">
-                            <img src="{{ asset('assets/images/backgrounds/welcome-bg.png') }}"
-                                 alt="welcome" class="img-fluid mb-n4 mt-2" width="150" />
-                        </div>
+
+
                     </div>
                 </div>
             </div>

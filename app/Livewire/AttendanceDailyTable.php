@@ -2,6 +2,7 @@
 
 namespace App\Livewire;
 
+use Carbon\Carbon;
 use Rappasoft\LaravelLivewireTables\DataTableComponent;
 use Rappasoft\LaravelLivewireTables\Views\Column;
 use App\Models\Attendance;
@@ -57,12 +58,24 @@ class AttendanceDailyTable extends DataTableComponent
             Column::make("Employee")
                 ->label(fn($row) => view('livewire.admin.attendance.employee', ['attendance' => $row])),
 
-            Column::make("Date", "date")
-                ->sortable(),
-            Column::make("Check in time", "check_in_time")
-                ->sortable(),
-            Column::make("Check out time", "check_out_time")
-                ->sortable(),
+            Column::make("Time In", "check_in_time")
+                ->sortable()
+                ->format(function ($value) {
+                    if (!$value) return '<span class="text-muted">-</span>';
+                    $formatted = Carbon::parse($value)->format('M d, Y g:i A');
+                    return "<span style='font-weight: 600; color: #198754;'>$formatted</span>";  // Bootstrap green color (#198754)
+                })
+                ->html(),
+
+            Column::make("Time Out", "check_out_time")
+                ->sortable()
+                ->format(function ($value) {
+                    if (!$value) return '<span class="text-muted">-</span>';
+                    $formatted = Carbon::parse($value)->format('M d, Y g:i A');
+                    return "<span style='font-weight: 600; color: #dc3545;'>$formatted</span>";  // Bootstrap red color (#dc3545)
+                })
+                ->html(),
+
             Column::make("Worked hours", "worked_hours")
                 ->sortable(),
             Column::make("Overtime hours", "overtime_hours")

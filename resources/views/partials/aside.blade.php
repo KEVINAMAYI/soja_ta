@@ -32,27 +32,13 @@
 
 
                     <li class="sidebar-item">
-                        <a class="sidebar-link has-arrow" href="javascript:void(0)" aria-expanded="false">
-                            <iconify-icon icon="solar:home-angle-line-duotone"></iconify-icon>
+                        <a class="sidebar-link {{ request()->routeIs('attendance.index') ? 'active' : '' }}"
+                           href="{{ route('attendance.index') }}"
+                           id="get-url"
+                           aria-expanded="false">
+                            <iconify-icon icon="solar:widget-add-line-duotone"></iconify-icon>
                             <span class="hide-menu">Attendance</span>
                         </a>
-                        <ul aria-expanded="false" class="collapse first-level">
-                            <li class="sidebar-item">
-                                <a class="sidebar-link {{ request()->routeIs('attendance.daily') ? 'text-primary fw-bold' : '' }}"
-                                   href="{{ route('attendance.daily') }}">
-                                    <span class="icon-small"></span>
-                                    <span class="hide-menu">Daily Attendance</span>
-                                </a>
-                            </li>
-
-                            <li class="sidebar-item">
-                                <a class="sidebar-link {{ request()->routeIs('attendance.monthly') ? 'text-primary fw-bold' : '' }}"
-                                   href="{{ route('attendance.monthly') }}">
-                                    <span class="icon-small"></span>
-                                    <span class="hide-menu">Monthly Attendance</span>
-                                </a>
-                            </li>
-                        </ul>
                     </li>
 
                     <!-- ---------------------------------- -->
@@ -68,15 +54,6 @@
                         </a>
                     </li>
 
-                    <li class="sidebar-item">
-                        <a class="sidebar-link {{ request()->routeIs('employees.index') ? 'active' : '' }}"
-                           href="{{ route('employees.index') }}"
-                           id="get-url"
-                           aria-expanded="false">
-                            <iconify-icon icon="solar:widget-add-line-duotone"></iconify-icon>
-                            <span class="hide-menu">Employees</span>
-                        </a>
-                    </li>
 
                     <li class="sidebar-item">
                         <a class="sidebar-link {{ request()->routeIs('organizations.index') ? 'active' : '' }}"
@@ -89,39 +66,13 @@
                     </li>
 
                     <li class="sidebar-item">
-                        <a class="sidebar-link {{ request()->routeIs('employee-types.index') ? 'active' : '' }}"
-                           href="{{ route('employee-types.index') }}"
+                        <a class="sidebar-link {{ request()->routeIs('reports.index') ? 'active' : '' }}"
+                           href="{{ route('reports.index') }}"
                            id="get-url"
                            aria-expanded="false">
-                            <iconify-icon icon="solar:widget-add-line-duotone"></iconify-icon>
-                            <span class="hide-menu">Employee Types</span>
+                            <iconify-icon icon="mdi:file-chart-outline"></iconify-icon>
+                            <span class="hide-menu">Reports</span>
                         </a>
-                    </li>
-
-
-                    <!-- ---------------------------------- -->
-                    <!-- Dashboard -->
-                    <!-- ---------------------------------- -->
-                    <li class="sidebar-item">
-                        <a class="sidebar-link {{ request()->routeIs('settings.index') ? 'active' : '' }}"
-                           href="{{ route('settings.index') }}"
-                           id="get-url"
-                           aria-expanded="false">
-                            <iconify-icon icon="mdi:tune-variant"></iconify-icon>
-                            <span class="hide-menu">Settings</span>
-                        </a>
-                    </li>
-
-
-                    <li class="sidebar-item">
-                        <form method="POST" action="{{ route('logout') }}">
-                            @csrf
-                            <button type="submit"
-                                    class="sidebar-link w-100 text-start border-0 bg-transparent d-flex align-items-center gap-2 px-3 py-2">
-                                <iconify-icon icon="solar:logout-2-line-duotone"></iconify-icon>
-                                <span class="hide-menu">Logout</span>
-                            </button>
-                        </form>
                     </li>
 
                 </ul>

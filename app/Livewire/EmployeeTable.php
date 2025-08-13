@@ -47,10 +47,6 @@ class EmployeeTable extends DataTableComponent
     {
         return [
 
-            Column::make("Organization", "organization_id")
-                ->format(fn($value, $row) => $row->organization?->name ?? '—')
-                ->sortable(),
-
             Column::make("Employee Type", "employee_type_id")
                 ->format(fn($value, $row) => $row->employeeType?->name ?? '—')
                 ->sortable(),

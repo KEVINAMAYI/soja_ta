@@ -17,6 +17,7 @@
         "livewire/flux": "^2.1.1",
         "livewire/volt": "^1.7.0",
         "rappasoft/laravel-livewire-tables": "^3.7",
+        "spatie/laravel-permission": "^6.21",
         "vinkla/hashids": "^13.0"
     },
     "require-dev": {

@@ -2,6 +2,7 @@
 
 namespace Database\Seeders;
 
+use App\Models\Department;
 use App\Models\Employee;
 use App\Models\EmployeeType;
 use App\Models\Organization;
@@ -19,6 +20,12 @@ class DatabaseSeeder extends Seeder
     {
         $organization = Organization::factory()->create([
             'name' => 'Test Org',
+            'email' => 'test@example.com',
+            'phone_number' => '254795704301',
+        ]);
+
+        $department = Department::factory()->create([
+            'name' => 'ICT',
         ]);
 
         $employeeType = EmployeeType::factory()->create([
@@ -35,6 +42,7 @@ class DatabaseSeeder extends Seeder
 
         Employee::factory()->create([
             'organization_id' => $organization->id,
+            'department_id' => $department->id,
             'employee_type_id' => $employeeType->id,
             'user_id' => $user->id,
             'name' => 'Test Employee',
@@ -45,5 +53,10 @@ class DatabaseSeeder extends Seeder
         ]);
 
         Employee::factory()->count(9)->create();
+
+        $this->call([
+            RolesAndPermissionsSeeder::class,
+        ]);
+
     }
 }

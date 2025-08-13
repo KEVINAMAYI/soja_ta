@@ -15,6 +15,10 @@
        aria-expanded="false" aria-label="Toggle navigation">
         <iconify-icon icon="solar:menu-dots-bold-duotone" class="fs-6"></iconify-icon>
     </a>
+
+
+
+
     <div class="collapse navbar-collapse justify-content-end" id="navbarNav">
         <div class="d-flex align-items-center justify-content-between">
             <ul class="navbar-nav flex-row mx-auto ms-lg-auto align-items-center justify-content-center">
@@ -26,6 +30,8 @@
                         <iconify-icon icon="solar:sort-line-duotone" class="fs-6"></iconify-icon>
                     </a>
                 </li>
+
+
                 <li class="nav-item">
                     <a class="nav-link moon dark-layout nav-icon-hover-bg rounded-circle"
                        href="javascript:void(0)">
@@ -42,6 +48,9 @@
                         <iconify-icon icon="solar:magnifer-line-duotone" class="fs-6"></iconify-icon>
                     </a>
                 </li>
+
+
+
 
 
                 <!-- ------------------------------- -->
@@ -74,14 +83,27 @@
                                 </div>
                             </div>
                             <div class="message-body">
-                                <a href="default-sidebar/page-account-settings.html"
-                                   class="p-2 dropdown-item h6 rounded-1">
+                                <a href="{{ route('system-settings.index') }}"
+                                   class="p-2 dropdown-item h6 rounded-1 d-flex justify-content-between align-items-center">
+                                    My Profile
+                                    <iconify-icon icon="mdi:user" style="font-size: 1.2em;"></iconify-icon>
+                                </a>
+                                <a href="{{ route('system-settings.index') }}"
+                                   class="p-2 dropdown-item h6 rounded-1 d-flex justify-content-between align-items-center">
+                                    System Settings
+                                    <iconify-icon icon="mdi:cog-outline" style="font-size: 1.2em;"></iconify-icon>
+                                </a>
+                                <a href="{{ route('account-settings.index') }}"
+                                   class="p-2 dropdown-item h6 rounded-1 d-flex justify-content-between align-items-center">
                                     Account Settings
+                                    <iconify-icon icon="mdi:tune" style="font-size: 1.2em;"></iconify-icon>
                                 </a>
                                 <form method="POST" action="{{ route('logout') }}">
                                     @csrf
-                                    <button type="submit" class="p-2 dropdown-item h6 rounded-1 w-100 text-start border-0 bg-transparent">
+                                    <button type="submit"
+                                            class="p-2 dropdown-item h6 rounded-1 w-100 text-start border-0 bg-transparent d-flex justify-content-between align-items-center">
                                         Sign Out
+                                        <iconify-icon icon="mdi:logout" style="font-size: 1.2em;"></iconify-icon>
                                     </button>
                                 </form>
                             </div>

@@ -2,6 +2,7 @@
 
 namespace Database\Factories;
 
+use App\Models\Department;
 use App\Models\User;
 use App\Models\Organization;
 use App\Models\Employee;
@@ -16,6 +17,7 @@ class EmployeeFactory extends Factory
     {
         return [
             'organization_id' => Organization::factory(),
+            'department_id' => Department::factory(),
             'employee_type_id' => EmployeeType::factory(),
             'user_id' => User::factory(),
             'name' => $this->faker->name(),

@@ -9,7 +9,16 @@ class Organization extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['name'];
+    protected $fillable = [
+        'name',
+        'address',
+        'location',
+        'email',
+        'phone_number',
+        'description',
+        'website',
+        'logo_path',
+    ];
 
     public function employees()
     {

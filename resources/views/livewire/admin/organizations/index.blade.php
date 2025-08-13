@@ -9,12 +9,26 @@ use Jantinnerezo\LivewireAlert\Facades\LivewireAlert;
 new class extends Component {
 
     public $name;
+    public $address;
+    public $location;
+    public $email;
+    public $phone_number;
+    public $description;
+    public $website;
+    public $logo_path;
     public $editId;
 
     public function rules()
     {
         return [
             'name' => 'required|string|max:255|unique:organizations,name,' . $this->editId,
+            'address' => 'nullable|string|max:255',
+            'location' => 'nullable|string|max:255',
+            'email' => 'required|email|unique:organizations,email,' . $this->editId,
+            'phone_number' => 'required|string|max:255',
+            'description' => 'nullable|string',
+            'website' => 'nullable|url',
+            'logo_path' => 'nullable|string',
         ];
     }
 
@@ -25,7 +39,16 @@ new class extends Component {
         try {
             DB::beginTransaction();
 
-            Organization::create(['name' => $this->name]);
+            Organization::create([
+                'name' => $this->name,
+                'address' => $this->address,
+                'location' => $this->location,
+                'email' => $this->email,
+                'phone_number' => $this->phone_number,
+                'description' => $this->description,
+                'website' => $this->website,
+                'logo_path' => $this->logo_path,
+            ]);
 
             DB::commit();
 
@@ -60,6 +83,13 @@ new class extends Component {
         $org = Organization::findOrFail($id);
         $this->editId = $id;
         $this->name = $org->name;
+        $this->address = $org->address;
+        $this->location = $org->location;
+        $this->email = $org->email;
+        $this->phone_number = $org->phone_number;
+        $this->description = $org->description;
+        $this->website = $org->website;
+        $this->logo_path = $org->logo_path;
 
         $this->dispatch('show-organization-modal');
     }
@@ -71,7 +101,16 @@ new class extends Component {
         try {
             DB::beginTransaction();
 
-            Organization::findOrFail($this->editId)->update(['name' => $this->name]);
+            Organization::findOrFail($this->editId)->update([
+                'name' => $this->name,
+                'address' => $this->address,
+                'location' => $this->location,
+                'email' => $this->email,
+                'phone_number' => $this->phone_number,
+                'description' => $this->description,
+                'website' => $this->website,
+                'logo_path' => $this->logo_path,
+            ]);
 
             DB::commit();
 
@@ -100,6 +139,7 @@ new class extends Component {
 
         }
     }
+
 
     #[On('delete-organization')]
     public function deleteOrganization($id)
@@ -223,10 +263,9 @@ new class extends Component {
         </div>
     </div>
 
-    <!-- Organization Modal -->
     <div class="modal fade" id="organizationModal" tabindex="-1"
          aria-labelledby="organizationModalTitle" aria-hidden="true" wire:ignore.self>
-        <div class="modal-dialog modal-md modal-dialog-centered">
+        <div class="modal-dialog modal-xl modal-dialog-centered">
             <div class="modal-content">
                 <div class="modal-header">
                     <h5 class="modal-title">{{ $editId ? 'Edit Organization' : 'New Organization' }}</h5>
@@ -235,20 +274,76 @@ new class extends Component {
 
                 <form wire:submit.prevent="{{ $editId ? 'updateOrganization' : 'createOrganization' }}">
                     <div class="modal-body">
-                        <input type="text" wire:model="name" class="form-control" placeholder="Organization Name"/>
-                        @error('name') <small class="text-danger">{{ $message }}</small> @enderror
-                    </div>
+                        <div class="row">
+                            <div class="col-md-4 mb-3">
+                                <label for="name" class="form-label">Organization Name</label>
+                                <input type="text" wire:model="name" id="name" class="form-control"
+                                       placeholder="Organization Name"/>
+                                @error('name') <small class="text-danger">{{ $message }}</small> @enderror
+                            </div>
 
-                    <div class="modal-footer d-flex gap-1">
-                        <button type="submit" class="btn btn-success">
-                            {{ $editId ? 'Save' : 'Add' }}
-                        </button>
-                        <button wire:click="$dispatch('discard-organization-modal')" type="button"
-                                class="btn btn-outline-danger" data-bs-dismiss="modal">
-                            Discard
-                        </button>
-                    </div>
+                            <div class="col-md-4 mb-3">
+                                <label for="address" class="form-label">Address</label>
+                                <input type="text" wire:model="address" id="address" class="form-control"
+                                       placeholder="Address"/>
+                                @error('address') <small class="text-danger">{{ $message }}</small> @enderror
+                            </div>
+
+                            <div class="col-md-4 mb-3">
+                                <label for="location" class="form-label">Location</label>
+                                <input type="text" wire:model="location" id="location" class="form-control"
+                                       placeholder="Location"/>
+                                @error('location') <small class="text-danger">{{ $message }}</small> @enderror
+                            </div>
+
+                            <div class="col-md-4 mb-3">
+                                <label for="email" class="form-label">Email</label>
+                                <input type="email" wire:model="email" id="email" class="form-control"
+                                       placeholder="Email"/>
+                                @error('email') <small class="text-danger">{{ $message }}</small> @enderror
+                            </div>
+
+                            <div class="col-md-4 mb-3">
+                                <label for="phone_number" class="form-label">Phone Number</label>
+                                <input type="tel" wire:model="phone_number" id="phone_number" class="form-control"
+                                       placeholder="Phone Number"/>
+                                @error('phone_number') <small class="text-danger">{{ $message }}</small> @enderror
+                            </div>
+
+                            <div class="col-md-4 mb-3">
+                                <label for="website" class="form-label">Website</label>
+                                <input type="url" wire:model="website" id="website" class="form-control"
+                                       placeholder="Website URL"/>
+                                @error('website') <small class="text-danger">{{ $message }}</small> @enderror
+                            </div>
+
+                            <div class="col-md-12 mb-3">
+                                <label for="description" class="form-label">Description</label>
+                                <textarea wire:model="description" id="description" class="form-control" rows="3"
+                                          placeholder="Description"></textarea>
+                                @error('description') <small class="text-danger">{{ $message }}</small> @enderror
+                            </div>
+
+                            <div class="col-md-12 mb-3">
+                                <label for="logo_path" class="form-label">Upload Logo</label>
+                                <input type="file" wire:model="logo_path" id="logo_path" class="form-control"
+                                       placeholder="e.g., /logos/isuzu.png"/>
+                                @error('logo_path') <small class="text-danger">{{ $message }}</small> @enderror
+                            </div>
+                        </div>
+
+
+                        <div class="modal-footer d-flex gap-1">
+                            <button type="submit" class="btn btn-success">
+                                {{ $editId ? 'Save' : 'Add' }}
+                            </button>
+                            <button wire:click="$dispatch('discard-organization-modal')" type="button"
+                                    class="btn btn-outline-danger" data-bs-dismiss="modal">
+                                Discard
+                            </button>
+                        </div>
                 </form>
+
             </div>
         </div>
     </div>

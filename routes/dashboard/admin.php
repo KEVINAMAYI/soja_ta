@@ -10,7 +10,8 @@ Route::middleware(['auth'])->prefix('admin')->group(function () {
     Volt::route('employees', 'admin.employees.index')->name('employees.index');
     Volt::route('employees/view', 'admin.employees.view')->name('employees.view');
 
-    Volt::route('settings', 'admin.settings.index')->name('settings.index');
+    Volt::route('system-settings', 'admin.system-settings.index')->name('system-settings.index');
+    Volt::route('account-settings', 'admin.account-settings.index')->name('account-settings.index');
 
     // Route to manage organizations
     Volt::route('organizations', 'admin.organizations.index')->name('organizations.index');
@@ -19,11 +20,13 @@ Route::middleware(['auth'])->prefix('admin')->group(function () {
     Volt::route('employee-types', 'admin.employee-types.index')->name('employee-types.index');
 
     //Routes to manage Attendance
-    Volt::route('attendance/daily', 'admin.attendance.daily')->name('attendance.daily');
-    Volt::route('attendance/monthly', 'admin.attendance.monthly')->name('attendance.monthly');
+    Volt::route('attendance', 'admin.attendance.index')->name('attendance.index');
 
     //Routes to manage Attendance
     Volt::route('overtime', 'admin.overtime.index')->name('overtime.index');
+
+    //Routes to manage Attendance
+    Volt::route('reports', 'admin.reports.index')->name('reports.index');
 
 });
 

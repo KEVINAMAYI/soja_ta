@@ -91,7 +91,7 @@ new class extends Component {
             <div class="row align-items-center">
                 <div class="col-12">
                     <div class="d-sm-flex align-items-center justify-space-between">
-                        <h4 class="mb-4 mb-sm-0 card-title">Settings</h4>
+                        <h4 class="mb-4 mb-sm-0 card-title">System Settings</h4>
                         <nav aria-label="breadcrumb" class="ms-auto">
                             <ol class="breadcrumb">
                                 <li class="breadcrumb-item d-flex align-items-center">
@@ -101,7 +101,7 @@ new class extends Component {
                                 </li>
                                 <li class="breadcrumb-item" aria-current="page">
                         <span class="badge fw-medium fs-2 bg-primary-subtle text-primary">
-                           Settings
+                           System Settings
                         </span>
                                 </li>
                             </ol>
@@ -161,21 +161,6 @@ new class extends Component {
                     </button>
                 </li>
 
-                <!-- Security -->
-                {{--                <li class="nav-item" role="presentation">--}}
-                {{--                    <button--}}
-                {{--                        class="nav-link position-relative rounded-0 d-flex align-items-center justify-content-center bg-transparent fs-3 py-3"--}}
-                {{--                        id="tab-security-tab"--}}
-                {{--                        data-bs-toggle="pill"--}}
-                {{--                        data-bs-target="#tab-holiday"--}}
-                {{--                        type="button"--}}
-                {{--                        role="tab"--}}
-                {{--                        aria-controls="tab-security"--}}
-                {{--                        aria-selected="false">--}}
-                {{--                        <i class="ti ti-lock me-2 fs-6"></i>--}}
-                {{--                        <span class="d-none d-md-block">Public Holidays</span>--}}
-                {{--                    </button>--}}
-                {{--                </li>--}}
             </ul>
 
             <div class="card-body">

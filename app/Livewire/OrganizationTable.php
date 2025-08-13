@@ -23,8 +23,15 @@ class OrganizationTable extends DataTableComponent
             Column::make("Name", "name")
                 ->sortable(),
 
-            Column::make("Created at", "created_at")
+            Column::make("Email", "email")
                 ->sortable(),
+
+            Column::make("Phone", "phone_number")
+                ->sortable(),
+
+            Column::make("Created at", "created_at")
+                ->sortable()
+                ->format(fn($value, $row, Column $column) => $value->format('F d, Y h:i A')),
 
             Column::make('Actions')
                 ->label(fn($row) => view('livewire.admin.organizations.actions', ['organization' => $row]))
