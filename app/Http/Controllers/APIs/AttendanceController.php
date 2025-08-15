@@ -21,11 +21,13 @@ class AttendanceController extends Controller
         $validated = $request->validate([
             'identifier_type' => 'required|in:id_number,qr_code,face_id',
             'identifier_value' => 'required|string',
-            'check_in_time' => 'required|date'
-
+            'check_in_time' => 'required|date',
+            'latitude' => 'required|numeric',
+            'longitude' => 'required|numeric',
         ]);
 
-        return $this->processCheckIn($validated['identifier_value'], $validated['identifier_type'], $validated['check_in_time']);
+        return $this->processCheckIn($validated['identifier_value'],
+            $validated['identifier_type'], $validated['check_in_time'], $validated['latitude'], $validated['longitude']);
     }
 
     /**
@@ -46,7 +48,7 @@ class AttendanceController extends Controller
     /**
      * Handle check-in logic
      */
-    private function processCheckIn(string $value, string $column, string $checkInTime)
+    private function processCheckIn(string $value, string $column, string $checkInTime, $latitude, $longitude)
     {
         DB::beginTransaction();
         try {
@@ -64,6 +66,8 @@ class AttendanceController extends Controller
                 'employee_id' => $employee->id,
                 'date' => $checkInTime ? Carbon::parse($checkInTime)->toDateString() : today()->toDateString(),
                 'check_in_time' => $checkInTime ? Carbon::parse($checkInTime) : now(),
+                'latitude' => $latitude,
+                'longitude' => $longitude
             ]);
 
             DB::commit();

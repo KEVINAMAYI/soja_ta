@@ -16,7 +16,9 @@ class Attendance extends Model
         'check_out_time',
         'worked_hours',
         'overtime_hours',
-        'status'
+        'status',
+        'latitude',
+        'longitude'
     ];
 
     protected $casts = [

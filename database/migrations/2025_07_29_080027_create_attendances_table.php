@@ -20,6 +20,8 @@ return new class extends Migration
             $table->decimal('worked_hours', 5, 2)->default(0);
             $table->decimal('overtime_hours', 5, 2)->default(0);
             $table->enum('status', ['present', 'absent', 'leave'])->default('present');
+            $table->decimal('latitude', 10, 7)->nullable();
+            $table->decimal('longitude', 10, 7)->nullable();
             $table->timestamps();
         });
 
