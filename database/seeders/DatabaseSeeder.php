@@ -18,6 +18,10 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
+        $this->call([
+            RolesAndPermissionsSeeder::class,
+        ]);
+
         $organization = Organization::factory()->create([
             'name' => 'Test Org',
             'email' => 'test@example.com',
@@ -41,6 +45,9 @@ class DatabaseSeeder extends Seeder
             'password' => bcrypt('password'),
         ]);
 
+        // Assign the supervisor role
+        $user->assignRole('supervisor');
+
         Employee::factory()->create([
             'organization_id' => $organization->id,
             'department_id' => $department->id,
@@ -57,10 +64,6 @@ class DatabaseSeeder extends Seeder
 
         //create token to be used for APis
         $user->createToken('Api Token')->plainTextToken;
-
-        $this->call([
-            RolesAndPermissionsSeeder::class,
-        ]);
 
     }
 }

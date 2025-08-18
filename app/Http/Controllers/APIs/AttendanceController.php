@@ -52,7 +52,35 @@ class AttendanceController extends Controller
     {
         DB::beginTransaction();
         try {
+
             $employee = Employee::where($column, $value)->firstOrFail();
+            $loggedInEmployee = auth()->user()->employee;
+
+            if (!$loggedInEmployee) {
+                return response()->json([
+                    'code' => 1003,
+                    'message' => 'No employee profile found.'
+                ], 404);
+            }
+
+            $isSelf = $employee->id === $loggedInEmployee->id;
+
+            if (!$isSelf) {
+
+                if ($employee->organization_id !== $loggedInEmployee->organization_id) {
+                    return response()->json([
+                        'code' => 1003,
+                        'message' => 'You cannot check in employees from another organization.'
+                    ], 403);
+                }
+
+                if (!auth()->user()->can('manage-employee-attendance')) {
+                    return response()->json([
+                        'code' => 1003,
+                        'message' => 'You do not have permission to check in other employees.'
+                    ], 403);
+                }
+            }
 
             $alreadyIn = Attendance::where('employee_id', $employee->id)
                 ->whereNull('check_out_time')
@@ -94,6 +122,35 @@ class AttendanceController extends Controller
             $employee = Employee::with('organization')
                 ->where($column, $value)
                 ->firstOrFail();
+
+            $loggedInEmployee = auth()->user()->employee;
+
+            if (!$loggedInEmployee) {
+                return response()->json([
+                    'code' => 1003,
+                    'message' => 'No employee profile found.'
+                ], 404);
+            }
+
+            $isSelf = $employee->id === $loggedInEmployee->id;
+
+            if (!$isSelf) {
+
+                if ($employee->organization_id !== $loggedInEmployee->organization_id) {
+                    return response()->json([
+                        'code' => 1003,
+                        'message' => 'You cannot check out employees from another organization.'
+                    ], 403);
+                }
+
+                if (!auth()->user()->can('manage-employee-attendance')) {
+                    return response()->json([
+                        'code' => 1003,
+                        'message' => 'You do not have permission to check out other employees.'
+                    ], 403);
+                }
+            }
+
 
             $attendance = Attendance::where('employee_id', $employee->id)
                 ->whereNull('check_out_time')
@@ -151,31 +208,65 @@ class AttendanceController extends Controller
     public function attendanceHistory(Request $request, $employeeId = null)
     {
         try {
-
             $startDate = $request->query('start_date');
             $endDate = $request->query('end_date');
+            $departmentId = $request->query('department_id'); // optional department filter
+            $all = $request->query('all', false); // optional flag to get all employees
 
-            // Get the logged-in user's employee record
             $loggedInEmployee = auth()->user()->employee;
-
             if (!$loggedInEmployee) {
                 return response()->json([
+                    'code' => 1003,
                     'message' => 'No employee profile found for the logged-in user.'
                 ], 404);
             }
 
-            // Build query: only for employees in same organization
             $query = Attendance::with(['employee.user'])
-                ->whereHas('employee', function ($q) use ($loggedInEmployee) {
+                ->whereHas('employee', function ($q) use ($loggedInEmployee, $departmentId) {
                     $q->where('organization_id', $loggedInEmployee->organization_id);
+
+                    if ($departmentId) {
+                        $q->where('department_id', $departmentId);
+                    }
                 });
 
-            // If specific employee is requested, filter within same organization
+            // Self-request (default)
+            if (!$all && !$employeeId) {
+                $query->where('employee_id', $loggedInEmployee->id);
+            }
+
+            // Specific employee request
             if ($employeeId) {
+                $targetEmployee = Employee::findOrFail($employeeId);
+
+                if ($targetEmployee->organization_id !== $loggedInEmployee->organization_id) {
+                    return response()->json([
+                        'message' => 'You cannot view employees from another organization.'
+                    ], 403);
+                }
+
+                // Only users with permission can view others
+                if ($targetEmployee->id !== $loggedInEmployee->id &&
+                    !auth()->user()->can('view-all-attendance')) {
+                    return response()->json([
+                        'message' => 'You do not have permission to view other employees attendance.'
+                    ], 403);
+                }
+
                 $query->where('employee_id', $employeeId);
             }
 
-            // If date range is provided
+            // All employees request (for supervisors/managers)
+            if ($all) {
+                if (!auth()->user()->can('view-all-attendance')) {
+                    return response()->json([
+                        'message' => 'You do not have permission to view all employees attendance.'
+                    ], 403);
+                }
+                // No employee_id filter needed, query already returns all in org/department
+            }
+
+            // Filter by date range
             if ($startDate && $endDate) {
                 $query->whereBetween('date', [$startDate, $endDate]);
             }
@@ -190,7 +281,6 @@ class AttendanceController extends Controller
         } catch (\Exception $e) {
             \Log::error('Error fetching attendance history: ' . $e->getMessage());
             return $this->errorResponse('Error fetching attendance history', $e);
-
         }
     }
 

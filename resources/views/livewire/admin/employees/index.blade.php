@@ -53,7 +53,7 @@ new class extends Component {
             ]);
 
             // Create the employee
-            $employee = Employee::create([
+            Employee::create([
                 'name' => $this->name,
                 'email' => $this->email,
                 'phone' => $this->phone,
@@ -65,10 +65,8 @@ new class extends Component {
                 'department_id' => $this->department_id,
             ]);
 
-            // ✅ Generate and save QR Code string
-            $qrCodeString = $org_id . $employee->id;
-            $employee->qr_code = $qrCodeString;
-            $employee->save();
+            // Assign the supervisor role
+            $user->assignRole('employee');
 
             //create token to be used for APis
             $user->createToken('Api Token')->plainTextToken;

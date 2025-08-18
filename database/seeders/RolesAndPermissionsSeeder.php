@@ -16,14 +16,13 @@ class RolesAndPermissionsSeeder extends Seeder
 
         // Define all permissions
         $permissions = [
-
             // Organization-related
             'view-organizations',
             'add-organizations',
             'edit-organizations',
             'delete-organizations',
 
-            // lecturer-related
+            // Employee-related
             'view-employees',
             'add-employees',
             'edit-employees',
@@ -35,9 +34,12 @@ class RolesAndPermissionsSeeder extends Seeder
             'edit-roles',
             'delete-roles',
 
-            //Manage reports
-            'manage-reports'
+            // Attendance management
+            'manage-employee-attendance',
+            'view-all-attendance',
 
+            // Reports
+            'manage-reports'
         ];
 
         // Create all permissions
@@ -47,11 +49,10 @@ class RolesAndPermissionsSeeder extends Seeder
 
         // Define specific role-permission mappings
         $rolePermissions = [
-
             'super-admin' => 'all',
-
-            'admin' => 'all',
-
+            'admin' => array_filter($permissions, fn($p) => !str_contains($p, 'organizations')),
+            'supervisor' => array_filter($permissions, fn($p) => !str_contains($p, 'organizations')),
+            'employee' => [],
         ];
 
         // Assign permissions
@@ -66,3 +67,4 @@ class RolesAndPermissionsSeeder extends Seeder
         }
     }
 }
+

@@ -16,6 +16,16 @@ class AuthController extends Controller
 
     public function enroll(Request $request)
     {
+        $currentUser = auth()->user();
+
+        // Only supervisors can enroll
+        if (!$currentUser->hasRole('supervisor')) {
+            return response()->json([
+                'code' => 1003,
+                'message' => 'Only supervisors can enroll new employees.'
+            ], 403);
+        }
+
         $request->validate([
             'name' => 'required|string|max:255',
             'email' => 'required|email|unique:users',
@@ -47,16 +57,20 @@ class AuthController extends Controller
                 'active' => true,
                 'user_id' => $user->id,
                 'department_id' => $request->department_id,
+                'face_id' => $request->face_id,
             ]);
 
             DB::commit();
+
+            // Assign the supervisor role
+            $user->assignRole('employee');
 
             // Generate token for immediate login
             $token = $user->createToken('Api Token')->plainTextToken;
 
             return response()->json([
-                'message' => 'User successfully enrolled',
-                'user' => new UserResource($user),
+                'message' => 'Employee successfully enrolled',
+                'data' => new UserResource($user),
                 'token' => $token
             ], 201);
 
@@ -83,7 +97,8 @@ class AuthController extends Controller
         if (!Auth::attempt($credentials)) {
 
             return response()->json([
-                'error' => 'User not Authenticated',
+                'code' => 1003,
+                'message' => 'User not Authenticated',
             ], 401);
 
         }
@@ -95,8 +110,9 @@ class AuthController extends Controller
         $token = $tokenResult->plainTextToken;
 
         return response()->json([
+            'code' => 1000,
             'message' => 'Login was successful',
-            'user' => new UserResource($user),
+            'data' => new UserResource($user),
             'token' => $token,
         ], 200);
 
@@ -105,12 +121,33 @@ class AuthController extends Controller
 
     public function logout(Request $request)
     {
+        try {
+            // Ensure the request has an authenticated user
+            $user = $request->user();
 
-        $request->user()->tokens()->delete();
+            if (!$user) {
+                return response()->json([
+                    'code' => 1003,
+                    'message' => 'No authenticated user found',
+                ], 401);
+            }
 
-        return response()->json([
-            'message' => 'User logged in and out successfully'
-        ], 200);
+            // Delete all tokens for this user
+            $user->tokens()->delete();
+
+            return response()->json([
+                'code' => 1000,
+                'message' => 'User logged out successfully',
+            ], 200);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'code' => 1003,
+                'message' => 'Logout failed. Please try again.',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
     }
+
 
 }

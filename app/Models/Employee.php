@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Helpers\QRCodeGenerator;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 
@@ -19,7 +20,22 @@ class Employee extends Model
         'email',
         'phone',
         'status',
+        'face_id',
     ];
+
+
+    protected static function booted()
+    {
+        static::creating(function ($employee) {
+            if (!$employee->qr_code) {
+                $employee->qr_code = QRCodeGenerator::generateEmployeeCode(
+                    $employee->organization_id,
+                    $employee->id ?? (Employee::max('id') + 1)
+                );
+            }
+        });
+    }
+
 
     public function organization()
     {
