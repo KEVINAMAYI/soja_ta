@@ -17,20 +17,26 @@ return Application::configure(basePath: dirname(__DIR__))
         //
     })
     ->withExceptions(function (Exceptions $exceptions) {
+
         $exceptions->renderable(function (AuthenticationException $e, $request) {
-            return response()->json([
-                'code' => 1003,
-                'message' => 'Unauthenticated. Please provide a valid token.',
-            ], 401);
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'code' => 1003,
+                    'message' => 'Unauthenticated. Please provide a valid token.',
+                ], 401);
+            }
+            return null;
         });
 
-        // Validation errors
         $exceptions->renderable(function (ValidationException $e, $request) {
-            return response()->json([
-                'code' => 1001,
-                'message' => 'Validation failed. Please check the provided data.',
-                'errors' => $e->errors(),
-            ], 422);
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'code' => 1001,
+                    'message' => 'Validation failed. Please check the provided data.',
+                    'errors' => $e->errors(),
+                ], 422);
+            }
+            return null;
         });
 
     })->create();

@@ -263,7 +263,6 @@ class AttendanceController extends Controller
                         'message' => 'You do not have permission to view all employees attendance.'
                     ], 403);
                 }
-                // No employee_id filter needed, query already returns all in org/department
             }
 
             // Filter by date range

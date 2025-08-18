@@ -67,7 +67,7 @@ new class extends Component {
                         role="tab"
                         aria-controls="tab-daily-attendance"
                         aria-selected="true">
-                        <i class="ti ti-user-circle me-2 fs-6"></i>
+                        <i class="ti ti-user-circle mx-2 fs-6"></i>
                         <span class="d-none d-md-block">Daily Attendance</span>
                     </button>
                 </li>
@@ -83,7 +83,7 @@ new class extends Component {
                         role="tab"
                         aria-controls="tab-monthly-attendance"
                         aria-selected="false">
-                        <i class="ti ti-calendar fs-6"></i> <!-- Right aligned icon -->
+                        <i class="ti ti-calendar mx-2 fs-6"></i> <!-- Right aligned icon -->
                         <span class="d-none d-md-block">Monthly Attendance</span>
                     </button>
                 </li>
