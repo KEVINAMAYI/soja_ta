@@ -19,7 +19,10 @@ class DepartmentTable extends DataTableComponent
 
     public function builder(): Builder
     {
-        $query = Department::query()->select('departments.*');
+        $orgId = auth()->user()->employee->organization_id ?? null;
+
+        $query = Department::query()->select('departments.*')
+            ->where('organization_id', $orgId);
 
         if ($this->search !== null && $this->search !== '') {
             $query->where(function ($q) {

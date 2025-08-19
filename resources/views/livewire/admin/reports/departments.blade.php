@@ -56,7 +56,7 @@ new class extends Component {
         <div class="card card-body">
 
             {{-- Livewire Table --}}
-            <livewire:attendance-daily-table theme="bootstrap-4"/>
+            <livewire:departmental-attendance-table theme="bootstrap-4"/>
 
         </div>
     </div>

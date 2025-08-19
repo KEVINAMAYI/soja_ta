@@ -47,7 +47,8 @@ new class extends Component {
         try {
             DB::beginTransaction();
 
-            $role = Role::create(['name' => strtolower($this->name)]);
+            $orgId = auth()->user()->employee->organization_id ?? null;
+            $role = Role::create(['name' => strtolower($this->name), 'organization_id' => $orgId]);
             $role->syncPermissions($this->selectedPermissions);
 
             DB::commit();
@@ -215,7 +216,8 @@ new class extends Component {
                                     <div class="row gy-1">
                                         @foreach ($groupedPermissions as $module => $perms)
                                             <div class="col-12 my-3">
-                                                <h6 class="text-primary fw-bold text-uppercase border-bottom pb-1 mb-1" style="font-size: 0.85rem;">
+                                                <h6 class="text-primary fw-bold text-uppercase border-bottom pb-1 mb-1"
+                                                    style="font-size: 0.85rem;">
                                                     {{ ucfirst($module) }}
                                                 </h6>
                                                 <div class="row gx-2 gy-1">
@@ -227,7 +229,9 @@ new class extends Component {
                                                                        wire:model.live="selectedPermissions"
                                                                        id="perm-{{ Str::slug($perm->name) }}"
                                                                        class="form-check-input"/>
-                                                                <label class="form-check-label" for="perm-{{ Str::slug($perm->name) }}" style="font-size: 0.8rem;">
+                                                                <label class="form-check-label"
+                                                                       for="perm-{{ Str::slug($perm->name) }}"
+                                                                       style="font-size: 0.8rem;">
                                                                     {{ ucwords(str_replace('-', ' ', $perm->name)) }}
                                                                 </label>
                                                             </div>

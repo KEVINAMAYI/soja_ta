@@ -57,7 +57,7 @@ class RolesAndPermissionsSeeder extends Seeder
 
         // Assign permissions
         foreach ($rolePermissions as $role => $perms) {
-            $roleInstance = Role::firstOrCreate(['name' => $role]);
+            $roleInstance = Role::firstOrCreate(['name' => $role, 'organization_id' => 1]);
 
             if ($perms === 'all') {
                 $roleInstance->syncPermissions(Permission::all());

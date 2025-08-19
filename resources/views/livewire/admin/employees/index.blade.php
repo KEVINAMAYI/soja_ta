@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\Role;
 use App\Models\User;
 use App\Models\Employee;
 use App\Models\EmployeeType;
@@ -14,9 +15,12 @@ new class extends Component {
 
     public $name, $email, $phone, $employee_type_id, $department_id, $id_number, $active = true;
     public $editId, $employeeTypes, $departments;
+    public $role;
 
-    public function mount()
+
+    public function mount(Role $role = null)
     {
+        $this->role = $role;
         $this->employeeTypes = EmployeeType::all();
         $this->departments = auth()->user()->employee->organization->departments;
 
@@ -309,7 +313,8 @@ new class extends Component {
             </div>
 
             {{-- Livewire Table --}}
-            <livewire:employee-table theme="bootstrap-4"/>
+            <livewire:employee-table :role="$role ?? null" theme="bootstrap-4"/>
+
         </div>
     </div>
 

@@ -6,6 +6,7 @@ use App\Models\Department;
 use App\Models\Employee;
 use App\Models\EmployeeType;
 use App\Models\Organization;
+use App\Models\Role;
 use App\Models\User;
 
 // use Illuminate\Database\Console\Seeds\WithoutModelEvents;
@@ -64,6 +65,11 @@ class DatabaseSeeder extends Seeder
 
         //create token to be used for APis
         $user->createToken('Api Token')->plainTextToken;
+
+        // Update ALL roles
+        Role::query()->update([
+            'organization_id' => $organization->id,
+        ]);
 
     }
 }

@@ -15,8 +15,8 @@ return new class extends Migration
             $table->id();
             $table->foreignId('employee_id')->constrained()->onDelete('cascade');
             $table->date('date');
-            $table->time('check_in_time')->nullable();
-            $table->time('check_out_time')->nullable();
+            $table->dateTime('check_in_time')->nullable();
+            $table->dateTime('check_out_time')->nullable();
             $table->decimal('worked_hours', 5, 2)->default(0);
             $table->decimal('overtime_hours', 5, 2)->default(0);
             $table->enum('status', ['present', 'absent', 'leave'])->default('present');

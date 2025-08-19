@@ -2,6 +2,7 @@
 
 namespace App\Livewire;
 
+use App\Models\Role;
 use Jantinnerezo\LivewireAlert\Facades\LivewireAlert;
 use Livewire\Attributes\On;
 use Rappasoft\LaravelLivewireTables\DataTableComponent;
@@ -13,6 +14,14 @@ use Rappasoft\LaravelLivewireTables\Views\Filters\SelectFilter;
 class EmployeeTable extends DataTableComponent
 {
     protected $model = Employee::class;
+
+
+    public ?Role $role = null;
+
+    public function mount($role = null)
+    {
+        $this->role = $role;
+    }
 
     public function configure(): void
     {
@@ -30,6 +39,13 @@ class EmployeeTable extends DataTableComponent
             ->select('employees.*')
             ->with(['organization', 'employeeType'])
             ->where('organization_id', $orgId);
+
+        // If role filter passed in
+        if ($this->role) {
+            $query->whereHas('user.roles', function ($q) {
+                $q->where('name', $this->role->name);
+            });
+        }
 
         if ($this->search !== null && $this->search !== '') {
             $query->where(function ($q) {

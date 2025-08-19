@@ -184,8 +184,8 @@ class AttendanceController extends Controller
                     'employee_id' => $employee->id,
                     'attendance_id' => $attendance->id,
                     'date' => $checkOutTime->toDateString(),
-                    'start_time' => $checkInTime->copy()->addHours($standardHours)->toTimeString(),
-                    'end_time' => $checkOutTime->toTimeString(),
+                    'start_time' => $checkInTime->copy()->addHours($standardHours),
+                    'end_time' => $checkOutTime,
                     'hours' => round($overtimeHours, 2),
                     'reason' => 'Auto-generated on checkout',
                 ]);
@@ -290,6 +290,7 @@ class AttendanceController extends Controller
     private function errorResponse(string $message, \Exception $e)
     {
         return response()->json([
+            'code' => 1003,
             'message' => $message,
             'error' => config('app.debug') ? $e->getMessage() : 'Server error'
         ], 500);
