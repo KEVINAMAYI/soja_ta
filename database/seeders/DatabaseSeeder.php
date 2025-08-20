@@ -7,6 +7,7 @@ use App\Models\Employee;
 use App\Models\EmployeeType;
 use App\Models\Organization;
 use App\Models\Role;
+use App\Models\Shift;
 use App\Models\User;
 
 // use Illuminate\Database\Console\Seeds\WithoutModelEvents;
@@ -34,10 +35,15 @@ class DatabaseSeeder extends Seeder
             'organization_id' => $organization->id
         ]);
 
-        $employeeType = EmployeeType::factory()->create([
+        $shift = Shift::factory()->create([
             'organization_id' => $organization->id,
-            'name' => 'Full Time',
-            'description' => 'Full time employee',
+            'name' => 'Morning Shift',
+            'start_time' => '08:00:00',
+            'end_time' => '16:00:00',
+            'break_minutes' => 30,
+            'overtime_rate' => 1.5,
+            'status' => 'active',
+            'notes' => 'Standard 8-hour day shift with 30-minute break.',
         ]);
 
         $user = User::factory()->create([
@@ -52,7 +58,7 @@ class DatabaseSeeder extends Seeder
         Employee::factory()->create([
             'organization_id' => $organization->id,
             'department_id' => $department->id,
-            'employee_type_id' => $employeeType->id,
+            'shift_id' => $shift->id,
             'user_id' => $user->id,
             'name' => 'Test Employee',
             'id_number' => 'EMP999',

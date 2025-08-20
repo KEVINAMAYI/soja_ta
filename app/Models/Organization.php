@@ -58,5 +58,10 @@ class Organization extends Model
         return $this->hasMany(Department::class);
     }
 
+    public function shifts()
+    {
+        return $this->hasMany(Shift::class);
+    }
+
 }
 

@@ -37,10 +37,9 @@ class EmployeeTable extends DataTableComponent
 
         $query = Employee::query()
             ->select('employees.*')
-            ->with(['organization', 'employeeType'])
+            ->with(['organization', 'shift', 'user'])
             ->where('organization_id', $orgId);
 
-        // If role filter passed in
         if ($this->role) {
             $query->whereHas('user.roles', function ($q) {
                 $q->where('name', $this->role->name);
@@ -63,8 +62,8 @@ class EmployeeTable extends DataTableComponent
     {
         return [
 
-            Column::make("Employee Type", "employee_type_id")
-                ->format(fn($value, $row) => $row->employeeType?->name ?? '—')
+            Column::make("Shift", "shift_id")
+                ->format(fn($value, $row) => $row->shift?->name ?? '—')
                 ->sortable(),
 
             Column::make("Employee", "name")
@@ -77,6 +76,10 @@ class EmployeeTable extends DataTableComponent
             Column::make("Department", "department_id")
                 ->format(fn($value, $row) => $row->department?->name ?? '—')
                 ->sortable(),
+
+            Column::make("Roles")
+                ->label(fn($row) => view('livewire.admin.employees.roles', ['employee' => $row]))
+                ->collapseOnMobile(),
 
             BooleanColumn::make('Active')
                 ->sortable()

@@ -52,4 +52,11 @@ class Shift extends Model
 
         return null;
     }
+
+
+    public function organization()
+    {
+        $this->belongsTo(Organization::class);
+    }
+
 }

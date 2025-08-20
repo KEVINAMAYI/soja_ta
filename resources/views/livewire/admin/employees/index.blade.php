@@ -16,13 +16,15 @@ new class extends Component {
     public $name, $email, $phone, $employee_type_id, $department_id, $id_number, $active = true;
     public $editId, $employeeTypes, $departments;
     public $role;
+    public $shifts;
+    public $shift_id;
 
 
     public function mount(Role $role = null)
     {
         $this->role = $role;
-        $this->employeeTypes = EmployeeType::all();
         $this->departments = auth()->user()->employee->organization->departments;
+        $this->shifts = auth()->user()->employee->organization->shifts;
 
     }
 
@@ -32,7 +34,7 @@ new class extends Component {
             'name' => 'required|string|max:255',
             'email' => 'nullable|email|unique:employees,email,' . $this->editId,
             'phone' => 'nullable|string|max:20',
-            'employee_type_id' => 'required|exists:employee_types,id',
+            'shift_id' => 'required|exists:shifts,id',
             'department_id' => 'required|exists:departments,id',
             'id_number' => 'required|string|unique:employees,id_number,' . $this->editId,
             'active' => 'boolean',
@@ -61,7 +63,7 @@ new class extends Component {
                 'name' => $this->name,
                 'email' => $this->email,
                 'phone' => $this->phone,
-                'employee_type_id' => $this->employee_type_id,
+                'shift_id' => $this->shift_id,
                 'organization_id' => auth()->user()->employee->organization->id,
                 'id_number' => $this->id_number,
                 'active' => $this->active,
@@ -117,7 +119,7 @@ new class extends Component {
         $this->name = $employee->name;
         $this->email = $employee->email;
         $this->phone = $employee->phone;
-        $this->employee_type_id = $employee->employee_type_id;
+        $this->shift_id = $employee->shift_id;
         $this->department_id = $employee->department_id;
         $this->id_number = $employee->id_number;
         $this->active = $employee->active;
@@ -140,7 +142,7 @@ new class extends Component {
                 'name' => $this->name,
                 'email' => $this->email,
                 'phone' => $this->phone,
-                'employee_type_id' => $this->employee_type_id,
+                'shift_id' => $this->shift_id,
                 'department_id' => $this->department_id,
                 'id_number' => $this->id_number,
                 'active' => $this->active,
@@ -351,14 +353,15 @@ new class extends Component {
                             </div>
 
                             <!-- Employee Type -->
+                            <!-- Organization -->
                             <div class="col-md-6 mb-3">
-                                <select wire:model="employee_type_id" class="form-control">
-                                    <option value="">Select Employee Type</option>
-                                    @foreach ($employeeTypes as $type)
-                                        <option value="{{ $type->id }}">{{ $type->name }}</option>
+                                <select wire:model="shift_id" class="form-control">
+                                    <option value="">Select Shift</option>
+                                    @foreach ($shifts as $shift)
+                                        <option value="{{ $shift->id }}">{{ $shift->name }}</option>
                                     @endforeach
                                 </select>
-                                @error('employee_type_id') <small class="text-danger">{{ $message }}</small> @enderror
+                                @error('shift_id') <small class="text-danger">{{ $message }}</small> @enderror
                             </div>
 
                             <!-- Organization -->
