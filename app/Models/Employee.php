@@ -72,7 +72,6 @@ class Employee extends Model
         return $this->belongsTo(Department::class);
     }
 
-
     public function shift()
     {
         return $this->belongsTo(Shift::class);

@@ -113,26 +113,11 @@ new class extends Component {
 
         <div class="card">
             <ul class="nav nav-pills user-profile-tab" id="pills-tab" role="tablist">
-                <!-- Working Hours -->
-                <li class="nav-item" role="presentation">
-                    <button
-                        class="nav-link position-relative rounded-0 active d-flex align-items-center justify-content-center bg-transparent fs-3 py-3"
-                        id="tab-working-hours-tab"
-                        data-bs-toggle="pill"
-                        data-bs-target="#tab-working-hours"
-                        type="button"
-                        role="tab"
-                        aria-controls="tab-working-hours"
-                        aria-selected="true">
-                        <i class="ti ti-user-circle me-2 fs-6"></i>
-                        <span class="d-none d-md-block">Working Hours Policy</span>
-                    </button>
-                </li>
 
                 <!-- Overtime -->
                 <li class="nav-item" role="presentation">
                     <button
-                        class="nav-link position-relative rounded-0 d-flex align-items-center justify-content-center bg-transparent fs-3 py-3"
+                        class="nav-link position-relative rounded-0 active d-flex align-items-center justify-content-center bg-transparent fs-3 py-3"
                         id="tab-overtime-policy-tab"
                         data-bs-toggle="pill"
                         data-bs-target="#tab-overtime-policy"
@@ -165,64 +150,9 @@ new class extends Component {
 
             <div class="card-body">
                 <div class="tab-content" id="pills-tabContent">
-                    <!-- Working Hours Tab -->
-                    <div class="tab-pane fade show active"
-                         id="tab-working-hours"
-                         role="tabpanel"
-                         aria-labelledby="tab-working-hours-tab"
-                         tabindex="0">
-                        <div class="row">
-                            <div class="col-12">
-                                <div class="card w-100 border position-relative overflow-hidden mb-0">
-                                    <div class="card-body p-4">
-                                        <h6 class="mb-3">Working Hours Policy</h6>
-
-                                        <!-- Start & End Time -->
-                                        <div class="row">
-                                            <div class="col-md-6 mb-3">
-                                                <label for="startTime" class="form-label">Start Time</label>
-                                                <input type="time" wire:model="settings.start_time"
-                                                       class="form-control" id="startTime">>
-                                            </div>
-                                            <div class="col-md-6 mb-3">
-                                                <label for="endTime" class="form-label">End Time <span
-                                                        class="text-muted">(optional)</span></label>
-                                                <input type="time"
-                                                       wire:change="$dispatch('set-end-time')"
-                                                       wire:model="settings.end_time"
-                                                       class="form-control" id="endTime">
-                                            </div>
-                                        </div>
-
-                                        <!-- Daily Required Hours -->
-                                        <div class="mb-3">
-                                            <label for="dailyHours" class="form-label">Daily Required Hours</label>
-                                            <div class="input-group">
-                                                <!-- Daily Required Hours -->
-                                                <input type="number" step="0.1"
-                                                       wire:model="settings.daily_required_hours"
-                                                       class="form-control"
-                                                       id="dailyHours"
-                                                       placeholder="e.g. 8.0">
-                                                <span class="input-group-text">hrs</span>
-                                            </div>
-                                        </div>
-
-                                    </div>
-                                </div>
-
-                            </div>
-
-                            <!-- Save/Cancel Buttons -->
-                            <div class="d-flex align-items-center justify-content-end gap-6 mt-4">
-                                <button wire:click="storeSettings" class="btn btn-primary">Save</button>
-                                <button class="btn bg-danger-subtle text-danger">Cancel</button>
-                            </div>
-                        </div>
-                    </div>
 
                     <!-- Overtime Policy Tab -->
-                    <div class="tab-pane fade"
+                    <div class="tab-pane fade show active"
                          id="tab-overtime-policy"
                          role="tabpanel"
                          aria-labelledby="tab-overtime-policy-tab"
@@ -411,94 +341,6 @@ new class extends Component {
                             </div>
                         </div>
                     </div>
-
-
-                    <!-- public holidays Tab -->
-                    {{--                    <div class="tab-pane fade"--}}
-                    {{--                         id="tab-holiday"--}}
-                    {{--                         role="tabpanel"--}}
-                    {{--                         aria-labelledby="tab-holiday"--}}
-                    {{--                         tabindex="0">--}}
-                    {{--                        <!-- Your security content remains unchanged -->--}}
-                    {{--                        <div>--}}
-                    {{--                            <div class="row justify-content-center">--}}
-                    {{--                                <div class="col-lg-10">--}}
-                    {{--                                    <div class="card border shadow-none">--}}
-                    {{--                                        <div class="card-body p-4">--}}
-                    {{--                                            <h4 class="card-title mb-4">🏝️ Public Holidays</h4>--}}
-                    {{--                                            <p class="card-subtitle mb-4">Manage company-wide holidays for automatic--}}
-                    {{--                                                absence logging and schedule planning.</p>--}}
-
-                    {{--                                            <div class="table-responsive">--}}
-                    {{--                                                <table class="table align-middle mb-0" id="holidaysTable">--}}
-                    {{--                                                    <thead class="table-light">--}}
-                    {{--                                                    <tr>--}}
-                    {{--                                                        <th style="width: 200px;">Date</th>--}}
-                    {{--                                                        <th>Occasion</th>--}}
-                    {{--                                                        <th style="width: 60px;"></th>--}}
-                    {{--                                                    </tr>--}}
-                    {{--                                                    </thead>--}}
-                    {{--                                                    <tbody>--}}
-                    {{--                                                    <tr>--}}
-                    {{--                                                        <td><input type="date" class="form-control" value="2025-08-10"/>--}}
-                    {{--                                                        </td>--}}
-                    {{--                                                        <td><input type="text" class="form-control"--}}
-                    {{--                                                                   value="Independence Day 🇰🇪"/></td>--}}
-                    {{--                                                        <td class="text-center">--}}
-                    {{--                                                            <button type="button" class="btn btn-sm btn-outline-danger"--}}
-                    {{--                                                                    onclick="this.closest('tr').remove();">--}}
-                    {{--                                                                <i class="ti ti-trash"></i>--}}
-                    {{--                                                            </button>--}}
-                    {{--                                                        </td>--}}
-                    {{--                                                    </tr>--}}
-                    {{--                                                    <tr>--}}
-                    {{--                                                        <td><input type="date" class="form-control" value="2025-08-15"/>--}}
-                    {{--                                                        </td>--}}
-                    {{--                                                        <td><input type="text" class="form-control"--}}
-                    {{--                                                                   value="Company Retreat 🏕️"/></td>--}}
-                    {{--                                                        <td class="text-center">--}}
-                    {{--                                                            <button type="button" class="btn btn-sm btn-outline-danger"--}}
-                    {{--                                                                    onclick="this.closest('tr').remove();">--}}
-                    {{--                                                                <i class="ti ti-trash"></i>--}}
-                    {{--                                                            </button>--}}
-                    {{--                                                        </td>--}}
-                    {{--                                                    </tr>--}}
-                    {{--                                                    <tr>--}}
-                    {{--                                                        <td><input type="date" class="form-control" value="2025-09-02"/>--}}
-                    {{--                                                        </td>--}}
-                    {{--                                                        <td><input type="text" class="form-control" value="Labour Day"/>--}}
-                    {{--                                                        </td>--}}
-                    {{--                                                        <td class="text-center">--}}
-                    {{--                                                            <button type="button" class="btn btn-sm btn-outline-danger"--}}
-                    {{--                                                                    onclick="this.closest('tr').remove();">--}}
-                    {{--                                                                <i class="ti ti-trash"></i>--}}
-                    {{--                                                            </button>--}}
-                    {{--                                                        </td>--}}
-                    {{--                                                    </tr>--}}
-                    {{--                                                    </tbody>--}}
-                    {{--                                                </table>--}}
-                    {{--                                            </div>--}}
-
-                    {{--                                            <div class="mt-4">--}}
-                    {{--                                                <button type="button" class="btn btn-outline-primary"--}}
-                    {{--                                                        onclick="addHolidayRow()">--}}
-                    {{--                                                    <i class="ti ti-plus me-1"></i> Add Holiday--}}
-                    {{--                                                </button>--}}
-                    {{--                                            </div>--}}
-                    {{--                                        </div>--}}
-                    {{--                                    </div>--}}
-
-                    {{--                                    <!-- Save/Cancel Buttons -->--}}
-                    {{--                                    <div class="d-flex align-items-center justify-content-end gap-6 mt-4">--}}
-                    {{--                                        <button class="btn btn-primary">Save</button>--}}
-                    {{--                                        <button class="btn bg-danger-subtle text-danger">Cancel</button>--}}
-                    {{--                                    </div>--}}
-                    {{--                                </div>--}}
-                    {{--                            </div>--}}
-                    {{--                        </div>--}}
-                    {{--                    </div>--}}
-
-
                 </div>
             </div>
         </div>

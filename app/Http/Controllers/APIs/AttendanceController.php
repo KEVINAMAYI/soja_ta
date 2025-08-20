@@ -116,10 +116,11 @@ class AttendanceController extends Controller
      */
     private function processCheckOut(string $value, string $column, string $checkOutTime)
     {
+
         DB::beginTransaction();
         try {
 
-            $employee = Employee::with('organization')
+            $employee = Employee::with('organization', 'shift')
                 ->where($column, $value)
                 ->firstOrFail();
 
@@ -131,6 +132,7 @@ class AttendanceController extends Controller
                     'message' => 'No employee profile found.'
                 ], 404);
             }
+
 
             $isSelf = $employee->id === $loggedInEmployee->id;
 
@@ -160,8 +162,9 @@ class AttendanceController extends Controller
                 return response()->json(['message' => 'Not checked in or already checked out.'], 409);
             }
 
+
             $org = $employee->organization;
-            $standardHours = (float)$org->getSetting('daily_required_hours', 8);
+            $standardHours = $employee->shift->duration;
             $otThreshold = (float)$org->getSetting('min_ot_threshold', 0);
 
             $checkInTime = Carbon::parse($attendance->check_in_time);

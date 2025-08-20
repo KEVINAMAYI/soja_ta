@@ -33,7 +33,7 @@ class AttendanceDailyTable extends DataTableComponent
 
         $query = Attendance::query()
             ->select('attendances.*')
-            ->with(['employee'])
+            ->with(['employee', 'employee.shift'])
             ->whereHas('employee', function ($q) use ($orgId) {
                 $q->where('organization_id', $orgId);
             });
@@ -55,8 +55,23 @@ class AttendanceDailyTable extends DataTableComponent
         $threshold = $this->min_ot_threshold;
 
         return [
+
             Column::make("Employee")
                 ->label(fn($row) => view('livewire.admin.attendance.employee', ['attendance' => $row])),
+
+            // Updated Shift Column with start and end times
+            Column::make("Shift")
+                ->label(function ($row) {
+                    if (!$row->employee->shift) {
+                        return '<span class="text-muted">-</span>';
+                    }
+                    $shift = $row->employee->shift;
+                    $formattedStart = Carbon::parse($shift->start_time)->format('g:i A');
+                    $formattedEnd = Carbon::parse($shift->end_time)->format('g:i A');
+
+                    return "<strong>{$shift->name}</strong><br><small>{$formattedStart} - {$formattedEnd}</small>";
+                })
+                ->html(),
 
             Column::make("Time In", "check_in_time")
                 ->sortable()
@@ -78,7 +93,7 @@ class AttendanceDailyTable extends DataTableComponent
 
             Column::make("Worked hours", "worked_hours")
                 ->sortable(),
-            Column::make("Overtime hours", "overtime_hours")
+            Column::make("Overtime(hours)", "overtime_hours")
                 ->sortable()
                 ->format(function ($value) use ($threshold) {
                     $badgeClass = $value >= $threshold ? 'badge bg-success' : 'badge bg-secondary';

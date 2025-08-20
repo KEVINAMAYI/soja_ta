@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 
@@ -35,23 +36,46 @@ class Shift extends Model
     /**
      * Accessor for shift duration (excluding break).
      */
-    public function getDurationAttribute()
+    public function getDurationAttribute(): ?float
     {
         if ($this->start_time && $this->end_time) {
-            $start = \Carbon\Carbon::createFromFormat('H:i:s', $this->start_time);
-            $end = \Carbon\Carbon::createFromFormat('H:i:s', $this->end_time);
+            try {
+                $baseDate = now()->startOfDay();
 
-            // Handle overnight shifts (end < start)
-            if ($end->lt($start)) {
-                $end->addDay();
+                $start = $baseDate->copy()->setTime(
+                    $this->start_time->hour,
+                    $this->start_time->minute,
+                    $this->start_time->second
+                );
+
+                $end = $baseDate->copy()->setTime(
+                    $this->end_time->hour,
+                    $this->end_time->minute,
+                    $this->end_time->second
+                );
+
+                // Handle overnight shifts
+                if ($end->lt($start)) {
+                    $end->addDay();
+                }
+
+                $breakMinutes = (int) ($this->break_minutes ?? 0);
+
+                $rawMinutes = $start->diffInMinutes($end); // ✅ Corrected direction
+
+                $durationMinutes = max(0, $rawMinutes - $breakMinutes);
+
+                return round($durationMinutes / 60, 2); // return float hours
+
+            } catch (\Exception $e) {
+                return null;
             }
-
-            $minutes = $end->diffInMinutes($start) - ($this->break_minutes ?? 0);
-            return $minutes > 0 ? $minutes : 0;
         }
 
         return null;
     }
+
+
 
 
     public function organization()
