@@ -13,6 +13,68 @@
 
     @rappasoftTableThirdPartyStyles
 
+    <style>
+        :root {
+            --primary-color: #e14326; /* Updated primary color */
+            --accent-color: #e14326; /* Updated accent color */
+            --light-gray: #F4F6F9;
+            --dark-text: #212121;
+            --muted-text: #666666;
+            --dark-bg: #1A1A1A;
+            --white: #ffffff;
+        }
+
+
+        [data-bs-theme=light][data-color-theme=Blue_Theme]:root {
+            --bs-primary: #e14326; /* Updated primary color */
+            --bs-primary-rgb: 225, 67, 38; /* RGB for #e14326 */
+            --bs-secondary: #16CDC7;
+            --bs-secondary-rgb: 22, 205, 199;
+        }
+
+        .btn-primary {
+            background-color: var(--primary-color) !important;
+            border-color: var(--primary-color) !important;
+        }
+
+        .btn-outline-primary {
+            border-color: var(--accent-color) !important;
+            color: var(--accent-color) !important;
+        }
+
+        .btn-outline-info {
+            border-color: var(--primary-color) !important;
+            color: var(--primary-color) !important;
+        }
+
+        .btn-outline-primary:hover,
+        .btn-outline-info:hover {
+            background-color: var(--accent-color) !important;
+            color: var(--dark-text) !important;
+        }
+
+        .btn-outline-info:hover {
+            border: 0px !important;
+        }
+
+        .topbar-image {
+            background-color: var(--primary-color) !important;
+        }
+
+        header.header-fp {
+            background-color: var(--light-gray) !important;
+        }
+
+        .nav-link {
+            color: var(--dark-text) !important;
+        }
+
+        .nav-link.active,
+        .nav-link:hover {
+            color: var(--primary-color) !important;
+        }
+    </style>
+
 </head>
 
 <body class="link-sidebar">
@@ -354,7 +416,6 @@
 <script src="../assets/js/apex-chart/apex.pie.init.js"></script>
 <script src="../assets/js/apex-chart/apex.bar.init.js"></script>
 <script src="../assets/js/apex-chart/apex.line.init.js"></script>
-
 
 
 <!-- Adds the Core Table Scripts -->

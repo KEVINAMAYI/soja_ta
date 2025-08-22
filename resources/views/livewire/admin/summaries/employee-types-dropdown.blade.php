@@ -10,7 +10,10 @@ new class extends Component {
     public function mount()
     {
         $orgId = auth()->user()->employee->organization_id ?? null;
-        $this->roles = Role::where('organization_id', $orgId)->get();
+
+        $this->roles = Role::where('organization_id', $orgId)
+            ->where('name', '!=', 'super-admin')
+            ->get();
     }
 
 }; ?>
