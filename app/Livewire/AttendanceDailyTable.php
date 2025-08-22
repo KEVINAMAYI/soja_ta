@@ -2,24 +2,36 @@
 
 namespace App\Livewire;
 
+use App\Models\Employee;
 use Carbon\Carbon;
 use Rappasoft\LaravelLivewireTables\DataTableComponent;
 use Rappasoft\LaravelLivewireTables\Views\Column;
 use App\Models\Attendance;
+use App\Services\AttendanceSeeder;
 
 class AttendanceDailyTable extends DataTableComponent
 {
     protected $model = Attendance::class;
-
-    public $status = '';
     public $min_ot_threshold = 0;
-    public $employee;
+    public $status;
 
-    public function mount()
+    protected AttendanceSeeder $seeder;
+
+
+    public function mount(AttendanceSeeder $seeder, $status = null)
     {
-        $this->employee = auth()->user()->employee()->with('organization')->first();
-        $this->min_ot_threshold = $this->employee->organization->getSetting('min_ot_threshold', 0);
+        $this->status = $status;
+        $this->seeder = $seeder;
+        $orgId = auth()->user()->employee->organization_id ?? null;
+
+        if ($status == 'unchecked_in' || $status == 'absent') {
+            $this->seeder->seedMissingAttendanceRecords($orgId);
+        }
+
+        $this->min_ot_threshold = auth()->user()->employee->organization()->first()->getSetting('min_ot_threshold', 0);
+
     }
+
 
     public function configure(): void
     {
@@ -28,27 +40,34 @@ class AttendanceDailyTable extends DataTableComponent
 
     public function builder(): \Illuminate\Database\Eloquent\Builder
     {
+        $orgId = auth()->user()->employee->organization_id ?? null;
+        $today = now()->toDateString();
+        $status = $this->status;
+        $search = $this->search;
 
-        $orgId = $this->employee->organization->id;
-
+        // Base Attendance query
         $query = Attendance::query()
             ->select('attendances.*')
             ->with(['employee', 'employee.shift'])
-            ->whereHas('employee', function ($q) use ($orgId) {
-                $q->where('organization_id', $orgId);
-            });
+            ->whereDate('date', $today)
+            ->whereHas('employee', fn($q) => $q->where('organization_id', $orgId));
 
-        if ($this->search !== null && $this->search !== '') {
-            $query->where(function ($q) {
-                $q->where('status', 'like', '%' . $this->search . '%')
-                    ->orWhereHas('employee', function ($q) {
-                        $q->where('name', 'like', '%' . $this->search . '%');
-                    });
+        if (!empty($status)) {
+            $query->where('status', $status);
+        }
+
+        // Apply search
+        if ($search) {
+            $query->where(function ($q) use ($search) {
+                $q->where('status', 'like', "%$search%")
+                    ->orWhereHas('employee', fn($q) => $q->where('name', 'like', "%$search%")
+                    );
             });
         }
 
         return $query;
     }
+
 
     public function columns(): array
     {
@@ -93,6 +112,7 @@ class AttendanceDailyTable extends DataTableComponent
 
             Column::make("Worked hours", "worked_hours")
                 ->sortable(),
+
             Column::make("Overtime(hours)", "overtime_hours")
                 ->sortable()
                 ->format(function ($value) use ($threshold) {
@@ -102,10 +122,10 @@ class AttendanceDailyTable extends DataTableComponent
                     return $value . '<br><span style=font-weight:bold;" class="' . $badgeClass . '" style="font-size: 0.55rem;">' . $badgeText . '</span>';
                 })
                 ->html(),
+
             Column::make("Status", "status")
-                ->sortable(),
-            Column::make("Created at", "created_at")
-                ->sortable(),
+                ->sortable()
+
         ];
     }
 }

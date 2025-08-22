@@ -82,25 +82,38 @@ class AttendanceController extends Controller
                 }
             }
 
-            $alreadyIn = Attendance::where('employee_id', $employee->id)
-                ->whereNull('check_out_time')
-                ->exists();
+            $today = today()->toDateString();
 
-            if ($alreadyIn) {
-                return response()->json(['message' => 'Already checked in.'], 409);
+            // Try to fetch today's attendance (seeded as absent/unchecked_in or none)
+            $attendance = Attendance::where('employee_id', $employee->id)
+                ->whereDate('date', $today)
+                ->first();
+
+
+            if ($attendance && $attendance->check_in_time) {
+                return response()->json([
+                    'code' => 1003,
+                    'message' => 'Already checked in.'
+                ], 409);
             }
 
-            $attendance = Attendance::create([
-                'employee_id' => $employee->id,
-                'date' => $checkInTime ? Carbon::parse($checkInTime)->toDateString() : today()->toDateString(),
-                'check_in_time' => $checkInTime ? Carbon::parse($checkInTime) : now(),
-                'latitude' => $latitude,
-                'longitude' => $longitude
-            ]);
+            if (!$attendance) {
+                $attendance = new Attendance([
+                    'employee_id' => $employee->id,
+                    'date' => $today,
+                ]);
+            }
+
+            $attendance->status = 'clocked_in';
+            $attendance->check_in_time = $checkInTime ? Carbon::parse($checkInTime) : now();
+            $attendance->latitude = $latitude;
+            $attendance->longitude = $longitude;
+            $attendance->save();
 
             DB::commit();
 
             return response()->json([
+                'code' => 1000,
                 'message' => 'Check-in successful',
                 'data' => new AttendanceResource($attendance)
             ], 201);
@@ -154,12 +167,18 @@ class AttendanceController extends Controller
             }
 
 
+            $today = today()->toDateString();
+
             $attendance = Attendance::where('employee_id', $employee->id)
+                ->whereDate('date', $today)
                 ->whereNull('check_out_time')
                 ->first();
 
-            if (!$attendance) {
-                return response()->json(['message' => 'Not checked in or already checked out.'], 409);
+            if (!$attendance || !$attendance->check_in_time) {
+                return response()->json([
+                    'code' => 1003,
+                    'message' => 'Not checked in or already checked out.'
+                ], 409);
             }
 
 
@@ -177,6 +196,7 @@ class AttendanceController extends Controller
             }
 
             $attendance->update([
+                'status' => 'clocked_out',
                 'check_out_time' => $checkOutTime,
                 'worked_hours' => round($workedHours, 2),
                 'overtime_hours' => round($overtimeHours, 2),
@@ -244,6 +264,7 @@ class AttendanceController extends Controller
 
                 if ($targetEmployee->organization_id !== $loggedInEmployee->organization_id) {
                     return response()->json([
+                        'code' => 1003,
                         'message' => 'You cannot view employees from another organization.'
                     ], 403);
                 }
@@ -252,6 +273,7 @@ class AttendanceController extends Controller
                 if ($targetEmployee->id !== $loggedInEmployee->id &&
                     !auth()->user()->can('view-all-attendance')) {
                     return response()->json([
+                        'code' => 1003,
                         'message' => 'You do not have permission to view other employees attendance.'
                     ], 403);
                 }
@@ -263,6 +285,7 @@ class AttendanceController extends Controller
             if ($all) {
                 if (!auth()->user()->can('view-all-attendance')) {
                     return response()->json([
+                        'code' => 1003,
                         'message' => 'You do not have permission to view all employees attendance.'
                     ], 403);
                 }
@@ -276,6 +299,7 @@ class AttendanceController extends Controller
             $history = $query->orderBy('date', 'desc')->get();
 
             return response()->json([
+                'code' => 1000,
                 'message' => 'Attendance history retrieved successfully',
                 'data' => AttendanceResource::collection($history)
             ], 200);
@@ -290,13 +314,64 @@ class AttendanceController extends Controller
     /**
      * Standard error response
      */
-    private function errorResponse(string $message, \Exception $e)
+    private function errorResponse(string $message, \Throwable $e): \Illuminate\Http\JsonResponse
     {
         return response()->json([
             'code' => 1003,
-            'message' => $message,
-            'error' => config('app.debug') ? $e->getMessage() : 'Server error'
+            'message' => $this->getFriendlyErrorMessage($e, $message),
         ], 500);
+    }
+
+
+    private function getFriendlyErrorMessage(\Throwable $e, string $defaultMessage = 'An unexpected error occurred.'): string
+    {
+        // Handle Laravel's common exceptions
+        if ($e instanceof \Illuminate\Auth\AuthenticationException) {
+            return 'Authentication failed. Please log in again.';
+        }
+
+        if ($e instanceof \Illuminate\Validation\ValidationException) {
+            return 'Validation failed. Please check your input.';
+        }
+
+        if ($e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException) {
+            return 'Requested resource not found.';
+        }
+
+        if ($e instanceof \Symfony\Component\HttpKernel\Exception\NotFoundHttpException) {
+            return 'The requested endpoint was not found.';
+        }
+
+        if ($e instanceof \Symfony\Component\HttpKernel\Exception\MethodNotAllowedHttpException) {
+            return 'HTTP method not allowed on this route.';
+        }
+
+        if ($e instanceof \Illuminate\Auth\Access\AuthorizationException) {
+            return 'You are not authorized to perform this action.';
+        }
+
+        if ($e instanceof \Illuminate\Database\QueryException) {
+            $message = $e->getMessage();
+
+            // Optional: more specific DB error handling
+            if (str_contains($message, 'Duplicate entry')) {
+                return 'Duplicate data. This record already exists.';
+            }
+
+            if (str_contains($message, 'foreign key constraint')) {
+                return 'Cannot delete or update because of related data.';
+            }
+
+            return 'A database error occurred. Please try again later.';
+        }
+
+        // You may also match known substrings if really needed
+        if (str_contains($e->getMessage(), 'specific known issue')) {
+            return 'A specific known error occurred.';
+        }
+
+        // Default fallback
+        return $defaultMessage;
     }
 
 

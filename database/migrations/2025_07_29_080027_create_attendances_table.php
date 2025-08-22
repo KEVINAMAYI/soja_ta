@@ -19,7 +19,7 @@ return new class extends Migration
             $table->dateTime('check_out_time')->nullable();
             $table->decimal('worked_hours', 5, 2)->default(0);
             $table->decimal('overtime_hours', 5, 2)->default(0);
-            $table->enum('status', ['present', 'absent', 'leave'])->default('present');
+            $table->enum('status', ['clocked_in','clocked_out', 'unchecked_in','absent',])->default('absent');
             $table->decimal('latitude', 10, 7)->nullable();
             $table->decimal('longitude', 10, 7)->nullable();
             $table->timestamps();

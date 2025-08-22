@@ -18,6 +18,7 @@ class OrganizationController extends Controller
         // Restrict access to supervisors
         if (!$user->hasRole('supervisor')) {
             return response()->json([
+                'code' => 1003,
                 'message' => 'Unauthorized. Only supervisors can access this.'
             ], 403);
         }
@@ -25,7 +26,10 @@ class OrganizationController extends Controller
         $employee = $user->employee;
 
         if (!$employee) {
-            return response()->json(['message' => 'No employee profile found.'], 404);
+            return response()->json([
+                'code' => 1003,
+                'message' => 'No employee profile found.'
+            ], 404);
         }
 
         $departments = Department::where('organization_id', $employee->organization_id)
@@ -33,6 +37,7 @@ class OrganizationController extends Controller
             ->get();
 
         return response()->json([
+            'code' => 1000,
             'message' => 'Departments retrieved successfully',
             'data' => $departments
         ]);
@@ -46,6 +51,7 @@ class OrganizationController extends Controller
 
         if (!$user->hasRole('supervisor')) {
             return response()->json([
+                'code' => 1003,
                 'message' => 'Unauthorized. Only supervisors can access this.'
             ], 403);
         }
@@ -53,7 +59,10 @@ class OrganizationController extends Controller
         $employee = $user->employee;
 
         if (!$employee) {
-            return response()->json(['message' => 'No employee profile found.'], 404);
+            return response()->json([
+                'code' => 1003,
+                'message' => 'No employee profile found.'
+            ], 404);
         }
 
         $query = Employee::with('department', 'employeeType', 'user')
@@ -67,11 +76,11 @@ class OrganizationController extends Controller
         $employees = $query->orderBy('name')->get();
 
         return response()->json([
+            'code' => 1000,
             'message' => 'Employees retrieved successfully',
             'data' => UserResource::collection($employees->pluck('user')) // Only return user info formatted
         ], 200);
     }
-
 
 
 }

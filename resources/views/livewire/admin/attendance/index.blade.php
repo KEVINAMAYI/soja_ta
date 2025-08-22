@@ -3,6 +3,16 @@
 use Livewire\Volt\Component;
 
 new class extends Component {
+
+
+    public $status;
+
+    public function mount($status = null)
+    {
+        $this->status = $status;
+
+    }
+
 }; ?>
 
 @push('styles')
@@ -56,7 +66,7 @@ new class extends Component {
         <div class="card card-body">
 
             {{-- Livewire Table --}}
-            <livewire:attendance-daily-table theme="bootstrap-4"/>
+            <livewire:attendance-daily-table :status="$status ?? null" theme="bootstrap-4"/>
 
         </div>
     </div>

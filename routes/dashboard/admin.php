@@ -3,8 +3,14 @@
 use Illuminate\Support\Facades\Route;
 use Livewire\Volt\Volt;
 
+
+Volt::route('/', 'admin.dashboard.index')->middleware(['auth', 'verified'])
+    ->name('dashboard');
+
 // Group all admin routes under the 'admin' prefix
 Route::middleware(['auth'])->prefix('admin')->group(function () {
+
+    Volt::route('dashboard', 'admin.dashboard.index')->name('dashboard');
 
     // Route to manage employees
     Volt::route('employees', 'admin.employees.index')->name('employees.index');
@@ -26,6 +32,7 @@ Route::middleware(['auth'])->prefix('admin')->group(function () {
 
     //Routes to manage Attendance
     Volt::route('attendance', 'admin.attendance.index')->name('attendance.index');
+    Volt::route('attendance/status/{status}', 'admin.attendance.index')->name('attendance.status.index');
 
     //Routes to manage Overtime
     Volt::route('overtime', 'admin.overtime.index')->name('overtime.index');

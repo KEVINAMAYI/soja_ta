@@ -57,35 +57,36 @@
 
                             <!-- Clocked In -->
                             <li class="sidebar-item">
-                                <a class="sidebar-link" href="#">
-                                    <span class="icon-small"></span>
-                                    Clocked In
+                                <a class="sidebar-link {{ request()->routeIs('attendance.status.index') && request()->status === 'clocked_in' ? 'active' : '' }}"
+                                   href="{{ route('attendance.status.index', ['status' => 'clocked_in']) }}">
+                                    <span class="icon-small"></span> Clocked In
                                 </a>
                             </li>
 
                             <!-- Clocked Out -->
                             <li class="sidebar-item">
-                                <a class="sidebar-link" href="#">
-                                    <span class="icon-small"></span>
-                                    Clocked Out
+                                <a class="sidebar-link {{ request()->routeIs('attendance.status.index') && request()->status === 'clocked_out' ? 'active' : '' }}"
+                                   href="{{ route('attendance.status.index', ['status' => 'clocked_out']) }}">
+                                    <span class="icon-small"></span> Clocked Out
                                 </a>
                             </li>
 
-                            <!-- Unchecked Out -->
+                            <!-- Unchecked In -->
                             <li class="sidebar-item">
-                                <a class="sidebar-link" href="#">
-                                    <span class="icon-small"></span>
-                                    Unchecked Out
+                                <a class="sidebar-link {{ request()->routeIs('attendance.status.index') && request()->status === 'unchecked_in' ? 'active' : '' }}"
+                                   href="{{ route('attendance.status.index', ['status' => 'unchecked_in']) }}">
+                                    <span class="icon-small"></span> Unchecked In
                                 </a>
                             </li>
 
                             <!-- Absent -->
                             <li class="sidebar-item">
-                                <a class="sidebar-link" href="#">
-                                    <span class="icon-small"></span>
-                                    Absent
+                                <a class="sidebar-link {{ request()->routeIs('attendance.status.index') && request()->status === 'absent' ? 'active' : '' }}"
+                                   href="{{ route('attendance.status.index', ['status' => 'absent']) }}">
+                                    <span class="icon-small"></span> Absent
                                 </a>
                             </li>
+
                         </ul>
                     </li>
 

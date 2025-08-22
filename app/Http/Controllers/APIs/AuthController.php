@@ -5,6 +5,7 @@ namespace App\Http\Controllers\APIs;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\UserResource;
 use App\Models\Employee;
+use App\Models\Shift;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -32,13 +33,14 @@ class AuthController extends Controller
             'password' => 'required|string|max:255',
             'confirm_password' => 'required|string|max:255|same:password',
             'phone' => 'nullable|string|max:20',
-            'employee_type_id' => 'required|exists:employee_types,id',
+//            'shift_id' => 'required|exists:shifts,id',
             'department_id' => 'required|exists:departments,id',
             'id_number' => 'required|string|unique:employees,id_number',
         ]);
 
         DB::beginTransaction();
         try {
+
             // Create user
             $user = User::create([
                 'name' => $request->name,
@@ -46,12 +48,23 @@ class AuthController extends Controller
                 'password' => Hash::make($request->password),
             ]);
 
+            // Determine shift_id
+            $shiftId = $request->shift_id;
+
+            if (!$shiftId) {
+                $firstShift = Shift::where('organization_id', $currentUser->employee->organization_id ?? null)
+                    ->orderBy('id')
+                    ->first();
+
+                $shiftId = $firstShift ? $firstShift->id : null;
+            }
+
             // Create employee linked to the new user
             Employee::create([
                 'name' => $request->name,
                 'email' => $request->email,
                 'phone' => $request->phone,
-                'employee_type_id' => $request->employee_type_id,
+                'shift_id' => $shiftId,
                 'organization_id' => auth()->user()->employee->organization_id,
                 'id_number' => $request->id_number,
                 'active' => true,
