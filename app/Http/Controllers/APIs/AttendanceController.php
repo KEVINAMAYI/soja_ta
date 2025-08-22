@@ -85,25 +85,30 @@ class AttendanceController extends Controller
             $today = today()->toDateString();
 
             // Try to fetch today's attendance (seeded as absent/unchecked_in or none)
-            $attendance = Attendance::where('employee_id', $employee->id)
+            $existing = Attendance::where('employee_id', $employee->id)
                 ->whereDate('date', $today)
+                ->latest()
                 ->first();
 
-
-            if ($attendance && $attendance->check_in_time) {
+            // Prevent check-in if already checked in and not checked out
+            if ($existing && $existing->check_in_time && is_null($existing->check_out_time)) {
                 return response()->json([
-                    'code' => 1003,
-                    'message' => 'Already checked in.'
+                    'code' => 1004,
+                    'message' => 'Already checked in and not checked out.'
                 ], 409);
             }
 
-            if (!$attendance) {
+            // Determine whether to use existing record or create new
+            if (!$existing || ($existing->check_in_time && $existing->check_out_time)) {
                 $attendance = new Attendance([
                     'employee_id' => $employee->id,
                     'date' => $today,
                 ]);
+            } else {
+                $attendance = $existing;
             }
 
+            // Set check-in data
             $attendance->status = 'clocked_in';
             $attendance->check_in_time = $checkInTime ? Carbon::parse($checkInTime) : now();
             $attendance->latitude = $latitude;
@@ -172,15 +177,15 @@ class AttendanceController extends Controller
             $attendance = Attendance::where('employee_id', $employee->id)
                 ->whereDate('date', $today)
                 ->whereNull('check_out_time')
+                ->latest()
                 ->first();
 
-            if (!$attendance || !$attendance->check_in_time || $attendance->check_out_time) {
+            if (!$attendance || !$attendance->check_in_time) {
                 return response()->json([
                     'code' => 1003,
-                    'message' => 'Not eligible for checkout: not checked in or already checked out.'
+                    'message' => 'Not checked in or already checked out.'
                 ], 409);
             }
-
 
             $org = $employee->organization;
             $standardHours = $employee->shift->duration;
