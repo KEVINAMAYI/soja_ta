@@ -15,6 +15,7 @@ new class extends Component {
     public $recentActivities = [];
     public $currentEmployeeStatus = [];
     public $employeeLocations = [];
+    public $googleMapsApiKey;
 
 
     public function mount()
