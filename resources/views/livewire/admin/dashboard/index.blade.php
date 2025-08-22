@@ -22,6 +22,9 @@ new class extends Component {
 
         $today = Carbon::today();
 
+
+        $this->googleMapsApiKey = env('GOOGLE_MAPS_API_KEY');
+
         //Determine organization of logged-in user
         $employeeRecord = Employee::where('user_id', auth()->id())->first();
         $orgId = $employeeRecord->organization_id;
@@ -555,7 +558,7 @@ new class extends Component {
     </script>
 
     <script async defer
-            src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCywsYc_9cfBe6v9AMffH33JOHuksi0kaA&callback=initMap">
+            src="https://maps.googleapis.com/maps/api/js?key={{ $googleMapsApiKey }}&callback=initMap">
     </script>
 @endpush
 
