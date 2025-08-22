@@ -174,10 +174,10 @@ class AttendanceController extends Controller
                 ->whereNull('check_out_time')
                 ->first();
 
-            if (!$attendance || !$attendance->check_in_time) {
+            if (!$attendance || !$attendance->check_in_time || $attendance->check_out_time) {
                 return response()->json([
                     'code' => 1003,
-                    'message' => 'Not checked in or already checked out.'
+                    'message' => 'Not eligible for checkout: not checked in or already checked out.'
                 ], 409);
             }
 
