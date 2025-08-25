@@ -3,6 +3,7 @@
 use App\Models\Shift;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Livewire\Attributes\On;
 use Livewire\Volt\Component;
 use Jantinnerezo\LivewireAlert\Facades\LivewireAlert;
 
@@ -79,6 +80,7 @@ new class extends Component {
         }
     }
 
+    #[On('edit-shift')]
     public function editShift($id)
     {
         $shift = Shift::findOrFail($id);
@@ -140,6 +142,7 @@ new class extends Component {
         }
     }
 
+    #[On('delete-shift')]
     public function deleteShift($id)
     {
         DB::beginTransaction();

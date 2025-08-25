@@ -15,13 +15,13 @@ class EmployeeTable extends DataTableComponent
 {
     protected $model = Employee::class;
 
+    public ?int $roleId;
 
-    public ?Role $role = null;
-
-    public function mount($role = null)
+    public function mount($roleId = null)
     {
-        $this->role = $role;
+        $this->roleId = $roleId;
     }
+
 
     public function configure(): void
     {
@@ -40,9 +40,9 @@ class EmployeeTable extends DataTableComponent
             ->with(['organization', 'shift', 'user'])
             ->where('organization_id', $orgId);
 
-        if ($this->role) {
+        if (!empty($this->roleId)) {
             $query->whereHas('user.roles', function ($q) {
-                $q->where('name', $this->role->name);
+                $q->where('id', $this->roleId);
             });
         }
 
@@ -60,6 +60,7 @@ class EmployeeTable extends DataTableComponent
 
     public function columns(): array
     {
+
         return [
 
             Column::make("Shift", "shift_id")
@@ -84,10 +85,6 @@ class EmployeeTable extends DataTableComponent
             BooleanColumn::make('Active')
                 ->sortable()
                 ->collapseOnMobile(),
-
-            Column::make("Created", "created_at")
-                ->sortable()
-                ->format(fn($value) => $value->format('Y-m-d')),
 
             Column::make("Action")
                 ->label(fn($row) => view('livewire.admin.employees.actions', ['employee' => $row]))

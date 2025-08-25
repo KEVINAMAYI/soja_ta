@@ -59,7 +59,7 @@ class Shift extends Model
                     $end->addDay();
                 }
 
-                $breakMinutes = (int) ($this->break_minutes ?? 0);
+                $breakMinutes = (int)($this->break_minutes ?? 0);
 
                 $rawMinutes = $start->diffInMinutes($end); // ✅ Corrected direction
 
@@ -76,11 +76,15 @@ class Shift extends Model
     }
 
 
-
-
     public function organization()
     {
         $this->belongsTo(Organization::class);
+    }
+
+
+    public function employees()
+    {
+        return $this->hasMany(Employee::class);
     }
 
 }

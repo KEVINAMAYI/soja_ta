@@ -13,7 +13,7 @@ Route::middleware(['auth'])->prefix('admin')->group(function () {
     Volt::route('dashboard', 'admin.dashboard.index')->name('dashboard');
 
     // Route to manage employees
-    Volt::route('employees', 'admin.employees.index')->name('employees.index');
+    Volt::route('employees/{?role}', 'admin.employees.index')->name('employees.index');
     Volt::route('employees/view', 'admin.employees.view')->name('employees.view');
     Volt::route('employees/roles/{role}', 'admin.employees.index')->name('employees.roles.index');
 
@@ -26,6 +26,7 @@ Route::middleware(['auth'])->prefix('admin')->group(function () {
 
     // Route to manage Shifts
     Volt::route('shifts', 'admin.shifts.index')->name('shifts.index');
+    Volt::route('shifts/view/{shift}', 'admin.shifts.view')->name('shifts.view');
 
     // Route to manage Employee Types
     Volt::route('employee-types', 'admin.employee-types.index')->name('employee-types.index');

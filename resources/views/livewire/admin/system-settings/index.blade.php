@@ -125,8 +125,8 @@ new class extends Component {
                         role="tab"
                         aria-controls="tab-overtime-policy"
                         aria-selected="false">
-                        <i class="ti ti-bell me-2 fs-6"></i>
-                        <span class="d-none d-md-block">Overtime Hours Policy</span>
+                        <i class="ti ti-building-factory me-2 fs-6"></i>
+                        <span class="d-none d-md-block">Shifts</span>
                     </button>
                 </li>
 
@@ -141,7 +141,7 @@ new class extends Component {
                         role="tab"
                         aria-controls="tab-notifications"
                         aria-selected="false">
-                        <i class="ti ti-article me-2 fs-6"></i>
+                        <i class="ti ti-bell me-2 fs-6"></i>
                         <span class="d-none d-md-block">Notifications</span>
                     </button>
                 </li>
@@ -157,90 +157,10 @@ new class extends Component {
                          role="tabpanel"
                          aria-labelledby="tab-overtime-policy-tab"
                          tabindex="0">
-                        <div class="row justify-content-center">
-                            <div class="col-lg-9">
-                                <div class="card border shadow-none">
-                                    <div class="card-body p-4">
-                                        <h4 class="card-title mb-4">Overtime Policy</h4>
 
-                                        <!-- Minimum OT Threshold -->
-                                        <div class="mb-4">
-                                            <label for="minOtThreshold" class="form-label">Minimum OT Threshold</label>
-                                            <div class="input-group">
-                                                <input type="number" step="0.1" class="form-control" id="minOtThreshold"
-                                                       placeholder="e.g. 1.0"
-                                                       wire:model="settings.min_ot_threshold"/>
-                                                <span class="input-group-text">hrs</span>
-                                            </div>
-                                        </div>
+                        {{-- Livewire Table --}}
+                        <livewire:admin.shifts.index/>
 
-                                        <!-- Approval Required -->
-                                        <div class="d-flex align-items-center justify-content-between mb-4">
-                                            <div class="d-flex align-items-center gap-3">
-                                                <div
-                                                    class="text-bg-light rounded-1 p-6 d-flex align-items-center justify-content-center">
-                                                    <i class="ti ti-check text-dark d-block fs-7"></i>
-                                                </div>
-                                                <div>
-                                                    <h5 class="fs-4 fw-semibold mb-0">Approval Required</h5>
-                                                    <p class="mb-0">Overtime must be approved by a manager</p>
-                                                </div>
-                                            </div>
-                                            <div class="form-check form-switch mb-0">
-                                                <input class="form-check-input" type="checkbox" role="switch"
-                                                       id="otApprovalSwitch"
-                                                       wire:model="settings.ot_requires_approval"/>
-                                            </div>
-                                        </div>
-
-                                        <!-- OT Allowed on Weekends -->
-                                        <div class="d-flex align-items-center justify-content-between mb-4">
-                                            <div class="d-flex align-items-center gap-3">
-                                                <div
-                                                    class="text-bg-light rounded-1 p-6 d-flex align-items-center justify-content-center">
-                                                    <i class="ti ti-calendar-x text-dark d-block fs-7"></i>
-                                                </div>
-                                                <div>
-                                                    <h5 class="fs-4 fw-semibold mb-0">OT Allowed on Weekends</h5>
-                                                    <p class="mb-0">Enable or disable OT tracking on weekends</p>
-                                                </div>
-                                            </div>
-                                            <div class="form-check form-switch mb-0">
-                                                <input class="form-check-input" type="checkbox" role="switch"
-                                                       id="otWeekendSwitch"
-                                                       wire:model="settings.ot_allowed_on_weekends"/>
-                                            </div>
-                                        </div>
-
-                                        <!-- Auto Calculate OT -->
-                                        <div class="d-flex align-items-center justify-content-between">
-                                            <div class="d-flex align-items-center gap-3">
-                                                <div
-                                                    class="text-bg-light rounded-1 p-6 d-flex align-items-center justify-content-center">
-                                                    <i class="ti ti-calculator text-dark d-block fs-7"></i>
-                                                </div>
-                                                <div>
-                                                    <h5 class="fs-4 fw-semibold mb-0">Auto Calculate OT</h5>
-                                                    <p class="mb-0">Automatically compute OT from working hours</p>
-                                                </div>
-                                            </div>
-                                            <div class="form-check form-switch mb-0">
-                                                <input class="form-check-input" type="checkbox" role="switch"
-                                                       id="autoOtSwitch" wire:model="settings.auto_calculate_ot"/>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <!-- Save / Cancel Buttons -->
-                            <div class="col-12">
-                                <div class="d-flex align-items-center justify-content-end gap-6 mt-4">
-                                    <button wire:click="storeSettings" class="btn btn-primary">Save</button>
-                                    <button class="btn bg-danger-subtle text-danger">Cancel</button>
-                                </div>
-                            </div>
-                        </div>
                     </div>
 
                     <!-- Notifications Tab -->

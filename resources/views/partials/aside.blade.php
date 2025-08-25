@@ -103,16 +103,6 @@
                     </li>
 
                     <li class="sidebar-item">
-                        <a class="sidebar-link {{ request()->routeIs('shifts.index') ? 'active' : '' }}"
-                           href="{{ route('shifts.index') }}"
-                           id="get-url"
-                           aria-expanded="false">
-                            <iconify-icon icon="mdi:factory"></iconify-icon>
-                            <span class="hide-menu">Shifts</span>
-                        </a>
-                    </li>
-
-                    <li class="sidebar-item">
                         <a class="sidebar-link {{ request()->routeIs('reports.*') ? 'active' : '' }}"
                            href="#reportsMenu"
                            data-bs-toggle="collapse"

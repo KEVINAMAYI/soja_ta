@@ -68,6 +68,9 @@ class ShiftTable extends DataTableComponent
                     default => '<span class="badge bg-secondary">' . ucfirst($value) . '</span>'
                 })
                 ->html(),
+
+            Column::make("Action")
+                ->label(fn($row) => view('livewire.admin.shifts.actions', ['shift' => $row]))
         ];
 
     }

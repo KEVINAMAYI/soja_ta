@@ -250,10 +250,11 @@ new class extends Component {
             <div class="stat-card">
                 <div class="stat-text">
                     <h6 class="text-muted mb-1">Total Employees</h6>
-                    <h3 class="fw-bold">{{ $totalEmployees }}</h3>
+                    <h3 class="fw-bold text-dark">{{ $totalEmployees }}</h3>
+                    <small style="visibility:hidden;" class="text-muted">Everyone in</small>
                 </div>
-                <div class="stat-icon icon-blue">
-                    <span class="iconify" data-icon="mdi:account-group"></span>
+                <div class="stat-icon icon-green">
+                    <span class="iconify" data-icon="mdi:account-check"></span>
                 </div>
             </div>
         </div>
@@ -266,7 +267,7 @@ new class extends Component {
                 <div class="stat-text">
                     <h6 class="text-muted mb-1">Present Today</h6>
                     <h3 class="fw-bold text-success">{{ $presentToday }}</h3>
-                    <small class="text-muted">{{ ($presentToday/$totalEmployees) * 100 }}% attendance</small>
+                    <small class="text-muted">{{ number_format(($presentToday / $totalEmployees) * 100, 2) }}% attendance</small>
                 </div>
                 <div class="stat-icon icon-green">
                     <span class="iconify" data-icon="mdi:account-check"></span>
@@ -282,7 +283,7 @@ new class extends Component {
                 <div class="stat-text">
                     <h6 class="text-muted mb-1">Late Arrivals</h6>
                     <h3 class="fw-bold text-danger">{{ $lateArrivals }}</h3>
-                    <small class="text-muted">Need attention</small>
+                    <small class="text-muted">Today</small>
                 </div>
                 <div class="stat-icon icon-red">
                     <span class="iconify" data-icon="mdi:alert-circle-outline"></span>

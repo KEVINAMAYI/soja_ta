@@ -30,6 +30,7 @@ new class extends Component {
 
 @push('styles')
     <style>
+        /* Buttons */
         .btn-outline-secondary {
             margin-left: 0.5rem !important;
             padding: 6px 16px !important;
@@ -57,6 +58,7 @@ new class extends Component {
             stroke: white !important;
         }
 
+        /* Input fields */
         .form-control {
             display: block !important;
             font-size: 0.875rem !important;
@@ -64,11 +66,85 @@ new class extends Component {
             line-height: 1.5 !important;
             color: #1e293b !important;
             background-color: #fff !important;
-            background-clip: padding-box !important;
             border: 1px solid #d1d5db !important;
             border-radius: 8px !important;
             box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03) !important;
             transition: all 0.2s ease-in-out !important;
+        }
+
+        /* Accordion wrapper */
+        .accordion-item {
+            border: none;
+            border-radius: 8px;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+            margin-bottom: 1rem;
+            overflow: hidden;
+        }
+
+        /* Accordion header button */
+        .accordion-button {
+            background-color: #f8f9fa;
+            font-weight: 600;
+            color: #333;
+            padding: 1rem 1.25rem;
+            transition: background-color 0.3s ease;
+            border: none;
+        }
+
+        .accordion-button:not(.collapsed) {
+            background-color: #e9ecef;
+            color: #000;
+        }
+
+        .accordion-button:hover {
+            background-color: #e2e6ea;
+        }
+
+        /* Remove default arrow */
+        .accordion-button::after {
+            display: none !important;
+        }
+
+        /* Accordion collapse body */
+        .accordion-collapse {
+            background-color: white;
+            padding: 1rem 1.25rem;
+            border-top: 1px solid #dee2e6;
+            border-bottom-left-radius: 0px;
+            border-bottom-right-radius: 0px;
+        }
+
+        /* Flatten Livewire inner card */
+        .accordion-collapse .card {
+            box-shadow: none !important;
+            border: none !important;
+            border-radius: 0 !important;
+            margin: 0 !important;
+        }
+
+        /* Rounded corners when closed */
+        .accordion-item .accordion-button.collapsed {
+            border-radius: 8px;
+        }
+
+        /* Only top corners when open */
+        .accordion-item .accordion-button:not(.collapsed) {
+            border-top-left-radius: 0px;
+            border-top-right-radius: 0px;
+            border-bottom-left-radius: 0;
+            border-bottom-right-radius: 0;
+        }
+
+        .accordion-collapse {
+            background-color: white;
+            padding: 1rem 1.25rem;
+            border-top: 1px solid #dee2e6;
+            border-bottom-left-radius: 0px;
+            border-bottom-right-radius: 0px;
+
+            /* Smooth transition */
+            transition: height 0.3s ease, padding 0.3s ease;
+            overflow: hidden;
         }
 
     </style>
@@ -123,25 +199,10 @@ new class extends Component {
                         aria-controls="tab-users"
                         aria-selected="false">
                         <i class="ti ti-users mx-1 fs-6"></i>
-                        <span class="d-none d-md-block">User</span>
+                        <span class="d-none d-md-block">User & Departments</span>
                     </button>
                 </li>
 
-                <!-- Departments -->
-                <li class="nav-item" role="presentation">
-                    <button
-                        class="nav-link position-relative rounded-0 d-flex align-items-center justify-content-between bg-transparent fs-3 py-3"
-                        id="tab-depts-tab"
-                        data-bs-toggle="pill"
-                        data-bs-target="#tab-depts"
-                        type="button"
-                        role="tab"
-                        aria-controls="tab-depts"
-                        aria-selected="false">
-                        <i class="ti ti-building mx-1 fs-6"></i>
-                        <span class="d-none d-md-block">Departments</span>
-                    </button>
-                </li>
             </ul>
 
             <div class="card-body">
@@ -177,20 +238,44 @@ new class extends Component {
                          aria-labelledby="tab-users-tab"
                          tabindex="0">
 
-                        <livewire:admin.employees.index/>
+                        <div class="accordion" id="customAccordion">
+                            <div class="accordion-item border-0 mb-3 shadow-sm rounded">
+                                <h2 class="accordion-header" id="headingOne">
+                                    <button class="fs-4 accordion-button fw-bold collapsed" type="button"
+                                            data-bs-toggle="collapse" data-bs-target="#collapseOne"
+                                            aria-expanded="false" aria-controls="collapseOne">
+                                        Departments
+                                    </button>
+                                </h2>
+                                <div id="collapseOne" class="accordion-collapse collapse" aria-labelledby="headingOne"
+                                     data-bs-parent="#customAccordion">
+                                    <livewire:admin.departments.index/>
+                                </div>
+                            </div>
+
+                            <div class="accordion" id="userAccordion">
+                                <div class="accordion-item border-0 shadow-sm rounded">
+                                    <h2 class="accordion-header" id="headingUsers">
+                                        <button class="fs-4 accordion-button fw-bold collapsed" type="button"
+                                                data-bs-toggle="collapse" data-bs-target="#collapseUsers"
+                                                aria-expanded="false" aria-controls="collapseUsers">
+                                            Users
+                                        </button>
+                                    </h2>
+                                    <div id="collapseUsers" class="accordion-collapse collapse"
+                                         aria-labelledby="headingUsers"
+                                         data-bs-parent="#userAccordion">
+                                        <!-- ⚠️ NO card wrapper here -->
+                                        <livewire:admin.employees.index/>
+                                    </div>
+                                </div>
+                            </div>
+
+
+                        </div>
 
                     </div>
 
-                    <!-- Overtime Policy Tab -->
-                    <div class="tab-pane fade"
-                         id="tab-depts"
-                         role="tabpanel"
-                         aria-labelledby="tab-depts-tab"
-                         tabindex="0">
-
-                        <livewire:admin.departments.index/>
-
-                    </div>
 
                 </div>
             </div>
