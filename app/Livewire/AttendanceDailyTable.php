@@ -92,7 +92,7 @@ class AttendanceDailyTable extends DataTableComponent
                 })
                 ->html(),
 
-            Column::make("Time In", "check_in_time")
+            Column::make("Clocked In", "check_in_time")
                 ->sortable()
                 ->format(function ($value) {
                     if (!$value) return '<span class="text-muted">-</span>';
@@ -101,7 +101,7 @@ class AttendanceDailyTable extends DataTableComponent
                 })
                 ->html(),
 
-            Column::make("Time Out", "check_out_time")
+            Column::make("Clocked Out", "check_out_time")
                 ->sortable()
                 ->format(function ($value) {
                     if (!$value) return '<span class="text-muted">-</span>';
