@@ -51,7 +51,7 @@ class DepartmentalAttendanceTable extends DataTableComponent
                 DB::raw("SUM(attendances.worked_hours) as total_worked_hours"),
                 DB::raw("SUM(attendances.overtime_hours) as total_ot_hours")
             )
-            ->groupBy('employees.department_id', DB::raw("DATE_FORMAT(attendances.date, '%Y-%m')"));
+            ->groupBy('employees.department_id', 'departments.name', DB::raw("DATE_FORMAT(attendances.date, '%Y-%m')"));
     }
 
     public function columns(): array
