@@ -15,7 +15,7 @@ class EmployeeTable extends DataTableComponent
 {
     protected $model = Employee::class;
 
-    public ?int $roleId;
+    public int $roleId;
 
     public function mount($roleId = null)
     {

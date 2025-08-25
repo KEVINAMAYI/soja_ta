@@ -15,14 +15,14 @@ new class extends Component {
 
     public $name, $email, $phone, $employee_type_id, $department_id, $id_number, $active = true;
     public $editId, $employeeTypes, $departments;
-    public $role;
+    public $roleId;
     public $shifts;
     public $shift_id;
 
 
-    public function mount(Role $role = null)
+    public function mount($roleId = null)
     {
-        $this->role = $role;
+        $this->roleId = $roleId;
         $this->departments = auth()->user()->employee->organization->departments;
         $this->shifts = auth()->user()->employee->organization->shifts;
 
@@ -315,7 +315,7 @@ new class extends Component {
             </div>
 
             {{-- Livewire Table --}}
-            <livewire:employee-table :role="$role ?? null" theme="bootstrap-4"/>
+            <livewire:employee-table :roleId="$roleId ?? null" theme="bootstrap-4"/>
 
         </div>
     </div>

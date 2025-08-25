@@ -265,8 +265,7 @@ new class extends Component {
                                     <div id="collapseUsers" class="accordion-collapse collapse"
                                          aria-labelledby="headingUsers"
                                          data-bs-parent="#userAccordion">
-                                        <!-- ⚠️ NO card wrapper here -->
-                                        <livewire:admin.employees.index/>
+                                        <livewire:admin.employees.index :roleId="null" />
                                     </div>
                                 </div>
                             </div>
