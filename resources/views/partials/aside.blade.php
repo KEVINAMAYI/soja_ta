@@ -97,7 +97,7 @@
                            href="{{ route('organizations.index') }}"
                            id="get-url"
                            aria-expanded="false">
-                            <iconify-icon icon="solar:widget-add-line-duotone"></iconify-icon>
+                            <iconify-icon icon="mdi:office-building-outline" class="fs-5"></iconify-icon>
                             <span class="hide-menu">Organizations</span>
                         </a>
                     </li>
