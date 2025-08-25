@@ -53,6 +53,27 @@ new class extends Component {
 
 <div class="row">
     <div class="col-12">
+
+        <livewire:admin.system-settings.bread-crumb
+            title="Department Reports"
+            :items="[
+        [
+            'label' => 'Dashboard',
+            'url' => route('dashboard'),
+            'icon' => '<iconify-icon icon=\'solar:home-2-line-duotone\' class=\'fs-5\'></iconify-icon>',
+        ],
+        [
+            'label' => 'Reports',
+            'icon' => '<iconify-icon icon=\'mdi:file-chart-outline\' class=\'fs-5\'></iconify-icon>',
+        ],
+        [
+            'label' => 'Departments',
+            'icon' => '<iconify-icon icon=\'mdi:office-building-outline\' class=\'fs-5\'></iconify-icon>',
+        ]
+      ]"
+        />
+
+
         <div class="card card-body">
 
             {{-- Livewire Table --}}

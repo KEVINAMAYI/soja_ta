@@ -1,8 +1,6 @@
 <?php
 
 use App\Models\Organization;
-use App\Models\OrganizationSetting;
-use Carbon\Carbon;
 use Jantinnerezo\LivewireAlert\Facades\LivewireAlert;
 use Livewire\Attributes\On;
 use Livewire\Volt\Component;
@@ -11,6 +9,10 @@ new class extends Component {
 
 
     public $settings;
+    public string $activeTab = 'shifts'; // default
+    public string $tabTitle;
+    public string $tabIcon;
+    public array $breadcrumbItems = [];
 
     public function mount()
     {
@@ -23,62 +25,49 @@ new class extends Component {
             return [$item->key => $value];
         })->toArray();
 
+        $this->changeBreadcrumb();
+
+    }
+
+    #[On('tabChanged')]
+    public function tabChanged($tabId)
+    {
+
+        $this->activeTab = $tabId;
+        $this->changeBreadcrumb();
 
     }
 
 
-    public function storeSettings()
+    public function changeBreadcrumb()
     {
+        $this->tabTitle = $this->activeTab === 'notifications'
+            ? 'Notification'
+            : 'Shift';
 
 
-        $orgId = auth()->user()->employee?->organization_id;
-        $org = Organization::find($orgId);
+        $this->tabIcon = $this->activeTab === 'notifications'
+            ? '<iconify-icon icon="mdi:bell-outline" class="fs-5"></iconify-icon>'
+            : '<iconify-icon icon="mdi:calendar-clock" class="fs-5"></iconify-icon>';
 
-        foreach ($this->settings as $key => $value) {
-            $org->setSetting(
-                $key,
-                is_array($value) ? json_encode($value) : $value,
-                gettype($value)
-            );
-        }
+        $this->breadcrumbItems = [
+            [
+                'label' => 'Dashboard',
+                'url' => route('dashboard'),
+                'icon' => '<iconify-icon icon="solar:home-2-line-duotone" class="fs-5"></iconify-icon>',
+            ],
+            [
+                'label' => 'System Settings',
+                'url' => '#',
+                'icon' => '<iconify-icon icon="mdi:cog-outline" class="fs-5"></iconify-icon>',
+            ],
+            [
+                'label' => $this->tabTitle,
+                'icon' => $this->tabIcon,
+            ],
+        ];
 
-        LivewireAlert::title('Awesome!')
-            ->text('Organization settings updated successfully.')
-            ->success()
-            ->toast()
-            ->position('top-end')
-            ->show();
 
-    }
-
-
-    #[On('set-end-time')]
-    public function calculateDailyHours(): void
-    {
-
-        $start = $this->settings['start_time'];
-        $end = $this->settings['end_time'];
-
-        if ($start && $end) {
-            try {
-
-                $startTime = Carbon::createFromFormat('H:i', $start);
-                $endTime = Carbon::createFromFormat('H:i', $end);
-
-                // Handle overnight shifts
-                if ($endTime->lessThanOrEqualTo($startTime)) {
-                    $endTime->addDay();
-                }
-
-                $hours = $startTime->diffInMinutes($endTime) / 60;
-
-                $this->settings['daily_required_hours'] = round($hours, 2);
-
-            } catch (\Exception $e) {
-                // Optional error handling
-                $this->settings['daily_required_hours'] = null;
-            }
-        }
     }
 
 
@@ -87,37 +76,18 @@ new class extends Component {
 <div>
 
     <div class="container-fluid">
-        <div class="card card-body py-3">
-            <div class="row align-items-center">
-                <div class="col-12">
-                    <div class="d-sm-flex align-items-center justify-space-between">
-                        <h4 class="mb-4 mb-sm-0 card-title">System Settings</h4>
-                        <nav aria-label="breadcrumb" class="ms-auto">
-                            <ol class="breadcrumb">
-                                <li class="breadcrumb-item d-flex align-items-center">
-                                    <a class="text-muted text-decoration-none d-flex" href="../main/index.html">
-                                        <iconify-icon icon="solar:home-2-line-duotone" class="fs-6"></iconify-icon>
-                                    </a>
-                                </li>
-                                <li class="breadcrumb-item" aria-current="page">
-                        <span class="badge fw-medium fs-2 bg-primary-subtle text-primary">
-                           System Settings
-                        </span>
-                                </li>
-                            </ol>
-                        </nav>
-                    </div>
-                </div>
-            </div>
-        </div>
+
+        <livewire:admin.system-settings.bread-crumb
+            :title="$tabTitle"
+            :items="$breadcrumbItems"
+        />
 
         <div class="card">
             <ul class="nav nav-pills user-profile-tab" id="pills-tab" role="tablist">
 
-                <!-- Overtime -->
                 <li class="nav-item" role="presentation">
                     <button
-                        class="nav-link position-relative rounded-0 active d-flex align-items-center justify-content-center bg-transparent fs-3 py-3"
+                        class="nav-link position-relative rounded-0 {{ $activeTab === 'shifts' ? 'active' : '' }} d-flex align-items-center justify-content-center bg-transparent fs-3 py-3"
                         id="tab-overtime-policy-tab"
                         data-bs-toggle="pill"
                         data-bs-target="#tab-overtime-policy"
@@ -130,10 +100,9 @@ new class extends Component {
                     </button>
                 </li>
 
-                <!-- Notifications -->
                 <li class="nav-item" role="presentation">
                     <button
-                        class="nav-link position-relative rounded-0 d-flex align-items-center justify-content-center bg-transparent fs-3 py-3"
+                        class="nav-link position-relative rounded-0 {{ $activeTab === 'notifications' ? 'active' : '' }} d-flex align-items-center justify-content-center bg-transparent fs-3 py-3"
                         id="tab-notifications-tab"
                         data-bs-toggle="pill"
                         data-bs-target="#tab-notifications"
@@ -146,17 +115,16 @@ new class extends Component {
                     </button>
                 </li>
 
+
             </ul>
 
             <div class="card-body">
                 <div class="tab-content" id="pills-tabContent">
 
                     <!-- Overtime Policy Tab -->
-                    <div class="tab-pane fade show active"
-                         id="tab-overtime-policy"
-                         role="tabpanel"
-                         aria-labelledby="tab-overtime-policy-tab"
-                         tabindex="0">
+                    <div class="tab-pane fade {{ $activeTab === 'shifts' ? 'show active' : '' }}"
+                         id="tab-overtime-policy">
+
 
                         {{-- Livewire Table --}}
                         <livewire:admin.shifts.index/>
@@ -164,11 +132,8 @@ new class extends Component {
                     </div>
 
                     <!-- Notifications Tab -->
-                    <div class="tab-pane fade"
-                         id="tab-notifications"
-                         role="tabpanel"
-                         aria-labelledby="tab-notifications-tab"
-                         tabindex="0">
+                    <div class="tab-pane fade {{ $activeTab === 'notifications' ? 'show active' : '' }}"
+                         id="tab-notifications">
 
                         <div class="row justify-content-center">
                             <div class="col-lg-9">
@@ -268,6 +233,38 @@ new class extends Component {
     </div>
 
 </div>
+
+
+@push('scripts')
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const tabs = document.querySelectorAll('button[data-bs-toggle="pill"]');
+
+            tabs.forEach(tab => {
+                tab.addEventListener('shown.bs.tab', function (event) {
+                    const tabId = event.target.id;
+
+                    // Map Bootstrap tab IDs to your internal tab names
+                    let mappedTab;
+                    switch (tabId) {
+                        case 'tab-overtime-policy-tab':
+                            mappedTab = 'shifts';
+                            break;
+                        case 'tab-notifications-tab':
+                            mappedTab = 'notifications';
+                            break;
+                        default:
+                            mappedTab = 'shifts';
+                    }
+
+                    Livewire.dispatch('tabChanged', {tabId: mappedTab});
+
+                });
+            });
+        });
+    </script>
+@endpush
+
 
 
 

@@ -1,12 +1,17 @@
 <?php
 
 use App\Models\Organization;
+use Livewire\Attributes\On;
 use Livewire\Volt\Component;
 
 new class extends Component {
 
     public $organizationId;
     public $org;
+    public string $activeTab = 'company';
+    public string $tabTitle;
+    public string $tabIcon;
+    public array $breadcrumbItems = [];
 
     public function mount()
     {
@@ -23,6 +28,62 @@ new class extends Component {
         } else {
             abort(403, 'No organization found for this user.');
         }
+
+
+        $this->changeBreadcrumb();
+
+    }
+
+    #[On('tabChanged')]
+    public function tabChanged($tabId)
+    {
+
+        $this->activeTab = $tabId;
+        $this->changeBreadcrumb();
+
+    }
+
+    public function changeBreadcrumb()
+    {
+        switch ($this->activeTab) {
+
+            case 'company':
+                $this->tabTitle = 'Company';
+                $this->tabIcon = '<iconify-icon icon="mdi:office-building-outline" class="fs-5"></iconify-icon>';
+                break;
+
+            case 'roles':
+                $this->tabTitle = 'Roles & Permissions';
+                $this->tabIcon = '<iconify-icon icon="mdi:account-key-outline" class="fs-5"></iconify-icon>';
+                break;
+
+            case 'users':
+                $this->tabTitle = 'Users & Departments';
+                $this->tabIcon = '<iconify-icon icon="mdi:account-multiple-outline" class="fs-5"></iconify-icon>';
+                break;
+
+            default:
+                $this->tabTitle = 'Settings';
+                $this->tabIcon = '<iconify-icon icon="mdi:cog-outline" class="fs-5"></iconify-icon>';
+                break;
+        }
+
+        $this->breadcrumbItems = [
+            [
+                'label' => 'Dashboard',
+                'url' => route('dashboard'),
+                'icon' => '<iconify-icon icon="solar:home-2-line-duotone" class="fs-5"></iconify-icon>',
+            ],
+            [
+                'label' => 'Account Settings',
+                'url' => '#',
+                'icon' => '<iconify-icon icon="mdi:cog-outline" class="fs-5"></iconify-icon>',
+            ],
+            [
+                'label' => $this->tabTitle,
+                'icon' => $this->tabIcon,
+            ],
+        ];
     }
 
 
@@ -152,13 +213,18 @@ new class extends Component {
 <div class="row">
     <div class="col-12">
 
+        <livewire:admin.system-settings.bread-crumb
+            :title="$tabTitle"
+            :items="$breadcrumbItems"
+        />
+
         <div class="card">
 
             <ul class="nav nav-pills user-profile-tab" id="pills-tab" role="tablist">
                 <!-- Company Information -->
                 <li class="nav-item" role="presentation">
                     <button
-                        class="nav-link position-relative rounded-0 active d-flex align-items-center justify-content-between bg-transparent fs-3 py-3"
+                        class="nav-link position-relative rounded-0 {{ $activeTab === 'company' ? 'active' : '' }} d-flex align-items-center justify-content-center bg-transparent fs-3 py-3"
                         id="tab-company-information-tab"
                         data-bs-toggle="pill"
                         data-bs-target="#tab-company-information"
@@ -174,7 +240,7 @@ new class extends Component {
                 <!-- Roles & Permissions -->
                 <li class="nav-item" role="presentation">
                     <button
-                        class="nav-link position-relative rounded-0 d-flex align-items-center justify-content-between bg-transparent fs-3 py-3"
+                        class="nav-link position-relative rounded-0 {{ $activeTab === 'roles' ? 'active' : '' }} d-flex align-items-center justify-content-center bg-transparent fs-3 py-3"
                         id="tab-roles-permissions-tab"
                         data-bs-toggle="pill"
                         data-bs-target="#tab-roles-permissions"
@@ -190,7 +256,7 @@ new class extends Component {
                 <!-- User -->
                 <li class="nav-item" role="presentation">
                     <button
-                        class="nav-link position-relative rounded-0 d-flex align-items-center justify-content-between bg-transparent fs-3 py-3"
+                        class="nav-link position-relative rounded-0 {{ $activeTab === 'users' ? 'active' : '' }} d-flex align-items-center justify-content-center bg-transparent fs-3 py-3"
                         id="tab-users-tab"
                         data-bs-toggle="pill"
                         data-bs-target="#tab-users"
@@ -209,22 +275,16 @@ new class extends Component {
                 <div class="tab-content" id="pills-tabContent">
 
                     <!-- Working Hours Tab -->
-                    <div class="tab-pane fade show active"
-                         id="tab-company-information"
-                         role="tabpanel"
-                         aria-labelledby="tab-company-information-tab"
-                         tabindex="0">
+                    <div class="tab-pane fade {{ $activeTab === 'company' ? 'show active' : '' }}"
+                         id="tab-notifications">
 
                         <livewire:admin.organizations.edit :id="$org->id"/>
 
                     </div>
 
                     <!-- Overtime Policy Tab -->
-                    <div class="tab-pane fade"
-                         id="tab-roles-permissions"
-                         role="tabpanel"
-                         aria-labelledby="tab-roles-permissions-tab"
-                         tabindex="0">
+                    <div class="tab-pane fade {{ $activeTab === 'roles' ? 'show active' : '' }}"
+                         id="tab-notifications">
 
                         <livewire:admin.roles.index/>
 
@@ -232,11 +292,8 @@ new class extends Component {
 
 
                     <!-- Overtime Policy Tab -->
-                    <div class="tab-pane fade"
-                         id="tab-users"
-                         role="tabpanel"
-                         aria-labelledby="tab-users-tab"
-                         tabindex="0">
+                    <div class="tab-pane fade {{ $activeTab === 'users' ? 'show active' : '' }}"
+                         id="tab-notifications">
 
                         <div class="accordion" id="customAccordion">
                             <div class="accordion-item border-0 mb-3 shadow-sm rounded">
@@ -265,7 +322,7 @@ new class extends Component {
                                     <div id="collapseUsers" class="accordion-collapse collapse"
                                          aria-labelledby="headingUsers"
                                          data-bs-parent="#userAccordion">
-                                        <livewire:admin.employees.index :roleId="null" />
+                                        <livewire:admin.employees.index :roleId="null"/>
                                     </div>
                                 </div>
                             </div>
@@ -283,6 +340,40 @@ new class extends Component {
     </div>
 </div>
 
+
+
+@push('scripts')
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const tabs = document.querySelectorAll('button[data-bs-toggle="pill"]');
+
+            tabs.forEach(tab => {
+                tab.addEventListener('shown.bs.tab', function (event) {
+                    const tabId = event.target.id;
+
+                    // Map Bootstrap tab IDs to your internal tab names
+                    let mappedTab;
+                    switch (tabId) {
+                        case 'tab-company-information':
+                            mappedTab = 'company';
+                            break;
+                        case 'tab-roles-permissions-tab':
+                            mappedTab = 'roles';
+                            break;
+                        case 'tab-users-tab':
+                            mappedTab = 'users';
+                            break;
+                        default:
+                            mappedTab = 'company';
+                    }
+
+                    Livewire.dispatch('tabChanged', {tabId: mappedTab});
+
+                });
+            });
+        });
+    </script>
+@endpush
 
 
 

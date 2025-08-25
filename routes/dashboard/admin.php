@@ -13,7 +13,7 @@ Route::middleware(['auth'])->prefix('admin')->group(function () {
     Volt::route('dashboard', 'admin.dashboard.index')->name('dashboard');
 
     // Route to manage employees
-    Volt::route('employees/roles/{roleId}', 'admin.employees.index')->name('employees.roles.index');
+    Volt::route('employees/roles/{roleId?}', 'admin.employees.index')->name('employees.roles.index');
     Volt::route('employees/view', 'admin.employees.view')->name('employees.view');
 
 

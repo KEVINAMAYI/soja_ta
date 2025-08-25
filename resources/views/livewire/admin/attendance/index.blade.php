@@ -63,6 +63,54 @@ new class extends Component {
 
 <div class="row">
     <div class="col-12">
+
+        @php
+            $statusLabel = $status
+            ? match(strtolower($status)) {
+               'clock_in' => 'Clocked In',
+               'clock_out' => 'Clocked Out',
+               'absent' => 'Absent',
+               'unchecked_in' => 'Unchecked In',
+               default => ucwords(str_replace('_', ' ', $status)),
+           }
+           : 'All Attendance';
+
+               $breadcrumbItems = array_filter([
+                   [
+                       'label' => 'Dashboard',
+                       'url' => route('dashboard'),
+                       'icon' => '<iconify-icon icon="solar:home-2-line-duotone" class="fs-5"></iconify-icon>',
+                   ],
+                   [
+                       'label' => 'Attendance',
+                       'url' => route('attendance.index'),
+                       'icon' => '<iconify-icon icon="mdi:clipboard-text-check-outline" class="fs-5"></iconify-icon>',
+                   ],
+                   $status ? [
+                       'label' => match(strtolower($status)) {
+                           'clock_in' => 'Clocked In',
+                           'clock_out' => 'Clocked Out',
+                           'absent' => 'Absent',
+                           'unchecked_in' => 'Unchecked In',
+                           default => ucfirst($status)
+                       },
+                       'icon' => match(strtolower($status)) {
+                           'clock_in' => '<iconify-icon icon="mdi:clock-in" class="fs-5 text-success"></iconify-icon>',
+                           'clock_out' => '<iconify-icon icon="mdi:clock-out" class="fs-5 text-info"></iconify-icon>',
+                           'absent' => '<iconify-icon icon="mdi:close-circle-outline" class="fs-5 text-danger"></iconify-icon>',
+                           'unchecked_in' => '<iconify-icon icon="mdi:account-question" class="fs-5 text-warning"></iconify-icon>',
+                           default => '<iconify-icon icon="mdi:alert-circle-outline" class="fs-5 text-secondary"></iconify-icon>',
+                       }
+                   ] : null
+               ]);
+        @endphp
+
+        <livewire:admin.system-settings.bread-crumb
+            :title="$statusLabel"
+            :items="$breadcrumbItems"
+        />
+
+
         <div class="card card-body">
 
             {{-- Livewire Table --}}

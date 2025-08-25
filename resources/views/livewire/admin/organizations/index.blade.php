@@ -247,6 +247,22 @@ new class extends Component {
 
 <div class="row">
     <div class="col-12">
+
+        <livewire:admin.system-settings.bread-crumb
+            title="Organizations"
+            :items="[
+            [
+             'label' => 'Dashboard',
+             'url' => route('dashboard'),
+             'icon' => '<iconify-icon icon=\'solar:home-2-line-duotone\' class=\'fs-5\'></iconify-icon>',
+           ],
+           [
+             'label' => 'Organizations',
+             'icon' => '<iconify-icon icon=\'mdi:domain\' class=\'fs-5\'></iconify-icon>',
+           ],
+        ]"
+        />
+
         <div class="card card-body">
             {{-- Top Bar: Search + Create Button --}}
             <div class="d-flex flex-wrap justify-content-between align-items-center mb-3">

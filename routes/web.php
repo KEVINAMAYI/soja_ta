@@ -14,15 +14,5 @@ Route::middleware(['auth'])->group(function () {
 });
 
 
-Route::get('/clear-cache', function () {
-
-    Artisan::call('config:clear');
-    Artisan::call('view:clear');
-    Artisan::call('route:clear');
-    Artisan::call('optimize:clear');
-
-    return 'Caches cleared!';
-});
-
 require __DIR__ . '/auth.php';
 require __DIR__ . '/dashboard/admin.php';

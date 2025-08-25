@@ -18,11 +18,16 @@ new class extends Component {
     public $roleId;
     public $shifts;
     public $shift_id;
-
+    public $role;
 
     public function mount($roleId = null)
     {
         $this->roleId = $roleId;
+
+        if ($roleId) {
+            $this->role = Role::find($roleId);
+        }
+
         $this->departments = auth()->user()->employee->organization->departments;
         $this->shifts = auth()->user()->employee->organization->shifts;
 
@@ -243,6 +248,32 @@ new class extends Component {
     }
 
 
+    public function getBreadcrumbItemsProperty()
+    {
+        return [
+            [
+                'label' => 'Dashboard',
+                'url' => route('dashboard'),
+                'icon' => '<iconify-icon icon="solar:home-2-line-duotone" class="fs-5"></iconify-icon>'
+            ],
+            [
+                'label' => 'Employees',
+                'url' => route('employees.roles.index', ['roleId' => null]),
+                'icon' => '<iconify-icon icon="tabler:users" class="fs-5"></iconify-icon>'
+            ],
+            [
+                'label' => ucfirst($this->role?->name) ?? 'All Employees',
+                'icon' => match(ucfirst($this->role?->name)) {
+                    'Admin' => '<iconify-icon icon="mdi:shield-account" class="fs-5"></iconify-icon>',
+                    'Supervisor' => '<iconify-icon icon="mdi:account-tie" class="fs-5"></iconify-icon>',
+                    'HR' => '<iconify-icon icon="mdi:account-group" class="fs-5"></iconify-icon>',
+                    default => '<iconify-icon icon="tabler:user" class="fs-5"></iconify-icon>',
+                }
+            ]
+        ];
+    }
+
+
 }; ?>
 
 @push('styles')
@@ -294,6 +325,14 @@ new class extends Component {
 
 <div class="row">
     <div class="col-12">
+
+
+        <livewire:admin.system-settings.bread-crumb
+            title="{{ ucfirst($role?->name ?? 'Employees') }}"
+            :items="$this->breadcrumbItems"
+        />
+
+
         <div class="card card-body">
 
             {{-- Top Bar: Search + Create Button --}}
