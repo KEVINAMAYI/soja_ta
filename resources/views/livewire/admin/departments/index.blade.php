@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\Department;
+use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Livewire\Attributes\On;
 use Livewire\Volt\Component;
@@ -10,11 +11,15 @@ new class extends Component {
 
     public $name;
     public $editId;
+    public $description;
+    public $manager_id;
 
     public function rules()
     {
         return [
             'name' => 'required|string|max:255|unique:departments,name,' . $this->editId,
+            'description' => 'nullable|string|max:1000',
+            'manager_id' => 'nullable|exists:users,id',
         ];
     }
 
@@ -30,8 +35,19 @@ new class extends Component {
 
             Department::create([
                 'name' => $this->name,
+                'description' => $this->description,
+                'manager_id' => $this->manager_id,
                 'organization_id' => $org->id
             ]);
+
+
+            if ($this->manager_id) {
+                $manager = User::find($this->manager_id);
+                if ($manager && !$manager->hasRole('department-manager')) {
+                    $manager->assignRole('department-manager');
+                }
+            }
+
 
             DB::commit();
 
@@ -66,6 +82,8 @@ new class extends Component {
         $dept = Department::findOrFail($id);
         $this->editId = $id;
         $this->name = $dept->name;
+        $this->description = $dept->description;
+        $this->manager_id = $dept->manager_id;
 
         $this->dispatch('show-department-modal');
     }
@@ -77,7 +95,20 @@ new class extends Component {
         try {
             DB::beginTransaction();
 
-            Department::findOrFail($this->editId)->update(['name' => $this->name]);
+            Department::findOrFail($this->editId)->update(
+                [
+                    'name' => $this->name,
+                    'description' => $this->description,
+                    'manager_id' => $this->manager_id,
+
+                ]);
+
+            if ($this->manager_id) {
+                $manager = User::find($this->manager_id);
+                if ($manager && !$manager->hasRole('department-manager')) {
+                    $manager->assignRole('department-manager');
+                }
+            }
 
             DB::commit();
 
@@ -96,6 +127,8 @@ new class extends Component {
         } catch (\Exception $e) {
             DB::rollBack();
             report($e);
+
+            dd($e->getMessage());
 
             LivewireAlert::title('Error!')
                 ->text('Failed to update department.')
@@ -211,10 +244,28 @@ new class extends Component {
                 <form wire:submit.prevent="{{ $editId ? 'updateDepartment' : 'createDepartment' }}">
                     <div class="modal-body">
                         <div class="mb-3">
-                            <label for="name" class="form-label">Department Name</label>
+                            <label for="name" class="form-label">Name</label>
                             <input type="text" wire:model="name" id="name" class="form-control"
                                    placeholder="Department Name"/>
                             @error('name') <small class="text-danger">{{ $message }}</small> @enderror
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="description" class="form-label">Description</label>
+                            <textarea wire:model="description" id="description" class="form-control" rows="3"
+                                      placeholder="Write a short description..."></textarea>
+                            @error('description') <small class="text-danger">{{ $message }}</small> @enderror
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="manager_id" class="form-label">Manager</label>
+                            <select wire:model="manager_id" id="manager_id" class="form-control">
+                                <option value="">Select Manager (Optional)</option>
+                                @foreach(User::whereHas('employee', fn($q) => $q->where('organization_id', auth()->user()->employee->organization_id))->get() as $user)
+                                    <option value="{{ $user->id }}">{{ $user->name }}</option>
+                                @endforeach
+                            </select>
+                            @error('manager_id') <small class="text-danger">{{ $message }}</small> @enderror
                         </div>
                     </div>
 

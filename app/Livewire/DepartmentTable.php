@@ -22,6 +22,7 @@ class DepartmentTable extends DataTableComponent
         $orgId = auth()->user()->employee->organization_id ?? null;
 
         $query = Department::query()->select('departments.*')
+            ->with(['manager'])
             ->where('organization_id', $orgId);
 
         if ($this->search !== null && $this->search !== '') {
@@ -40,6 +41,19 @@ class DepartmentTable extends DataTableComponent
             Column::make("Name", "name")
                 ->sortable(),
 
+            Column::make("Manager", "manager.name")
+                ->label(function ($row) {
+                    if ($row->manager) {
+                        return "<span class='badge bg-primary'>{$row->manager->name}</span>";
+                    }
+                    return "<span class='text-muted'>—</span>";
+                })
+                ->html()
+                ->sortable(function ($builder, $direction) {
+                    $builder->join('users as managers', 'departments.manager_id', '=', 'managers.id')
+                        ->orderBy('managers.name', $direction);
+                }),
+
             Column::make("Created at", "created_at")
                 ->sortable()
                 ->format(fn($value, $row, Column $column) => $value->format('F d, Y h:i A')),
@@ -48,5 +62,6 @@ class DepartmentTable extends DataTableComponent
                 ->label(fn($row) => view('livewire.admin.departments.actions', ['department' => $row]))
                 ->html(),
         ];
+
     }
 }

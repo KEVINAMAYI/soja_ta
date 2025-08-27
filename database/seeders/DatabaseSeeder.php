@@ -30,11 +30,6 @@ class DatabaseSeeder extends Seeder
             'phone_number' => '254795704301',
         ]);
 
-        $department = Department::factory()->create([
-            'name' => 'ICT',
-            'organization_id' => $organization->id
-        ]);
-
         $shift = Shift::factory()->create([
             'organization_id' => $organization->id,
             'name' => 'Morning Shift',
@@ -50,6 +45,13 @@ class DatabaseSeeder extends Seeder
             'name' => 'Test User',
             'email' => 'test@example.com',
             'password' => bcrypt('password'),
+        ]);
+
+        $department = Department::factory()->create([
+            'name' => 'ICT',
+            'description' => 'ICT',
+            'manager_id' => $user->id,
+            'organization_id' => $organization->id
         ]);
 
         // Assign the supervisor role

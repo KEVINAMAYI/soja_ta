@@ -12,5 +12,14 @@ class Department extends Model
     protected $fillable = [
         'name',
         'organization_id',
+        'description',
+        'manager_id',
     ];
+
+
+    public function manager()
+    {
+        return $this->belongsTo(User::class, 'manager_id');
+    }
+
 }

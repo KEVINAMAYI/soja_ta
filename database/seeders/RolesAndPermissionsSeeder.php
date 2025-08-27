@@ -16,6 +16,7 @@ class RolesAndPermissionsSeeder extends Seeder
 
         // Define all permissions
         $permissions = [
+
             // Organization-related
             'view-organizations',
             'add-organizations',
@@ -39,7 +40,10 @@ class RolesAndPermissionsSeeder extends Seeder
             'view-all-attendance',
 
             // Reports
-            'manage-reports'
+            'manage-reports',
+
+            //timesheets
+            'approve-manual-timesheets'
         ];
 
         // Create all permissions
@@ -53,10 +57,13 @@ class RolesAndPermissionsSeeder extends Seeder
             'admin' => array_filter($permissions, fn($p) => !str_contains($p, 'organizations')),
             'supervisor' => array_filter($permissions, fn($p) => !str_contains($p, 'organizations')),
             'employee' => [],
+            'department-manager' => ['approve-manual-timesheets'],
         ];
 
         // Assign permissions
         foreach ($rolePermissions as $role => $perms) {
+
+            //seed roles for specific organization
             $roleInstance = Role::firstOrCreate(['name' => $role, 'organization_id' => 1]);
 
             if ($perms === 'all') {
