@@ -11,6 +11,18 @@ class ShiftTable extends DataTableComponent
 {
     protected $model = Shift::class;
 
+
+//    public function mount(){
+//
+//        $orgId = auth()->user()->employee->organization_id ?? null;
+//
+//        $query = Shift::query()->select('shifts.*')
+//            ->with(['employees'])
+//            ->where('organization_id', $orgId);
+//
+//        dd($query->get());
+//    }
+
     public function configure(): void
     {
         $this->setPrimaryKey('id')
@@ -23,6 +35,7 @@ class ShiftTable extends DataTableComponent
         $orgId = auth()->user()->employee->organization_id ?? null;
 
         $query = Shift::query()->select('shifts.*')
+            ->with(['employees'])
             ->where('organization_id', $orgId);
 
         if ($this->search !== null && $this->search !== '') {
@@ -43,15 +56,26 @@ class ShiftTable extends DataTableComponent
                 ->searchable()
                 ->sortable(),
 
-            Column::make("Start", "start_time")
-                ->format(fn($value) => '<span class="text-primary fw-semibold"><i class="bi bi-clock"></i> ' . Carbon::parse($value)->format('g:i A') . '</span>')
+            Column::make("Time","start_time")
+                ->format(function ($value, $row) {
+                    return '
+            <div class="d-flex justify-content-between">
+                <div>
+                    <div><small class="text-muted">From</small> <span class="text-primary fw-semibold">' . Carbon::parse($row->start_time)->format('g:i A') . '</span></div>
+                    <div><small class="text-muted">To</small> <span class="text-danger fw-semibold">' . Carbon::parse($row->end_time)->format('g:i A') . '</span></div>
+                </div>
+            </div>';
+                })
                 ->html()
                 ->sortable(),
 
-            Column::make("End", "end_time")
-                ->format(fn($value) => '<span class="text-danger fw-semibold"><i class="bi bi-clock-fill"></i> ' . Carbon::parse($value)->format('g:i A') . '</span>')
-                ->html()
-                ->sortable(),
+
+            Column::make("Employees","start_time")
+                ->format(function ($value, $row) {
+                    return '<span class="text-danger fw-bold">' . $row->employees->count() . '</span>';
+                })
+                ->html(),
+
 
             Column::make("Break (min)", "break_minutes")
                 ->format(fn($value) => '<span class="badge bg-secondary">' . $value . ' min</span>')

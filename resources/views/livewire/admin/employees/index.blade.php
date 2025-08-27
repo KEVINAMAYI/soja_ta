@@ -353,6 +353,7 @@ new class extends Component {
                 </div>
             </div>
 
+
             {{-- Livewire Table --}}
             <livewire:employee-table :roleId="$roleId ?? null" theme="bootstrap-4"/>
 

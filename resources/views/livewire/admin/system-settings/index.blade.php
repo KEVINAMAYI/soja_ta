@@ -127,7 +127,7 @@ new class extends Component {
 
 
                         {{-- Livewire Table --}}
-                        <livewire:admin.shifts.index/>
+                        <livewire:admin.shifts.index theme="bootstrap-4"/>
 
                     </div>
 

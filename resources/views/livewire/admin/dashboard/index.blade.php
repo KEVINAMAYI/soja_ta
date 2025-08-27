@@ -4,6 +4,7 @@ use Livewire\Volt\Component;
 use App\Models\Attendance;
 use App\Models\Employee;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\Http;
 
 new class extends Component {
 
@@ -30,7 +31,6 @@ new class extends Component {
         $employeeRecord = Employee::where('user_id', auth()->id())->first();
         $orgId = $employeeRecord->organization_id;
 
-        //All employees in this organization
         $employees = Employee::where('organization_id', $orgId)->get();
         $this->totalEmployees = $employees->count();
         $employeeIds = $employees->pluck('id');
@@ -108,7 +108,25 @@ new class extends Component {
                     : 'N/A',
                 'lat' => $att->latitude,
                 'lng' => $att->longitude,
-            ]);
+            ]) ?? [];
+
+
+
+        // If empty, fallback to organization location
+        if ($this->employeeLocations->isEmpty()) {
+
+            $orgLocation = $employeeRecord->organization->location ?? null;
+            if ($orgLocation) {
+                $this->employeeLocations = collect([[
+                    'name' => 'Organization Location',
+                    'department' => 'Organization HQ',
+                    'clock_in' => '',
+                    'address' => $orgLocation, // include address here
+                ]]);
+            }
+        }
+
+
 
     }
 
@@ -267,7 +285,8 @@ new class extends Component {
                 <div class="stat-text">
                     <h6 class="text-muted mb-1">Present Today</h6>
                     <h3 class="fw-bold text-success">{{ $presentToday }}</h3>
-                    <small class="text-muted">{{ number_format(($presentToday / $totalEmployees) * 100, 2) }}% attendance</small>
+                    <small class="text-muted">{{ number_format(($presentToday / $totalEmployees) * 100, 2) }}%
+                        attendance</small>
                 </div>
                 <div class="stat-icon icon-green">
                     <span class="iconify" data-icon="mdi:account-check"></span>
@@ -507,6 +526,7 @@ new class extends Component {
         const employeeLocations = @json($employeeLocations);
 
         function initMap() {
+
             if (!employeeLocations || employeeLocations.length === 0) return;
 
             const map = new google.maps.Map(document.getElementById("map"), {
@@ -515,48 +535,47 @@ new class extends Component {
             });
 
             const bounds = new google.maps.LatLngBounds();
+            const geocoder = new google.maps.Geocoder();
 
             employeeLocations.forEach(emp => {
                 if (emp.lat && emp.lng) {
-                    const pos = {lat: parseFloat(emp.lat), lng: parseFloat(emp.lng)};
-
-                    const marker = new google.maps.Marker({
-                        position: pos,
-                        map,
-                        title: emp.name
+                    addMarker({ lat: parseFloat(emp.lat), lng: parseFloat(emp.lng) }, emp);
+                } else if (emp.address) {
+                    geocoder.geocode({ address: emp.address }, function(results, status) {
+                        if (status === 'OK' && results[0]) {
+                            const location = results[0].geometry.location;
+                            addMarker({ lat: location.lat(), lng: location.lng() }, emp);
+                        } else {
+                            console.warn(`Geocoding failed for ${emp.name || 'Unknown'}: ${status}`);
+                        }
                     });
-
-                    // Simple InfoWindow content
-                    const infoWindow = new google.maps.InfoWindow({
-                        content: `
-        <div style="
-            font-family: Arial, sans-serif;
-            padding: 8px 12px;
-            min-width: 150px;
-        ">
-            <div style="font-weight: bold; font-size: 14px; margin-bottom: 4px; color: #1a202c;">
-                ${emp.name}
-            </div>
-            <div style="font-size: 12px; color: #4a5568; margin-bottom: 2px;">
-                Dept: <strong>${emp.department ?? 'N/A'}</strong>
-            </div>
-            <div style="font-size: 12px; color: #4a5568;">
-                Clock In: ${emp.clock_in ?? 'N/A'}
-            </div>
-        </div>
-    `
-                    });
-
-
-                    // Open InfoWindow on click (default behavior)
-                    marker.addListener('click', () => infoWindow.open(map, marker));
-
-                    bounds.extend(pos);
                 }
             });
 
-            map.fitBounds(bounds);
+            function addMarker(position, emp) {
+                const marker = new google.maps.Marker({
+                    position,
+                    map,
+                    title: emp.name
+                });
+
+                const infoWindow = new google.maps.InfoWindow({
+                    content: `
+                <div style="font-family: Arial; font-size: 14px;">
+                    <strong>${emp.name}</strong><br>
+                    Dept: ${emp.department ?? 'N/A'}<br>
+                    Clock In: ${emp.clock_in ?? 'N/A'}
+                </div>
+            `
+                });
+
+                marker.addListener('click', () => infoWindow.open(map, marker));
+
+                bounds.extend(position);
+                map.fitBounds(bounds);
+            }
         }
+
     </script>
 
     <script async defer

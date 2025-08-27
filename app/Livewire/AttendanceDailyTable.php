@@ -52,9 +52,34 @@ class AttendanceDailyTable extends DataTableComponent
             ->whereDate('date', $today)
             ->whereHas('employee', fn($q) => $q->where('organization_id', $orgId));
 
+
+        // Add subselects for last check_in/out from *previous* records
+        $query->addSelect([
+            'last_check_in' => Attendance::select('check_in_time')
+                ->whereColumn('employee_id', 'attendances.employee_id')
+                ->whereNotNull('check_in_time')
+                ->orderByDesc('date')
+                ->limit(1),
+            'last_check_out' => Attendance::select('check_out_time')
+                ->whereColumn('employee_id', 'attendances.employee_id')
+                ->whereNotNull('check_out_time')
+                ->orderByDesc('date')
+                ->limit(1),
+        ]);
+
+
         if (!empty($status)) {
-            $query->where('status', $status);
+            if ($status === 'absent') {
+                $query->whereIn('status', ['absent', 'unchecked_in']);
+            } elseif ($status === 'off_shift') {
+                $query->whereHas('employee.shift', function ($q) {
+                    $q->where('status', 'inactive');
+                });
+            } else {
+                $query->where('status', $status);
+            }
         }
+
 
         // Apply search
         if ($search) {
@@ -72,6 +97,9 @@ class AttendanceDailyTable extends DataTableComponent
     public function columns(): array
     {
         $threshold = $this->min_ot_threshold;
+
+        $isAbsentFilter = in_array($this->status, ['absent', 'unchecked_in', 'off_shift']);
+
 
         return [
 
@@ -92,26 +120,45 @@ class AttendanceDailyTable extends DataTableComponent
                 })
                 ->html(),
 
-            Column::make("Clocked In", "check_in_time")
-                ->sortable()
-                ->format(function ($value) {
-                    if (!$value) return '<span class="text-muted">-</span>';
-                    $formatted = Carbon::parse($value)->format('M d, Y g:i A');
-                    return "<span style='font-weight: 600; color: #198754;'>$formatted</span>";  // Bootstrap green color (#198754)
+            Column::make($isAbsentFilter ? "Last Clock-In" : "Check In", "check_in_time")
+                ->format(function ($value, $row) {
+                    $label = '';
+
+                    if (in_array($row->status, ['absent', 'unchecked_in'])) {
+                        $value = $row->last_check_in;
+                        if (is_null($this->status)) {
+                            $label = "<br><small class='text-muted'>(Last Check-in)</small>";
+                        }
+                    }
+
+                    $formatted = $value ? Carbon::parse($value)->format('M d, Y g:i A') : '-';
+
+                    return "<div>
+                    <span class='fw-semibold text-success'>{$formatted}</span>
+                    {$label}
+                    </div>";
                 })
                 ->html(),
 
-            Column::make("Clocked Out", "check_out_time")
-                ->sortable()
-                ->format(function ($value) {
-                    if (!$value) return '<span class="text-muted">-</span>';
-                    $formatted = Carbon::parse($value)->format('M d, Y g:i A');
-                    return "<span style='font-weight: 600; color: #dc3545;'>$formatted</span>";  // Bootstrap red color (#dc3545)
+            Column::make($isAbsentFilter ? "Last Clock-Out" : "Check Out", "check_out_time")
+                ->format(function ($value, $row) {
+                    $label = '';
+
+                    if (in_array($row->status, ['absent', 'unchecked_in'])) {
+                        $value = $row->last_check_out;
+                        if (is_null($this->status)) {
+                            $label = "<br><small class='text-muted'>(Last Check-Out)</small>";
+                        }
+                    }
+
+                    $formatted = $value ? Carbon::parse($value)->format('M d, Y g:i A') : '-';
+
+                    return "<div>
+                    <span class='fw-semibold text-danger'>{$formatted}</span>
+                    {$label}
+                   </div>";
                 })
                 ->html(),
-
-            Column::make("Worked hours", "worked_hours")
-                ->sortable(),
 
             Column::make("Overtime(hours)", "overtime_hours")
                 ->sortable()
@@ -125,6 +172,25 @@ class AttendanceDailyTable extends DataTableComponent
 
             Column::make("Status", "status")
                 ->sortable()
+                ->format(function ($value, $row, $column) {
+                    // Map statuses to colors
+                    $colors = [
+                        'clocked_in' => 'success', // green
+                        'clocked_out' => 'warning', // orange
+                        'unchecked_in' => 'danger',  // red
+                        'absent' => 'danger',  // red
+                    ];
+
+                    // Convert status into a readable label
+                    $label = ucwords(str_replace('_', ' ', $value));
+
+                    // Pick color class
+                    $color = $colors[$value] ?? 'secondary';
+
+                    return "<span class='badge bg-{$color}'>$label</span>";
+                })
+                ->html(),
+
 
         ];
     }

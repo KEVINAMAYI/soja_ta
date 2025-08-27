@@ -19,14 +19,19 @@ new class extends Component {
     public $description;
     public $website;
     public $logo_path;
+    public $googleMapsApiKey;
+
 
     public function mount($id)
     {
         $this->editId = $id;
 
+        $this->googleMapsApiKey = env('GOOGLE_MAPS_API_KEY');
+
         $org = Organization::findOrFail($id);
 
         $this->getOrgData($org);
+
     }
 
 
@@ -113,9 +118,19 @@ new class extends Component {
         }
     }
 
-
 };
 ?>
+
+@push('styles')
+    <style>
+        #locationInput {
+            margin-top: 0px !important;
+            border-top-right-radius: 0 !important;
+            border-bottom-right-radius: 0 !important;
+        }
+    </style>
+@endpush
+
 
 <div class="row">
     <div class="col-12">
@@ -140,13 +155,29 @@ new class extends Component {
                 </div>
 
                 <div class="mb-3 row align-items-center">
-                    <label class="col-sm-3 col-form-label fw-semibold">Location <span
-                            class="text-danger">*</span></label>
-                    <div class="col-sm-9">
-                        <input type="text" wire:model.defer="location" class="form-control">
+                    <label class="col-sm-3 col-form-label fw-semibold">
+                        Location <span class="text-danger">*</span>
+                    </label>
+
+                    <input type="hidden" wire:model="location" id="locationSync">
+                    <div class="col-sm-9" x-data="{ location: @entangle('location').defer }">
+                        <div x-data="{ location: @entangle('location') }" class="input-group">
+                            <input type="text"
+                                   id="locationInput"
+                                   class="form-control"
+                                   placeholder="Search for a location..."
+                                   autocomplete="off"
+                                   x-model="location"
+                                   value="{{ $location }}"
+                            >
+                            <button type="button" class="btn btn-primary" id="getCurrentLocationBtn">
+                                <iconify-icon icon="tabler:current-location"></iconify-icon>
+                            </button>
+                        </div>
                         @error('location') <span class="text-danger">{{ $message }}</span> @enderror
                     </div>
                 </div>
+
 
                 <div class="mb-3 row align-items-center">
                     <label class="col-sm-3 col-form-label fw-semibold">Email <span class="text-danger">*</span></label>
@@ -198,7 +229,7 @@ new class extends Component {
                 </div>
 
                 <div class="d-flex justify-content-end gap-2">
-                    <a href="{{ route('organizations.index') }}" class="btn btn-info">
+                    <a href="{{ route('organizations.index') }}" class="btn btn-outline-primary">
                         <i class="ti ti-arrow-left"></i> Back
                     </a>
                     <button type="submit" class="btn btn-primary">
@@ -208,7 +239,56 @@ new class extends Component {
             </form>
         </div>
     </div>
+
+
 </div>
 
+<script src="https://maps.googleapis.com/maps/api/js?key={{ $googleMapsApiKey }}&libraries=places"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
 
+        const locationInput = document.getElementById('locationInput');
+        const syncInput = document.getElementById('locationSync');
+
+
+        const autocomplete = new google.maps.places.Autocomplete(locationInput, {types: ['geocode']});
+
+        autocomplete.addListener('place_changed', function () {
+            const place = autocomplete.getPlace();
+            if (place && place.formatted_address) {
+                locationInput.value = place.formatted_address;
+                syncInput.value = place.formatted_address;
+                syncInput.dispatchEvent(new Event('input')); // trigger Livewire update
+            }
+        });
+
+        document.getElementById('getCurrentLocationBtn').addEventListener('click', function () {
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(function (position) {
+                    const lat = position.coords.latitude;
+                    const lng = position.coords.longitude;
+
+                    const geocoder = new google.maps.Geocoder();
+                    const latlng = {lat, lng};
+
+                    geocoder.geocode({location: latlng}, function (results, status) {
+                        if (status === 'OK' && results[0]) {
+                            const address = results[0].formatted_address;
+                            locationInput.value = address;
+                            syncInput.value = address;
+                            syncInput.dispatchEvent(new Event('input'));
+                        } else {
+                            alert("Unable to retrieve address.");
+                        }
+                    });
+                }, function () {
+                    alert("Unable to retrieve your location.");
+                });
+            } else {
+                alert("Geolocation not supported.");
+            }
+        });
+
+    });
+</script>
 

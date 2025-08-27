@@ -2,14 +2,18 @@
 
 namespace App\Livewire;
 
+use App\Exports\EmployeesExcelExport;
 use App\Models\Role;
 use Jantinnerezo\LivewireAlert\Facades\LivewireAlert;
 use Livewire\Attributes\On;
+use Maatwebsite\Excel\Facades\Excel;
+use Maatwebsite\Excel\Excel as ExcelFormat;
 use Rappasoft\LaravelLivewireTables\DataTableComponent;
 use Rappasoft\LaravelLivewireTables\Views\Column;
 use App\Models\Employee;
 use Rappasoft\LaravelLivewireTables\Views\Columns\BooleanColumn;
 use Rappasoft\LaravelLivewireTables\Views\Filters\SelectFilter;
+use Barryvdh\DomPDF\Facade\Pdf;
 
 class EmployeeTable extends DataTableComponent
 {
@@ -115,8 +119,24 @@ class EmployeeTable extends DataTableComponent
             'bulkDelete' => 'Delete Selected',
             'activate' => 'Activate',
             'deactivate' => 'Deactivate',
-            'export' => 'Export',
+            'exportExcel' => 'Export Excel',
+            'exportPdf' => 'Export PDF'
         ];
+    }
+
+    public function exportExcel()
+    {
+        return Excel::download(new EmployeesExcelExport($this->getSelected()), 'employees.xlsx');
+    }
+
+
+    public function exportPdf()
+    {
+        $ids = $this->getSelected();
+
+        $url = route('employees.export.pdf', ['ids' => $ids]);
+
+        return redirect()->to($url);
     }
 
 

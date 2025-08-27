@@ -72,19 +72,19 @@
                                 </a>
                             </li>
 
-                            <!-- Unchecked In -->
-                            <li class="sidebar-item">
-                                <a class="sidebar-link {{ request()->routeIs('attendance.status.index') && request()->status === 'unchecked_in' ? 'active' : '' }}"
-                                   href="{{ route('attendance.status.index', ['status' => 'unchecked_in']) }}">
-                                    <span class="icon-small"></span> Unchecked In
-                                </a>
-                            </li>
-
                             <!-- Absent -->
                             <li class="sidebar-item">
                                 <a class="sidebar-link {{ request()->routeIs('attendance.status.index') && request()->status === 'absent' ? 'active' : '' }}"
                                    href="{{ route('attendance.status.index', ['status' => 'absent']) }}">
                                     <span class="icon-small"></span> Absent
+                                </a>
+                            </li>
+
+                            <!-- Unchecked In -->
+                            <li class="sidebar-item">
+                                <a class="sidebar-link {{ request()->routeIs('attendance.status.index') && request()->status === 'off_shift' ? 'active' : '' }}"
+                                   href="{{ route('attendance.status.index', ['status' => 'off_shift']) }}">
+                                    <span class="icon-small"></span> Off Shift
                                 </a>
                             </li>
 
