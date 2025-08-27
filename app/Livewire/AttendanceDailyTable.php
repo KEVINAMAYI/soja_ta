@@ -58,19 +58,23 @@ class AttendanceDailyTable extends DataTableComponent
             'last_check_in' => Attendance::select('check_in_time')
                 ->whereColumn('employee_id', 'attendances.employee_id')
                 ->whereNotNull('check_in_time')
+                ->where('date', '<', $today)  // 👈 this line is critical
                 ->orderByDesc('date')
                 ->limit(1),
+
             'last_check_out' => Attendance::select('check_out_time')
                 ->whereColumn('employee_id', 'attendances.employee_id')
                 ->whereNotNull('check_out_time')
+                ->where('date', '<', $today)  // 👈 this line too
                 ->orderByDesc('date')
                 ->limit(1),
         ]);
 
-
         if (!empty($status)) {
+
             if ($status === 'absent') {
                 $query->whereIn('status', ['absent', 'unchecked_in']);
+
             } elseif ($status === 'off_shift') {
                 $query->whereHas('employee.shift', function ($q) {
                     $q->where('status', 'inactive');
@@ -173,23 +177,28 @@ class AttendanceDailyTable extends DataTableComponent
             Column::make("Status", "status")
                 ->sortable()
                 ->format(function ($value, $row, $column) {
-                    // Map statuses to colors
-                    $colors = [
-                        'clocked_in' => 'success', // green
-                        'clocked_out' => 'warning', // orange
-                        'unchecked_in' => 'danger',  // red
-                        'absent' => 'danger',  // red
+                    // Map statuses to readable labels and colors
+                    $statusLabels = [
+                        'clocked_in' => 'Clocked In',
+                        'clocked_out' => 'Clocked Out',
+                        'unchecked_in' => 'Unclocked In',
+                        'absent' => 'Absent',
                     ];
 
-                    // Convert status into a readable label
-                    $label = ucwords(str_replace('_', ' ', $value));
+                    $colors = [
+                        'clocked_in' => 'success',  // green
+                        'clocked_out' => 'danger', // orange
+                        'unchecked_in' => 'warning', // red
+                        'absent' => 'warning',       // red
+                    ];
 
-                    // Pick color class
+                    $label = $statusLabels[$value] ?? ucfirst($value);
                     $color = $colors[$value] ?? 'secondary';
 
                     return "<span class='badge bg-{$color}'>$label</span>";
                 })
                 ->html(),
+
 
 
         ];
