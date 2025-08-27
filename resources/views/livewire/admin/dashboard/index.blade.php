@@ -97,24 +97,20 @@ new class extends Component {
             ]);
 
 
-        // Employee locations for map
         $this->employeeLocations = $attendancesToday->filter(fn($att) => $att->latitude && $att->longitude)
             ->map(fn($att) => [
                 'name' => $att->employee->name,
                 'department' => $att->employee->department->name ?? 'N/A',
-                // Format time as H:i A, e.g., 08:30 AM
                 'clock_in' => $att->check_in_time
                     ? Carbon::parse($att->check_in_time)->format('h:i A')
                     : 'N/A',
                 'lat' => $att->latitude,
                 'lng' => $att->longitude,
-            ]) ?? [];
-
+            ])->values()->toArray();
 
 
         // If empty, fallback to organization location
-        if ($this->employeeLocations->isEmpty()) {
-
+        if (empty($this->employeeLocations)) {
             $orgLocation = $employeeRecord->organization->location ?? null;
             if ($orgLocation) {
                 $this->employeeLocations = collect([[
@@ -125,7 +121,6 @@ new class extends Component {
                 ]]);
             }
         }
-
 
 
     }
@@ -539,12 +534,12 @@ new class extends Component {
 
             employeeLocations.forEach(emp => {
                 if (emp.lat && emp.lng) {
-                    addMarker({ lat: parseFloat(emp.lat), lng: parseFloat(emp.lng) }, emp);
+                    addMarker({lat: parseFloat(emp.lat), lng: parseFloat(emp.lng)}, emp);
                 } else if (emp.address) {
-                    geocoder.geocode({ address: emp.address }, function(results, status) {
+                    geocoder.geocode({address: emp.address}, function (results, status) {
                         if (status === 'OK' && results[0]) {
                             const location = results[0].geometry.location;
-                            addMarker({ lat: location.lat(), lng: location.lng() }, emp);
+                            addMarker({lat: location.lat(), lng: location.lng()}, emp);
                         } else {
                             console.warn(`Geocoding failed for ${emp.name || 'Unknown'}: ${status}`);
                         }
