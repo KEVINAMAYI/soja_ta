@@ -21,6 +21,16 @@ new class extends Component {
     public $logo_path;
     public $editId;
 
+
+    public function mount()
+    {
+        if (!auth()->user()?->can('view-organizations')) {
+            abort(403, 'Unauthorized.');
+        }
+
+    }
+
+
     public function rules()
     {
         return [

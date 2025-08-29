@@ -17,8 +17,6 @@
     </a>
 
 
-
-
     <div class="collapse navbar-collapse justify-content-end" id="navbarNav">
         <div class="d-flex align-items-center justify-content-between">
             <ul class="navbar-nav flex-row mx-auto ms-lg-auto align-items-center justify-content-center">
@@ -50,14 +48,11 @@
                 </li>
 
 
-
-
-
                 <!-- ------------------------------- -->
                 <!-- start profile Dropdown -->
                 <!-- ------------------------------- -->
                 <li class="nav-item dropdown">
-                    <a class="nav-link" href="javascript:void(0)" id="drop1" aria-expanded="false">
+                    <a class="nav-link" href="{{ route('user.settings') }}" id="drop1" aria-expanded="false">
                         <div class="d-flex align-items-center gap-2 lh-base">
                             <img src="assets/images/profile/user-1.jpg" class="rounded-circle"
                                  width="35" height="35" alt="matdash-img"/>
@@ -83,7 +78,7 @@
                                 </div>
                             </div>
                             <div class="message-body">
-                                <a href="{{ route('system-settings.index') }}"
+                                <a href="{{ route('user.settings') }}"
                                    class="p-2 dropdown-item h6 rounded-1 d-flex justify-content-between align-items-center">
                                     My Profile
                                     <iconify-icon icon="mdi:user" style="font-size: 1.2em;"></iconify-icon>

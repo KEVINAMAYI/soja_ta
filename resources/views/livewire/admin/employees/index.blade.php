@@ -376,26 +376,29 @@ new class extends Component {
                         <div class="row">
                             <!-- Name -->
                             <div class="col-md-6 mb-3">
-                                <input type="text" wire:model="name" class="form-control" placeholder="Name"/>
+                                <label for="empName" class="form-label">Full Name</label>
+                                <input type="text" id="empName" wire:model="name" class="form-control" placeholder="John Doe"/>
                                 @error('name') <small class="text-danger">{{ $message }}</small> @enderror
                             </div>
 
                             <!-- Email -->
                             <div class="col-md-6 mb-3">
-                                <input type="email" wire:model="email" class="form-control" placeholder="Email"/>
+                                <label for="empEmail" class="form-label">Email Address</label>
+                                <input type="email" id="empEmail" wire:model="email" class="form-control" placeholder="john@example.com"/>
                                 @error('email') <small class="text-danger">{{ $message }}</small> @enderror
                             </div>
 
                             <!-- Phone -->
                             <div class="col-md-6 mb-3">
-                                <input type="text" wire:model="phone" class="form-control" placeholder="Phone"/>
+                                <label for="empPhone" class="form-label">Phone Number</label>
+                                <input type="text" id="empPhone" wire:model="phone" class="form-control" placeholder="+1234567890"/>
                                 @error('phone') <small class="text-danger">{{ $message }}</small> @enderror
                             </div>
 
-                            <!-- Employee Type -->
-                            <!-- Organization -->
+                            <!-- Shift -->
                             <div class="col-md-6 mb-3">
-                                <select wire:model="shift_id" class="form-control">
+                                <label for="empShift" class="form-label">Shift</label>
+                                <select id="empShift" wire:model="shift_id" class="form-control">
                                     <option value="">Select Shift</option>
                                     @foreach ($shifts as $shift)
                                         <option value="{{ $shift->id }}">{{ $shift->name }}</option>
@@ -404,9 +407,10 @@ new class extends Component {
                                 @error('shift_id') <small class="text-danger">{{ $message }}</small> @enderror
                             </div>
 
-                            <!-- Organization -->
+                            <!-- Department -->
                             <div class="col-md-6 mb-3">
-                                <select wire:model="department_id" class="form-control">
+                                <label for="empDept" class="form-label">Department</label>
+                                <select id="empDept" wire:model="department_id" class="form-control">
                                     <option value="">Select Department</option>
                                     @foreach ($departments as $dept)
                                         <option value="{{ $dept->id }}">{{ $dept->name }}</option>
@@ -415,18 +419,17 @@ new class extends Component {
                                 @error('department_id') <small class="text-danger">{{ $message }}</small> @enderror
                             </div>
 
-                            <!-- Employee Number -->
+                            <!-- ID Number -->
                             <div class="col-md-6 mb-3">
-                                <input type="text" wire:model="id_number" class="form-control"
-                                       placeholder="ID Number"/>
+                                <label for="empIdNumber" class="form-label">Employee ID Number</label>
+                                <input type="text" id="empIdNumber" wire:model="id_number" class="form-control" placeholder="EMP123456"/>
                                 @error('id_number') <small class="text-danger">{{ $message }}</small> @enderror
                             </div>
 
                             <!-- Active Toggle -->
                             <div class="col-12 mb-3">
                                 <div class="form-check">
-                                    <input type="checkbox" wire:model="active" class="form-check-input"
-                                           id="activeToggle"/>
+                                    <input type="checkbox" wire:model="active" class="form-check-input" id="activeToggle"/>
                                     <label for="activeToggle" class="form-check-label">Active</label>
                                 </div>
                             </div>
@@ -446,6 +449,7 @@ new class extends Component {
             </div>
         </div>
     </div>
+
 
 </div>
 

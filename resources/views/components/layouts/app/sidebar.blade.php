@@ -9,6 +9,8 @@
 
     @stack('styles')
 
+    @stack('vite')
+
     @rappasoftTableStyles
 
     @rappasoftTableThirdPartyStyles

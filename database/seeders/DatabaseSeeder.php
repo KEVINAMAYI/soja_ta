@@ -55,7 +55,7 @@ class DatabaseSeeder extends Seeder
         ]);
 
         // Assign the supervisor role
-        $user->assignRole('supervisor');
+        $user->assignRole('super-admin');
 
         Employee::factory()->create([
             'organization_id' => $organization->id,

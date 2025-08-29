@@ -17,45 +17,49 @@ class RolesAndPermissionsSeeder extends Seeder
         // Define all permissions
         $permissions = [
 
-            // Organization-related
-            'view-organizations',
-            'add-organizations',
-            'edit-organizations',
-            'delete-organizations',
+            // Organizations
+            ['name' => 'view-organizations', 'category' => 'Organizations'],
+            ['name' => 'add-organizations', 'category' => 'Organizations'],
+            ['name' => 'edit-organizations', 'category' => 'Organizations'],
+            ['name' => 'delete-organizations', 'category' => 'Organizations'],
 
-            // Employee-related
-            'view-employees',
-            'add-employees',
-            'edit-employees',
-            'delete-employees',
+            // Employees
+            ['name' => 'view-employees', 'category' => 'Employees'],
+            ['name' => 'add-employees', 'category' => 'Employees'],
+            ['name' => 'edit-employees', 'category' => 'Employees'],
+            ['name' => 'delete-employees', 'category' => 'Employees'],
 
-            // Roles management
-            'view-roles',
-            'add-roles',
-            'edit-roles',
-            'delete-roles',
+            // Roles
+            ['name' => 'view-roles', 'category' => 'Roles'],
+            ['name' => 'add-roles', 'category' => 'Roles'],
+            ['name' => 'edit-roles', 'category' => 'Roles'],
+            ['name' => 'delete-roles', 'category' => 'Roles'],
 
-            // Attendance management
-            'manage-employee-attendance',
-            'view-all-attendance',
+            // Timesheets
+            ['name' => 'checkin-other-employees', 'category' => 'Timesheets'],
+            ['name' => 'approve-manual-timesheets', 'category' => 'Timesheets'],
 
             // Reports
-            'manage-reports',
+            ['name' => 'view-own-reports', 'category' => 'Reports'],
+            ['name' => 'view-all-reports', 'category' => 'Reports'],
 
-            //timesheets
-            'approve-manual-timesheets'
+            // Shifts
+            ['name' => 'manage-shifts', 'category' => 'Shifts'],
         ];
 
-        // Create all permissions
         foreach ($permissions as $permission) {
-            Permission::firstOrCreate(['name' => $permission]);
+            Permission::updateOrCreate(
+                ['name' => $permission['name']],
+                ['category' => $permission['category']]
+            );
         }
+
 
         // Define specific role-permission mappings
         $rolePermissions = [
             'super-admin' => 'all',
-            'admin' => array_filter($permissions, fn($p) => !str_contains($p, 'organizations')),
-            'supervisor' => array_filter($permissions, fn($p) => !str_contains($p, 'organizations')),
+            'admin' => array_column(array_filter($permissions, fn($p) => !str_contains($p['name'], 'organizations')), 'name'),
+            'supervisor' => array_column(array_filter($permissions, fn($p) => !str_contains($p['name'], 'organizations')), 'name'),
             'employee' => [],
             'department-manager' => ['approve-manual-timesheets'],
         ];

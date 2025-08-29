@@ -19,17 +19,14 @@ new class extends Component {
 
     public function mount()
     {
-//        if (!auth()->user()->hasPermissionTo('view-roles')) {
-//            abort(403, 'Unauthorized action.');
-//        }
+        if (!auth()->user()?->can('view-roles')) {
+            abort(403, 'Unauthorized.');
+        }
 
         $permissions = Permission::query()->get()->toBase();
         $this->permissions = $permissions;
 
-        $this->groupedPermissions = $this->permissions->groupBy(function ($permission) {
-            $parts = explode('-', $permission->name);
-            return $parts[1] ?? 'general';
-        });
+        $this->groupedPermissions = $this->permissions->groupBy('category');
     }
 
     public function rules()
@@ -232,7 +229,7 @@ new class extends Component {
                                                                 <label class="form-check-label"
                                                                        for="perm-{{ Str::slug($perm->name) }}"
                                                                        style="font-size: 0.8rem;">
-                                                                    {{ ucwords(str_replace('-', ' ', $perm->name)) }}
+                                                                    {{ ucwords(str_replace(['-', '_'], ' ', $perm->name)) }}
                                                                 </label>
                                                             </div>
                                                         </div>

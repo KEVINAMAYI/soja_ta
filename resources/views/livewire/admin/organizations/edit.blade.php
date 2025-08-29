@@ -229,9 +229,6 @@ new class extends Component {
                 </div>
 
                 <div class="d-flex justify-content-end gap-2">
-                    <a href="{{ route('organizations.index') }}" class="btn btn-outline-primary">
-                        <i class="ti ti-arrow-left"></i> Back
-                    </a>
                     <button type="submit" class="btn btn-primary">
                         <i class="ti ti-edit"></i> Update
                     </button>

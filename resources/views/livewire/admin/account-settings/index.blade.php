@@ -53,8 +53,8 @@ new class extends Component {
                 break;
 
             case 'roles':
-                $this->tabTitle = 'Roles & Permissions';
-                $this->tabIcon = '<iconify-icon icon="mdi:account-key-outline" class="fs-5"></iconify-icon>';
+                $this->tabTitle = 'Access & Security';
+                $this->tabIcon = '<iconify-icon icon="mdi:shield-check-outline" class="fs-5"></iconify-icon>';
                 break;
 
             case 'users':
@@ -248,8 +248,8 @@ new class extends Component {
                         role="tab"
                         aria-controls="tab-roles-permissions"
                         aria-selected="false">
-                        <i class="ti ti-calendar mx-1 fs-6"></i>
-                        <span class="d-none d-md-block">Roles & Permissions</span>
+                        <i class="ti ti-shield mx-1 fs-6"></i>
+                        <span class="d-none d-md-block">Access & Security</span>
                     </button>
                 </li>
 

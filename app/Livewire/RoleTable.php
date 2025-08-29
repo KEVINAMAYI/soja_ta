@@ -34,8 +34,10 @@ class RoleTable extends DataTableComponent
     public function columns(): array
     {
         return [
+
             Column::make("Name", "name")
-                ->sortable(),
+                ->sortable()
+                ->format(fn($value) => ucwords(str_replace(['-', '_'], ' ', $value))),
 
             Column::make("Created at", "created_at")
                 ->sortable()

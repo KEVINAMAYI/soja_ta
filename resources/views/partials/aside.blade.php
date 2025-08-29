@@ -91,16 +91,18 @@
                         </ul>
                     </li>
 
+                    @can('view-organizations')
+                        <li class="sidebar-item">
+                            <a class="sidebar-link {{ request()->routeIs('organizations.index') ? 'active' : '' }}"
+                               href="{{ route('organizations.index') }}"
+                               id="get-url"
+                               aria-expanded="false">
+                                <iconify-icon icon="mdi:office-building-outline" class="fs-5"></iconify-icon>
+                                <span class="hide-menu">Organizations</span>
+                            </a>
+                        </li>
+                    @endcan
 
-                    <li class="sidebar-item">
-                        <a class="sidebar-link {{ request()->routeIs('organizations.index') ? 'active' : '' }}"
-                           href="{{ route('organizations.index') }}"
-                           id="get-url"
-                           aria-expanded="false">
-                            <iconify-icon icon="mdi:office-building-outline" class="fs-5"></iconify-icon>
-                            <span class="hide-menu">Organizations</span>
-                        </a>
-                    </li>
 
                     <li class="sidebar-item">
                         <a class="sidebar-link {{ request()->routeIs('reports.*') ? 'active' : '' }}"

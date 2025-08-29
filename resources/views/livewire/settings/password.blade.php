@@ -4,12 +4,16 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rules\Password;
 use Illuminate\Validation\ValidationException;
+use Jantinnerezo\LivewireAlert\Facades\LivewireAlert;
+use Livewire\Attributes\On;
 use Livewire\Volt\Component;
 
 new class extends Component {
+
     public string $current_password = '';
     public string $password = '';
     public string $password_confirmation = '';
+
 
     /**
      * Update the password for the currently authenticated user.
@@ -34,45 +38,54 @@ new class extends Component {
         $this->reset('current_password', 'password', 'password_confirmation');
 
         $this->dispatch('password-updated');
+
+        LivewireAlert::title('Awesome!')
+            ->text('Password updated successfully.')
+            ->success()
+            ->toast()
+            ->position('top-end')
+            ->show();
+
     }
+
+
 }; ?>
 
 <section class="w-full">
-    @include('partials.settings-heading')
 
-    <x-settings.layout :heading="__('Update password')" :subheading="__('Ensure your account is using a long, random password to stay secure')">
-        <form wire:submit="updatePassword" class="mt-6 space-y-6">
-            <flux:input
-                wire:model="current_password"
-                :label="__('Current password')"
-                type="password"
-                required
-                autocomplete="current-password"
-            />
-            <flux:input
-                wire:model="password"
-                :label="__('New password')"
-                type="password"
-                required
-                autocomplete="new-password"
-            />
-            <flux:input
-                wire:model="password_confirmation"
-                :label="__('Confirm Password')"
-                type="password"
-                required
-                autocomplete="new-password"
-            />
+    <form wire:submit.prevent="updatePassword" class="my-4">
 
-            <div class="flex items-center gap-4">
-                <div class="flex items-center justify-end">
-                    <flux:button variant="primary" type="submit" class="w-full">{{ __('Save') }}</flux:button>
-                </div>
+        <!-- Current Password -->
+        <div class="mb-3">
+            <label for="current_password" class="form-label">{{ __('Current password') }}</label>
+            <input type="password" id="current_password" wire:model="current_password" class="form-control" required
+                   autocomplete="current-password">
+            @error('current_password')
+            <div class="text-danger small">{{ $message }}</div> @enderror
+        </div>
 
-                <x-action-message class="me-3" on="password-updated">
-                    {{ __('Saved.') }}
-                </x-action-message>
-            </div>
-        </form>
-    </x-settings.layout>
+        <!-- New Password -->
+        <div class="mb-3">
+            <label for="password" class="form-label">{{ __('New password') }}</label>
+            <input type="password" id="password" wire:model="password" class="form-control" required
+                   autocomplete="new-password">
+            @error('password')
+            <div class="text-danger small">{{ $message }}</div> @enderror
+        </div>
+
+        <!-- Confirm Password -->
+        <div class="mb-3">
+            <label for="password_confirmation" class="form-label">{{ __('Confirm Password') }}</label>
+            <input type="password" id="password_confirmation" wire:model="password_confirmation" class="form-control"
+                   required autocomplete="new-password">
+            @error('password_confirmation')
+            <div class="text-danger small">{{ $message }}</div> @enderror
+        </div>
+
+        <!-- Submit -->
+        <div class="d-flex align-items-center gap-3">
+            <button type="submit" class="btn btn-primary">{{ __('Save') }}</button>
+        </div>
+    </form>
+
 </section>

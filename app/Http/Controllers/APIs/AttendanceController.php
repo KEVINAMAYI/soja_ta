@@ -74,7 +74,7 @@ class AttendanceController extends Controller
                     ], 403);
                 }
 
-                if (!auth()->user()->can('manage-employee-attendance')) {
+                if (!auth()->user()->can('checkin-other-employees')) {
                     return response()->json([
                         'code' => 1003,
                         'message' => 'You do not have permission to check in other employees.'
@@ -163,7 +163,7 @@ class AttendanceController extends Controller
                     ], 403);
                 }
 
-                if (!auth()->user()->can('manage-employee-attendance')) {
+                if (!auth()->user()->can('checkin-other-employees')) {
                     return response()->json([
                         'code' => 1003,
                         'message' => 'You do not have permission to check out other employees.'
