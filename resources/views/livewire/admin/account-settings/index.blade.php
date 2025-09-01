@@ -271,12 +271,13 @@ new class extends Component {
 
             </ul>
 
+
             <div class="card-body">
                 <div class="tab-content" id="pills-tabContent">
 
                     <!-- Working Hours Tab -->
                     <div class="tab-pane fade {{ $activeTab === 'company' ? 'show active' : '' }}"
-                         id="tab-notifications">
+                         id="tab-company-information">
 
                         <livewire:admin.organizations.edit :id="$org->id"/>
 
@@ -284,7 +285,7 @@ new class extends Component {
 
                     <!-- Overtime Policy Tab -->
                     <div class="tab-pane fade {{ $activeTab === 'roles' ? 'show active' : '' }}"
-                         id="tab-notifications">
+                         id="tab-roles-permissions">
 
                         <livewire:admin.roles.index/>
 
@@ -293,7 +294,7 @@ new class extends Component {
 
                     <!-- Overtime Policy Tab -->
                     <div class="tab-pane fade {{ $activeTab === 'users' ? 'show active' : '' }}"
-                         id="tab-notifications">
+                         id="tab-users">
 
                         <div class="accordion" id="customAccordion">
                             <div class="accordion-item border-0 mb-3 shadow-sm rounded">
@@ -304,11 +305,16 @@ new class extends Component {
                                         Departments
                                     </button>
                                 </h2>
+
+
                                 <div id="collapseOne" class="accordion-collapse collapse" aria-labelledby="headingOne"
                                      data-bs-parent="#customAccordion">
                                     <livewire:admin.departments.index/>
                                 </div>
                             </div>
+
+
+
 
                             <div class="accordion" id="userAccordion">
                                 <div class="accordion-item border-0 shadow-sm rounded">

@@ -98,7 +98,7 @@
                                id="get-url"
                                aria-expanded="false">
                                 <iconify-icon icon="mdi:office-building-outline" class="fs-5"></iconify-icon>
-                                <span class="hide-menu">Organizations</span>
+                                <span class="hide-menu">Clients</span>
                             </a>
                         </li>
                     @endcan
