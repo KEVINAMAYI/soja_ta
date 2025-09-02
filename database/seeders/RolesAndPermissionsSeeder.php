@@ -23,6 +23,12 @@ class RolesAndPermissionsSeeder extends Seeder
             ['name' => 'edit-organizations', 'category' => 'Organizations'],
             ['name' => 'delete-organizations', 'category' => 'Organizations'],
 
+            // Departments
+            ['name' => 'view-departments', 'category' => 'Departments'],
+            ['name' => 'add-departments', 'category' => 'Departments'],
+            ['name' => 'edit-departments', 'category' => 'Departments'],
+            ['name' => 'delete-departments', 'category' => 'Departments'],
+
             // Employees
             ['name' => 'view-employees', 'category' => 'Employees'],
             ['name' => 'add-employees', 'category' => 'Employees'],

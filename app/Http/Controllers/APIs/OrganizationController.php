@@ -16,10 +16,10 @@ class OrganizationController extends Controller
         $user = auth()->user();
 
         // Restrict access to supervisors
-        if (!$user->hasRole('supervisor')) {
+        if (!$user->can('view-departments')) {
             return response()->json([
                 'code' => 1003,
-                'message' => 'Unauthorized. Only supervisors can access this.'
+                'message' => 'Unauthorized. You have have permission to view all departments.'
             ], 403);
         }
 
@@ -49,10 +49,10 @@ class OrganizationController extends Controller
 
         $user = auth()->user();
 
-        if (!$user->hasRole('supervisor')) {
+        if (!$user->can('view-employees')) {
             return response()->json([
                 'code' => 1003,
-                'message' => 'Unauthorized. Only supervisors can access this.'
+                'message' => 'Unauthorized. You have have permission to view all employees.'
             ], 403);
         }
 
