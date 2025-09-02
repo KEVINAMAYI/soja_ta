@@ -72,7 +72,11 @@ new class extends Component {
             ->whereDate('date', $today);
 
         if ($this->status !== 'all') {
-            $attendances->where('status', $this->status);
+            if ($this->status === 'absent') {
+                $attendances->whereIn('status', ['absent', 'unchecked_in']);
+            } else {
+                $attendances->where('status', $this->status);
+            }
         }
 
         $attendances = $attendances->get();
@@ -246,7 +250,8 @@ new class extends Component {
                             <div class="w-100">
                                 <h6 class="fw-bold mb-1">Absent</h6>
                                 <h4 class="text-danger fw-bold mb-1">
-                                    {{ $countAbsent }} <small class="text-muted fs‑6">/ {{ $totalEmployees }}</small>
+                                    {{ $countAbsent + $countUncheckedIn  }} <small
+                                        class="text-muted fs‑6">/ {{ $totalEmployees }}</small>
                                 </h4>
                                 <div class="progress w-100" style="height: 6px;">
                                     <div class="progress-bar bg-danger"
@@ -254,23 +259,8 @@ new class extends Component {
                                 </div>
                             </div>
                         </div>
-
-                        <!-- Unchecked In -->
-                        <div class="d-flex align-items-start">
-                            <div class="icon-circle bg-warning bg-opacity-10 text-warning me-3">
-                                <i class="ti ti-alert-circle fs-5"></i>
-                            </div>
-                            <div class="w-100">
-                                <h6 class="fw-bold mb-1">Unchecked In</h6>
-                                <h4 class="text-warning fw-bold mb-1">
-                                    {{ $countUncheckedIn }} <small
-                                        class="text-muted fs‑6">/ {{ $totalEmployees }}</small>
-                                </h4>
-                            </div>
-                        </div>
                     </div>
                 </div>
-
             </div>
         </div>
     </div>
@@ -285,7 +275,6 @@ new class extends Component {
                             @case('clocked_in') Clocked-In Employees @break
                             @case('clocked_out') Clocked-Out Employees @break
                             @case('absent') Absent Employees @break
-                            @case('unchecked_in') Unchecked-In Employees @break
                             @default All Employees
                         @endswitch
                     </h5>
@@ -298,7 +287,7 @@ new class extends Component {
                             Filter Status
                         </button>
                         <ul class="dropdown-menu dropdown-menu-end shadow-sm">
-                            @foreach(['all' => 'All', 'unchecked_in' => 'Unchecked In', 'clocked_in' => 'Clock In', 'clocked_out' => 'Clock Out', 'absent' => 'Absent'] as $key => $label)
+                            @foreach(['all' => 'All', 'clocked_in' => 'Clock In', 'clocked_out' => 'Clock Out', 'absent' => 'Absent'] as $key => $label)
                                 <li>
                                     <a wire:click.prevent="updateStatus('{{ $key }}')"
                                        class="dropdown-item d-flex align-items-center {{ $status === $key ? 'fw-bold' : '' }}"

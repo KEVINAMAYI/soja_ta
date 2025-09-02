@@ -38,6 +38,8 @@ class RolesAndPermissionsSeeder extends Seeder
             // Timesheets
             ['name' => 'checkin-other-employees', 'category' => 'Timesheets'],
             ['name' => 'approve-manual-timesheets', 'category' => 'Timesheets'],
+            ['name' => 'view-all-attendance', 'category' => 'Timesheets'],
+            ['name' => 'enroll-employee', 'category' => 'Timesheets'],
 
             // Reports
             ['name' => 'view-own-reports', 'category' => 'Reports'],
@@ -45,6 +47,11 @@ class RolesAndPermissionsSeeder extends Seeder
 
             // Shifts
             ['name' => 'manage-shifts', 'category' => 'Shifts'],
+
+            // Locations
+            ['name' => 'manage-work-locations', 'category' => 'Locations'],
+            ['name' => 'assign-locations', 'category' => 'Locations'],
+
         ];
 
         foreach ($permissions as $permission) {

@@ -240,52 +240,54 @@ new class extends Component {
 
 </div>
 
-<script src="https://maps.googleapis.com/maps/api/js?key={{ $googleMapsApiKey }}&libraries=places"></script>
-<script>
-    document.addEventListener('DOMContentLoaded', function () {
+@push('scripts')
 
-        const locationInput = document.getElementById('locationInput');
-        const syncInput = document.getElementById('locationSync');
+    <script src="https://maps.googleapis.com/maps/api/js?key={{ $googleMapsApiKey }}&libraries=places"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+
+            const locationInput = document.getElementById('locationInput');
+            const syncInput = document.getElementById('locationSync');
 
 
-        const autocomplete = new google.maps.places.Autocomplete(locationInput, {types: ['geocode']});
+            const autocomplete = new google.maps.places.Autocomplete(locationInput, {types: ['geocode']});
 
-        autocomplete.addListener('place_changed', function () {
-            const place = autocomplete.getPlace();
-            if (place && place.formatted_address) {
-                locationInput.value = place.formatted_address;
-                syncInput.value = place.formatted_address;
-                syncInput.dispatchEvent(new Event('input')); // trigger Livewire update
-            }
-        });
+            autocomplete.addListener('place_changed', function () {
+                const place = autocomplete.getPlace();
+                if (place && place.formatted_address) {
+                    locationInput.value = place.formatted_address;
+                    syncInput.value = place.formatted_address;
+                    syncInput.dispatchEvent(new Event('input')); // trigger Livewire update
+                }
+            });
 
-        document.getElementById('getCurrentLocationBtn').addEventListener('click', function () {
-            if (navigator.geolocation) {
-                navigator.geolocation.getCurrentPosition(function (position) {
-                    const lat = position.coords.latitude;
-                    const lng = position.coords.longitude;
+            document.getElementById('getCurrentLocationBtn').addEventListener('click', function () {
+                if (navigator.geolocation) {
+                    navigator.geolocation.getCurrentPosition(function (position) {
+                        const lat = position.coords.latitude;
+                        const lng = position.coords.longitude;
 
-                    const geocoder = new google.maps.Geocoder();
-                    const latlng = {lat, lng};
+                        const geocoder = new google.maps.Geocoder();
+                        const latlng = {lat, lng};
 
-                    geocoder.geocode({location: latlng}, function (results, status) {
-                        if (status === 'OK' && results[0]) {
-                            const address = results[0].formatted_address;
-                            locationInput.value = address;
-                            syncInput.value = address;
-                            syncInput.dispatchEvent(new Event('input'));
-                        } else {
-                            alert("Unable to retrieve address.");
-                        }
+                        geocoder.geocode({location: latlng}, function (results, status) {
+                            if (status === 'OK' && results[0]) {
+                                const address = results[0].formatted_address;
+                                locationInput.value = address;
+                                syncInput.value = address;
+                                syncInput.dispatchEvent(new Event('input'));
+                            } else {
+                                alert("Unable to retrieve address.");
+                            }
+                        });
+                    }, function () {
+                        alert("Unable to retrieve your location.");
                     });
-                }, function () {
-                    alert("Unable to retrieve your location.");
-                });
-            } else {
-                alert("Geolocation not supported.");
-            }
+                } else {
+                    alert("Geolocation not supported.");
+                }
+            });
+
         });
-
-    });
-</script>
-
+    </script>
+@endpush

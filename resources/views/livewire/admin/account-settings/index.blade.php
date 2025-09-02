@@ -26,6 +26,7 @@ new class extends Component {
             $this->org = Organization::findOrFail($this->organizationId);
 
         } else {
+
             abort(403, 'No organization found for this user.');
         }
 
@@ -55,6 +56,11 @@ new class extends Component {
             case 'roles':
                 $this->tabTitle = 'Access & Security';
                 $this->tabIcon = '<iconify-icon icon="mdi:shield-check-outline" class="fs-5"></iconify-icon>';
+                break;
+
+            case 'location-assignment':
+                $this->tabTitle = 'Locations & Assignments';
+                $this->tabIcon = '<iconify-icon icon="mdi:map-marker-outline" class="fs-5"></iconify-icon>';
                 break;
 
             case 'users':
@@ -253,6 +259,22 @@ new class extends Component {
                     </button>
                 </li>
 
+
+                <li class="nav-item" role="presentation">
+                    <button
+                        class="nav-link position-relative rounded-0 {{ $activeTab === 'location-assignment' ? 'active' : '' }} d-flex align-items-center justify-content-center bg-transparent fs-3 py-3"
+                        id="tab-location-assignment-tab"
+                        data-bs-toggle="pill"
+                        data-bs-target="#tab-location-assignment"
+                        type="button"
+                        role="tab"
+                        aria-controls="tab-location-assignment"
+                        aria-selected="false">
+                        <i class="ti ti-map-pin mx-1 fs-6"></i>
+                        <span class="d-none d-md-block">Locations & Assignments</span>
+                    </button>
+                </li>
+
                 <!-- User -->
                 <li class="nav-item" role="presentation">
                     <button
@@ -283,6 +305,15 @@ new class extends Component {
 
                     </div>
 
+                    <!-- Locations and Assignments Tab -->
+                    <div class="tab-pane fade {{ $activeTab === 'location-assignment' ? 'show active' : '' }}"
+                         id="tab-location-assignment">
+
+                        <livewire:admin.location-assignment.index/>
+
+                    </div>
+
+
                     <!-- Overtime Policy Tab -->
                     <div class="tab-pane fade {{ $activeTab === 'roles' ? 'show active' : '' }}"
                          id="tab-roles-permissions">
@@ -312,8 +343,6 @@ new class extends Component {
                                     <livewire:admin.departments.index/>
                                 </div>
                             </div>
-
-
 
 
                             <div class="accordion" id="userAccordion">
@@ -368,6 +397,9 @@ new class extends Component {
                             break;
                         case 'tab-users-tab':
                             mappedTab = 'users';
+                            break;
+                        case 'tab-location-assignment-tab':
+                            mappedTab = 'location-assignment';
                             break;
                         default:
                             mappedTab = 'company';

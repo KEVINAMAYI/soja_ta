@@ -20,7 +20,7 @@ class AuthController extends Controller
         $currentUser = auth()->user();
 
         // Only supervisors can enroll
-        if (!$currentUser->hasRole('supervisor')) {
+        if (!$currentUser->can('enroll-employee')) {
             return response()->json([
                 'code' => 1003,
                 'message' => 'Only supervisors can enroll new employees.'

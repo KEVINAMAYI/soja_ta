@@ -3,8 +3,8 @@
 use App\Models\Role;
 use App\Models\User;
 use App\Models\Employee;
-use App\Models\EmployeeType;
-use App\Models\Organization;
+use App\Models\WorkLocation;
+use App\Models\EmployeeAssignment;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Jantinnerezo\LivewireAlert\Facades\LivewireAlert;
@@ -19,6 +19,12 @@ new class extends Component {
     public $shifts;
     public $shift_id;
     public $role;
+    public $employeeId;
+    public $search = '';
+    public $workLocations = [];
+    public $selectedLocation = null;
+    public $start_date;
+    public $end_date;
 
     public function mount($roleId = null)
     {
@@ -31,6 +37,68 @@ new class extends Component {
         $this->departments = auth()->user()->employee->organization->departments;
         $this->shifts = auth()->user()->employee->organization->shifts;
 
+    }
+
+    #[On('assign-work-location')]
+    public function setEmployee($id)
+    {
+        $this->employeeId = $id;
+        $this->reset(['search', 'workLocations', 'selectedLocation']);
+        $this->dispatch('show-work-location-modal');
+    }
+
+    #[On('search-work-location')]
+    public function searchLocation()
+    {
+        if (strlen($this->search) > 1) {
+            $this->workLocations = WorkLocation::query()
+                ->where('name', 'like', "%{$this->search}%")
+                ->orWhere('address', 'like', "%{$this->search}%")
+                ->limit(10)
+                ->get();
+        } else {
+            $this->workLocations = [];
+        }
+    }
+
+    public function selectWorkLocation($id)
+    {
+        $this->selectedLocation = WorkLocation::find($id);
+        $this->search = $this->selectedLocation->name;
+        $this->workLocations = [];
+    }
+
+
+    public function assignWorkLocation()
+    {
+
+        $this->validate([
+            'employeeId' => 'required|exists:employees,id',
+            'selectedLocation.id' => 'required|exists:work_locations,id',
+            'start_date' => 'required|date',
+            'end_date' => 'required|date|after_or_equal:start_date',
+        ]);
+
+
+        // create new assignment
+        EmployeeAssignment::create([
+            'employee_id' => $this->employeeId,
+            'work_location_id' => $this->selectedLocation->id,
+            'start_date' => $this->start_date,
+            'end_date' => $this->end_date,
+            'is_current' => true
+        ]);
+
+        $this->dispatch('hide-work-location-modal');
+
+        LivewireAlert::title('Awesome!')
+            ->text('Employee Assigned a work location successfully.')
+            ->success()
+            ->toast()
+            ->position('top-end')
+            ->show();
+
+        $this->reset(['search', 'workLocations', 'selectedLocation']);
     }
 
     public function rules()
@@ -263,7 +331,7 @@ new class extends Component {
             ],
             [
                 'label' => ucfirst($this->role?->name) ?? 'All Employees',
-                'icon' => match(ucfirst($this->role?->name)) {
+                'icon' => match (ucfirst($this->role?->name)) {
                     'Admin' => '<iconify-icon icon="mdi:shield-account" class="fs-5"></iconify-icon>',
                     'Supervisor' => '<iconify-icon icon="mdi:account-tie" class="fs-5"></iconify-icon>',
                     'HR' => '<iconify-icon icon="mdi:account-group" class="fs-5"></iconify-icon>',
@@ -377,21 +445,24 @@ new class extends Component {
                             <!-- Name -->
                             <div class="col-md-6 mb-3">
                                 <label for="empName" class="form-label">Full Name</label>
-                                <input type="text" id="empName" wire:model="name" class="form-control" placeholder="John Doe"/>
+                                <input type="text" id="empName" wire:model="name" class="form-control"
+                                       placeholder="John Doe"/>
                                 @error('name') <small class="text-danger">{{ $message }}</small> @enderror
                             </div>
 
                             <!-- Email -->
                             <div class="col-md-6 mb-3">
                                 <label for="empEmail" class="form-label">Email Address</label>
-                                <input type="email" id="empEmail" wire:model="email" class="form-control" placeholder="john@example.com"/>
+                                <input type="email" id="empEmail" wire:model="email" class="form-control"
+                                       placeholder="john@example.com"/>
                                 @error('email') <small class="text-danger">{{ $message }}</small> @enderror
                             </div>
 
                             <!-- Phone -->
                             <div class="col-md-6 mb-3">
                                 <label for="empPhone" class="form-label">Phone Number</label>
-                                <input type="text" id="empPhone" wire:model="phone" class="form-control" placeholder="+1234567890"/>
+                                <input type="text" id="empPhone" wire:model="phone" class="form-control"
+                                       placeholder="+1234567890"/>
                                 @error('phone') <small class="text-danger">{{ $message }}</small> @enderror
                             </div>
 
@@ -422,14 +493,16 @@ new class extends Component {
                             <!-- ID Number -->
                             <div class="col-md-6 mb-3">
                                 <label for="empIdNumber" class="form-label">Employee ID Number</label>
-                                <input type="text" id="empIdNumber" wire:model="id_number" class="form-control" placeholder="EMP123456"/>
+                                <input type="text" id="empIdNumber" wire:model="id_number" class="form-control"
+                                       placeholder="EMP123456"/>
                                 @error('id_number') <small class="text-danger">{{ $message }}</small> @enderror
                             </div>
 
                             <!-- Active Toggle -->
                             <div class="col-12 mb-3">
                                 <div class="form-check">
-                                    <input type="checkbox" wire:model="active" class="form-check-input" id="activeToggle"/>
+                                    <input type="checkbox" wire:model="active" class="form-check-input"
+                                           id="activeToggle"/>
                                     <label for="activeToggle" class="form-check-label">Active</label>
                                 </div>
                             </div>
@@ -451,10 +524,93 @@ new class extends Component {
     </div>
 
 
+    {{--Live location Model--}}
+    <div class="modal fade" id="workLocationModal" tabindex="-1"
+         aria-labelledby="workLocationModalTitle"
+         aria-hidden="true" wire:ignore.self>
+        <div class="modal-dialog modal-lg modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header d-flex align-items-center">
+                    <h5 class="modal-title">Assign Work Location</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+
+                <form wire:submit.prevent="assignWorkLocation">
+                    <div class="modal-body">
+
+                        <div class="row mb-3">
+                            <div class="col-6">
+                                <label class="form-label">Start Date</label>
+                                <input type="date" class="form-control @error('start_date') is-invalid @enderror"
+                                       wire:model="start_date">
+
+                                @error('start_date')
+                                <div class="invalid-feedback">{{ $message }}</div>
+                                @enderror
+                            </div>
+
+                            <div class="col-6">
+                                <label class="form-label">End Date (optional)</label>
+                                <input type="date" class="form-control @error('end_date') is-invalid @enderror"
+                                       wire:model="end_date">
+
+                                @error('end_date')
+                                <div class="invalid-feedback">{{ $message }}</div>
+                                @enderror
+                            </div>
+                        </div>
+
+
+                        <div class="mb-3">
+                            <label for="workLocationSearch" class="form-label">Search Work Location</label>
+                            <input type="text" id="workLocationSearch"
+                                   wire:keyup.debounce.500ms="$dispatch('search-work-location')"
+                                   wire:model="search"
+                                   class="form-control"
+                                   placeholder="Type to search locations..."/>
+
+                            {{-- Live search results --}}
+                            @if(!empty($search) && !$selectedLocation)
+                                <ul class="list-group mt-2" style="max-height: 200px; overflow-y:auto;">
+                                    @forelse($workLocations as $location)
+                                        <li class="list-group-item list-group-item-action"
+                                            wire:click="selectWorkLocation({{ $location->id }})"
+                                            style="cursor: pointer;">
+                                            <strong>{{ $location->name }}</strong>
+                                            <br><small class="text-muted">{{ $location->address }}</small>
+                                        </li>
+                                    @empty
+                                        <li class="list-group-item text-muted">No locations found.</li>
+                                    @endforelse
+                                </ul>
+                            @endif
+                        </div>
+                    </div>
+
+                    <!-- Footer -->
+                    <div class="modal-footer d-flex gap-1">
+                        <button type="button" class="btn btn-outline-danger" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-success">Assign</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+
 </div>
 
 @push('scripts')
     <script>
+
+        window.addEventListener('show-work-location-modal', () => {
+            new bootstrap.Modal(document.getElementById('workLocationModal')).show();
+        });
+
+        window.addEventListener('hide-work-location-modal', () => {
+            bootstrap.Modal.getInstance(document.getElementById('workLocationModal'))?.hide();
+        });
+
         window.addEventListener('show-employee-modal', () => {
             new bootstrap.Modal(document.getElementById('employeeModal')).show();
         });

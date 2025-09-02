@@ -12,17 +12,6 @@ class ShiftTable extends DataTableComponent
     protected $model = Shift::class;
 
 
-//    public function mount(){
-//
-//        $orgId = auth()->user()->employee->organization_id ?? null;
-//
-//        $query = Shift::query()->select('shifts.*')
-//            ->with(['employees'])
-//            ->where('organization_id', $orgId);
-//
-//        dd($query->get());
-//    }
-
     public function configure(): void
     {
         $this->setPrimaryKey('id')
