@@ -299,7 +299,7 @@ new class extends Component {
                 {{-- Right side: Create Employee button --}}
                 <a href="javascript:void(0)" class="btn btn-primary" data-bs-toggle="modal"
                    data-bs-target="#organizationModal">
-                    <i class="ti ti-building fs-5"></i> Add Organization
+                    <i class="ti ti-building fs-5"></i> Add Client
                 </a>
 
             </div>
