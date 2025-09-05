@@ -14,7 +14,7 @@ new class extends Component {
     public $frequency = 'weekly';
     public $time = '09:00';
     public $day_of_week = null;
-    public $timezone = 'UTC';
+    public $timezone = 'Africa/Nairobi';
     public $report_type = 'daily_attendance';
 
     // dynamic dropdown data
