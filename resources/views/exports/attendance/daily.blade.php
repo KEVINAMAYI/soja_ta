@@ -149,7 +149,7 @@ if ($organization) {
             <td>{{ optional($attendance->employee->shift)->name ?? '-' }}</td>
             <td style="color: green;">
                 {{ $attendance->check_in_time
-                    ? \Carbon\Carbon::parse($attendance->check_in)->format('M d, Y g:i A')
+                    ? \Carbon\Carbon::parse($attendance->check_in_time)->format('M d, Y g:i A')
                     : '-' }}
             </td>
             <td>
