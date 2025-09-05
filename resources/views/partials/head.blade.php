@@ -14,6 +14,7 @@
 
 <link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css" rel="stylesheet">
 
+<link rel="stylesheet" href="assets/libs/select2/dist/css/select2.min.css">
 
 <title>SOJA TA</title>
 

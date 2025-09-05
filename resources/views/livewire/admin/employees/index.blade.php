@@ -346,6 +346,21 @@ new class extends Component {
 
 @push('styles')
     <style>
+
+        #table-bulkActionsDropdown {
+            background-color: #e14326;
+            border: none;
+            color: #fff;
+            font-weight: 600;
+            transition: all 0.2s ease-in-out;
+        }
+
+        #table-bulkActionsDropdown:hover {
+            background-color: #c2361d; /* darker shade for hover */
+            transform: translateY(-1px);
+            box-shadow: 0 4px 8px rgba(225, 67, 38, 0.4);
+        }
+
         .btn-outline-secondary {
             margin-left: 0.5rem !important;
             padding: 6px 16px !important;

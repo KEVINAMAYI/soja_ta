@@ -1,6 +1,7 @@
 <?php
 
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Jantinnerezo\LivewireAlert\Facades\LivewireAlert;
 use Livewire\Volt\Component;
 use App\Models\Organization;
@@ -20,6 +21,7 @@ new class extends Component {
     public $website;
     public $logo_path;
     public $googleMapsApiKey;
+    public $newLogo;
 
 
     public function mount($id)
@@ -45,7 +47,7 @@ new class extends Component {
             'phone_number' => 'required|string|max:255',
             'description' => 'nullable|string',
             'website' => 'nullable|url',
-            'logo_path' => 'nullable|file|mimes:jpg,jpeg,png,gif|max:2048',
+            'newLogo' => 'nullable|image|mimes:jpg,jpeg,png,gif|max:2048',
         ];
     }
 
@@ -61,6 +63,7 @@ new class extends Component {
         $this->description = $org->description;
         $this->website = $org->website;
         $this->logo_path = $org->logo_path;
+        $this->newLogo = null; // Reset the new logo property
 
     }
 
@@ -75,6 +78,14 @@ new class extends Component {
 
             $org = Organization::findOrFail($this->editId);
 
+            if ($this->newLogo) {
+                if ($org->logo_path) {
+                    Storage::disk('public')->delete($org->logo_path);
+                }
+
+                $logo_path = $this->newLogo->store('logos', 'public');
+            }
+
             $org->update([
                 'name' => $this->name,
                 'address' => $this->address,
@@ -83,6 +94,7 @@ new class extends Component {
                 'phone_number' => $this->phone_number,
                 'description' => $this->description,
                 'website' => $this->website,
+                'logo_path' => $logo_path ?? '',
             ]);
 
             DB::commit();
@@ -116,6 +128,12 @@ new class extends Component {
                 ->position('top-end')
                 ->show();
         }
+    }
+
+
+    public function removeNewLogo()
+    {
+        $this->newLogo = null;
     }
 
 };
@@ -213,12 +231,31 @@ new class extends Component {
                     </div>
                 </div>
 
+                {{-- Logo upload and preview section --}}
                 <div class="mb-3 row align-items-center">
                     <label class="col-sm-3 col-form-label fw-semibold">Logo</label>
+                    <div class="col-sm-9">
+                        <input type="file" wire:model="newLogo" class="form-control">
+                        @error('newLogo') <span class="text-danger">{{ $message }}</span> @enderror
+                    </div>
+                </div>
+
+                <div class="mb-3 row">
+                    <label class="col-sm-3 col-form-label fw-semibold">Current/New Logo</label>
                     <div class="col-sm-9 d-flex align-items-center gap-3">
-                        @if($logo_path)
+
+                        @if ($newLogo)
+                            <div class="position-relative">
+                                <img src="{{ $newLogo->temporaryUrl() }}" class="rounded-circle"
+                                     style="height: 100px; width: 100px; object-fit: cover;">
+                                <button type="button" wire:click="removeNewLogo"
+                                        class="btn-close position-absolute top-0 start-100 translate-middle"
+                                        aria-label="Remove image"></button>
+                            </div>
+
+                        @elseif($logo_path)
                             <img src="{{ asset('storage/' . $logo_path) }}" class="rounded-circle"
-                                 style="height: 100px; width: 100px;">
+                                 style="height: 100px; width: 100px; object-fit: cover;">
                         @else
                             <div class="rounded-circle d-flex justify-content-center align-items-center"
                                  style="height: 100px; width: 100px; background-color: #8E44AD; color: white; font-size: 2rem;">

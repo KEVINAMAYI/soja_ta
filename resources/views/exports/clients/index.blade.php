@@ -1,7 +1,5 @@
 <?php
-// Use a more robust way to get the first employee and their organization
-$firstEmployee = collect($employees)->first();
-$organization = $firstEmployee->organization ?? null;
+$organization = $organizations->first(); // Get the first organization
 $logoDataUri = null;
 $initials = 'XX'; // Default initials
 
@@ -9,9 +7,9 @@ if ($organization) {
     $initials = strtoupper(substr($organization->name, 0, 2));
 
     // Check if a logo path exists and the file is readable
-    if ($organization->logo_path && file_exists(storage_path('app/public/' . $organization->logo_path))) {
+    if (!empty($organization->logo_path) && file_exists(storage_path('app/public/' . $organization->logo_path))) {
         $path = storage_path('app/public/' . $organization->logo_path);
-        $type = pathinfo($path, PATHINFO_EXTENSION); // Get file extension
+        $type = pathinfo($path, PATHINFO_EXTENSION);
 
         // Handle common image types
         $mime = 'image/' . ($type === 'svg' ? 'svg+xml' : $type);
@@ -21,6 +19,7 @@ if ($organization) {
     }
 }
 ?>
+
 <html lang="en">
 <head>
     <meta charset="utf-8">
@@ -51,18 +50,6 @@ if ($organization) {
             margin-bottom: 10px;
         }
 
-        .header-logo-placeholder {
-            width: 100px;
-            height: 100px;
-            border-radius: 50%;
-            background-color: #8E44AD;
-            color: white;
-            font-size: 2rem;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            margin-bottom: 10px;
-        }
 
         .header-content h1 {
             font-size: 24px;
@@ -127,28 +114,27 @@ if ($organization) {
         <div class="meta">Generated on {{ now()->format('d M Y, H:i') }}</div>
     </div>
 </div>
+
 <table>
     <thead>
     <tr>
-        <th>Name</th>
+        <th>#</th>
+        <th>Client Name</th>
         <th>Email</th>
         <th>Phone</th>
-        <th>ID Number</th>
-        <th>Department</th>
-        <th>Shift</th>
-        <th>Status</th>
+        <th>Address</th>
+        <th>Created At</th>
     </tr>
     </thead>
     <tbody>
-    @foreach($employees as $employee)
+    @foreach($organizations as $index => $org)
         <tr>
-            <td>{{ $employee->name ?? '' }}</td>
-            <td>{{ $employee->user->email ?? '' }}</td>
-            <td>{{ $employee->phone ?? '' }}</td>
-            <td>{{ $employee->id_number ?? '' }}</td>
-            <td>{{ optional($employee->department)->name ?? '' }}</td>
-            <td>{{ optional($employee->shift)->name ?? '' }}</td>
-            <td>{{ $employee->active ? 'Active' : 'Inactive' }}</td>
+            <td>{{ $index + 1 }}</td>
+            <td>{{ $org->name }}</td>
+            <td>{{ $org->email ?? '-' }}</td>
+            <td>{{ $org->phone_number ?? '-' }}</td>
+            <td>{{ $org->location ?? '-' }}</td>
+            <td>{{ $org->created_at?->format('d M Y') }}</td>
         </tr>
     @endforeach
     </tbody>

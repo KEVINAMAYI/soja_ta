@@ -2,18 +2,19 @@
 
 namespace App\Exports;
 
+use App\Models\Attendance;
 use App\Models\Employee;
 use Illuminate\Contracts\View\View;
-use Illuminate\Database\Eloquent\Collection;
+use Maatwebsite\Excel\Concerns\FromCollection;
 use Maatwebsite\Excel\Concerns\FromView;
 use Maatwebsite\Excel\Concerns\ShouldAutoSize;
-use Maatwebsite\Excel\Concerns\WithTitle;
 use Maatwebsite\Excel\Concerns\WithStyles;
+use Maatwebsite\Excel\Concerns\WithTitle;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 
-class EmployeesExcelExport implements FromView, ShouldAutoSize, WithTitle, WithStyles
+class AttendanceDailyExcelExport implements FromView, ShouldAutoSize, WithTitle, WithStyles
 {
     protected array $selectedIds;
 
@@ -24,22 +25,28 @@ class EmployeesExcelExport implements FromView, ShouldAutoSize, WithTitle, WithS
 
     public function view(): View
     {
-        $query = Employee::query()
-            ->with(['organization', 'shift', 'user', 'department']);
+        $orgId = auth()->user()->employee->organization_id ?? null;
+        $today = now()->toDateString();
+
+        $query = Attendance::query()
+            ->with(['employee.user', 'employee.department', 'employee.shift'])
+            ->whereDate('date', $today)
+            ->whereHas('employee', fn($q) => $q->where('organization_id', $orgId));
 
         if (!empty($this->selectedIds)) {
-            $query->whereIn('id', $this->selectedIds);
+            $query->whereIn('employee_id', $this->selectedIds);
         }
 
-        $employees = $query->get();
+        $attendances = $query->get();
 
-        return view('exports.employees.index', [
-            'employees' => $employees,
-            'title' => 'Employee Report',
+        return view('exports.attendance.daily', [
+            'attendances' => $attendances,
+            'title' => 'Daily Attendance Report',
             'date' => now()->format('d M Y, H:i'),
             'isExcel' => true
         ]);
     }
+
 
     public function title(): string
     {
@@ -48,7 +55,7 @@ class EmployeesExcelExport implements FromView, ShouldAutoSize, WithTitle, WithS
 
     public function styles(Worksheet $sheet)
     {
-        $sheet->getStyle('A1:G1')->applyFromArray([
+        $sheet->getStyle('A1:R1')->applyFromArray([
             'font' => [
                 'bold' => true,
                 'color' => ['argb' => 'FFFFFFFF'],
@@ -60,7 +67,7 @@ class EmployeesExcelExport implements FromView, ShouldAutoSize, WithTitle, WithS
         ]);
 
 
-        $sheet->getStyle('A2:G2')->applyFromArray([
+        $sheet->getStyle('A2:R2')->applyFromArray([
             'font' => [
                 'bold' => true,
                 'color' => ['argb' => 'FFFFFFFF'],

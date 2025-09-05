@@ -2,10 +2,13 @@
 
 namespace App\Livewire;
 
+use App\Exports\DepartmentAttendanceExcelExport;
+use App\Exports\AttendanceMonthlyExcelExport;
 use App\Models\Attendance;
 use App\Models\Department;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder as EloquentBuilder;
+use Maatwebsite\Excel\Facades\Excel;
 use Rappasoft\LaravelLivewireTables\DataTableComponent;
 use Rappasoft\LaravelLivewireTables\Views\Column;
 use Rappasoft\LaravelLivewireTables\Views\Filters\DateFilter;
@@ -52,6 +55,7 @@ class DepartmentalAttendanceTable extends DataTableComponent
                 DB::raw("SUM(attendances.overtime_hours) as total_ot_hours")
             )
             ->groupBy('employees.department_id', 'departments.name', DB::raw("DATE_FORMAT(attendances.date, '%Y-%m')"));
+
     }
 
     public function columns(): array
@@ -84,11 +88,31 @@ class DepartmentalAttendanceTable extends DataTableComponent
             Column::make("OT Hours")
                 ->label(fn($row) => number_format($row->total_ot_hours, 2)),
 
-//            Column::make("View Details")
-//                ->label(fn($row) => view('livewire.admin.attendance.view-department-button', [
-//                    'departmentId' => $row->department_id,
-//                    'month' => $row->attendance_month
-//                ])),
         ];
+    }
+
+
+    public function bulkActions(): array
+    {
+        return [
+            'exportExcel' => 'Export Excel',
+            'exportPdf' => 'Export PDF'
+        ];
+    }
+
+
+    public function exportExcel()
+    {
+        return Excel::download(new DepartmentAttendanceExcelExport($this->getSelected()), 'department-attendance.xlsx');
+    }
+
+
+    public function exportPdf()
+    {
+        $ids = $this->getSelected();
+
+        $url = route('department-attendance.export.pdf', ['ids' => $ids]);
+
+        return redirect()->to($url);
     }
 }

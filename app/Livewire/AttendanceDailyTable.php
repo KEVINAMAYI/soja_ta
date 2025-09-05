@@ -2,8 +2,11 @@
 
 namespace App\Livewire;
 
+use App\Exports\AttendanceDailyExcelExport;
+use App\Exports\EmployeesExcelExport;
 use App\Models\Employee;
 use Carbon\Carbon;
+use Maatwebsite\Excel\Facades\Excel;
 use Rappasoft\LaravelLivewireTables\DataTableComponent;
 use Rappasoft\LaravelLivewireTables\Views\Column;
 use App\Models\Attendance;
@@ -124,14 +127,14 @@ class AttendanceDailyTable extends DataTableComponent
                 })
                 ->html(),
 
-            Column::make($isAbsentFilter ? "Last Clock-In" : "Check In", "check_in_time")
+            Column::make($isAbsentFilter ? "Last Clock-In" : "Clock In", "check_in_time")
                 ->format(function ($value, $row) {
                     $label = '';
 
                     if (in_array($row->status, ['absent', 'unchecked_in'])) {
                         $value = $row->last_check_in;
                         if (is_null($this->status)) {
-                            $label = "<br><small class='text-muted'>(Last Check-in)</small>";
+                            $label = "<br><small class='text-muted'>(Last Clock-in)</small>";
                         }
                     }
 
@@ -144,7 +147,7 @@ class AttendanceDailyTable extends DataTableComponent
                 })
                 ->html(),
 
-            Column::make($isAbsentFilter ? "Last Clock-Out" : "Check Out", "check_out_time")
+            Column::make($isAbsentFilter ? "Last Clock-Out" : "Clock Out", "check_out_time")
                 ->format(function ($value, $row) {
                     $label = '';
 
@@ -164,43 +167,40 @@ class AttendanceDailyTable extends DataTableComponent
                 })
                 ->html(),
 
-            Column::make("Overtime(hours)", "overtime_hours")
+            Column::make("Overtime (hours)", "overtime_hours")
                 ->sortable()
                 ->format(function ($value) use ($threshold) {
-                    $badgeClass = $value >= $threshold ? 'badge bg-success' : 'badge bg-secondary';
-                    $badgeText = $value >= $threshold ? 'Threshold Met' : 'Threshold Not Met';
-
-                    return $value . '<br><span style=font-weight:bold;" class="' . $badgeClass . '" style="font-size: 0.55rem;">' . $badgeText . '</span>';
+                    return $value;
                 })
-                ->html(),
-
-            Column::make("Status", "status")
-                ->sortable()
-                ->format(function ($value, $row, $column) {
-                    // Map statuses to readable labels and colors
-                    $statusLabels = [
-                        'clocked_in' => 'Clocked In',
-                        'clocked_out' => 'Clocked Out',
-                        'unchecked_in' => 'Unclocked In',
-                        'absent' => 'Absent',
-                    ];
-
-                    $colors = [
-                        'clocked_in' => 'success',  // green
-                        'clocked_out' => 'danger', // orange
-                        'unchecked_in' => 'warning', // red
-                        'absent' => 'warning',       // red
-                    ];
-
-                    $label = $statusLabels[$value] ?? ucfirst($value);
-                    $color = $colors[$value] ?? 'secondary';
-
-                    return "<span class='badge bg-{$color}'>$label</span>";
-                })
-                ->html(),
-
-
+                ->html()
 
         ];
     }
+
+
+    public function bulkActions(): array
+    {
+        return [
+            'exportExcel' => 'Export Excel',
+            'exportPdf' => 'Export PDF'
+        ];
+    }
+
+
+    public function exportExcel()
+    {
+        return Excel::download(new AttendanceDailyExcelExport($this->getSelected()), 'attendance.xlsx');
+    }
+
+
+    public function exportPdf()
+    {
+        $ids = $this->getSelected();
+
+        $url = route('attendance-daily.export.pdf', ['ids' => $ids]);
+
+        return redirect()->to($url);
+    }
+
+
 }

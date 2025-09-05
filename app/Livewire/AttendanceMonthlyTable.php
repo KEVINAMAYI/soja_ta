@@ -2,10 +2,13 @@
 
 namespace App\Livewire;
 
+use App\Exports\AttendanceDailyExcelExport;
+use App\Exports\AttendanceMonthlyExcelExport;
 use App\Models\Attendance;
 use Carbon\Carbon;
 use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Database\Eloquent\Builder as EloquentBuilder;
+use Maatwebsite\Excel\Facades\Excel;
 use Rappasoft\LaravelLivewireTables\DataTableComponent;
 use Rappasoft\LaravelLivewireTables\Views\Column;
 use Rappasoft\LaravelLivewireTables\Views\Filters\DateFilter;
@@ -87,11 +90,33 @@ class AttendanceMonthlyTable extends DataTableComponent
             Column::make("OT Hours")
                 ->label(fn($row) => number_format($row->total_ot_hours, 2)),
 
-            Column::make("View Details")
-                ->label(fn($row) => view('livewire.admin.attendance.view-button', [
-                    'employeeId' => $row->employee_id,
-                    'month' => $row->attendance_month
-                ])),
         ];
     }
+
+
+    public function bulkActions(): array
+    {
+        return [
+            'exportExcel' => 'Export Excel',
+            'exportPdf' => 'Export PDF'
+        ];
+    }
+
+
+    public function exportExcel()
+    {
+        return Excel::download(new AttendanceMonthlyExcelExport($this->getSelected()), 'attendance.xlsx');
+    }
+
+
+    public function exportPdf()
+    {
+        $ids = $this->getSelected();
+
+        $url = route('attendance-monthly.export.pdf', ['ids' => $ids]);
+
+        return redirect()->to($url);
+    }
+
+
 }

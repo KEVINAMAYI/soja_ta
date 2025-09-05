@@ -19,7 +19,8 @@ class RoleTable extends DataTableComponent
 
     public function builder(): Builder
     {
-        $query = Role::query()->select('roles.*');
+        $query = Role::query()->select('roles.*')
+            ->where('name', '!=', 'super-admin'); // Exclude super-admin
 
         if ($this->search !== null && $this->search !== '') {
             $query->where(function ($q) {
@@ -29,6 +30,7 @@ class RoleTable extends DataTableComponent
 
         return $query;
     }
+
 
 
     public function columns(): array

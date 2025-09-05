@@ -1,7 +1,7 @@
 <?php
 // Use a more robust way to get the first employee and their organization
-$firstEmployee = collect($employees)->first();
-$organization = $firstEmployee->organization ?? null;
+$firstAttendance = collect($attendances)->first();
+$organization = $firstAttendance->employee->organization ?? null;
 $logoDataUri = null;
 $initials = 'XX'; // Default initials
 
@@ -24,7 +24,7 @@ if ($organization) {
 <html lang="en">
 <head>
     <meta charset="utf-8">
-    <title>{{ $title }}</title>
+    <title>Attendance Report</title>
     <style>
         body {
             font-family: DejaVu Sans, sans-serif;
@@ -130,25 +130,27 @@ if ($organization) {
 <table>
     <thead>
     <tr>
-        <th>Name</th>
-        <th>Email</th>
-        <th>Phone</th>
-        <th>ID Number</th>
         <th>Department</th>
-        <th>Shift</th>
-        <th>Status</th>
+        <th>Month</th>
+        <th>Present</th>
+        <th>Absent</th>
+        <th>Leave</th>
+        <th>Total Days</th>
+        <th>Worked Hours</th>
+        <th>Overtime Hours</th>
     </tr>
     </thead>
     <tbody>
-    @foreach($employees as $employee)
+    @foreach ($attendances as $attendance)
         <tr>
-            <td>{{ $employee->name ?? '' }}</td>
-            <td>{{ $employee->user->email ?? '' }}</td>
-            <td>{{ $employee->phone ?? '' }}</td>
-            <td>{{ $employee->id_number ?? '' }}</td>
-            <td>{{ optional($employee->department)->name ?? '' }}</td>
-            <td>{{ optional($employee->shift)->name ?? '' }}</td>
-            <td>{{ $employee->active ? 'Active' : 'Inactive' }}</td>
+            <td>{{ $attendance->department_name }}</td>
+            <td>{{ $attendance->attendance_month }}</td>
+            <td>{{ $attendance->present_days }}</td>
+            <td>{{ $attendance->absent_days }}</td>
+            <td>{{ $attendance->leave_days }}</td>
+            <td>{{ $attendance->total_days }}</td>
+            <td>{{ $attendance->total_worked_hours }}</td>
+            <td>{{ $attendance->total_ot_hours }}</td>
         </tr>
     @endforeach
     </tbody>

@@ -2,7 +2,11 @@
 
 namespace App\Livewire;
 
+use App\Exports\AttendanceDailyExcelExport;
+use App\Exports\ClientsExcelExport;
+use App\Exports\ClientsExport;
 use Illuminate\Database\Eloquent\Builder;
+use Maatwebsite\Excel\Facades\Excel;
 use Rappasoft\LaravelLivewireTables\DataTableComponent;
 use Rappasoft\LaravelLivewireTables\Views\Column;
 use App\Models\Organization;
@@ -42,7 +46,7 @@ class OrganizationTable extends DataTableComponent
 
     public function builder(): Builder
     {
-        $query =  Organization::query()->select('organizations.*');
+        $query = Organization::query()->select('organizations.*');
 
         if ($this->search !== null && $this->search !== '') {
             $query->where(function ($q) {
@@ -50,7 +54,29 @@ class OrganizationTable extends DataTableComponent
             });
         }
 
-
         return $query;
+    }
+
+    public function bulkActions(): array
+    {
+        return [
+            'exportExcel' => 'Export Excel',
+            'exportPdf' => 'Export PDF'
+        ];
+    }
+
+    public function exportExcel()
+    {
+        return Excel::download(new ClientsExcelExport($this->getSelected()), 'clients.xlsx');
+    }
+
+
+    public function exportPdf()
+    {
+        $ids = $this->getSelected();
+
+        $url = route('clients.export.pdf', ['ids' => $ids]);
+
+        return redirect()->to($url);
     }
 }

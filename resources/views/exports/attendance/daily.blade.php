@@ -1,7 +1,7 @@
 <?php
 // Use a more robust way to get the first employee and their organization
-$firstEmployee = collect($employees)->first();
-$organization = $firstEmployee->organization ?? null;
+$firstAttendance = collect($attendances)->first();
+$organization = $firstAttendance->employee->organization ?? null;
 $logoDataUri = null;
 $initials = 'XX'; // Default initials
 
@@ -24,7 +24,7 @@ if ($organization) {
 <html lang="en">
 <head>
     <meta charset="utf-8">
-    <title>{{ $title }}</title>
+    <title>Attendance Report</title>
     <style>
         body {
             font-family: DejaVu Sans, sans-serif;
@@ -99,14 +99,14 @@ if ($organization) {
         }
 
         .header-org-name {
-            width: 100%;
-            padding: 15px;
-            color: #2c3e50;
-            font-size: 1.2rem;
-            font-weight: bold;
-            text-align: center;
-            margin-bottom: 10px;
-        }
+               width: 100%;
+               padding: 15px;
+               color: #2c3e50;
+               font-size: 1.2rem;
+               font-weight: bold;
+               text-align: center;
+               margin-bottom: 10px;
+           }
 
     </style>
 </head>
@@ -130,25 +130,41 @@ if ($organization) {
 <table>
     <thead>
     <tr>
-        <th>Name</th>
+        <th>Employee</th>
         <th>Email</th>
         <th>Phone</th>
-        <th>ID Number</th>
-        <th>Department</th>
         <th>Shift</th>
+        <th>Clock In</th>
+        <th>Clock Out</th>
+        <th>Overtime (hours)</th>
         <th>Status</th>
     </tr>
     </thead>
     <tbody>
-    @foreach($employees as $employee)
+    @foreach($attendances as $attendance)
         <tr>
-            <td>{{ $employee->name ?? '' }}</td>
-            <td>{{ $employee->user->email ?? '' }}</td>
-            <td>{{ $employee->phone ?? '' }}</td>
-            <td>{{ $employee->id_number ?? '' }}</td>
-            <td>{{ optional($employee->department)->name ?? '' }}</td>
-            <td>{{ optional($employee->shift)->name ?? '' }}</td>
-            <td>{{ $employee->active ? 'Active' : 'Inactive' }}</td>
+            <td>{{ $attendance->employee->name ?? '-' }}</td>
+            <td>{{ $attendance->employee->user->email ?? '-' }}</td>
+            <td>{{ $attendance->employee->phone ?? '-' }}</td>
+            <td>{{ optional($attendance->employee->shift)->name ?? '-' }}</td>
+            <td style="color: green;">
+                {{ $attendance->check_in_time
+                    ? \Carbon\Carbon::parse($attendance->check_in)->format('M d, Y g:i A')
+                    : '-' }}
+            </td>
+            <td style="color: red;">
+                {{ $attendance->check_out_time
+                    ? \Carbon\Carbon::parse($attendance->check_out)->format('M d, Y g:i A')
+                    : '-' }}
+            </td>
+            <td>
+                {{ number_format($attendance->overtime_hours ?? 0, 2) }}
+            </td>
+            <td>
+                <span style="color: {{ $attendance->status === 'Clocked In' ? '#27ae60' : '#e74c3c' }};">
+                        {{ \Illuminate\Support\Str::of($attendance->status)->replace('_', ' ')->title() }}
+               </span>
+            </td>
         </tr>
     @endforeach
     </tbody>

@@ -2,18 +2,17 @@
 
 namespace App\Exports;
 
-use App\Models\Employee;
+use App\Models\Organization;
 use Illuminate\Contracts\View\View;
-use Illuminate\Database\Eloquent\Collection;
 use Maatwebsite\Excel\Concerns\FromView;
 use Maatwebsite\Excel\Concerns\ShouldAutoSize;
-use Maatwebsite\Excel\Concerns\WithTitle;
 use Maatwebsite\Excel\Concerns\WithStyles;
+use Maatwebsite\Excel\Concerns\WithTitle;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 
-class EmployeesExcelExport implements FromView, ShouldAutoSize, WithTitle, WithStyles
+class ClientsExcelExport implements FromView, ShouldAutoSize, WithTitle, WithStyles
 {
     protected array $selectedIds;
 
@@ -24,31 +23,46 @@ class EmployeesExcelExport implements FromView, ShouldAutoSize, WithTitle, WithS
 
     public function view(): View
     {
-        $query = Employee::query()
-            ->with(['organization', 'shift', 'user', 'department']);
+        $orgId = auth()->user()->employee->organization_id ?? null;
+
+        $query = Organization::query()
+            ->where('id', $orgId);
 
         if (!empty($this->selectedIds)) {
             $query->whereIn('id', $this->selectedIds);
         }
 
-        $employees = $query->get();
+        $organizations = $query->get();
 
-        return view('exports.employees.index', [
-            'employees' => $employees,
-            'title' => 'Employee Report',
+        return view('exports.clients.index', [
+            'organizations' => $organizations,
+            'title' => 'Clients Report',
             'date' => now()->format('d M Y, H:i'),
-            'isExcel' => true
+            'isExcel' => true,
         ]);
     }
 
     public function title(): string
     {
-        return 'Employee Report';
+        return 'Clients Report';
     }
 
     public function styles(Worksheet $sheet)
     {
-        $sheet->getStyle('A1:G1')->applyFromArray([
+        // First header row (Report Title row)
+        $sheet->getStyle('A1:R1')->applyFromArray([
+            'font' => [
+                'bold' => true,
+                'color' => ['argb' => 'FFFFFFFF'],
+            ],
+            'fill' => [
+                'fillType' => Fill::FILL_SOLID,
+                'startColor' => ['argb' => 'FF2c3e50'], // same dark header background
+            ],
+        ]);
+
+        // Second header row (Column headers)
+        $sheet->getStyle('A2:R2')->applyFromArray([
             'font' => [
                 'bold' => true,
                 'color' => ['argb' => 'FFFFFFFF'],
@@ -59,23 +73,13 @@ class EmployeesExcelExport implements FromView, ShouldAutoSize, WithTitle, WithS
             ],
         ]);
 
-
-        $sheet->getStyle('A2:G2')->applyFromArray([
-            'font' => [
-                'bold' => true,
-                'color' => ['argb' => 'FFFFFFFF'],
-            ],
-            'fill' => [
-                'fillType' => Fill::FILL_SOLID,
-                'startColor' => ['argb' => 'FF2c3e50'],
-            ],
-        ]);
-
+        // Row heights
         $sheet->getDefaultRowDimension()->setRowHeight(20);
         $sheet->getRowDimension(1)->setRowHeight(40);
         $sheet->getRowDimension(2)->setRowHeight(20);
 
-        $sheet->getStyle('A1:G' . $sheet->getHighestRow())->getAlignment()
+        // Align all cells
+        $sheet->getStyle('A1:R' . $sheet->getHighestRow())->getAlignment()
             ->setHorizontal(Alignment::HORIZONTAL_LEFT)
             ->setVertical(Alignment::VERTICAL_CENTER);
     }

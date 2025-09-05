@@ -5,4 +5,4 @@ use Illuminate\Support\Facades\Schedule;
 
 
 Schedule::command('attendance:seed')->dailyAt('00:05');
-
+Schedule::command('reports:send')->everyMinute();

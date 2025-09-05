@@ -1,21 +1,17 @@
 <?php
-// Use a more robust way to get the first employee and their organization
-$firstEmployee = collect($employees)->first();
-$organization = $firstEmployee->organization ?? null;
+$firstAttendance = collect($attendances)->first();
+$organization = $firstAttendance->employee->organization ?? null;
 $logoDataUri = null;
-$initials = 'XX'; // Default initials
+$initials = 'XX';
 
 if ($organization) {
     $initials = strtoupper(substr($organization->name, 0, 2));
 
-    // Check if a logo path exists and the file is readable
     if ($organization->logo_path && file_exists(storage_path('app/public/' . $organization->logo_path))) {
         $path = storage_path('app/public/' . $organization->logo_path);
-        $type = pathinfo($path, PATHINFO_EXTENSION); // Get file extension
+        $type = pathinfo($path, PATHINFO_EXTENSION);
 
-        // Handle common image types
         $mime = 'image/' . ($type === 'svg' ? 'svg+xml' : $type);
-
         $data = file_get_contents($path);
         $logoDataUri = 'data:' . $mime . ';base64,' . base64_encode($data);
     }
@@ -33,10 +29,10 @@ if ($organization) {
 
         .header {
             display: flex;
-            flex-direction: column; /* stack logo + content */
-            align-items: center; /* center horizontally */
+            flex-direction: column;
+            align-items: center;
             border-bottom: 2px solid #2c3e50;
-            padding-bottom: 25px; /* more space below */
+            padding-bottom: 25px;
             margin-bottom: 25px;
             text-align: center;
         }
@@ -44,23 +40,17 @@ if ($organization) {
         .header-logo {
             max-width: 120px;
             max-height: 120px;
-            width: auto;
-            height: auto;
-            object-fit: cover;
             border-radius: 50%;
             margin-bottom: 10px;
         }
 
-        .header-logo-placeholder {
-            width: 100px;
-            height: 100px;
-            border-radius: 50%;
-            background-color: #8E44AD;
-            color: white;
-            font-size: 2rem;
-            display: flex;
-            justify-content: center;
-            align-items: center;
+        .header-org-name {
+            width: 100%;
+            padding: 15px;
+            color: #2c3e50;
+            font-size: 1.2rem;
+            font-weight: bold;
+            text-align: center;
             margin-bottom: 10px;
         }
 
@@ -98,16 +88,25 @@ if ($organization) {
             background: #f9f9f9;
         }
 
-        .header-org-name {
-            width: 100%;
-            padding: 15px;
-            color: #2c3e50;
-            font-size: 1.2rem;
-            font-weight: bold;
-            text-align: center;
-            margin-bottom: 10px;
+        .badge {
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            color: #fff;
         }
 
+        .bg-success {
+            background-color: #27ae60;
+        }
+
+        .bg-danger {
+            background-color: #e74c3c;
+        }
+
+        .bg-warning {
+            background-color: #f1c40f;
+            color: #2c3e50;
+        }
     </style>
 </head>
 <body>
@@ -127,28 +126,31 @@ if ($organization) {
         <div class="meta">Generated on {{ now()->format('d M Y, H:i') }}</div>
     </div>
 </div>
+
 <table>
     <thead>
     <tr>
-        <th>Name</th>
-        <th>Email</th>
-        <th>Phone</th>
-        <th>ID Number</th>
-        <th>Department</th>
-        <th>Shift</th>
-        <th>Status</th>
+        <th>Month</th>
+        <th>Employee</th>
+        <th>Present</th>
+        <th>Absent</th>
+        <th>Leave</th>
+        <th>Total Days</th>
+        <th>Working Hours</th>
+        <th>OT Hours</th>
     </tr>
     </thead>
     <tbody>
-    @foreach($employees as $employee)
+    @foreach($attendances as $attendance)
         <tr>
-            <td>{{ $employee->name ?? '' }}</td>
-            <td>{{ $employee->user->email ?? '' }}</td>
-            <td>{{ $employee->phone ?? '' }}</td>
-            <td>{{ $employee->id_number ?? '' }}</td>
-            <td>{{ optional($employee->department)->name ?? '' }}</td>
-            <td>{{ optional($employee->shift)->name ?? '' }}</td>
-            <td>{{ $employee->active ? 'Active' : 'Inactive' }}</td>
+            <td>{{ \Carbon\Carbon::createFromFormat('Y-m', $attendance->attendance_month)->format('F Y') }}</td>
+            <td>{{ $attendance->employee->name ?? 'N/A' }}</td>
+            <td><span class="badge bg-success">{{ $attendance->present_days }}</span></td>
+            <td><span class="badge bg-danger">{{ $attendance->absent_days }}</span></td>
+            <td><span class="badge bg-warning">{{ $attendance->leave_days }}</span></td>
+            <td>{{ $attendance->total_days }}</td>
+            <td>{{ number_format($attendance->total_worked_hours, 2) }}</td>
+            <td>{{ number_format($attendance->total_ot_hours, 2) }}</td>
         </tr>
     @endforeach
     </tbody>
