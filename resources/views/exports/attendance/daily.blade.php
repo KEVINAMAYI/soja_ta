@@ -162,8 +162,8 @@ if ($organization) {
             </td>
             <td>
                 <span style="color: {{ $attendance->status === 'Clocked In' ? '#27ae60' : '#e74c3c' }};">
-                        {{ \Illuminate\Support\Str::of($attendance->status)->replace('_', ' ')->title() }}
-               </span>
+                     {{ in_array($attendance->status, ['unchecked_in', 'absent']) ? 'Absent' : \Illuminate\Support\Str::of($attendance->status)->replace('_', ' ')->title() }}
+              </span>
             </td>
         </tr>
     @endforeach

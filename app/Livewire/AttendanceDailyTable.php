@@ -154,7 +154,7 @@ class AttendanceDailyTable extends DataTableComponent
                     if (in_array($row->status, ['absent', 'unchecked_in'])) {
                         $value = $row->last_check_out;
                         if (is_null($this->status)) {
-                            $label = "<br><small class='text-muted'>(Last Check-Out)</small>";
+                            $label = "<br><small class='text-muted'>(Last Clock-Out)</small>";
                         }
                     }
 
@@ -162,7 +162,7 @@ class AttendanceDailyTable extends DataTableComponent
 
                     // 🔴 Show red badge if user is still checked in (no checkout but has checkin)
                     if ($row->status === 'clocked_in' && $row->check_in_time && !$row->check_out_time) {
-                        $badge = "<span style='background-color:#dc3545; color:#fff; padding:2px 6px; border-radius:4px; font-size:0.75rem; margin-left:6px;'>Still In</span>";
+                        $badge = "<span style='background-color:green; color:#fff; padding:4px 12px; border-radius:4px; font-size:0.75rem; margin-left:6px;'>Still In</span>";
                     } else {
                         $badge = '';
                     }

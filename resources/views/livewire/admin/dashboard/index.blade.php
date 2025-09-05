@@ -567,13 +567,54 @@ new class extends Component {
 
                 const infoWindow = new google.maps.InfoWindow({
                     content: `
-                <div style="font-family: Arial; font-size: 14px;">
-                    <strong>${emp.name}</strong><br>
-                    Dept: ${emp.department ?? 'N/A'}<br>
-                    Clock In: ${emp.clock_in ?? 'N/A'}
+        <div style="
+            display:flex;
+            align-items:center;
+            gap:10px;
+            font-family: Arial, sans-serif;
+            font-size: 13px;
+            line-height:1.4;
+            padding:10px;
+            background:#fff;
+            border-radius:10px;
+            box-shadow:0 2px 6px rgba(0,0,0,0.15);
+            max-width:250px;       /* 👈 constrain width */
+            overflow:hidden;       /* 👈 prevent scrollbars */
+        ">
+            <!-- Avatar -->
+            <div style="
+                width:40px;
+                height:40px;
+                border-radius:50%;
+                overflow:hidden;
+                flex-shrink:0;
+                background:#eee;
+                display:flex;
+                align-items:center;
+                justify-content:center;
+                font-weight:bold;
+                color:#555;
+            ">
+                ${
+                        emp.photo
+                            ? `<img src="${emp.photo}" alt="${emp.name}" style="width:100%; height:100%; object-fit:cover;">`
+                            : (emp.name ? emp.name.charAt(0).toUpperCase() : "U")
+                    }
+            </div>
+
+            <!-- Info -->
+            <div style="overflow:hidden;">
+                <div style="font-weight:bold; font-size:15px; color:#2c3e50; margin-bottom:4px;">
+                    ${emp.name}
                 </div>
-            `
+                <div><strong>Dept:</strong> ${emp.department ?? 'N/A'}</div>
+                <div><strong>Clock In:</strong> ${emp.clock_in ?? 'N/A'}</div>
+            </div>
+        </div>
+    `
                 });
+
+
 
                 marker.addListener('click', () => infoWindow.open(map, marker));
 
