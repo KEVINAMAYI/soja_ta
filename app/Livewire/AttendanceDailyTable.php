@@ -161,9 +161,9 @@ class AttendanceDailyTable extends DataTableComponent
                     $formatted = $value ? Carbon::parse($value)->format('M d, Y g:i A') : '-';
 
                     return "<div>
-                    <span class='fw-semibold text-danger'>{$formatted}</span>
-                    {$label}
-                   </div>";
+                       <span class='fw-semibold' style='color: #dc3545;'>{$formatted}</span>
+                         {$label}
+                       </div>";
                 })
                 ->html(),
 
