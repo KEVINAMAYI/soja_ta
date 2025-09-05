@@ -476,7 +476,7 @@ new class extends Component {
     <!-- Current Employee Status -->
     <div class="col-12">
         <div class="card shadow-sm">
-            <div class="card-header fw-semibold">Current Employee Status</div>
+            <div class="card-header fw-semibold">Recent Entries</div>
             <div class="card-body p-0">
                 <table class="table mb-0 align-middle">
                     <thead class="table-light">
@@ -485,7 +485,7 @@ new class extends Component {
                         <th>Department</th>
                         <th>Clock In</th>
                         <th>Status</th>
-                        <th>Hours Today</th>
+                        <th>Hours Worked</th>
                         <th></th>
                     </tr>
                     </thead>
