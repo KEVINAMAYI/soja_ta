@@ -99,14 +99,14 @@ if ($organization) {
         }
 
         .header-org-name {
-               width: 100%;
-               padding: 15px;
-               color: #2c3e50;
-               font-size: 1.2rem;
-               font-weight: bold;
-               text-align: center;
-               margin-bottom: 10px;
-           }
+            width: 100%;
+            padding: 15px;
+            color: #2c3e50;
+            font-size: 1.2rem;
+            font-weight: bold;
+            text-align: center;
+            margin-bottom: 10px;
+        }
 
     </style>
 </head>
@@ -152,11 +152,18 @@ if ($organization) {
                     ? \Carbon\Carbon::parse($attendance->check_in)->format('M d, Y g:i A')
                     : '-' }}
             </td>
-            <td style="color: red;">
-                {{ $attendance->check_out_time
-                    ? \Carbon\Carbon::parse($attendance->check_out)->format('M d, Y g:i A')
-                    : '-' }}
+            <td>
+                @if($attendance->status === 'clocked_in' && !$attendance->check_out_time)
+                    <span style="color: #27ae60; font-weight: bold;">Still In</span>
+                @else
+                    <span style="color: red;">
+                   {{ $attendance->check_out_time
+                         ? \Carbon\Carbon::parse($attendance->check_out)->format('M d, Y g:i A')
+                         : '-' }}
+                 </span>
+                @endif
             </td>
+
             <td>
                 {{ number_format($attendance->overtime_hours ?? 0, 2) }}
             </td>
