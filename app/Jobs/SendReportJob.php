@@ -77,7 +77,7 @@ class SendReportJob implements ShouldQueue
         }
     }
 
-    private function generateReport(string $type, array $ids = []): ?string
+    private function generateReport(string $type, array $ids = []): ?array
     {
         try {
 
