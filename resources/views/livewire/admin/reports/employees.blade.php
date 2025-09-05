@@ -122,7 +122,7 @@ new class extends Component {
         $this->frequency = 'weekly';
         $this->time = '09:00';
         $this->day_of_week = null;
-        $this->timezone = 'UTC';
+        $this->timezone = 'Africa/Nairobi';
 
         // 🎯 Enforce type-specific defaults
         if ($this->report_type === 'daily_attendance') {
