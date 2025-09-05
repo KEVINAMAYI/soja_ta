@@ -97,17 +97,28 @@ new class extends Component {
             ]);
 
 
-        $this->employeeLocations = $attendancesToday->filter(fn($att) => $att->latitude && $att->longitude)
-            ->map(fn($att) => [
-                'name' => $att->employee->name,
-                'department' => $att->employee->department->name ?? 'N/A',
-                'clock_in' => $att->check_in_time
-                    ? Carbon::parse($att->check_in_time)->format('h:i A')
-                    : 'N/A',
-                'lat' => $att->latitude,
-                'lng' => $att->longitude,
-            ])->values()->toArray();
-
+        // Get last check-in per employee for today with location
+        $this->employeeLocations = Attendance::with('employee.department')
+            ->whereIn('employee_id', $employeeIds)
+            ->whereDate('date', $today)
+            ->whereNotNull('check_in_time')
+            ->whereNotNull('latitude')
+            ->whereNotNull('longitude')
+            ->orderBy('check_in_time', 'desc')
+            ->get()
+            ->groupBy('employee_id') // group to avoid multiple entries
+            ->map(function ($group) {
+                $last = $group->first(); // latest because of desc order
+                return [
+                    'name' => $last->employee->name,
+                    'department' => $last->employee->department->name ?? 'N/A',
+                    'clock_in' => Carbon::parse($last->check_in_time)->format('h:i A'),
+                    'lat' => $last->latitude,
+                    'lng' => $last->longitude,
+                ];
+            })
+            ->values()
+            ->toArray();
 
         // If empty, fallback to organization location
         if (empty($this->employeeLocations)) {
