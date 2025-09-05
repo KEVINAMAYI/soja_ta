@@ -19,23 +19,27 @@ class ReportMail extends Mailable
         $this->setting = $setting;
         $this->filePath = $filePath;
     }
-
     public function build()
     {
-        // Clean and format report type (remove underscores, capitalize words)
         $formattedReportType = ucwords(str_replace('_', ' ', $this->setting->report_type));
-
-        // Try to fetch organization name (fallback to app name if missing)
         $organizationName = $this->setting->organization->name ?? config('app.name');
+
+        \Log::info('ReportMail build data', [
+            'reportType'   => $formattedReportType,
+            'frequency'    => $this->setting->frequency,
+            'organization' => $organizationName,
+            'filePath'     => $this->filePath,
+        ]);
 
         return $this->subject("{$formattedReportType} Report - {$organizationName}")
             ->view('emails.reports.default')
             ->with([
-                'reportType'  => $formattedReportType,
-                'frequency'   => $this->setting->frequency,
-                'organization'=> $organizationName,
+                'reportType'   => $formattedReportType,
+                'frequency'    => $this->setting->frequency,
+                'organization' => $organizationName,
             ])
             ->attach($this->filePath);
     }
+
 
 }
