@@ -63,7 +63,7 @@ class SendReportJob implements ShouldQueue
                 ]);
             }
 
-            Mail::to($setting->email)->send(new ReportMail($setting, $reportFile));
+            Mail::to($setting->email)->send(new ReportMail($setting, $reportFile['path']));
 
         } catch (\Throwable $e) {
             Log::error('Report sending failed', [

@@ -23,11 +23,12 @@ class ReportGeneratorService
             // save to public storage
             Storage::disk('public')->put($path, $pdf->output());
 
-            // return the public URL
-            return asset("storage/{$path}");
+            return [
+                'path' => storage_path("app/public/{$path}"), // ✅ local file path for email attachment
+                'url'  => asset("storage/{$path}"),           // ✅ public URL for browser access
+            ];
         }
 
         return $pdf;
     }
-
 }
