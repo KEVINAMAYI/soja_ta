@@ -158,14 +158,23 @@ class AttendanceDailyTable extends DataTableComponent
                         }
                     }
 
-                    $formatted = $value ? Carbon::parse($value)->format('M d, Y g:i A') : '-';
+                    $formatted = $value ? Carbon::parse($value)->format('M d, Y g:i A') : '';
+
+                    // 🔴 Show red badge if user is still checked in (no checkout but has checkin)
+                    if ($row->status === 'clocked_in' && $row->check_in_time && !$row->check_out_time) {
+                        $badge = "<span style='background-color:#dc3545; color:#fff; padding:2px 6px; border-radius:4px; font-size:0.75rem; margin-left:6px;'>Still In</span>";
+                    } else {
+                        $badge = '';
+                    }
 
                     return "<div>
-                       <span class='fw-semibold' style='color: #dc3545;'>{$formatted}</span>
-                         {$label}
-                       </div>";
+            <span class='fw-semibold' style='color: #dc3545;'>{$formatted}</span>
+            {$badge}
+            {$label}
+        </div>";
                 })
                 ->html(),
+
 
             Column::make("Overtime (hours)", "overtime_hours")
                 ->sortable()
