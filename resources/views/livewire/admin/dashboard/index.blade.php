@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\WorkLocation;
 use Livewire\Volt\Component;
 use App\Models\Attendance;
 use App\Models\Employee;
@@ -17,7 +18,7 @@ new class extends Component {
     public $currentEmployeeStatus = [];
     public $employeeLocations = [];
     public $googleMapsApiKey;
-
+    public $workLocations = [];
 
     public function mount()
     {
@@ -132,6 +133,21 @@ new class extends Component {
                 ]]);
             }
         }
+
+
+        $this->workLocations = WorkLocation::where('organization_id', $orgId)
+            ->where('active', true)
+            ->get()
+            ->map(function ($loc) {
+                return [
+                    'name' => $loc->name,
+                    'lat' => $loc->latitude,
+                    'lng' => $loc->longitude,
+                    'radius_m' => $loc->radius_m,
+                    'address' => $loc->address,
+                ];
+            })
+            ->toArray();
 
 
     }
@@ -529,109 +545,156 @@ new class extends Component {
     <script src="https://code.iconify.design/3/3.1.0/iconify.min.js"></script>
 
     <script>
+        const workLocations = @json($workLocations);
         const employeeLocations = @json($employeeLocations);
 
         function initMap() {
-
-            if (!employeeLocations || employeeLocations.length === 0) return;
-
             const map = new google.maps.Map(document.getElementById("map"), {
-                zoom: 6,
+                zoom: 12,
                 center: {lat: 0, lng: 0},
             });
 
             const bounds = new google.maps.LatLngBounds();
             const geocoder = new google.maps.Geocoder();
+            let geofencesToProcess = workLocations.length;
+            let activeInfoWindow = null;
 
-            employeeLocations.forEach(emp => {
-                if (emp.lat && emp.lng) {
-                    addMarker({lat: parseFloat(emp.lat), lng: parseFloat(emp.lng)}, emp);
-                } else if (emp.address) {
-                    geocoder.geocode({address: emp.address}, function (results, status) {
-                        if (status === 'OK' && results[0]) {
-                            const location = results[0].geometry.location;
-                            addMarker({lat: location.lat(), lng: location.lng()}, emp);
-                        } else {
-                            console.warn(`Geocoding failed for ${emp.name || 'Unknown'}: ${status}`);
-                        }
+            // Draw geofence circle
+            function drawGeofence(position, radius) {
+                new google.maps.Circle({
+                    strokeColor: "#FF0000",
+                    strokeOpacity: 0.8,
+                    strokeWeight: 2,
+                    fillColor: "#FF0000",
+                    fillOpacity: 0.15,
+                    map,
+                    center: position,
+                    radius: radius,
+                });
+            }
+
+            // Add marker with optional info window
+            function addMarker(position, title, infoContent = null, iconUrl = null) {
+                const markerOptions = {
+                    position,
+                    map,
+                    title
+                };
+
+                if (iconUrl) {
+                    markerOptions.icon = {
+                        url: iconUrl,
+                        scaledSize: new google.maps.Size(40, 40)
+                    };
+                }
+
+                const marker = new google.maps.Marker(markerOptions);
+
+                if (infoContent) {
+                    const infoWindow = new google.maps.InfoWindow({
+                        content: infoContent
                     });
+
+                    marker.addListener("click", () => {
+                        if (activeInfoWindow) activeInfoWindow.close();
+                        infoWindow.open(map, marker);
+                        activeInfoWindow = infoWindow;
+                    });
+                }
+
+                return marker;
+            }
+
+            function fitMapToBounds() {
+                if (geofencesToProcess === 0) {
+                    if (!bounds.isEmpty()) {
+                        map.fitBounds(bounds);
+                    } else {
+                        map.setCenter({lat: -1.2921, lng: 36.8219}); // Nairobi fallback
+                        map.setZoom(12);
+                    }
+                }
+            }
+
+            // Process work locations
+            workLocations.forEach(loc => {
+                if (loc.lat && loc.lng) {
+                    const position = {lat: parseFloat(loc.lat), lng: parseFloat(loc.lng)};
+                    drawGeofence(position, loc.radius_m);
+                    bounds.extend(position);
+
+                    const infoContent = `
+                       <div style="background:#fff; padding:15px 18px; border-radius:10px; box-shadow:0 4px 10px rgba(0,0,0,0.15); min-width:220px;">
+                       <div style="font-weight:700; font-size:18px; color:#333; line-height:1.3;">${loc.name}</div>
+                       <div style="font-size:14px; color:#555; margin-top:6px; font-style:italic;">${loc.address || 'No address provided'}</div>
+                       </div>
+                       `;
+
+
+                    addMarker(position, loc.name, infoContent);
+                    geofencesToProcess--;
+                    fitMapToBounds();
+                } else if (loc.address) {
+                    geocoder.geocode({address: loc.address}, function (results, status) {
+                        if (status === 'OK' && results[0]) {
+                            const position = results[0].geometry.location;
+                            drawGeofence(position, loc.radius_m);
+                            bounds.extend(position);
+
+                            const infoContent = `
+                               <div style="background:#fff; padding:15px 18px; border-radius:10px; box-shadow:0 4px 10px rgba(0,0,0,0.15); min-width:220px;">
+                               <div style="font-weight:700; font-size:18px; color:#333; line-height:1.3;">${loc.name}</div>
+                               <div style="font-size:14px; color:#555; margin-top:6px; font-style:italic;">${loc.address || 'No address provided'}</div>
+                               </div>
+                              `;
+
+
+                            addMarker({lat: position.lat(), lng: position.lng()}, loc.name, infoContent);
+                        } else {
+                            console.warn(`Geocoding failed for ${loc.name}: ${status}`);
+                        }
+                        geofencesToProcess--;
+                        fitMapToBounds();
+                    });
+                } else {
+                    geofencesToProcess--;
+                    fitMapToBounds();
                 }
             });
 
-            function addMarker(position, emp) {
-                const marker = new google.maps.Marker({
-                    position,
-                    map,
-                    title: emp.name
-                });
+            // Add employee markers
+            employeeLocations.forEach(emp => {
+                if (emp.lat && emp.lng) {
+                    const position = {lat: parseFloat(emp.lat), lng: parseFloat(emp.lng)};
+                    bounds.extend(position);
 
-                const infoWindow = new google.maps.InfoWindow({
-                    content: `
-        <div style="
-            display:flex;
-            align-items:center;
-            gap:10px;
-            font-family: Arial, sans-serif;
-            font-size: 13px;
-            line-height:1.4;
-            padding:10px;
-            background:#fff;
-            border-radius:10px;
-            box-shadow:0 2px 6px rgba(0,0,0,0.15);
-            max-width:250px;       /* 👈 constrain width */
-            overflow:hidden;       /* 👈 prevent scrollbars */
-        ">
-            <!-- Avatar -->
-            <div style="
-                width:40px;
-                height:40px;
-                border-radius:50%;
-                overflow:hidden;
-                flex-shrink:0;
-                background:#eee;
-                display:flex;
-                align-items:center;
-                justify-content:center;
-                font-weight:bold;
-                color:#555;
-            ">
-                ${
-                        emp.photo
-                            ? `<img src="${emp.photo}" alt="${emp.name}" style="width:100%; height:100%; object-fit:cover;">`
-                            : (emp.name ? emp.name.charAt(0).toUpperCase() : "U")
-                    }
+                    const avatarUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(emp.name)}&background=0D8ABC&color=fff&rounded=true&size=64`;
+
+                    const infoContent = `
+    <div style="min-width:220px; padding:10px 12px; background:#fff; border-radius:10px; box-shadow:0 2px 8px rgba(0,0,0,0.15); display:flex; align-items:center; gap:12px;">
+        <img src="${avatarUrl}" style="width:50px; height:50px; border-radius:50%; border:2px solid #0D8ABC;">
+        <div style="flex:1;">
+            <div style="font-size:16px; font-weight:600; color:#222; margin-bottom:4px;">${emp.name}</div>
+            <div style="font-size:13px; color:#444; margin-bottom:3px;">
+                <span style="font-weight:500; color:#0D8ABC;">Dept:</span> ${emp.department}
             </div>
-
-            <!-- Info -->
-            <div style="overflow:hidden;">
-                <div style="font-weight:bold; font-size:15px; color:#2c3e50; margin-bottom:4px;">
-                    ${emp.name}
-                </div>
-                <div><strong>Dept:</strong> ${emp.department ?? 'N/A'}</div>
-                <div><strong>Clock In:</strong> ${emp.clock_in ?? 'N/A'}</div>
+            <div style="font-size:12px; color:#666;">
+                <span style="font-weight:500;">Clock In:</span> ${emp.clock_in}
             </div>
         </div>
-    `
-                });
+    </div>
+`;
 
 
-
-                marker.addListener('click', () => infoWindow.open(map, marker));
-
-                bounds.extend(position);
-                map.fitBounds(bounds);
-            }
+                    addMarker(position, emp.name, infoContent, avatarUrl);
+                }
+            });
         }
-
     </script>
 
     <script async defer
             src="https://maps.googleapis.com/maps/api/js?key={{ $googleMapsApiKey }}&callback=initMap">
     </script>
 @endpush
-
-
-
-
 
 

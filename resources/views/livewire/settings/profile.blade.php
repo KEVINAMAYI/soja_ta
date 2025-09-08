@@ -5,12 +5,16 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\Rule;
 use Jantinnerezo\LivewireAlert\Facades\LivewireAlert;
 use Livewire\Attributes\On;
+use Livewire\Attributes\Url;
 use Livewire\Volt\Component;
 
 new class extends Component {
     public string $name = '';
     public string $email = '';
+
+    #[Url(as: 'tab')]
     public string $activeTab = 'profile';
+
     public string $tabTitle = ''; // ✅ Prevents null assignment error
     public string $tabIcon = '';  // ✅ Prevents null assignment error
     public array $breadcrumbItems = [];
@@ -20,6 +24,7 @@ new class extends Component {
      */
     public function mount(): void
     {
+
         $this->name = Auth::user()->name;
         $this->email = Auth::user()->email;
 
@@ -162,6 +167,12 @@ new class extends Component {
 
 
 <div class="container-fluid">
+
+    @if (session()->has('force_password_notice'))
+        <div class="alert alert-danger text-danger mb-3" role="alert" style="margin-top: 0.5rem;">
+            {{ session('force_password_notice') }}
+        </div>
+    @endif
 
     <livewire:admin.system-settings.bread-crumb
         :title="$tabTitle"

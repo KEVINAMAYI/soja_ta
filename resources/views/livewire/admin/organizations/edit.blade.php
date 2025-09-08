@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\WorkLocation;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Jantinnerezo\LivewireAlert\Facades\LivewireAlert;
@@ -97,6 +98,25 @@ new class extends Component {
                 'logo_path' => $logo_path ?? '',
             ]);
 
+            // --- Geofence Logic Starts Here ---
+            if ($this->location) {
+                WorkLocation::updateOrCreate(
+                    [
+                        'organization_id' => $org->id,
+                        'name' => 'main_branch',
+                    ],
+                    [
+                        'type' => 'branch',
+                        'address' => $this->location,
+                        'latitude' => null,
+                        'longitude' => null,
+                        'radius_m' => 100,
+                        'description' => 'Main Branch',
+                        'active' => 1,
+                    ]
+                );
+            }
+
             DB::commit();
 
             LivewireAlert::title('Awesome!')
@@ -109,6 +129,7 @@ new class extends Component {
             // Get updated version
             $org = Organization::findOrFail($this->editId);
             $this->getOrgData($org);
+            $this->dispatch('refreshDatatable');
 
 
         } catch (\Throwable $e) {

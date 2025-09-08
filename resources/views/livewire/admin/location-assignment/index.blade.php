@@ -270,7 +270,7 @@ new class extends Component {
                                     </div>
 
                                     <div class="col-md-12 mb-3">
-                                        <label>Working Radius (meters)</label>
+                                        <label>Geofence Radius (meters)</label>
                                         <input type="number" wire:model.defer="radius_m" class="form-control">
                                     </div>
 

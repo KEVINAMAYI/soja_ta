@@ -40,12 +40,21 @@ class WorkLocationTable extends DataTableComponent
         return [
 
             Column::make("Name", "name")
-                ->sortable(),
+                ->sortable()
+                ->format(
+                    function ($value) {
+                        // Replace underscores with spaces
+                        $formattedName = str_replace('_', ' ', $value);
+
+                        // Capitalize the first letter of each word
+                        return ucwords($formattedName);
+                    }
+                ),
             Column::make("Type", "type")
                 ->sortable(),
             Column::make("Address", "address")
                 ->sortable(),
-            Column::make("Radius m", "radius_m")
+            Column::make("Geofence Radius(m)", "radius_m")
                 ->sortable(),
             Column::make("Description", "description")
                 ->sortable(),
