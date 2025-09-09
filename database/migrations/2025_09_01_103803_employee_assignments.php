@@ -14,7 +14,7 @@ return new class extends Migration {
             $table->id();
             $table->foreignId('employee_id')->constrained()->cascadeOnDelete();
             $table->foreignId('work_location_id')->constrained('work_locations')->cascadeOnDelete();
-            $table->date('start_date');
+            $table->date('start_date')->nullable();
             $table->date('end_date')->nullable();
             $table->boolean('is_current')->default(false);
             $table->timestamps();

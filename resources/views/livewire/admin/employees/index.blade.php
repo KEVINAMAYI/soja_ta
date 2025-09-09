@@ -124,36 +124,55 @@ new class extends Component {
         $this->validate();
 
         try {
-
             DB::beginTransaction();
 
             $org_id = auth()->user()->employee->organization->id;
 
-            // Create the user
+            // 1. Create the user
             $user = User::create([
                 'name' => $this->name,
                 'email' => $this->email,
-                'password' => Hash::make('password'), // Consider generating or asking for a secure password
+                'password' => Hash::make('password'),
             ]);
 
-            // Create the employee
-            Employee::create([
+            // 2. Create the employee
+            $employee = Employee::create([
                 'name' => $this->name,
                 'email' => $this->email,
                 'phone' => $this->phone,
                 'shift_id' => $this->shift_id,
-                'organization_id' => auth()->user()->employee->organization->id,
+                'organization_id' => $org_id,
                 'id_number' => $this->id_number,
                 'active' => $this->active,
                 'user_id' => $user->id,
                 'department_id' => $this->department_id,
             ]);
 
-            // Assign the supervisor role
+            // 3. Assign the 'employee' role
             $user->assignRole('employee');
 
-            //create token to be used for APis
+            // 4. Create a token
             $user->createToken('Api Token')->plainTextToken;
+
+            // 5. 🔥 Assign default work location
+            $defaultLocation = WorkLocation::where('organization_id', $org_id)
+                ->where('is_default', true)
+                ->first();
+
+            if ($defaultLocation) {
+                EmployeeAssignment::updateOrCreate(
+                    [
+                        'employee_id' => $employee->id,
+                    ],
+                    [
+                        'work_location_id' => $defaultLocation->id,
+                        'start_date' => null,
+                        'end_date' => null,
+                        'is_current' => true,
+                    ]
+                );
+            }
+
 
             DB::commit();
 
@@ -169,10 +188,7 @@ new class extends Component {
             $this->resetForm();
             $this->dispatch('refreshDatatable');
 
-
         } catch (\Exception $e) {
-
-
             DB::rollBack();
             report($e);
 
@@ -182,9 +198,9 @@ new class extends Component {
                 ->toast()
                 ->position('top-end')
                 ->show();
-
         }
     }
+
 
 
     #[On('edit-employee')]

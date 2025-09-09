@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 class WorkLocation extends Model
 {
     protected $fillable = [
-        'organization_id', 'name', 'type', 'address', 'latitude', 'longitude', 'radius_m', 'description', 'active'
+        'organization_id', 'name', 'type', 'address', 'latitude','is_default', 'longitude', 'radius_m', 'description', 'active'
     ];
 
     public function organization()

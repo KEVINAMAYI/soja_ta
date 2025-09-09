@@ -112,6 +112,7 @@ new class extends Component {
                 $last = $group->first(); // latest because of desc order
                 return [
                     'name' => $last->employee->name,
+                    'work_location' => $last->employee->currentAssignment?->location,
                     'department' => $last->employee->department->name ?? 'N/A',
                     'clock_in' => Carbon::parse($last->check_in_time)->format('h:i A'),
                     'lat' => $last->latitude,
@@ -608,13 +609,23 @@ new class extends Component {
             function fitMapToBounds() {
                 if (geofencesToProcess === 0) {
                     if (!bounds.isEmpty()) {
-                        map.fitBounds(bounds);
+                        const ne = bounds.getNorthEast();
+                        const sw = bounds.getSouthWest();
+
+                        // Check if NE and SW corners are the same (i.e. one point)
+                        if (ne.equals(sw)) {
+                            map.setCenter(ne);
+                            map.setZoom(15); // 👈 manually control zoom for single location
+                        } else {
+                            map.fitBounds(bounds);
+                        }
                     } else {
                         map.setCenter({lat: -1.2921, lng: 36.8219}); // Nairobi fallback
                         map.setZoom(12);
                     }
                 }
             }
+
 
             // Process work locations
             workLocations.forEach(loc => {
@@ -625,7 +636,9 @@ new class extends Component {
 
                     const infoContent = `
                        <div style="background:#fff; padding:15px 18px; border-radius:10px; box-shadow:0 4px 10px rgba(0,0,0,0.15); min-width:220px;">
-                       <div style="font-weight:700; font-size:18px; color:#333; line-height:1.3;">${loc.name}</div>
+                       <div style="font-weight:700; font-size:18px; color:#333; line-height:1.3;">
+                                 ${loc.name.replace(/_/g, ' ').replace(/\b\w/g, char => char.toUpperCase())}
+                       </div>
                        <div style="font-size:14px; color:#555; margin-top:6px; font-style:italic;">${loc.address || 'No address provided'}</div>
                        </div>
                        `;
@@ -643,7 +656,9 @@ new class extends Component {
 
                             const infoContent = `
                                <div style="background:#fff; padding:15px 18px; border-radius:10px; box-shadow:0 4px 10px rgba(0,0,0,0.15); min-width:220px;">
-                               <div style="font-weight:700; font-size:18px; color:#333; line-height:1.3;">${loc.name}</div>
+                               <div style="font-weight:700; font-size:18px; color:#333; line-height:1.3;">
+                                 ${loc.name.replace(/_/g, ' ').replace(/\b\w/g, char => char.toUpperCase())}
+                               </div>
                                <div style="font-size:14px; color:#555; margin-top:6px; font-style:italic;">${loc.address || 'No address provided'}</div>
                                </div>
                               `;
@@ -671,18 +686,41 @@ new class extends Component {
                     const avatarUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(emp.name)}&background=0D8ABC&color=fff&rounded=true&size=64`;
 
                     const infoContent = `
-    <div style="min-width:220px; padding:10px 12px; background:#fff; border-radius:10px; box-shadow:0 2px 8px rgba(0,0,0,0.15); display:flex; align-items:center; gap:12px;">
-        <img src="${avatarUrl}" style="width:50px; height:50px; border-radius:50%; border:2px solid #0D8ABC;">
-        <div style="flex:1;">
-            <div style="font-size:16px; font-weight:600; color:#222; margin-bottom:4px;">${emp.name}</div>
-            <div style="font-size:13px; color:#444; margin-bottom:3px;">
-                <span style="font-weight:500; color:#0D8ABC;">Dept:</span> ${emp.department}
-            </div>
-            <div style="font-size:12px; color:#666;">
-                <span style="font-weight:500;">Clock In:</span> ${emp.clock_in}
-            </div>
+  <div style="
+    max-width: 300px;
+    padding: 12px;
+    background: #fff;
+    border-radius: 10px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    font-family: sans-serif;
+">
+    <img src="${avatarUrl}" style="
+        width: 48px;
+        height: 48px;
+        border-radius: 50%;
+        border: 2px solid #0D8ABC;
+        flex-shrink: 0;
+    ">
+
+    <div style="flex: 1; overflow: hidden;">
+        <div style="font-size: 15px; font-weight: 600; color: #222; margin-bottom: 4px; line-height: 1.2;">
+            ${emp.name}
+        </div>
+        <div style="font-size: 13px; color: #444; margin-bottom: 3px;">
+            <span style="font-weight: 500; color: #0D8ABC;">Dept:</span> ${emp.department}
+        </div>
+        <div style="font-size: 13px; color: #444; margin-bottom: 3px;">
+            <span style="font-weight: 500; color: #0D8ABC;">Work Location:</span> ${emp.work_location}
+        </div>
+        <div style="font-size: 12px; color: #666;">
+            <span style="font-weight: 500;">Clock In:</span> ${emp.clock_in}
         </div>
     </div>
+</div>
+
 `;
 
 

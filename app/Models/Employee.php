@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Helpers\QRCodeGenerator;
+use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 
@@ -80,6 +81,47 @@ class Employee extends Model
     public function assignments()
     {
         return $this->hasMany(EmployeeAssignment::class);
+    }
+
+    public function currentAssignment()
+    {
+        return $this->hasOne(EmployeeAssignment::class)->where('is_current', true);
+    }
+
+    public function weeklyWorkedHours($employeeId)
+    {
+        // Get worked hours for the past 7 days (last week)
+        $startOfWeek = Carbon::now()->startOfWeek();
+        $endOfWeek = Carbon::now()->endOfWeek();
+
+        return \DB::table('attendances')
+            ->where('employee_id', $employeeId)
+            ->whereBetween('date', [$startOfWeek, $endOfWeek])
+            ->sum('worked_hours');  // Assuming 'worked_hours' is a field that already has the calculated hours
+    }
+
+    public function monthlyWorkedHours($employeeId)
+    {
+        // Get worked hours for the current month
+        $startOfMonth = Carbon::now()->startOfMonth();
+        $endOfMonth = Carbon::now()->endOfMonth();
+
+        return \DB::table('attendances')
+            ->where('employee_id', $employeeId)
+            ->whereBetween('date', [$startOfMonth, $endOfMonth])
+            ->sum('worked_hours');
+    }
+
+    public function weeklyOvertimeHours($employeeId)
+    {
+        // Get overtime hours for the past 7 days
+        $startOfWeek = Carbon::now()->startOfWeek();
+        $endOfWeek = Carbon::now()->endOfWeek();
+
+        return \DB::table('attendances')
+            ->where('employee_id', $employeeId)
+            ->whereBetween('date', [$startOfWeek, $endOfWeek])
+            ->sum('overtime_hours');
     }
 
 

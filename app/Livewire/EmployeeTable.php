@@ -24,6 +24,8 @@ class EmployeeTable extends DataTableComponent
     public function mount($roleId = null)
     {
         $this->roleId = $roleId;
+
+
     }
 
 

@@ -5,13 +5,14 @@ namespace App\Http\Controllers\APIs;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\UserResource;
 use App\Models\Employee;
+use App\Models\EmployeeAssignment;
 use App\Models\Shift;
 use App\Models\User;
+use App\Models\WorkLocation;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
-use Propaganistas\LaravelPhone\PhoneNumber;
 
 class AuthController extends Controller
 {
@@ -19,6 +20,8 @@ class AuthController extends Controller
     public function enroll(Request $request)
     {
         $currentUser = auth()->user();
+
+        $org_id = auth()->user()->employee->organization->id;
 
         // Only supervisors can enroll
         if (!$currentUser->can('enroll-employee')) {
@@ -34,7 +37,6 @@ class AuthController extends Controller
             'password' => 'required|string|max:255',
             'confirm_password' => 'required|string|max:255|same:password',
             'phone' => 'nullable|string|max:20',
-//            'shift_id' => 'required|exists:shifts,id',
             'department_id' => 'required|exists:departments,id',
             'id_number' => 'required|string|unique:employees,id_number',
         ]);
@@ -61,10 +63,10 @@ class AuthController extends Controller
             }
 
             // Create employee linked to the new user
-            Employee::create([
+            $employee = Employee::create([
                 'name' => $request->name,
                 'email' => $request->email,
-                'phone' => !empty($request->phone) ? PhoneNumber::make($request->phone) : null,
+                'phone' => $request->phone,
                 'shift_id' => $shiftId,
                 'organization_id' => auth()->user()->employee->organization_id,
                 'id_number' => $request->id_number,
@@ -81,6 +83,27 @@ class AuthController extends Controller
 
             // Generate token for immediate login
             $token = $user->createToken('Api Token')->plainTextToken;
+
+
+            // 5. 🔥 Assign default work location
+            $defaultLocation = WorkLocation::where('organization_id', $org_id)
+                ->where('is_default', 1)
+                ->first();
+
+            if ($defaultLocation) {
+                EmployeeAssignment::updateOrCreate(
+                    [
+                        'employee_id' => $employee->id,
+                    ],
+                    [
+                        'work_location_id' => $defaultLocation->id,
+                        'start_date' => null,
+                        'end_date' => null,
+                        'is_current' => true,
+                    ]
+                );
+            }
+
 
             return response()->json([
                 'message' => 'Employee successfully enrolled',

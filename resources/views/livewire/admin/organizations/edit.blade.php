@@ -4,6 +4,7 @@ use App\Models\WorkLocation;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Jantinnerezo\LivewireAlert\Facades\LivewireAlert;
+use Livewire\Attributes\On;
 use Livewire\Volt\Component;
 use App\Models\Organization;
 use Livewire\WithFileUploads;
@@ -23,6 +24,8 @@ new class extends Component {
     public $logo_path;
     public $googleMapsApiKey;
     public $newLogo;
+    public $latitude;
+    public $longitude;
 
 
     public function mount($id)
@@ -108,13 +111,13 @@ new class extends Component {
                     [
                         'type' => 'branch',
                         'address' => $this->location,
-                        'latitude' => null,
-                        'longitude' => null,
+                        'latitude' => $this->latitude,
+                        'longitude' => $this->longitude,
                         'radius_m' => 100,
                         'description' => 'Main Branch',
                         'active' => 1,
-                    ]
-                );
+                        'is_default' => 1
+                    ]);
             }
 
             DB::commit();
@@ -139,8 +142,9 @@ new class extends Component {
             // Optional: Log the error for debugging
             \Log::error('Organization update failed', [
                 'error' => $e->getMessage(),
-                'organization_id' => $this->organizationId
             ]);
+
+            dd($e->getMessage());
 
             LivewireAlert::title('Error!')
                 ->text('Failed to update organization. Please try again.')
@@ -155,6 +159,15 @@ new class extends Component {
     public function removeNewLogo()
     {
         $this->newLogo = null;
+    }
+
+
+    #[On('locationUpdated')]
+    public function updateLocationFields($location, $latitude, $longitude)
+    {
+        $this->location = $location;
+        $this->latitude = $latitude;
+        $this->longitude = $longitude;
     }
 
 };
@@ -313,9 +326,22 @@ new class extends Component {
             autocomplete.addListener('place_changed', function () {
                 const place = autocomplete.getPlace();
                 if (place && place.formatted_address) {
-                    locationInput.value = place.formatted_address;
+                    formattedAddress = place.formatted_address;
+                    locationInput.value = formattedAddress;
                     syncInput.value = place.formatted_address;
-                    syncInput.dispatchEvent(new Event('input')); // trigger Livewire update
+                    syncInput.dispatchEvent(new Event('input'));
+
+                    const latitude = place.geometry.location.lat();
+                    const longitude = place.geometry.location.lng();
+
+                    // Dispatch Livewire event with data
+                    // Dispatch Livewire event with correct values
+                    Livewire.dispatch('locationUpdated', {
+                        location: formattedAddress,
+                        latitude: latitude,
+                        longitude: longitude
+                    });
+
                 }
             });
 

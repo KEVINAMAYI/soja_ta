@@ -21,6 +21,7 @@ return new class extends Migration {
             $table->integer('radius_m')->default(50); // matching radius in meters
             $table->text('description')->nullable();
             $table->boolean('active')->default(true);
+            $table->boolean('is_default')->default(false);
             $table->timestamps();
             $table->unique(['organization_id', 'name']);
         });
