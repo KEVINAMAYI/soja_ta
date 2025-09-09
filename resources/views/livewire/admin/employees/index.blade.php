@@ -106,7 +106,12 @@ new class extends Component {
         return [
             'name' => 'required|string|max:255',
             'email' => 'nullable|email|unique:employees,email,' . $this->editId,
-            'phone' => 'nullable|string|max:20',
+            'phone' => [
+                'nullable',
+                'string',
+                'max:20',
+                'regex:/^[2-9][0-9]{6,19}$/' // <-- New rule here
+            ],
             'shift_id' => 'required|exists:shifts,id',
             'department_id' => 'required|exists:departments,id',
             'id_number' => 'required|string|unique:employees,id_number,' . $this->editId,
@@ -477,9 +482,19 @@ new class extends Component {
                             <div class="col-md-6 mb-3">
                                 <label for="empPhone" class="form-label">Phone Number</label>
                                 <input type="text" id="empPhone" wire:model="phone" class="form-control"
-                                       placeholder="+1234567890"/>
-                                @error('phone') <small class="text-danger">{{ $message }}</small> @enderror
+                                       placeholder="e.g. 2512345678"/>
+
+                                <!-- Error message -->
+                                @error('phone')
+                                <small class="text-danger">{{ $message }}</small>
+                                @enderror
+
+                                <!-- Phone number hint -->
+                                <span class="form-text text-info mt-1">
+                                 Please start the phone number with <strong>25</strong> (e.g., 2512345678).
+                                </span>
                             </div>
+
 
                             <!-- Shift -->
                             <div class="col-md-6 mb-3">

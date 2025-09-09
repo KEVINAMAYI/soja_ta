@@ -11,6 +11,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Propaganistas\LaravelPhone\PhoneNumber;
 
 class AuthController extends Controller
 {
@@ -63,7 +64,7 @@ class AuthController extends Controller
             Employee::create([
                 'name' => $request->name,
                 'email' => $request->email,
-                'phone' => $request->phone,
+                'phone' => !empty($request->phone) ? PhoneNumber::make($request->phone) : null,
                 'shift_id' => $shiftId,
                 'organization_id' => auth()->user()->employee->organization_id,
                 'id_number' => $request->id_number,

@@ -8,7 +8,6 @@ use App\Models\Department;
 use App\Models\Employee;
 use Illuminate\Http\Request;
 
-
 class OrganizationController extends Controller
 {
     public function departments(Request $request)
@@ -82,5 +81,43 @@ class OrganizationController extends Controller
         ], 200);
     }
 
+
+    public function employeeByPhone(Request $request)
+    {
+        $request->validate([
+            'phone' => 'required',
+        ]);
+
+
+        // Step 1: Normalize the phone number input
+        $phone = $this->normalizePhoneNumber($request->input('phone'));
+
+        $employee = Employee::where('phone', 'like', '%' . $phone . '%')->first();
+
+        if ($employee) {
+            return response()->json([
+                'code' => 1000,  // Success code
+                'message' => 'Employee retrieved successfully',
+                'data' => new UserResource($employee->user),
+            ], 200);
+        }
+
+        return response()->json([
+            'code' => 1003,
+            'message' => 'Employee not found.'
+        ], 404);
+    }
+
+
+    private function normalizePhoneNumber($phone)
+    {
+        $phone = preg_replace('/\D/', '', $phone);
+
+        if (substr($phone, 0, 1) == '0') {
+            $phone = substr($phone, 1);
+        }
+
+        return $phone;
+    }
 
 }

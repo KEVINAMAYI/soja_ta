@@ -65,7 +65,7 @@ class DatabaseSeeder extends Seeder
             'name' => 'Test Employee',
             'id_number' => 'EMP999',
             'email' => 'test@example.com',
-            'phone' => '0712345678',
+            'phone' => '254712345678',
             'active' => true,
         ]);
 
