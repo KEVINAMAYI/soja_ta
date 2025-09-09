@@ -41,14 +41,22 @@ new class extends Component {
 
     public function changeBreadcrumb()
     {
-        $this->tabTitle = $this->activeTab === 'notifications'
-            ? 'Notification'
-            : 'Shift';
+        switch ($this->activeTab) {
+            case 'notifications':
+                $this->tabTitle = 'Notification';
+                $this->tabIcon = '<iconify-icon icon="mdi:bell-outline" class="fs-5"></iconify-icon>';
+                break;
 
+            case 'devices':
+                $this->tabTitle = 'Devices';
+                $this->tabIcon = '<iconify-icon icon="mdi:tablet-dashboard" class="fs-5"></iconify-icon>';
+                break;
 
-        $this->tabIcon = $this->activeTab === 'notifications'
-            ? '<iconify-icon icon="mdi:bell-outline" class="fs-5"></iconify-icon>'
-            : '<iconify-icon icon="mdi:calendar-clock" class="fs-5"></iconify-icon>';
+            default: // shifts or fallback
+                $this->tabTitle = 'Shift';
+                $this->tabIcon = '<iconify-icon icon="mdi:calendar-clock" class="fs-5"></iconify-icon>';
+                break;
+        }
 
         $this->breadcrumbItems = [
             [
@@ -66,8 +74,6 @@ new class extends Component {
                 'icon' => $this->tabIcon,
             ],
         ];
-
-
     }
 
 
@@ -99,6 +105,22 @@ new class extends Component {
                 </button>
             </li>
 
+            <!-- Devices Tab -->
+            <li class="nav-item" role="presentation">
+                <button
+                    class="nav-link position-relative rounded-0 {{ $activeTab === 'devices' ? 'active' : '' }} d-flex align-items-center justify-content-center bg-transparent fs-3 py-3"
+                    id="tab-devices-tab"
+                    data-bs-toggle="pill"
+                    data-bs-target="#tab-devices"
+                    type="button"
+                    role="tab"
+                    aria-controls="tab-devices"
+                    aria-selected="false">
+                    <i class="ti ti-device-laptop me-2 fs-6"></i>
+                    <span class="d-none d-md-block">Devices</span>
+                </button>
+            </li>
+
             <li class="nav-item" role="presentation">
                 <button
                     class="nav-link position-relative rounded-0 {{ $activeTab === 'notifications' ? 'active' : '' }} d-flex align-items-center justify-content-center bg-transparent fs-3 py-3"
@@ -122,11 +144,21 @@ new class extends Component {
 
                 <!-- Overtime Policy Tab -->
                 <div class="tab-pane fade {{ $activeTab === 'shifts' ? 'show active' : '' }}"
-                     id="tab-overtime-policy">
+                     id="tab-shifts">
 
 
                     {{-- Livewire Table --}}
                     <livewire:admin.shifts.index theme="bootstrap-4"/>
+
+                </div>
+
+                <!-- Overtime Policy Tab -->
+                <div class="tab-pane fade {{ $activeTab === 'devices' ? 'show active' : '' }}"
+                     id="tab-devices">
+
+
+                    {{-- Livewire Table --}}
+                    <livewire:admin.devices.index theme="bootstrap-4"/>
 
                 </div>
 
@@ -247,6 +279,9 @@ new class extends Component {
                     switch (tabId) {
                         case 'tab-overtime-policy-tab':
                             mappedTab = 'shifts';
+                            break;
+                        case 'tab-devices-tab':
+                            mappedTab = 'devices';
                             break;
                         case 'tab-notifications-tab':
                             mappedTab = 'notifications';

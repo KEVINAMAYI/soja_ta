@@ -77,5 +77,11 @@ class Employee extends Model
         return $this->belongsTo(Shift::class);
     }
 
+    public function assignments()
+    {
+        return $this->hasMany(EmployeeAssignment::class);
+    }
+
+
 }
 

@@ -24,10 +24,11 @@ class AttendanceController extends Controller
             'check_in_time' => 'required|date',
             'latitude' => 'required|numeric',
             'longitude' => 'required|numeric',
+            'device_id' => 'nullable|exists:devices,id',
         ]);
 
         return $this->processCheckIn($validated['identifier_value'],
-            $validated['identifier_type'], $validated['check_in_time'], $validated['latitude'], $validated['longitude']);
+            $validated['identifier_type'], $validated['check_in_time'], $validated['latitude'], $validated['longitude'], $validated['device_id'] ?? null);
     }
 
     /**
@@ -48,7 +49,7 @@ class AttendanceController extends Controller
     /**
      * Handle check-in logic
      */
-    private function processCheckIn(string $value, string $column, string $checkInTime, $latitude, $longitude)
+    private function processCheckIn(string $value, string $column, string $checkInTime, $latitude, $longitude, $deviceId = null)
     {
         DB::beginTransaction();
         try {
@@ -113,6 +114,7 @@ class AttendanceController extends Controller
             $attendance->check_in_time = $checkInTime ? Carbon::parse($checkInTime) : now();
             $attendance->latitude = $latitude;
             $attendance->longitude = $longitude;
+            $attendance->device_id = $deviceId;
             $attendance->save();
 
             DB::commit();

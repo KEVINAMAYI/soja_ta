@@ -61,6 +61,9 @@ class WorkLocationTable extends DataTableComponent
             BooleanColumn::make('Active')
                 ->sortable()
                 ->collapseOnMobile(),
+
+            Column::make("Action")
+                ->label(fn($row) => view('livewire.admin.location-assignment.actions', ['work_location' => $row]))
         ];
     }
 }

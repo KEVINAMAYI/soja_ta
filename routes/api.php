@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\APIs\AttendanceController;
 use App\Http\Controllers\APIs\AuthController;
+use App\Http\Controllers\APIs\DeviceController;
 use App\Http\Controllers\APIs\OrganizationController;
 use Illuminate\Support\Facades\Route;
 
@@ -26,6 +27,9 @@ Route::middleware(['auth:sanctum'])->group(function () {
         Route::get('/departments', [OrganizationController::class, 'departments']);
         Route::get('/employees', [OrganizationController::class, 'employees']);
     });
+
+
+    Route::post('/devices/verify', [DeviceController::class, 'verify']);
 
 
 });
