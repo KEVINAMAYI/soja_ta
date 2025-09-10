@@ -522,6 +522,8 @@ new class extends Component {
 
 
 @push('scripts')
+    <script src="https://code.iconify.design/3/3.1.0/iconify.min.js"></script>
+
     <script>
         const workLocations = @json($workLocations);
         const employeeLocations = @json($employeeLocations);
