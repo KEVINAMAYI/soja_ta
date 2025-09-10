@@ -26,7 +26,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::prefix('organization')->group(function () {
         Route::get('/departments', [OrganizationController::class, 'departments']);
         Route::get('/employees', [OrganizationController::class, 'employees']);
-        Route::get('employee-by-phone', [OrganizationController::class, 'employeeByPhone']);
+        Route::get('/employee-by-phone', [OrganizationController::class, 'employeeByPhone']);
 
     });
 

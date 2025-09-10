@@ -22,13 +22,10 @@ new class extends Component {
 
     public function mount()
     {
-
         $today = Carbon::today();
-
-
         $this->googleMapsApiKey = env('GOOGLE_MAPS_API_KEY');
 
-        //Determine organization of logged-in user
+        // Determine organization of logged-in user
         $employeeRecord = Employee::where('user_id', auth()->id())->first();
         $orgId = $employeeRecord->organization_id;
 
@@ -36,20 +33,17 @@ new class extends Component {
         $this->totalEmployees = $employees->count();
         $employeeIds = $employees->pluck('id');
 
-        //Attendances today
+        // Attendances today
         $attendancesToday = Attendance::whereIn('employee_id', $employeeIds)
             ->whereDate('date', $today)
             ->get();
 
-
         $this->presentToday = $attendancesToday->whereNotNull('check_in_time')->count();
 
-
-        //Late arrivals
+        // Late arrivals
         $this->lateArrivals = $attendancesToday->where('status', 'late')->count();
 
-
-        //Overtime hours this week
+        // Overtime hours this week
         $weekStart = Carbon::now()->startOfWeek();
         $weekEnd = Carbon::now()->endOfWeek();
 
@@ -57,8 +51,7 @@ new class extends Component {
             ->whereBetween('date', [$weekStart, $weekEnd])
             ->sum('overtime_hours');
 
-
-        // Department stats (group by department_id)
+        // Department stats
         $this->departmentStats = $employees->groupBy('department_id')->map(function ($group) {
             $clockedIn = Attendance::whereIn('employee_id', $group->pluck('id'))
                 ->whereDate('date', Carbon::today())
@@ -72,14 +65,12 @@ new class extends Component {
             ];
         });
 
-
         // Recent activities (today only, last 5)
         $this->recentActivities = $attendancesToday
-            ->sortByDesc('created_at') // sort descending by check-in time
+            ->sortByDesc('created_at')
             ->take(5);
 
-
-        // Get current employee status (up to 5)
+        // Current employee status
         $this->currentEmployeeStatus = Attendance::with('employee.department')
             ->whereIn('employee_id', $employeeIds)
             ->whereDate('date', $today)
@@ -89,17 +80,16 @@ new class extends Component {
             ->map(fn($att) => [
                 'name' => $att->employee->name,
                 'department' => $att->employee->department->name ?? 'N/A',
-                'status' => $att->status, // 'present', 'clocked_out', 'on_break', etc.
+                'status' => $att->status,
                 'clock_in' => $att->check_in_time
                     ? Carbon::parse($att->check_in_time)->format('h:i A')
                     : 'N/A',
-                'hours_today' => $att->worked_hours ?? 0, // Directly use worked_hours
+                'hours_today' => $att->worked_hours ?? 0,
                 'view_link' => route('attendance.index')
             ]);
 
-
-        // Get last check-in per employee for today with location
-        $this->employeeLocations = Attendance::with('employee.department')
+        // Employee locations
+        $this->employeeLocations = Attendance::with('employee.department', 'employee.currentAssignment.location')
             ->whereIn('employee_id', $employeeIds)
             ->whereDate('date', $today)
             ->whereNotNull('check_in_time')
@@ -107,40 +97,32 @@ new class extends Component {
             ->whereNotNull('longitude')
             ->orderBy('check_in_time', 'desc')
             ->get()
-            ->groupBy('employee_id') // group to avoid multiple entries
-            ->map(function ($group) {
-                $last = $group->first(); // latest because of desc order
+            ->groupBy('employee_id')
+            ->map(function ($group) use ($employeeRecord) {
+                $last = $group->first();
+                $workLocation = $last->employee->currentAssignment?->location;
+
                 return [
                     'name' => $last->employee->name,
-                    'work_location' => $last->employee->currentAssignment?->location,
                     'department' => $last->employee->department->name ?? 'N/A',
                     'clock_in' => Carbon::parse($last->check_in_time)->format('h:i A'),
                     'lat' => $last->latitude,
                     'lng' => $last->longitude,
+                    'work_location_id' => $workLocation?->id
+                        ?? $employeeRecord->organization->location?->id
+                            ?? null,
                 ];
             })
             ->values()
             ->toArray();
 
-        // If empty, fallback to organization location
-        if (empty($this->employeeLocations)) {
-            $orgLocation = $employeeRecord->organization->location ?? null;
-            if ($orgLocation) {
-                $this->employeeLocations = collect([[
-                    'name' => 'Organization Location',
-                    'department' => 'Organization HQ',
-                    'clock_in' => '',
-                    'address' => $orgLocation, // include address here
-                ]]);
-            }
-        }
-
-
+        // Work locations with id
         $this->workLocations = WorkLocation::where('organization_id', $orgId)
             ->where('active', true)
             ->get()
             ->map(function ($loc) {
                 return [
+                    'id' => $loc->id, // 🔹 fix added
                     'name' => $loc->name,
                     'lat' => $loc->latitude,
                     'lng' => $loc->longitude,
@@ -149,8 +131,6 @@ new class extends Component {
                 ];
             })
             ->toArray();
-
-
     }
 
 
@@ -541,10 +521,7 @@ new class extends Component {
 </div>
 
 
-
 @push('scripts')
-    <script src="https://code.iconify.design/3/3.1.0/iconify.min.js"></script>
-
     <script>
         const workLocations = @json($workLocations);
         const employeeLocations = @json($employeeLocations);
@@ -552,15 +529,13 @@ new class extends Component {
         function initMap() {
             const map = new google.maps.Map(document.getElementById("map"), {
                 zoom: 12,
-                center: {lat: 0, lng: 0},
+                center: {lat: -1.2921, lng: 36.8219}, // Nairobi fallback
             });
 
             const bounds = new google.maps.LatLngBounds();
-            const geocoder = new google.maps.Geocoder();
-            let geofencesToProcess = workLocations.length;
             let activeInfoWindow = null;
 
-            // Draw geofence circle
+            // --- Draw red geofence ---
             function drawGeofence(position, radius) {
                 new google.maps.Circle({
                     strokeColor: "#FF0000",
@@ -574,159 +549,78 @@ new class extends Component {
                 });
             }
 
-            // Add marker with optional info window
-            function addMarker(position, title, infoContent = null, iconUrl = null) {
-                const markerOptions = {
+            // --- Add marker with info window ---
+            function addMarker(position, infoContent) {
+                const marker = new google.maps.Marker({
                     position,
                     map,
-                    title
-                };
-
-                if (iconUrl) {
-                    markerOptions.icon = {
-                        url: iconUrl,
-                        scaledSize: new google.maps.Size(40, 40)
-                    };
-                }
-
-                const marker = new google.maps.Marker(markerOptions);
+                });
 
                 if (infoContent) {
-                    const infoWindow = new google.maps.InfoWindow({
-                        content: infoContent
-                    });
-
+                    const infoWindow = new google.maps.InfoWindow({content: infoContent});
                     marker.addListener("click", () => {
                         if (activeInfoWindow) activeInfoWindow.close();
                         infoWindow.open(map, marker);
                         activeInfoWindow = infoWindow;
                     });
                 }
-
                 return marker;
             }
 
-            function fitMapToBounds() {
-                if (geofencesToProcess === 0) {
-                    if (!bounds.isEmpty()) {
-                        const ne = bounds.getNorthEast();
-                        const sw = bounds.getSouthWest();
-
-                        // Check if NE and SW corners are the same (i.e. one point)
-                        if (ne.equals(sw)) {
-                            map.setCenter(ne);
-                            map.setZoom(15); // 👈 manually control zoom for single location
-                        } else {
-                            map.fitBounds(bounds);
-                        }
-                    } else {
-                        map.setCenter({lat: -1.2921, lng: 36.8219}); // Nairobi fallback
-                        map.setZoom(12);
+            // --- Group employees by work_location_id ---
+            const groupedEmployees = {};
+            employeeLocations.forEach(emp => {
+                if (emp.work_location_id) {
+                    if (!groupedEmployees[emp.work_location_id]) {
+                        groupedEmployees[emp.work_location_id] = [];
                     }
+                    groupedEmployees[emp.work_location_id].push(emp);
                 }
-            }
+            });
 
-
-            // Process work locations
+            // --- Process each work location ---
             workLocations.forEach(loc => {
                 if (loc.lat && loc.lng) {
                     const position = {lat: parseFloat(loc.lat), lng: parseFloat(loc.lng)};
+                    bounds.extend(position);
                     drawGeofence(position, loc.radius_m);
-                    bounds.extend(position);
 
-                    const infoContent = `
-                       <div style="background:#fff; padding:15px 18px; border-radius:10px; box-shadow:0 4px 10px rgba(0,0,0,0.15); min-width:220px;">
-                       <div style="font-weight:700; font-size:18px; color:#333; line-height:1.3;">
-                                 ${loc.name.replace(/_/g, ' ').replace(/\b\w/g, char => char.toUpperCase())}
+                    const emps = groupedEmployees[loc.id] || [];
+
+                    let infoContent = `
+                   <div style="background:#fff; padding:12px; border-radius:6px;
+                               box-shadow:0 2px 6px rgba(0,0,0,0.15); min-width:220px;">
+                       <div style="font-weight:700; font-size:16px; color:#333;">
+                           ${loc.name.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
                        </div>
-                       <div style="font-size:14px; color:#555; margin-top:6px; font-style:italic;">${loc.address || 'No address provided'}</div>
-                       </div>
-                       `;
+                       <div style="font-size:13px; color:#555; margin-bottom:8px;">
+                           ${loc.address || 'No address provided'}
+                       </div>`;
 
+                    if (emps.length > 0) {
+                        infoContent += `<div style="font-size:14px; color:#222; margin-bottom:6px;">
+                        <b>${emps.length} Employee${emps.length > 1 ? 's' : ''}</b> checked in:
+                    </div>`;
+                        emps.forEach(e => {
+                            infoContent += `<div style="font-size:13px; color:#444; margin-bottom:3px;">
+                            <b>${e.name}</b> (${e.department}) - Clock In: ${e.clock_in}
+                        </div>`;
+                        });
+                    }
 
-                    addMarker(position, loc.name, infoContent);
-                    geofencesToProcess--;
-                    fitMapToBounds();
-                } else if (loc.address) {
-                    geocoder.geocode({address: loc.address}, function (results, status) {
-                        if (status === 'OK' && results[0]) {
-                            const position = results[0].geometry.location;
-                            drawGeofence(position, loc.radius_m);
-                            bounds.extend(position);
+                    infoContent += `</div>`;
 
-                            const infoContent = `
-                               <div style="background:#fff; padding:15px 18px; border-radius:10px; box-shadow:0 4px 10px rgba(0,0,0,0.15); min-width:220px;">
-                               <div style="font-weight:700; font-size:18px; color:#333; line-height:1.3;">
-                                 ${loc.name.replace(/_/g, ' ').replace(/\b\w/g, char => char.toUpperCase())}
-                               </div>
-                               <div style="font-size:14px; color:#555; margin-top:6px; font-style:italic;">${loc.address || 'No address provided'}</div>
-                               </div>
-                              `;
-
-
-                            addMarker({lat: position.lat(), lng: position.lng()}, loc.name, infoContent);
-                        } else {
-                            console.warn(`Geocoding failed for ${loc.name}: ${status}`);
-                        }
-                        geofencesToProcess--;
-                        fitMapToBounds();
-                    });
-                } else {
-                    geofencesToProcess--;
-                    fitMapToBounds();
+                    addMarker(position, infoContent);
                 }
             });
 
-            // Add employee markers
-            employeeLocations.forEach(emp => {
-                if (emp.lat && emp.lng) {
-                    const position = {lat: parseFloat(emp.lat), lng: parseFloat(emp.lng)};
-                    bounds.extend(position);
-
-                    const avatarUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(emp.name)}&background=0D8ABC&color=fff&rounded=true&size=64`;
-
-                    const infoContent = `
-  <div style="
-    max-width: 300px;
-    padding: 12px;
-    background: #fff;
-    border-radius: 10px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
-    display: flex;
-    align-items: flex-start;
-    gap: 12px;
-    font-family: sans-serif;
-">
-    <img src="${avatarUrl}" style="
-        width: 48px;
-        height: 48px;
-        border-radius: 50%;
-        border: 2px solid #0D8ABC;
-        flex-shrink: 0;
-    ">
-
-    <div style="flex: 1; overflow: hidden;">
-        <div style="font-size: 15px; font-weight: 600; color: #222; margin-bottom: 4px; line-height: 1.2;">
-            ${emp.name}
-        </div>
-        <div style="font-size: 13px; color: #444; margin-bottom: 3px;">
-            <span style="font-weight: 500; color: #0D8ABC;">Dept:</span> ${emp.department}
-        </div>
-        <div style="font-size: 13px; color: #444; margin-bottom: 3px;">
-            <span style="font-weight: 500; color: #0D8ABC;">Work Location:</span> ${emp.work_location}
-        </div>
-        <div style="font-size: 12px; color: #666;">
-            <span style="font-weight: 500;">Clock In:</span> ${emp.clock_in}
-        </div>
-    </div>
-</div>
-
-`;
-
-
-                    addMarker(position, emp.name, infoContent, avatarUrl);
-                }
-            });
+            // --- Fit map bounds ---
+            if (!bounds.isEmpty()) {
+                map.fitBounds(bounds);
+            } else {
+                map.setCenter({lat: -1.2921, lng: 36.8219});
+                map.setZoom(12);
+            }
         }
     </script>
 
@@ -734,5 +628,7 @@ new class extends Component {
             src="https://maps.googleapis.com/maps/api/js?key={{ $googleMapsApiKey }}&callback=initMap">
     </script>
 @endpush
+
+
 
 

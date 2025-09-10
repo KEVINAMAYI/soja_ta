@@ -31,7 +31,7 @@ new class extends Component {
             'platform' => 'required|in:android,ios',
             'device_location_id' => 'required|exists:device_locations,id',
             'checkpoint_id' => 'required|string|max:50|unique:devices,checkpoint_id,' . $this->editId,
-            'pin' => 'nullable|string|max:10',
+            'pin' => 'required|string|max:10',
         ];
     }
 
@@ -172,7 +172,7 @@ new class extends Component {
 
                         <!-- PIN (Input Group) -->
                         <div class="col-md-12">
-                            <label class="form-label">PIN (optional)</label>
+                            <label class="form-label">PIN</label>
                             <div class="input-group">
                                 <input type="text"
                                        class="form-control"
