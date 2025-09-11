@@ -348,27 +348,27 @@ new class extends Component {
             <div class="card-body">
                 <div class="row g-3">
 
-                    <!-- Manual Check-In -->
+                    <!-- Timesheets -->
                     <div class="col-6">
-                        <a href="#" class="card-action">
-                            <span class="iconify mb-2" data-icon="mdi:account-check-outline"
+                        <a href="{{ route('attendance.index') }}" class="card-action text-center">
+                            <span class="iconify mb-2" data-icon="mdi:clipboard-text-clock-outline"
                                   style="font-size: 28px;"></span>
-                            <span>Manual Check-in</span>
+                            <span>Timesheets</span>
                         </a>
                     </div>
 
-                    <!-- Schedule Override -->
+                    <!-- Add Employee -->
                     <div class="col-6">
-                        <a href="#" class="card-action">
-                            <span class="iconify mb-2" data-icon="mdi:calendar-clock-outline"
+                        <a href="{{ route('employees.index') }}" class="card-action text-center">
+                            <span class="iconify mb-2" data-icon="mdi:account-plus-outline"
                                   style="font-size: 28px;"></span>
-                            <span>Schedule Override</span>
+                            <span>Add Employee</span>
                         </a>
                     </div>
 
                     <!-- Export Reports -->
                     <div class="col-6">
-                        <a href="#" class="card-action">
+                        <a href="{{ route('reports.employees') }}" class="card-action text-center">
                             <span class="iconify mb-2" data-icon="mdi:file-download-outline"
                                   style="font-size: 28px;"></span>
                             <span>Export Reports</span>
@@ -377,9 +377,18 @@ new class extends Component {
 
                     <!-- System Settings -->
                     <div class="col-6">
-                        <a href="#" class="card-action">
+                        <a href="{{ route('system-settings.index') }}" class="card-action text-center">
                             <span class="iconify mb-2" data-icon="mdi:cog-outline" style="font-size: 28px;"></span>
                             <span>System Settings</span>
+                        </a>
+                    </div>
+
+                    <!-- Account Settings -->
+                    <div class="col-12">
+                        <a href="{{ route('account-settings.index') }}" class="card-action text-center">
+                            <span class="iconify mb-2" data-icon="mdi:account-cog-outline"
+                                  style="font-size: 28px;"></span>
+                            <span>Account Settings</span>
                         </a>
                     </div>
 

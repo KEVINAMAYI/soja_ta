@@ -32,8 +32,15 @@
                     </li>
 
 
-                    <livewire:admin.summaries.employee-types-dropdown/>
-
+                    <li class="sidebar-item">
+                        <a class="sidebar-link {{ request()->routeIs('employees.index') ? 'active' : '' }}"
+                           href="{{ route('employees.index') }}"
+                           id="get-url"
+                           aria-expanded="false">
+                            <iconify-icon icon="mdi:office-building-outline" class="fs-5"></iconify-icon>
+                            <span class="hide-menu">Employee</span>
+                        </a>
+                    </li>
 
                     <li class="sidebar-item">
                         <a class="sidebar-link {{ request()->routeIs('attendance.*') ? 'active' : '' }}"

@@ -13,20 +13,10 @@ use Rappasoft\LaravelLivewireTables\Views\Column;
 use App\Models\Employee;
 use Rappasoft\LaravelLivewireTables\Views\Columns\BooleanColumn;
 use Rappasoft\LaravelLivewireTables\Views\Filters\SelectFilter;
-use Barryvdh\DomPDF\Facade\Pdf;
 
 class EmployeeTable extends DataTableComponent
 {
     protected $model = Employee::class;
-
-    public ?int $roleId;
-
-    public function mount($roleId = null)
-    {
-        $this->roleId = $roleId;
-
-
-    }
 
 
     public function configure(): void
@@ -46,11 +36,6 @@ class EmployeeTable extends DataTableComponent
             ->with(['organization', 'shift', 'user'])
             ->where('organization_id', $orgId);
 
-        if (!empty($this->roleId)) {
-            $query->whereHas('user.roles', function ($q) {
-                $q->where('id', $this->roleId);
-            });
-        }
 
         if ($this->search !== null && $this->search !== '') {
             $query->where(function ($q) {
@@ -101,24 +86,42 @@ class EmployeeTable extends DataTableComponent
 
     public function filters(): array
     {
+        $roleOptions = ['all' => 'All Roles'] + Role::where('name', '!=', 'super-admin')
+                ->pluck('name', 'id')
+                ->toArray();
+
         return [
             'active' => SelectFilter::make('Active')
                 ->options([
-                    '' => 'Any',
+                    '' => 'All',
                     '1' => 'Active',
                     '0' => 'Inactive',
                 ])
                 ->filter(function ($builder, $value) {
                     $builder->where('active', $value);
                 }),
+
+            'role' => SelectFilter::make('Role')
+                ->options($roleOptions)
+                ->filter(function ($builder, $value) {
+                    if ($value === 'all' || empty($value)) {
+                        // All roles EXCEPT super-admin
+                        $builder->whereHas('user.roles', function ($q) {
+                            $q->where('name', '!=', 'super-admin');
+                        });
+                    } else {
+                        // Specific role
+                        $builder->whereHas('user.roles', function ($q) use ($value) {
+                            $q->where('id', $value);
+                        });
+                    }
+                }),
         ];
     }
-
 
     public function bulkActions(): array
     {
         return [
-            'bulkDelete' => 'Delete Selected',
             'activate' => 'Activate',
             'deactivate' => 'Deactivate',
             'exportExcel' => 'Export Excel',

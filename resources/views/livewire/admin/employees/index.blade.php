@@ -25,6 +25,8 @@ new class extends Component {
     public $selectedLocation = null;
     public $start_date;
     public $end_date;
+    public $roleName = 'employee';
+    public $roles = [];
 
     public function mount($roleId = null)
     {
@@ -36,6 +38,7 @@ new class extends Component {
 
         $this->departments = auth()->user()->employee->organization->departments;
         $this->shifts = auth()->user()->employee->organization->shifts;
+        $this->roles = Role::where('name', '!=', 'super-admin')->pluck('name', 'id');
 
     }
 
@@ -116,6 +119,7 @@ new class extends Component {
             'department_id' => 'required|exists:departments,id',
             'id_number' => 'required|string|unique:employees,id_number,' . $this->editId,
             'active' => 'boolean',
+            'roleName' => 'required|exists:roles,name', // <-- Role validation
         ];
     }
 
@@ -149,7 +153,8 @@ new class extends Component {
             ]);
 
             // 3. Assign the 'employee' role
-            $user->assignRole('employee');
+            $user->assignRole($this->roleName);
+
 
             // 4. Create a token
             $user->createToken('Api Token')->plainTextToken;
@@ -202,7 +207,6 @@ new class extends Component {
     }
 
 
-
     #[On('edit-employee')]
     public function editEmployee($id)
     {
@@ -217,6 +221,7 @@ new class extends Component {
         $this->department_id = $employee->department_id;
         $this->id_number = $employee->id_number;
         $this->active = $employee->active;
+        $this->roleName = $employee->user->roles->first()->name ?? '';
 
         $this->dispatch('show-employee-modal');
 
@@ -230,7 +235,7 @@ new class extends Component {
 
             DB::beginTransaction();
 
-            $employee = Employee::findOrFail($this->editId);
+            $employee = Employee::with('user.roles')->findOrFail($this->editId);
 
             $employee->update([
                 'name' => $this->name,
@@ -241,6 +246,9 @@ new class extends Component {
                 'id_number' => $this->id_number,
                 'active' => $this->active,
             ]);
+
+            // 3. Remove old roles and assign the new one
+            $employee->user->syncRoles([$this->roleName]);
 
             // Optionally update the related user
             if ($employee->user) {
@@ -269,6 +277,75 @@ new class extends Component {
 
             LivewireAlert::title('Error!')
                 ->text('Something went wrong while updating the employee.')
+                ->error()
+                ->toast()
+                ->position('top-end')
+                ->show();
+        }
+    }
+
+    #[On('activate-employee')]
+    public function activateEmployee($id)
+    {
+        try {
+            DB::beginTransaction();
+
+            $employee = Employee::findOrFail($id);
+            $employee->active = true;
+            $employee->save();
+
+
+            DB::commit();
+
+            LivewireAlert::title('Success!')
+                ->text('Employee activated successfully.')
+                ->success()
+                ->toast()
+                ->position('top-end')
+                ->show();
+
+            $this->resetForm();
+            $this->dispatch('refreshDatatable');
+        } catch (\Exception $e) {
+            DB::rollBack();
+            logger()->error('Activating employee failed: ' . $e->getMessage());
+
+            LivewireAlert::title('Error!')
+                ->text('Something went wrong while activating the employee.')
+                ->error()
+                ->toast()
+                ->position('top-end')
+                ->show();
+        }
+    }
+
+    #[On('deactivate-employee')]
+    public function deactivateEmployee($id)
+    {
+        try {
+            DB::beginTransaction();
+
+            $employee = Employee::findOrFail($id);
+            $employee->active = false;
+            $employee->save();
+
+            DB::commit();
+
+            LivewireAlert::title('Success!')
+                ->text('Employee deactivated successfully.')
+                ->success()
+                ->toast()
+                ->position('top-end')
+                ->show();
+
+            $this->resetForm();
+            $this->dispatch('refreshDatatable');
+        } catch (\Exception $e) {
+            DB::rollBack();
+            logger()->error('Deactivating employee failed: ' . $e->getMessage());
+
+            LivewireAlert::title('Error!')
+                ->text('Something went wrong while deactivating the employee.')
                 ->error()
                 ->toast()
                 ->position('top-end')
@@ -347,7 +424,7 @@ new class extends Component {
             ],
             [
                 'label' => 'Employees',
-                'url' => route('employees.roles.index', ['roleId' => null]),
+                'url' => route('employees.index', ['roleId' => null]),
                 'icon' => '<iconify-icon icon="tabler:users" class="fs-5"></iconify-icon>'
             ],
             [
@@ -367,6 +444,61 @@ new class extends Component {
 
 @push('styles')
     <style>
+
+        .btn-group > div > button.dropdown-toggle {
+            background-color: #f4f4f5; /* Light grey background */
+            border: 1px solid #cbd5e1; /* Soft border */
+            color: #1e293b; /* Dark text */
+            padding: 8px 8px;
+            border-radius: 8px;
+            font-weight: 500;
+            font-size: 0.95rem;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
+            transition: all 0.2s ease-in-out;
+            margin-left: 5px;
+        }
+
+        .btn-group > div > button.dropdown-toggle:hover,
+        .btn-group > div > button.dropdown-toggle:focus {
+            background-color: #e2e8f0;
+            border-color: #94a3b8;
+            color: #1e293b;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+            outline: none;
+        }
+
+
+        .btn-group > .dropdown-menu {
+            position: fixed !important; /* Fixed relative to viewport */
+            top: 100px !important; /* Distance from top, adjust as needed */
+            left: 50% !important; /* Center horizontally */
+            transform: translateX(-50%) !important; /* Center by shifting left half of own width */
+            width: 600px !important; /* Fixed width, you can also use max-width */
+            max-width: 90vw !important; /* Responsive: max width 90% of viewport */
+            padding: 24px !important; /* More padding for modal look */
+            border-radius: 16px; /* Rounded corners for modal feel */
+            background-color: #ffffff;
+            box-shadow: 0 12px 30px rgba(0, 0, 0, 0.15); /* Softer shadow for floating effect */
+            border: 1px solid #e5e7eb;
+            z-index: 1050;
+            transition: all 0.3s ease-in-out;
+            overflow-y: auto; /* Scroll inside if content is tall */
+            max-height: 70vh; /* Limit max height */
+        }
+
+
+        .dropdown-menu select {
+            width: 100%;
+            border-radius: 8px;
+            padding: 8px;
+            font-size: 0.875rem;
+            color: #111827;
+            border: 1px solid #d1d5db;
+        }
+
 
         #table-bulkActionsDropdown {
             background-color: #e14326;
@@ -423,6 +555,40 @@ new class extends Component {
             transition: all 0.2s ease-in-out !important;
         }
 
+        .filter-close-button {
+            position: absolute;
+            top: 12px;
+            right: 25px;
+            background: transparent;
+            border: none;
+            font-size: 1.7rem;
+            color: #6b7280;
+            cursor: pointer;
+            z-index: 1100;
+            transition: color 0.2s ease-in-out;
+        }
+
+        .filter-close-button:hover {
+            color: #ef4444;
+        }
+
+        .dropdown-menu .dropdown-item.btn.text-center {
+            background-color: #f3f4f6;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            padding: 8px 16px;
+            font-weight: 500;
+            color: #374151;
+            transition: all 0.2s ease-in-out;
+            margin-top: 16px;
+        }
+
+        .dropdown-menu .dropdown-item.btn.text-center:hover {
+            background-color: #e5e7eb;
+            border-color: #cbd5e1;
+            color: #1f2937;
+        }
+
     </style>
 @endpush
 
@@ -459,7 +625,7 @@ new class extends Component {
 
 
             {{-- Livewire Table --}}
-            <livewire:employee-table :roleId="$roleId ?? null" theme="bootstrap-4"/>
+            <livewire:employee-table theme="bootstrap-4"/>
 
         </div>
     </div>
@@ -542,6 +708,18 @@ new class extends Component {
                                 <input type="text" id="empIdNumber" wire:model="id_number" class="form-control"
                                        placeholder="EMP123456"/>
                                 @error('id_number') <small class="text-danger">{{ $message }}</small> @enderror
+                            </div>
+
+                            <!-- Role -->
+                            <div class="col-md-12 mb-3">
+                                <label for="empRole" class="form-label">Role</label>
+                                <select id="empRole" wire:model="roleName" class="form-control">
+                                    <option value="">Select Role</option>
+                                    @foreach ($roles as $id => $name)
+                                        <option value="{{ $name }}">{{ ucfirst($name) }}</option>
+                                    @endforeach
+                                </select>
+                                @error('role') <small class="text-danger">{{ $message }}</small> @enderror
                             </div>
 
                             <!-- Active Toggle -->
@@ -664,6 +842,33 @@ new class extends Component {
         window.addEventListener('hide-employee-modal', () => {
             bootstrap.Modal.getInstance(document.getElementById('employeeModal'))?.hide();
         });
+
+
+        document.addEventListener("DOMContentLoaded", () => {
+            const observer = new MutationObserver(() => {
+                const dropdown = document.querySelector('.dropdown-menu[role="menu"]');
+
+                if (dropdown && !dropdown.querySelector('.filter-close-button')) {
+                    const closeBtn = document.createElement('button');
+                    closeBtn.innerHTML = '&times;'; // × symbol
+                    closeBtn.className = 'filter-close-button';
+                    closeBtn.setAttribute('type', 'button');
+                    closeBtn.setAttribute('aria-label', 'Close filter');
+
+                    // ✅ CLICK HANDLER GOES HERE — inside the MutationObserver
+                    closeBtn.onclick = () => {
+                        // Close Alpine dropdown
+                        document.querySelector('.dropdown-menu[role="menu"]')?.classList.remove('show');
+                    };
+
+                    // Insert as first child inside dropdown
+                    dropdown.insertBefore(closeBtn, dropdown.firstChild);
+                }
+            });
+
+            observer.observe(document.body, {childList: true, subtree: true});
+        });
+
     </script>
 @endpush
 

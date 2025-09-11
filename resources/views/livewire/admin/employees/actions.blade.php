@@ -26,12 +26,21 @@
                 </a>
             </li>
             <li>
-                <a class="dropdown-item d-flex align-items-center gap-2 text-danger" href="javascript:void(0)"
-                   wire:click="$dispatch('delete-employee',{ id : {{ $employee->id }} })">
-                    <iconify-icon icon="mdi:delete-outline" class="text-danger w-4 h-4"></iconify-icon>
-                    <span>Delete</span>
-                </a>
+                @if($employee->active)
+                    <a class="dropdown-item d-flex align-items-center gap-2 text-warning" href="javascript:void(0)"
+                       wire:click="$dispatch('deactivate-employee', { id: {{ $employee->id }} })">
+                        <iconify-icon icon="mdi:account-off-outline" class="text-warning w-4 h-4"></iconify-icon>
+                        <span>Deactivate</span>
+                    </a>
+                @else
+                    <a class="dropdown-item d-flex align-items-center gap-2 text-success" href="javascript:void(0)"
+                       wire:click="$dispatch('activate-employee', { id: {{ $employee->id }} })">
+                        <iconify-icon icon="mdi:account-check-outline" class="text-success w-4 h-4"></iconify-icon>
+                        <span>Activate</span>
+                    </a>
+                @endif
             </li>
+
         </ul>
     </div>
 </div>
