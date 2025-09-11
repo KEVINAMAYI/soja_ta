@@ -672,7 +672,7 @@ new class extends Component {
                                 @enderror
 
                                 <!-- Phone number hint -->
-                                <span class="form-text text-info mt-1">
+                                <span class="form-text text-danger mt-1">
                                  Please start the phone number with <strong>25</strong> (e.g., 2512345678).
                                 </span>
                             </div>
