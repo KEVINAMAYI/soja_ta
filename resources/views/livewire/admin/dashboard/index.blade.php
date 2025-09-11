@@ -427,16 +427,6 @@ new class extends Component {
         <div class="card shadow-sm recent-activity-card flex-fill">
             <div class="card-header d-flex justify-content-between align-items-center">
                 <span class="fw-semibold recent-activity-title">Recent Activity</span>
-                <div>
-                    <select class="form-select form-select-sm d-inline-block w-auto me-2">
-                        <option>All Activities</option>
-                        <option>Clock In</option>
-                        <option>Clock Out</option>
-                    </select>
-                    <button class="btn btn-primary btn-sm">
-                        <span class="iconify" data-icon="mdi:filter-variant"></span> Filter
-                    </button>
-                </div>
             </div>
             <div class="card-body">
                 <ul class="list-unstyled mb-0">
@@ -565,6 +555,12 @@ new class extends Component {
                 const marker = new google.maps.Marker({
                     position,
                     map,
+                    icon: {
+                        url: "/images/map_marker.png",  // custom icon path
+                        scaledSize: new google.maps.Size(40, 55), // resize (width, height)
+                        origin: new google.maps.Point(0, 0),
+                        anchor: new google.maps.Point(20, 40) // center bottom anchor
+                    }
                 });
 
                 if (infoContent) {
@@ -577,6 +573,7 @@ new class extends Component {
                 }
                 return marker;
             }
+
 
             // --- Group employees by work_location_id ---
             const groupedEmployees = {};

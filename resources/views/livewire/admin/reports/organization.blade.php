@@ -1,8 +1,155 @@
 <?php
 
+use App\Models\Attendance;
+use App\Models\Department;
+use Carbon\Carbon;
+use Illuminate\Support\Facades\Auth;
 use Livewire\Volt\Component;
 
 new class extends Component {
+
+    public $monthlyData = [];
+    public $chartData = [];
+    public $overtimeChartData = [];
+    public $statusData;
+    public $topOvertimeEmployees;
+
+    public function mount()
+    {
+
+        $orgId = Auth::user()->employee->organization_id ?? null;
+
+        //monhtly attendance data
+        $start = Carbon::now()->startOfMonth();
+        $end = Carbon::now()->endOfMonth();
+        $days = $start->diffInDays($end);
+
+        for ($i = 0; $i <= $days; $i++) {
+            $date = $start->copy()->addDays($i)->toDateString();
+
+            $present = Attendance::whereHas('employee', function ($q) use ($orgId) {
+                $q->where('organization_id', $orgId);
+            })
+                ->whereDate('date', $date)
+                ->whereIn('status', ['clocked_in', 'clocked_out'])
+                ->count();
+
+            $absent = Attendance::whereHas('employee', function ($q) use ($orgId) {
+                $q->where('organization_id', $orgId);
+            })
+                ->whereDate('date', $date)
+                ->whereIn('status', ['absent', 'unchecked_in'])
+                ->count();
+
+            $leave = Attendance::whereHas('employee', function ($q) use ($orgId) {
+                $q->where('organization_id', $orgId);
+            })
+                ->whereDate('date', $date)
+                ->where('status', 'leave')
+                ->count();
+
+            $this->monthlyData[] = [
+                'date' => $date,
+                'present' => $present,
+                'absent' => $absent,
+                'leave' => $leave,
+            ];
+        }
+
+
+        //department weekly data
+        $startOfWeek = Carbon::now()->startOfWeek(); // Monday
+        $endOfWeek = Carbon::now()->endOfWeek();     // Sunday
+
+        $departments = Department::where('organization_id', $orgId)->get();
+
+        $categories = [];
+        $presentData = [];
+        $absentData = [];
+        $leaveData = [];
+
+        foreach ($departments as $dept) {
+            $categories[] = $dept->name;
+
+            $attendances = Attendance::whereBetween('date', [$startOfWeek, $endOfWeek])
+                ->whereHas('employee', fn($q) => $q->where('organization_id', $orgId)
+                    ->where('department_id', $dept->id)
+                )->get();
+
+            $presentData[] = $attendances->whereIn('status', ['clocked_in', 'clocked_out'])->count();
+            $absentData[] = $attendances->whereIn('status', ['absent', 'unchecked_in'])->count();
+            $leaveData[] = $attendances->where('status', 'leave')->count();
+        }
+
+        $this->chartData = [
+            'categories' => $categories,
+            'series' => [
+                ['name' => 'Present', 'data' => $presentData],
+                ['name' => 'Absent', 'data' => $absentData],
+                ['name' => 'Leave', 'data' => $leaveData],
+            ]
+        ];
+
+
+        $today = Carbon::today();
+
+        // Get the attendance for today
+        $attendances = Attendance::whereHas('employee', fn($q) => $q->where('organization_id', $orgId))
+            ->whereDate('date', $today)
+            ->get();
+
+        // Aggregate by status and store in the new single array
+        $this->statusData = [
+            'present' => $attendances->whereIn('status', ['clocked_in', 'clocked_out'])->count(),
+            'absent' => $attendances->whereIn('status', ['absent', 'unchecked_in'])->count(),
+            'onLeave' => $attendances->where('status', 'leave')->count(),
+            'partial' => $attendances->where('status', 'clocked_in')
+                ->whereNull('check_out_time')
+                ->count(),
+        ];
+
+
+        $startOfWeek = Carbon::now()->startOfWeek(); // Monday
+        $endOfWeek = Carbon::now()->endOfWeek();   // Sunday
+
+        $departments = Department::where('organization_id', $orgId)->get();
+
+        $overtimeCategories = [];
+        $overtimeSeriesData = [];
+
+        foreach ($departments as $dept) {
+            $overtimeCategories[] = $dept->name;
+
+            $attendances = Attendance::whereBetween('date', [$startOfWeek, $endOfWeek])
+                ->whereHas('employee', fn($q) => $q->where('organization_id', $orgId)
+                    ->where('department_id', $dept->id)
+                )->get();
+
+            // Example: if you have overtime_hours column
+            $totalOvertime = $attendances->sum('overtime_hours');
+
+            $overtimeSeriesData[] = $totalOvertime;
+        }
+
+        $this->overtimeChartData = [
+            'categories' => $overtimeCategories,
+            'series' => [
+                ['name' => 'Overtime Hours', 'data' => $overtimeSeriesData],
+            ]
+        ];
+
+        $this->topOvertimeEmployees = Attendance::whereBetween('date', [$startOfWeek, $endOfWeek])
+            ->whereHas('employee', fn($q) => $q->where('organization_id', $orgId))
+            ->selectRaw('employee_id, SUM(overtime_hours) as total_overtime')
+            ->groupBy('employee_id')
+            ->orderByDesc('total_overtime')
+            ->take(5)
+            ->with('employee')
+            ->get();
+
+    }
+
+
 }; ?>
 
 <div class="row">
@@ -30,7 +177,7 @@ new class extends Component {
 
         <div class="card">
             <div class="card-body p-4 pb-0" data-simplebar>
-                <livewire:admin.summaries.employee-statuses />
+                <livewire:admin.summaries.employee-statuses/>
             </div>
         </div>
     </div>
@@ -38,8 +185,8 @@ new class extends Component {
     <div class="col-lg-12">
         <div class="card">
             <div class="card-body">
-                <h4 class="card-title">Zoomable Line Chart</h4>
-                <div id="chart-line-zoomable" class="ms-n3"></div>
+                <h4 class="card-title">Monthly Attendance Timeline</h4>
+                <div id="monthly-employee-attendance" class="ms-n3"></div>
             </div>
         </div>
     </div>
@@ -47,61 +194,350 @@ new class extends Component {
     <div class="col-lg-8">
         <div class="card">
             <div class="card-body">
-                <div id="chart-bar-stacked"></div>
+                <h5 class="card-title mb-4">Weekly Departmental Attendance</h5>
+                <div id="department-weekly-data"></div>
             </div>
         </div>
     </div>
-    <!-- ----------------------------------------- -->
-    <!-- Annual Profit -->
-    <!-- ----------------------------------------- -->
+
+    <!-- Start Simple Pie Chart -->
     <div class="col-lg-4">
         <div class="card">
             <div class="card-body">
-                <h5 class="card-title mb-4">Daily Attendance</h5>
-                <div class="bg-primary bg-opacity-10 rounded-1 overflow-hidden mb-4">
-                    <div id="chart-pie-simple"></div>
-                </div>
-                <div class="d-flex align-items-center justify-content-between pb-6 border-bottom">
-                    <div>
-                        <span class="text-muted fw-medium">Present</span>
-                        <span class="fs-11 fw-medium d-block mt-1">368 records</span>
-                    </div>
-                    <div class="text-end">
-                        <h6 class="fw-bolder mb-1 lh-base">78%</h6>
-                        <span class="fs-11 fw-medium text-success">+2.5%</span>
-                    </div>
-                </div>
-
-                <div class="d-flex align-items-center justify-content-between py-6 border-bottom">
-                    <div>
-                        <span class="text-muted fw-medium">Absent</span>
-                        <span class="fs-11 fw-medium d-block mt-1">72 records</span>
-                    </div>
-                    <div class="text-end">
-                        <h6 class="fw-bolder mb-1 lh-base">15%</h6>
-                        <span class="fs-11 fw-medium text-danger">-1.1%</span>
-                    </div>
-                </div>
-
-                <div class="d-flex align-items-center justify-content-between pt-6">
-                    <div>
-                        <span class="text-muted fw-medium">On Leave</span>
-                        <span class="fs-11 fw-medium d-block mt-1">30 records</span>
-                    </div>
-                    <div class="text-end">
-                        <h6 class="fw-bolder mb-1 lh-base">7%</h6>
-                        <span class="fs-11 fw-medium text-warning">+0.3%</span>
-                    </div>
-                </div>
+                <h4 class="card-title">Daily Attendance Status</h4>
+                <div id="daily-attendance"></div>
             </div>
         </div>
     </div>
+
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title mb-4">Weekly Departmental Overtime Hours</h5>
+                <div id="department-weekly-overtime"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent Activity -->
+    <div class="col-lg-4 d-flex">
+        <div class="card shadow-sm recent-activity-card flex-fill">
+            <!-- Top 5 Overtime Employees -->
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Top 5 Overtime Employees (This Week)</h5>
+                </div>
+                <div class="card-body">
+                    @if ($topOvertimeEmployees->isEmpty())
+                        <div class="text-center py-4">
+                            <span class="iconify text-muted mb-2" data-icon="mdi:emoticon-sad-outline"
+                                  style="font-size: 32px;"></span>
+                            <div class="fw-semibold text-muted">No Overtime Data Available</div>
+                        </div>
+                    @else
+                        <ul class="list-unstyled">
+                            @foreach ($topOvertimeEmployees as $emp)
+                                <li class="activity-item d-flex align-items-center mb-3">
+                                    <!-- Icon -->
+                                    <div class="icon-wrap">
+                                        <span class="iconify text-warning" data-icon="mdi:clock-plus-outline"
+                                              style="font-size: 24px;"></span>
+                                    </div>
+
+                                    <!-- Employee Name -->
+                                    <div class="flex-grow-1 ms-3">
+                                        <div class="fw-semibold">{{ $emp->employee->name }}</div>
+                                    </div>
+
+                                    <!-- Overtime Hours -->
+                                    <div class="text-end">
+                                        <div class="fw-semibold text-primary">
+                                            {{ number_format($emp->total_overtime, 1) }} hrs
+                                        </div>
+                                        <div class="small text-muted">Overtime</div>
+                                    </div>
+                                </li>
+                            @endforeach
+                        </ul>
+                    @endif
+                </div>
+            </div>
+
+        </div>
+    </div>
+
 
 </div>
 
 @push('scripts')
-    <script src="assets/js/apps/contact.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+
+
+            // Daily Pie Chart
+            const dailydata = @json($statusData);
+
+            const seriesData = Object.values(dailydata);
+            const labels = Object.keys(dailydata).map(key => {
+                if (key === 'onLeave') return 'On Leave';
+                if (key === 'partial') return 'Partial';
+                return key.charAt(0).toUpperCase() + key.slice(1);
+            });
+
+            const options_simple = {
+                series: seriesData,
+                chart: {
+                    fontFamily: "inherit",
+                    type: "pie",
+                    height: 300, // responsive, no fixed width
+                },
+                colors: ["#0d6efd", "#dc3545", "#ffc107", "#6c757d"],
+                labels: labels,
+                legend: {
+                    position: "bottom",
+                    horizontalAlign: "center",
+                    fontSize: "12px",
+                    labels: {
+                        colors: "#a1aab2"
+                    },
+                },
+                responsive: [
+                    {
+                        breakpoint: 480,
+                        options: {
+                            chart: {height: 250},
+                            legend: {position: "bottom"}
+                        },
+                    },
+                ],
+            };
+
+
+            const chart_pie_simple = new ApexCharts(
+                document.querySelector("#daily-attendance"),
+                options_simple
+            );
+            chart_pie_simple.render();
+
+            const data = @json($monthlyData);
+
+            const presentSeries = data.map(d => ({
+                x: new Date(d.date).toISOString(),
+                y: d.present
+            }));
+
+            const absentSeries = data.map(d => ({
+                x: new Date(d.date).toISOString(),
+                y: d.absent
+            }));
+
+            const leaveSeries = data.map(d => ({
+                x: new Date(d.date).toISOString(),
+                y: d.leave
+            }));
+
+            const options_zoomable = {
+                series: [
+                    {
+                        name: "Present",
+                        data: presentSeries
+                    },
+                    {
+                        name: "Absent",
+                        data: absentSeries
+                    },
+                    {
+                        name: "Leave",
+                        data: leaveSeries
+                    }
+                ],
+                chart: {
+                    fontFamily: "inherit",
+                    type: "area",
+                    stacked: false,
+                    height: 350,
+                    zoom: {
+                        type: "x",
+                        enabled: true,
+                        autoScaleYaxis: true,
+                    },
+                    toolbar: {
+                        autoSelected: "zoom",
+                        show: true,
+                    },
+                },
+                dataLabels: {
+                    enabled: false,
+                },
+                grid: {
+                    borderColor: "transparent",
+                    padding: {
+                        top: 0,
+                        right: 0,
+                        bottom: 0,
+                        left: 0,
+                    },
+                },
+                colors: ["#0d6efd", "#dc3545", "#ffc107"], // Present, Absent, Leave
+                markers: {
+                    size: 3,
+                },
+                fill: {
+                    type: "gradient",
+                    gradient: {
+                        shadeIntensity: 1,
+                        inverseColors: false,
+                        opacityFrom: 0.4,
+                        opacityTo: 0,
+                        stops: [0, 90, 100],
+                    },
+                },
+                yaxis: {
+                    labels: {
+                        style: {
+                            colors: "#a1aab2",
+                        },
+                    },
+                    title: {
+                        text: "Employee Count"
+                    }
+                },
+                xaxis: {
+                    type: "datetime",
+                    labels: {
+                        style: {
+                            colors: "#a1aab2",
+                        },
+                    },
+                },
+                tooltip: {
+                    shared: false,
+                    y: {
+                        formatter: function (val) {
+                            return val + " employees";
+                        },
+                    },
+                    theme: "dark",
+                },
+            };
+
+            const chart = new ApexCharts(
+                document.querySelector("#monthly-employee-attendance"),
+                options_zoomable
+            );
+            chart.render();
+
+
+            //department weekly data
+            const chartData = @json($chartData);
+
+            const options_stacked = {
+                series: chartData.series,
+                chart: {
+                    fontFamily: "inherit",
+                    type: "bar",
+                    height: 400,
+                    stacked: true,
+                    toolbar: {show: false},
+                },
+                plotOptions: {
+                    bar: {
+                        horizontal: true,
+                    },
+                },
+                grid: {
+                    borderColor: "transparent",
+                },
+                colors: ["#0d6efd", "#dc3545", "#ffc107"], // Present, Absent, Leave
+                xaxis: {
+                    categories: chartData.categories,
+                    labels: {
+                        style: {colors: "#a1aab2"},
+                    },
+                },
+                yaxis: {
+                    labels: {
+                        style: {colors: "#a1aab2"},
+                    },
+                },
+                tooltip: {
+                    y: {
+                        formatter: function (val) {
+                            return val + " employees";
+                        },
+                    },
+                    theme: "dark",
+                },
+                fill: {
+                    opacity: 1,
+                },
+                legend: {
+                    position: "top",
+                    horizontalAlign: "left",
+                    offsetX: 40,
+                    labels: {
+                        colors: ["#a1aab2"],
+                    },
+                },
+            };
+
+            const dchart = new ApexCharts(document.querySelector("#department-weekly-data"), options_stacked);
+            dchart.render();
+
+            const overtimeChartData = @json($overtimeChartData);
+
+            const overtimeOptions = {
+                series: overtimeChartData.series,
+                chart: {
+                    fontFamily: "inherit",
+                    type: "bar",
+                    height: 400,
+                    toolbar: {show: false},
+                },
+                plotOptions: {
+                    bar: {
+                        horizontal: true,
+                    },
+                },
+                grid: {
+                    borderColor: "transparent",
+                },
+                colors: ["#f59e0b"], // orange for overtime
+                xaxis: {
+                    categories: overtimeChartData.categories,
+                    labels: {style: {colors: "#a1aab2"}},
+                    title: {text: "Overtime Hours"}
+                },
+                yaxis: {
+                    labels: {style: {colors: "#a1aab2"}},
+                },
+                tooltip: {
+                    y: {
+                        formatter: function (val) {
+                            return val + " hrs";
+                        },
+                    },
+                    theme: "dark",
+                },
+                fill: {opacity: 1},
+                legend: {
+                    position: "top",
+                    horizontalAlign: "left",
+                    offsetX: 40,
+                    labels: {colors: ["#a1aab2"]},
+                },
+            };
+
+            const overtimeChart = new ApexCharts(
+                document.querySelector("#department-weekly-overtime"),
+                overtimeOptions
+            );
+            overtimeChart.render();
+
+        });
+    </script>
 @endpush
+
 
 
 

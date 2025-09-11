@@ -22,14 +22,15 @@ new class extends Component {
 
         $today = Carbon::today();
 
-        // Attendance statuses for today
-        $attendances = Attendance::whereHas('employee', fn($q) => $q->where('organization_id', $orgId))
-            ->whereDate('date', $today)
-            ->get();
+        // Fetch all today's attendances for this org
+        $attendances = Attendance::whereHas('employee', fn($q) =>
+        $q->where('organization_id', $orgId)
+        )->whereDate('date', $today)->get();
 
-        $this->present = $attendances->where('status', 'Present')->count();
-        $this->absent = $attendances->where('status', 'Absent')->count();
-        $this->onLeave = $attendances->where('status', 'Leave')->count();
+        // Use Laravel Collections to filter statuses
+        $this->present = $attendances->whereIn('status', ['clock_in', 'clock_out'])->count();
+        $this->absent  = $attendances->whereIn('status', ['absent', 'unchecked_in'])->count();
+        $this->onLeave = $attendances->where('status', 'leave')->count();
     }
 
 }; ?>
