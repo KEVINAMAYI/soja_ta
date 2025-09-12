@@ -58,6 +58,12 @@ class RolesAndPermissionsSeeder extends Seeder
             ['name' => 'manage-work-locations', 'category' => 'Locations'],
             ['name' => 'assign-locations', 'category' => 'Locations'],
 
+            //Dashboard
+            ['name' => 'view-dashboard', 'category' => 'Dashboard'],
+
+            //Settings
+            ['name' => 'view-settings', 'category' => 'Settings'],
+
         ];
 
         foreach ($permissions as $permission) {

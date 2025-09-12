@@ -8,6 +8,7 @@ use App\Models\Attendance;
 use Carbon\Carbon;
 use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Database\Eloquent\Builder as EloquentBuilder;
+use Livewire\Attributes\On;
 use Maatwebsite\Excel\Facades\Excel;
 use Rappasoft\LaravelLivewireTables\DataTableComponent;
 use Rappasoft\LaravelLivewireTables\Views\Column;
@@ -21,20 +22,6 @@ class AttendanceMonthlyTable extends DataTableComponent
         $this->setPrimaryKey('employee_id');
     }
 
-    public function filters(): array
-    {
-        return [
-            DateFilter::make('Month')
-                ->config([
-                    'type' => 'month', // This is for frontend display
-                ])
-                ->filter(function ($query, string $value) {
-
-                    $ym = Carbon::parse($value)->format('Y-m');
-                    $query->whereRaw("DATE_FORMAT(date, '%Y-%m') = ?", [$ym]);
-                }),
-        ];
-    }
 
     public function builder(): EloquentBuilder
     {
@@ -94,21 +81,14 @@ class AttendanceMonthlyTable extends DataTableComponent
     }
 
 
-    public function bulkActions(): array
-    {
-        return [
-            'exportExcel' => 'Export Excel',
-            'exportPdf' => 'Export PDF'
-        ];
-    }
-
-
+    #[On('export-monthly-excel')]
     public function exportExcel()
     {
         return Excel::download(new AttendanceMonthlyExcelExport($this->getSelected()), 'attendance.xlsx');
     }
 
 
+    #[On('export-monthly-pdf')]
     public function exportPdf()
     {
         $ids = $this->getSelected();

@@ -6,6 +6,7 @@ use App\Exports\AttendanceDailyExcelExport;
 use App\Exports\EmployeesExcelExport;
 use App\Models\Employee;
 use Carbon\Carbon;
+use Livewire\Attributes\On;
 use Maatwebsite\Excel\Facades\Excel;
 use Rappasoft\LaravelLivewireTables\DataTableComponent;
 use Rappasoft\LaravelLivewireTables\Views\Column;
@@ -187,21 +188,14 @@ class AttendanceDailyTable extends DataTableComponent
     }
 
 
-    public function bulkActions(): array
-    {
-        return [
-            'exportExcel' => 'Export Excel',
-            'exportPdf' => 'Export PDF'
-        ];
-    }
-
-
+    #[On('export-daily-excel')]
     public function exportExcel()
     {
         return Excel::download(new AttendanceDailyExcelExport($this->getSelected()), 'attendance.xlsx');
     }
 
 
+    #[On('export-daily-pdf')]
     public function exportPdf()
     {
         $ids = $this->getSelected();

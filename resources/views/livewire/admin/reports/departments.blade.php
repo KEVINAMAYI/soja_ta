@@ -269,9 +269,8 @@ new class extends Component {
                         style="background-color: #EDE9FE; color: #DC2626; border-radius: 8px;"
                         data-bs-toggle="modal"
                         data-bs-target="#reportModal">
-                    <iconify-icon icon="mdi:cog-outline" width="20"
-                                  height="20"></iconify-icon>
-                    <span>Schedule Report</span>
+                    <iconify-icon icon="mdi:email-newsletter" width="20" height="20"></iconify-icon>
+                    <span>Email Report</span>
                 </button>
             </div>
 
@@ -403,6 +402,27 @@ new class extends Component {
             $('select.select2[multiple]').each(function () {
                 $(this).val(@this.get('emails')).trigger('change');
             });
+        });
+
+        document.addEventListener('DOMContentLoaded', function () {
+            function renameBulkActions() {
+                const btn = document.getElementById('table-bulkActionsDropdown');
+
+                console.log(btn);
+
+                if (btn) {
+                    btn.textContent = 'Export'; // replace inner text
+                    btn.innerHTML = '<iconify-icon icon="mdi:file-export-outline" width="18" height="18" style="margin-right:6px; vertical-align:middle;"></iconify-icon> Export';
+                }
+            }
+
+            // run once on load
+            renameBulkActions();
+
+            // run again after every Livewire render (so it sticks after refresh)
+            if (window.Livewire) {
+                Livewire.hook('message.processed', () => renameBulkActions());
+            }
         });
 
     </script>

@@ -7,6 +7,7 @@ use App\Models\WorkLocation;
 use App\Models\EmployeeAssignment;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Password;
 use Jantinnerezo\LivewireAlert\Facades\LivewireAlert;
 use Livewire\Attributes\On;
 use Livewire\Volt\Component;
@@ -192,6 +193,9 @@ new class extends Component {
 
             $this->resetForm();
             $this->dispatch('refreshDatatable');
+
+            // Send reset link
+            Password::sendResetLink(['email' => $user->email]);
 
         } catch (\Exception $e) {
             DB::rollBack();

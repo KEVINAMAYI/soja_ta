@@ -152,6 +152,9 @@ new class extends Component {
             $this->day_of_week = $first->day_of_week ?? $this->day_of_week;
             $this->timezone = $first->timezone ?? $this->timezone;
         }
+
+        $this->dispatch('modify-bulk-action');
+
     }
 
 }; ?>
@@ -286,16 +289,49 @@ new class extends Component {
                                 <div class="card w-100 border position-relative overflow-hidden mb-0">
                                     <div class="card-body p-4">
 
+
                                         <!-- Top-right button inside card -->
                                         <div class="d-flex justify-content-end mb-5">
+
+                                            <div style="margin-right:10px;" class="dropdown">
+                                                <button class="btn btn-primary dropdown-toggle" type="button"
+                                                        id="exportDailyDropdown" data-bs-toggle="dropdown"
+                                                        aria-expanded="false">
+                                                    <iconify-icon icon="mdi:file-export-outline" width="18" height="18"
+                                                                  style="margin-right:6px; vertical-align:middle;"></iconify-icon>
+                                                    Export
+                                                </button>
+                                                <ul class="dropdown-menu" aria-labelledby="exportDailyDropdown">
+                                                    <li>
+                                                        <a href="#"
+                                                           wire:click.prevent="dispatch('export-daily-excel')"
+                                                           class="dropdown-item">
+                                                            <iconify-icon icon="mdi:file-excel" width="16" height="16"
+                                                                          style="margin-right:6px; vertical-align:middle;"></iconify-icon>
+                                                            Excel
+                                                        </a>
+                                                    </li>
+                                                    <li>
+                                                        <a href="#"
+                                                           wire:click.prevent="dispatch('export-daily-pdf')"
+                                                           class="dropdown-item">
+                                                            <iconify-icon icon="mdi:file-pdf-box" width="16" height="16"
+                                                                          style="margin-right:6px; vertical-align:middle;"></iconify-icon>
+                                                            PDF
+                                                        </a>
+                                                    </li>
+                                                </ul>
+                                            </div>
+
+
                                             <button class="btn d-flex align-items-center gap-2 px-3 py-2"
                                                     style="background-color: #EDE9FE; color: #DC2626; border-radius: 8px;"
                                                     data-bs-toggle="modal"
                                                     data-bs-target="#reportModal"
                                                     onclick="Livewire.dispatch('setReportType', { type: 'daily_attendance' })">
-                                                <iconify-icon icon="mdi:cog-outline" width="20"
+                                                <iconify-icon icon="mdi:email-newsletter" width="20"
                                                               height="20"></iconify-icon>
-                                                <span>Schedule Report</span>
+                                                <span>Email Reports</span>
                                             </button>
                                         </div>
 
@@ -322,6 +358,36 @@ new class extends Component {
 
                                         <!-- Top-right button inside card -->
                                         <div class="d-flex justify-content-end mb-5">
+                                            <div style="margin-right:10px;" class="dropdown">
+                                                <button class="btn btn-primary dropdown-toggle" type="button"
+                                                        id="exportDropdown" data-bs-toggle="dropdown"
+                                                        aria-expanded="false">
+                                                    <iconify-icon icon="mdi:file-export-outline" width="18" height="18"
+                                                                  style="margin-right:6px; vertical-align:middle;"></iconify-icon>
+                                                    Export
+                                                </button>
+                                                <ul class="dropdown-menu" aria-labelledby="exportDropdown">
+                                                    <li>
+                                                        <a href="#"
+                                                           wire:click.prevent="dispatch('export-monthly-excel')"
+                                                           class="dropdown-item">
+                                                            <iconify-icon icon="mdi:file-excel" width="16" height="16"
+                                                                          style="margin-right:6px; vertical-align:middle;"></iconify-icon>
+                                                            Excel
+                                                        </a>
+                                                    </li>
+                                                    <li>
+                                                        <a href="#"
+                                                           wire:click.prevent="dispatch('export-monthly-pdf')"
+                                                           class="dropdown-item">
+                                                            <iconify-icon icon="mdi:file-pdf-box" width="16" height="16"
+                                                                          style="margin-right:6px; vertical-align:middle;"></iconify-icon>
+                                                            PDF
+                                                        </a>
+                                                    </li>
+                                                </ul>
+                                            </div>
+
                                             <button class="btn d-flex align-items-center gap-2 px-3 py-2"
                                                     style="background-color: #EDE9FE; color: #DC2626; border-radius: 8px;"
                                                     data-bs-toggle="modal"
@@ -476,6 +542,8 @@ new class extends Component {
         window.addEventListener('hide-report-settings-modal', () => {
             bootstrap.Modal.getInstance(document.getElementById('reportModal'))?.hide();
         });
+
+
     </script>
 
 @endpush

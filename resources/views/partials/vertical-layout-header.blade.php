@@ -83,16 +83,20 @@
                                     My Profile
                                     <iconify-icon icon="mdi:user" style="font-size: 1.2em;"></iconify-icon>
                                 </a>
-                                <a href="{{ route('system-settings.index') }}"
-                                   class="p-2 dropdown-item h6 rounded-1 d-flex justify-content-between align-items-center">
-                                    System Settings
-                                    <iconify-icon icon="mdi:cog-outline" style="font-size: 1.2em;"></iconify-icon>
-                                </a>
-                                <a href="{{ route('account-settings.index') }}"
-                                   class="p-2 dropdown-item h6 rounded-1 d-flex justify-content-between align-items-center">
-                                    Account Settings
-                                    <iconify-icon icon="mdi:tune" style="font-size: 1.2em;"></iconify-icon>
-                                </a>
+
+                                @can('view-settings')
+                                    <a href="{{ route('system-settings.index') }}"
+                                       class="p-2 dropdown-item h6 rounded-1 d-flex justify-content-between align-items-center">
+                                        System Settings
+                                        <iconify-icon icon="mdi:cog-outline" style="font-size: 1.2em;"></iconify-icon>
+                                    </a>
+                                    <a href="{{ route('account-settings.index') }}"
+                                       class="p-2 dropdown-item h6 rounded-1 d-flex justify-content-between align-items-center">
+                                        Account Settings
+                                        <iconify-icon icon="mdi:tune" style="font-size: 1.2em;"></iconify-icon>
+                                    </a>
+                                @endcan
+
                                 <form method="POST" action="{{ route('logout') }}">
                                     @csrf
                                     <button type="submit"

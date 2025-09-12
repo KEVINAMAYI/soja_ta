@@ -21,82 +21,85 @@
                     <!-- ---------------------------------- -->
                     <!-- Dashboard -->
                     <!-- ---------------------------------- -->
-                    <li class="sidebar-item">
-                        <a class="sidebar-link {{ request()->routeIs('dashboard') ? 'active' : '' }}"
-                           href="{{ route('dashboard') }}"
-                           id="get-url"
-                           aria-expanded="false">
-                            <iconify-icon icon="solar:widget-add-line-duotone"></iconify-icon>
-                            <span class="hide-menu">Dashboard</span>
-                        </a>
-                    </li>
+                    @can('view-dashboard')
+                        <li class="sidebar-item">
+                            <a class="sidebar-link {{ request()->routeIs('dashboard') ? 'active' : '' }}"
+                               href="{{ route('dashboard') }}"
+                               id="get-url"
+                               aria-expanded="false">
+                                <iconify-icon icon="solar:widget-add-line-duotone"></iconify-icon>
+                                <span class="hide-menu">Dashboard</span>
+                            </a>
+                        </li>
+                    @endcan
 
+                    @can('view-employees')
+                        <li class="sidebar-item">
+                            <a class="sidebar-link {{ request()->routeIs('employees.index') ? 'active' : '' }}"
+                               href="{{ route('employees.index') }}"
+                               id="get-url"
+                               aria-expanded="false">
+                                <iconify-icon icon="mdi:office-building-outline" class="fs-5"></iconify-icon>
+                                <span class="hide-menu">Employee</span>
+                            </a>
+                        </li>
+                    @endcan
 
-                    <li class="sidebar-item">
-                        <a class="sidebar-link {{ request()->routeIs('employees.index') ? 'active' : '' }}"
-                           href="{{ route('employees.index') }}"
-                           id="get-url"
-                           aria-expanded="false">
-                            <iconify-icon icon="mdi:office-building-outline" class="fs-5"></iconify-icon>
-                            <span class="hide-menu">Employee</span>
-                        </a>
-                    </li>
+                    @can('view-all-attendance')
+                        <li class="sidebar-item">
+                            <a class="sidebar-link {{ request()->routeIs('attendance.*') ? 'active' : '' }}"
+                               href="#timesheetsMenu"
+                               data-bs-toggle="collapse"
+                               aria-expanded="{{ request()->routeIs('attendance.*') ? 'true' : 'false' }}">
+                                <iconify-icon icon="mdi:clock-time-eight-outline"></iconify-icon>
+                                <span class="hide-menu">Timesheets</span>
+                            </a>
+                            <ul class="collapse first-level {{ request()->routeIs('attendance.*') ? 'show' : '' }}"
+                                id="timesheetsMenu">
 
-                    <li class="sidebar-item">
-                        <a class="sidebar-link {{ request()->routeIs('attendance.*') ? 'active' : '' }}"
-                           href="#timesheetsMenu"
-                           data-bs-toggle="collapse"
-                           aria-expanded="{{ request()->routeIs('attendance.*') ? 'true' : 'false' }}">
-                            <iconify-icon icon="mdi:clock-time-eight-outline"></iconify-icon>
-                            <span class="hide-menu">Timesheets</span>
-                        </a>
+                                <!-- All Timesheets -->
+                                <li class="sidebar-item">
+                                    <a class="sidebar-link {{ request()->routeIs('attendance.index') ? 'active' : '' }}"
+                                       href="{{ route('attendance.index') }}">
+                                        <span class="icon-small"></span>
+                                        All Timesheets
+                                    </a>
+                                </li>
 
-                        <ul class="collapse first-level {{ request()->routeIs('attendance.*') ? 'show' : '' }}"
-                            id="timesheetsMenu">
+                                <!-- Clocked In -->
+                                <li class="sidebar-item">
+                                    <a class="sidebar-link {{ request()->routeIs('attendance.status.index') && request()->status === 'clocked_in' ? 'active' : '' }}"
+                                       href="{{ route('attendance.status.index', ['status' => 'clocked_in']) }}">
+                                        <span class="icon-small"></span> Clocked In
+                                    </a>
+                                </li>
 
-                            <!-- All Timesheets -->
-                            <li class="sidebar-item">
-                                <a class="sidebar-link {{ request()->routeIs('attendance.index') ? 'active' : '' }}"
-                                   href="{{ route('attendance.index') }}">
-                                    <span class="icon-small"></span>
-                                    All Timesheets
-                                </a>
-                            </li>
+                                <!-- Clocked Out -->
+                                <li class="sidebar-item">
+                                    <a class="sidebar-link {{ request()->routeIs('attendance.status.index') && request()->status === 'clocked_out' ? 'active' : '' }}"
+                                       href="{{ route('attendance.status.index', ['status' => 'clocked_out']) }}">
+                                        <span class="icon-small"></span> Clocked Out
+                                    </a>
+                                </li>
 
-                            <!-- Clocked In -->
-                            <li class="sidebar-item">
-                                <a class="sidebar-link {{ request()->routeIs('attendance.status.index') && request()->status === 'clocked_in' ? 'active' : '' }}"
-                                   href="{{ route('attendance.status.index', ['status' => 'clocked_in']) }}">
-                                    <span class="icon-small"></span> Clocked In
-                                </a>
-                            </li>
+                                <!-- Absent -->
+                                <li class="sidebar-item">
+                                    <a class="sidebar-link {{ request()->routeIs('attendance.status.index') && request()->status === 'absent' ? 'active' : '' }}"
+                                       href="{{ route('attendance.status.index', ['status' => 'absent']) }}">
+                                        <span class="icon-small"></span> Absent
+                                    </a>
+                                </li>
 
-                            <!-- Clocked Out -->
-                            <li class="sidebar-item">
-                                <a class="sidebar-link {{ request()->routeIs('attendance.status.index') && request()->status === 'clocked_out' ? 'active' : '' }}"
-                                   href="{{ route('attendance.status.index', ['status' => 'clocked_out']) }}">
-                                    <span class="icon-small"></span> Clocked Out
-                                </a>
-                            </li>
-
-                            <!-- Absent -->
-                            <li class="sidebar-item">
-                                <a class="sidebar-link {{ request()->routeIs('attendance.status.index') && request()->status === 'absent' ? 'active' : '' }}"
-                                   href="{{ route('attendance.status.index', ['status' => 'absent']) }}">
-                                    <span class="icon-small"></span> Absent
-                                </a>
-                            </li>
-
-                            <!-- Unchecked In -->
-                            <li class="sidebar-item">
-                                <a class="sidebar-link {{ request()->routeIs('attendance.status.index') && request()->status === 'off_shift' ? 'active' : '' }}"
-                                   href="{{ route('attendance.status.index', ['status' => 'off_shift']) }}">
-                                    <span class="icon-small"></span> Off Shift
-                                </a>
-                            </li>
-
-                        </ul>
-                    </li>
+                                <!-- Unchecked In -->
+                                <li class="sidebar-item">
+                                    <a class="sidebar-link {{ request()->routeIs('attendance.status.index') && request()->status === 'off_shift' ? 'active' : '' }}"
+                                       href="{{ route('attendance.status.index', ['status' => 'off_shift']) }}">
+                                        <span class="icon-small"></span> Off Shift
+                                    </a>
+                                </li>
+                            </ul>
+                        </li>
+                    @endcan
 
                     @can('view-organizations')
                         <li class="sidebar-item">
@@ -110,46 +113,47 @@
                         </li>
                     @endcan
 
+                    @can('view-all-reports')
+                        <li class="sidebar-item">
+                            <a class="sidebar-link {{ request()->routeIs('reports.*') ? 'active' : '' }}"
+                               href="#reportsMenu"
+                               data-bs-toggle="collapse"
+                               aria-expanded="{{ request()->routeIs('reports.*') ? 'true' : 'false' }}"
+                               aria-controls="reportsMenu">
+                                <iconify-icon icon="mdi:file-chart-outline"></iconify-icon>
+                                <span class="hide-menu">Reports</span>
+                            </a>
 
-                    <li class="sidebar-item">
-                        <a class="sidebar-link {{ request()->routeIs('reports.*') ? 'active' : '' }}"
-                           href="#reportsMenu"
-                           data-bs-toggle="collapse"
-                           aria-expanded="{{ request()->routeIs('reports.*') ? 'true' : 'false' }}"
-                           aria-controls="reportsMenu">
-                            <iconify-icon icon="mdi:file-chart-outline"></iconify-icon>
-                            <span class="hide-menu">Reports</span>
-                        </a>
+                            <ul class="collapse first-level {{ request()->routeIs('reports.*') ? 'show' : '' }}"
+                                id="reportsMenu">
 
-                        <ul class="collapse first-level {{ request()->routeIs('reports.*') ? 'show' : '' }}"
-                            id="reportsMenu">
+                                <li class="sidebar-item">
+                                    <a class="sidebar-link {{ request()->routeIs('reports.employees') ? 'active' : '' }}"
+                                       href="{{ route('reports.employees') }}">
+                                        <span class="icon-small"></span>
+                                        Employee Reports
+                                    </a>
+                                </li>
 
-                            <li class="sidebar-item">
-                                <a class="sidebar-link {{ request()->routeIs('reports.employees') ? 'active' : '' }}"
-                                   href="{{ route('reports.employees') }}">
-                                    <span class="icon-small"></span>
-                                    Employee Reports
-                                </a>
-                            </li>
+                                <li class="sidebar-item">
+                                    <a class="sidebar-link {{ request()->routeIs('reports.departments') ? 'active' : '' }}"
+                                       href="{{ route('reports.departments') }}">
+                                        <span class="icon-small"></span>
+                                        Department Reports
+                                    </a>
+                                </li>
 
-                            <li class="sidebar-item">
-                                <a class="sidebar-link {{ request()->routeIs('reports.departments') ? 'active' : '' }}"
-                                   href="{{ route('reports.departments') }}">
-                                    <span class="icon-small"></span>
-                                    Department Reports
-                                </a>
-                            </li>
+                                <li class="sidebar-item">
+                                    <a class="sidebar-link {{ request()->routeIs('reports.organization') ? 'active' : '' }}"
+                                       href="{{ route('reports.organization') }}">
+                                        <span class="icon-small"></span>
+                                        Organization Reports
+                                    </a>
+                                </li>
 
-                            <li class="sidebar-item">
-                                <a class="sidebar-link {{ request()->routeIs('reports.organization') ? 'active' : '' }}"
-                                   href="{{ route('reports.organization') }}">
-                                    <span class="icon-small"></span>
-                                    Organization Reports
-                                </a>
-                            </li>
-
-                        </ul>
-                    </li>
+                            </ul>
+                        </li>
+                    @endcan
 
                 </ul>
             </nav>
