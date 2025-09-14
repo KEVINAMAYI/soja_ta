@@ -19,10 +19,12 @@ class RoleTable extends DataTableComponent
 
     public function builder(): Builder
     {
-        $query = Role::query()->select('roles.*')
-            ->where('name', '!=', 'super-admin'); // Exclude super-admin
+        $query = Role::query()
+            ->select('roles.*')
+            ->where('name', '!=', 'super-admin') // Exclude global super-admin
+            ->where('organization_id', auth()->user()->employee->organization_id); // Org filter
 
-        if ($this->search !== null && $this->search !== '') {
+        if (!empty($this->search)) {
             $query->where(function ($q) {
                 $q->where('name', 'like', '%' . $this->search . '%');
             });
@@ -30,7 +32,6 @@ class RoleTable extends DataTableComponent
 
         return $query;
     }
-
 
 
     public function columns(): array

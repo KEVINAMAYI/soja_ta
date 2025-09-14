@@ -39,7 +39,9 @@ new class extends Component {
 
         $this->departments = auth()->user()->employee->organization->departments;
         $this->shifts = auth()->user()->employee->organization->shifts;
-        $this->roles = Role::where('name', '!=', 'super-admin')->pluck('name', 'id');
+        $this->roles = Role::where('name', '!=', 'super-admin')
+            ->where('organization_id', auth()->user()->employee->organization_id)
+            ->pluck('name', 'id');
 
     }
 
@@ -131,7 +133,7 @@ new class extends Component {
         try {
             DB::beginTransaction();
 
-            $org_id = auth()->user()->employee->organization->id;
+            $org = auth()->user()->employee->organization;
 
             // 1. Create the user
             $user = User::create([
@@ -146,30 +148,27 @@ new class extends Component {
                 'email' => $this->email,
                 'phone' => $this->phone,
                 'shift_id' => $this->shift_id,
-                'organization_id' => $org_id,
+                'organization_id' => $org->id,
                 'id_number' => $this->id_number,
                 'active' => $this->active,
                 'user_id' => $user->id,
                 'department_id' => $this->department_id,
             ]);
 
-            // 3. Assign the 'employee' role
+            // 3. Assign the role (comes from UI select or default "employee")
             $user->assignRole($this->roleName);
 
-
-            // 4. Create a token
+            // 4. Create API token
             $user->createToken('Api Token')->plainTextToken;
 
-            // 5. 🔥 Assign default work location
-            $defaultLocation = WorkLocation::where('organization_id', $org_id)
+            // 5. Assign default work location
+            $defaultLocation = WorkLocation::where('organization_id', $org->id)
                 ->where('is_default', true)
                 ->first();
 
             if ($defaultLocation) {
                 EmployeeAssignment::updateOrCreate(
-                    [
-                        'employee_id' => $employee->id,
-                    ],
+                    ['employee_id' => $employee->id],
                     [
                         'work_location_id' => $defaultLocation->id,
                         'start_date' => null,
@@ -179,9 +178,9 @@ new class extends Component {
                 );
             }
 
-
             DB::commit();
 
+            // UI feedback
             $this->dispatch('hide-employee-modal');
 
             LivewireAlert::title('Awesome!')
@@ -194,8 +193,13 @@ new class extends Component {
             $this->resetForm();
             $this->dispatch('refreshDatatable');
 
-            // Send reset link
-            Password::sendResetLink(['email' => $user->email]);
+            // 6. Send password reset with organization context
+            Password::broker()->sendResetLink(
+                ['email' => $user->email],
+                function ($user, $token) use ($org) {
+                    $user->sendPasswordResetNotificationWithOrganization($token, $org);
+                }
+            );
 
         } catch (\Exception $e) {
             DB::rollBack();

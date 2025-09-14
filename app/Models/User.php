@@ -70,16 +70,15 @@ class User extends Authenticatable
     }
 
 
-    public function sendPasswordResetNotification($token): void
+    public function sendPasswordResetNotificationWithOrganization($token, Organization $organization): void
     {
         $url = url(route('password.reset', [
             'token' => $token,
             'email' => $this->email,
         ], false));
 
-        $companyName = auth()->user()->employee->organization->name ?? config('app.name');
-
-        $this->notify(new CustomResetPassword($url, $companyName));
+        $this->notify(new CustomResetPassword($url, $organization->name));
     }
+
 
 }

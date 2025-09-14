@@ -69,7 +69,7 @@ class DatabaseSeeder extends Seeder
             'active' => true,
         ]);
 
-        Employee::factory()->count(9)->create();
+//        Employee::factory()->count(9)->create();
 
         //create token to be used for APis
         $user->createToken('Api Token')->plainTextToken;

@@ -152,7 +152,6 @@ new class extends Component {
             $this->day_of_week = $first->day_of_week ?? $this->day_of_week;
             $this->timezone = $first->timezone ?? $this->timezone;
         }
-
         $this->dispatch('modify-bulk-action');
 
     }
@@ -217,6 +216,47 @@ new class extends Component {
             box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03) !important;
             transition: all 0.2s ease-in-out !important;
         }
+
+
+        .email-badge {
+            background: linear-gradient(45deg, #6dbf8c, #3a9e64, #2a8a47, #118c1b); /* Green gradient */
+            color: white;
+            padding: 2px 5px;
+            border-radius: 25px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            display: inline-block;
+            text-transform: lowercase;
+            text-overflow: ellipsis;
+            max-width: 200px; /* Ensures long emails don't overflow */
+            overflow: hidden;
+            white-space: nowrap;
+            transition: transform 0.3s ease, background 0.3s ease; /* Smooth transition for hover effect */
+        }
+
+        .email-badge:hover {
+            background: linear-gradient(45deg, #6dbf8c, #3a9e64, #2a8a47, #118c1b); /* Green gradient */
+            transform: translateY(-3px); /* Slight lift effect */
+            cursor: pointer;
+        }
+
+        .email-badge:focus {
+            outline: none;
+        }
+
+        .modal-body {
+            position: relative;
+        }
+
+        .d-flex.flex-wrap.gap-2 {
+            padding-top: 10px;
+        }
+
+        /* Optional: If you'd like to adjust the spacing between badges */
+        .d-flex.flex-wrap.gap-2 .email-badge {
+            margin-bottom: 8px;
+        }
+
     </style>
 
 @endpush
@@ -393,9 +433,9 @@ new class extends Component {
                                                     data-bs-toggle="modal"
                                                     data-bs-target="#reportModal"
                                                     onclick="Livewire.dispatch('setReportType', { type: 'monthly_attendance' })">
-                                                <iconify-icon icon="mdi:cog-outline" width="20"
+                                                <iconify-icon icon="mdi:email-newsletter" width="20"
                                                               height="20"></iconify-icon>
-                                                <span>Schedule Report</span>
+                                                <span>Email Reports</span>
                                             </button>
                                         </div>
 
@@ -488,6 +528,17 @@ new class extends Component {
                                     @endforeach
                                 </select>
                             </div>
+
+                            <!-- Active Emails (Gradient Spans) -->
+                            <div class="mt-4">
+                                <h6 class="fw-semibold">Active Users</h6>
+                                <div class="d-flex flex-wrap gap-2">
+                                    @foreach($emails as $email)
+                                        <span class="email-badge">{{ $email }}</span>
+                                    @endforeach
+                                </div>
+                            </div>
+
                         </div>
                     </div>
 
@@ -498,10 +549,10 @@ new class extends Component {
                         </button>
                     </div>
                 </form>
-
             </div>
         </div>
     </div>
+
 
 </div>
 
@@ -542,6 +593,9 @@ new class extends Component {
         window.addEventListener('hide-report-settings-modal', () => {
             bootstrap.Modal.getInstance(document.getElementById('reportModal'))?.hide();
         });
+
+
+
 
 
     </script>

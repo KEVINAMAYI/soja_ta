@@ -1,11 +1,19 @@
 <?php
 
+use App\Models\Department;
+use App\Models\Employee;
 use App\Models\Organization;
+use App\Models\Role;
+use App\Models\Shift;
+use App\Models\User;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Password;
 use Livewire\Attributes\On;
 use Livewire\Volt\Component;
 use Jantinnerezo\LivewireAlert\Facades\LivewireAlert;
 use Livewire\WithFileUploads;
+use Spatie\Permission\Models\Permission;
 
 new class extends Component {
 
@@ -54,7 +62,8 @@ new class extends Component {
 
             $logoPath = $this->logo_path ? $this->logo_path->store('logos', 'public') : null;
 
-            Organization::create([
+            // Create organization
+            $organization = Organization::create([
                 'name' => $this->name,
                 'address' => $this->address,
                 'location' => $this->location,
@@ -65,8 +74,51 @@ new class extends Component {
                 'logo_path' => $logoPath,
             ]);
 
+            // Default shift
+            $shift = Shift::factory()->create([
+                'organization_id' => $organization->id,
+                'name' => 'Morning Shift',
+                'start_time' => '08:00:00',
+                'end_time' => '17:00:00',
+                'break_minutes' => 30,
+                'overtime_rate' => 1.5,
+                'status' => 'active',
+                'notes' => 'Standard 8-hour day shift with 30-minute break.',
+            ]);
+
+            // Create default user (org admin)
+            $user = User::factory()->create([
+                'name' => $this->name,
+                'email' => $this->email,
+                'password' => bcrypt('password'),
+            ]);
+
+            $department = Department::factory()->create([
+                'name' => 'ICT',
+                'description' => 'ICT',
+                'manager_id' => $user->id,
+                'organization_id' => $organization->id
+            ]);
+
+            // Setup default roles + assign admin to user
+            $this->setupDefaultRoles($organization, $user);
+
+            // Create default employee record
+            Employee::factory()->create([
+                'organization_id' => $organization->id,
+                'department_id' => $department->id,
+                'shift_id' => $shift->id,
+                'user_id' => $user->id,
+                'name' => $this->email,
+                'id_number' => 'ADMIN999',
+                'email' => $this->email,
+                'phone' => $this->phone_number,
+                'active' => true,
+            ]);
+
             DB::commit();
 
+            // Hide modal + alert
             $this->dispatch('hide-organization-modal');
 
             LivewireAlert::title('Awesome!')
@@ -78,6 +130,14 @@ new class extends Component {
 
             $this->resetForm();
             $this->dispatch('refreshDatatable');
+
+            // Send password reset link to the new org admin
+            Password::broker()->sendResetLink(
+                ['email' => $user->email],
+                function ($user, $token) use ($organization) {
+                    $user->sendPasswordResetNotificationWithOrganization($token, $organization);
+                }
+            );
 
         } catch (\Exception $e) {
             DB::rollBack();
@@ -91,6 +151,58 @@ new class extends Component {
                 ->show();
         }
     }
+
+
+    /**
+     * Setup default roles + permissions for an organization
+     */
+    private function setupDefaultRoles(Organization $organization, User $user): void
+    {
+        // Define default roles for each org
+        $defaultRoles = [
+            'admin',
+            'supervisor',
+            'employee',
+            'department-manager',
+        ];
+
+        foreach ($defaultRoles as $roleName) {
+            Role::firstOrCreate([
+                'name' => $roleName,
+                'organization_id' => $organization->id,
+            ]);
+        }
+
+        // Get all permissions
+        $allPermissions = Permission::all()->pluck('name')->toArray();
+
+        // Role → permissions map
+        $rolePermissions = [
+            'admin' => array_filter($allPermissions, fn($p) => !str_contains($p, 'organizations')),
+            'supervisor' => array_filter($allPermissions, fn($p) => !str_contains($p, 'organizations')),
+            'employee' => [],
+            'department-manager' => ['approve-manual-timesheets'],
+        ];
+
+        foreach ($rolePermissions as $role => $perms) {
+            $roleInstance = Role::firstOrCreate([
+                'name' => $role,
+                'organization_id' => $organization->id,
+            ]);
+
+            $roleInstance->syncPermissions($perms);
+        }
+
+        // Assign org admin role to the default user
+        $adminRole = Role::where('name', 'admin')
+            ->where('organization_id', $organization->id)
+            ->first();
+
+        if ($adminRole) {
+            $user->assignRole($adminRole);
+        }
+    }
+
 
     #[On('edit-organization')]
     public function editOrganization($id)
@@ -331,34 +443,20 @@ new class extends Component {
                             </div>
 
                             <div class="col-md-4 mb-3">
-                                <label for="address" class="form-label">Address</label>
-                                <input type="text" wire:model="address" id="address" class="form-control"
-                                       placeholder="Address"/>
-                                @error('address') <small class="text-danger">{{ $message }}</small> @enderror
-                            </div>
-
-                            <div class="col-md-4 mb-3">
-                                <label for="location" class="form-label">Location</label>
-                                <input type="text" wire:model="location" id="location" class="form-control"
-                                       placeholder="Location"/>
-                                @error('location') <small class="text-danger">{{ $message }}</small> @enderror
-                            </div>
-
-                            <div class="col-md-4 mb-3">
-                                <label for="email" class="form-label">Email</label>
+                                <label for="email" class="form-label">Admin Email</label>
                                 <input type="email" wire:model="email" id="email" class="form-control"
                                        placeholder="Email"/>
                                 @error('email') <small class="text-danger">{{ $message }}</small> @enderror
                             </div>
 
                             <div class="col-md-4 mb-3">
-                                <label for="phone_number" class="form-label">Phone Number</label>
+                                <label for="phone_number" class="form-label">Admin Phone Number</label>
                                 <input type="tel" wire:model="phone_number" id="phone_number" class="form-control"
                                        placeholder="Phone Number"/>
                                 @error('phone_number') <small class="text-danger">{{ $message }}</small> @enderror
                             </div>
 
-                            <div class="col-md-4 mb-3">
+                            <div class="col-md-12 mb-3">
                                 <label for="website" class="form-label">Website</label>
                                 <input type="url" wire:model="website" id="website" class="form-control"
                                        placeholder="Website URL"/>
