@@ -628,7 +628,7 @@ new class extends Component {
                                     <span class="iconify mb-2 text-info" data-icon="mdi:map-marker-check-outline"
                                           style="font-size: 32px;"></span>
                                     <div class="fs-5 fw-bold text-info">{{ $checkinCount }}</div>
-                                    <span class="text-muted">Check-in Points</span>
+                                    <span class="text-muted">Clock-in Points</span>
                                 </div>
                             </div>
 
@@ -653,7 +653,7 @@ new class extends Component {
                 <a class="nav-link {{ $activeTab === 'checkin-points' ? 'active' : '' }}"
                    href="#"
                    wire:click.prevent="$set('activeTab', 'checkin-points')">
-                    Check-in Points
+                    Clock-in Points
                 </a>
             </li>
         </ul>
@@ -673,12 +673,12 @@ new class extends Component {
             <!-- Device Check-in Points Tab -->
             <div class="tab-pane fade {{ $activeTab === 'checkin-points' ? 'show active' : '' }}" id="checkin-points">
                 <div class="d-flex justify-content-between align-items-center mb-3">
-                    <h6 class="mb-0">Check-in Points for This Location</h6>
+                    <h6 class="mb-0">Clock-in Points for This Location</h6>
                     <button class="btn btn-primary d-flex align-items-center gap-2 px-3 py-2 rounded"
                             data-bs-toggle="modal"
                             data-bs-target="#addCheckinPointModal">
                         <iconify-icon icon="mdi:plus-circle" style="font-size: 20px; color: white;"></iconify-icon>
-                        Add Check-in Point
+                        Add Clock-in Point
                     </button>
                 </div>
 

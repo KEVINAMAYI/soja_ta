@@ -120,4 +120,52 @@ class OrganizationController extends Controller
         return $phone;
     }
 
+
+    /**
+     * Get working hours and overtime for an employee.
+     */
+    public function workingHours(Request $request)
+    {
+        try {
+            $request->validate([
+                'employee_id' => 'required|exists:employees,id',
+            ]);
+
+            $employee = Employee::findOrFail($request->employee_id);
+
+            return response()->json([
+                'code' => 1000,
+                'message' => 'Employee working hours retrieved successfully',
+                'data' => [
+                    'employee_id' => $employee->id,
+                    'employee_name' => $employee->name,
+                    'working_hours' => [
+                        'weekly_worked_hours' => $employee->weeklyWorkedHours($employee->id),
+                        'monthly_worked_hours' => $employee->monthlyWorkedHours($employee->id),
+                        'weekly_overtime_hours' => $employee->weeklyOvertimeHours($employee->id),
+                    ],
+                ],
+            ], 200);
+
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'code' => 422,
+                'message' => 'Invalid input',
+                'errors' => $e->errors(),
+            ], 422);
+
+        } catch (\Exception $e) {
+            Log::error('Failed to retrieve working hours', [
+                'error' => $e->getMessage(),
+                'employee_id' => $request->employee_id ?? null,
+            ]);
+
+            return response()->json([
+                'code' => 500,
+                'message' => 'Failed to retrieve employee working hours',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
 }
