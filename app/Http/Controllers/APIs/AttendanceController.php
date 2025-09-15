@@ -5,6 +5,7 @@ namespace App\Http\Controllers\APIs;
 use App\Http\Controllers\Controller;
 use App\Models\Employee;
 use App\Models\Attendance;
+use App\Models\EmployeeAssignment;
 use App\Models\Overtime;
 use App\Http\Resources\AttendanceResource;
 use Carbon\Carbon;
@@ -84,6 +85,35 @@ class AttendanceController extends Controller
             }
 
             $today = today()->toDateString();
+
+
+            // ✅ 1. Fetch geofence location (e.g. from WorkLocation / DeviceLocation / EmployeeAssignment)
+            $assignment = EmployeeAssignment::where('employee_id', $employee->id)
+                ->where('is_current', true)
+                ->first();
+
+            if (!$assignment || !$assignment->location) {
+                return response()->json([
+                    'code' => 1005,
+                    'message' => 'No assigned work location found.'
+                ], 403);
+            }
+
+            $workLocation = $assignment->location;
+
+            // ✅ 2. Compute distance using Haversine
+            $distance = $workLocation->distanceTo((float)$latitude, (float)$longitude);
+
+
+            // ✅ 3. Check if within geofence (say radius = 100 meters)
+            $radius = $workLocation->radius ?? 100; // default 100m if not set
+            if ($distance > $radius) {
+                return response()->json([
+                    'code' => 1006,
+                    'message' => 'You are outside the allowed geofence. Move closer to your work location.'
+                ], 403);
+            }
+
 
             // Try to fetch today's attendance (seeded as absent/unchecked_in or none)
             $existing = Attendance::where('employee_id', $employee->id)
