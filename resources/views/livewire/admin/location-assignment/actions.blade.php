@@ -13,10 +13,14 @@
                 </a>
             </li>
             <li>
-                <a class="dropdown-item d-flex align-items-center gap-2 text-danger" href="javascript:void(0)"
-                   wire:click="$dispatch('delete-work-location',{ id : {{ $work_location->id }} })">
-                    <iconify-icon icon="mdi:delete-outline" class="text-danger w-4 h-4"></iconify-icon>
-                    <span>Delete</span>
+                <a class="dropdown-item d-flex align-items-center gap-2 {{ $work_location->active ? 'text-warning' : 'text-success' }}"
+                   href="javascript:void(0)"
+                   wire:click="$dispatch('toggle-work-location', { id : {{ $work_location->id }}})">
+                    <iconify-icon
+                        icon="{{ $work_location->active ? 'mdi:power' : 'mdi:power-plug' }}"
+                        class="{{ $work_location->active ? 'text-warning' : 'text-success' }} w-4 h-4">
+                    </iconify-icon>
+                    <span>{{ $work_location->active ? 'Deactivate' : 'Activate' }}</span>
                 </a>
             </li>
         </ul>

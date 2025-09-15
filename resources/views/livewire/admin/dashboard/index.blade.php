@@ -529,7 +529,7 @@ new class extends Component {
 
         function initMap() {
             const map = new google.maps.Map(document.getElementById("map"), {
-                zoom: 12,
+                zoom: 15,
                 center: {lat: -1.2921, lng: 36.8219}, // Nairobi fallback
             });
 
@@ -557,7 +557,7 @@ new class extends Component {
                     map,
                     icon: {
                         url: "/images/map_marker.png",  // custom icon path
-                        scaledSize: new google.maps.Size(40, 55), // resize (width, height)
+                        scaledSize: new google.maps.Size(55, 60), // resize (width, height)
                         origin: new google.maps.Point(0, 0),
                         anchor: new google.maps.Point(20, 40) // center bottom anchor
                     }
@@ -625,10 +625,17 @@ new class extends Component {
             // --- Fit map bounds ---
             if (!bounds.isEmpty()) {
                 map.fitBounds(bounds);
+
+                // 👇 cap zoom (don’t let it zoom out too far)
+                google.maps.event.addListenerOnce(map, "bounds_changed", function() {
+                    if (map.getZoom() > 16) map.setZoom(16);  // street level
+                    if (map.getZoom() < 14) map.setZoom(14);  // prevent zooming out too much
+                });
             } else {
                 map.setCenter({lat: -1.2921, lng: 36.8219});
-                map.setZoom(12);
+                map.setZoom(15);
             }
+
         }
     </script>
 

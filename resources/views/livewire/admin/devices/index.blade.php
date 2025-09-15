@@ -67,7 +67,13 @@ new class extends Component {
             DB::commit();
 
             $this->dispatch('hide-device-modal');
-            LivewireAlert::success('Success', 'Device created successfully.')->toast()->position('top-end');
+
+            LivewireAlert::title('Awesome!')
+                ->text('Device Added successfully.')
+                ->success()
+                ->toast()
+                ->position('top-end')
+                ->show();
 
             $this->resetForm();
             $this->dispatch('refreshDatatable');
@@ -80,7 +86,52 @@ new class extends Component {
                 'user_id' => auth()->id(),
             ]);
 
-            LivewireAlert::error('Error', 'Something went wrong.')->toast()->position('top-end');
+            LivewireAlert::title('Error!')
+                ->text('Something went wrong while updating the employee.')
+                ->error()
+                ->toast()
+                ->position('top-end')
+                ->show();
+        }
+    }
+
+
+    #[On('remove-device')]
+    public function removeDevice($id)
+    {
+
+        DB::beginTransaction();
+
+        try {
+            $device = Device::findOrFail($id);
+
+            $device->delete();
+
+            DB::commit();
+
+            $this->dispatch('refreshDatatable');
+            LivewireAlert::title('Deleted!')
+                ->text('Device removed successfully.')
+                ->success()
+                ->toast()
+                ->position('top-end')
+                ->show();
+
+        } catch (\Throwable $e) {
+            DB::rollBack();
+
+            Log::error('Device removal failed', [
+                'error' => $e->getMessage(),
+                'user_id' => auth()->id(),
+                'device_id' => $deviceId,
+            ]);
+
+            LivewireAlert::title('Error!')
+                ->text('Something went wrong while removing device.')
+                ->error()
+                ->toast()
+                ->position('top-end')
+                ->show();
         }
     }
 

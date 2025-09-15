@@ -15,6 +15,8 @@ class WorkLocation extends Model
         return $this->belongsTo(Organization::class);
     }
 
+    // Employees assigned
+
     public function assignments()
     {
         return $this->hasMany(EmployeeAssignment::class, 'work_location_id');
@@ -48,6 +50,12 @@ class WorkLocation extends Model
     public function deviceLocations()
     {
         return $this->hasMany(DeviceLocation::class);
+    }
+
+    // Devices through check-in points
+    public function devices()
+    {
+        return $this->hasManyThrough(Device::class, DeviceLocation::class);
     }
 
 }

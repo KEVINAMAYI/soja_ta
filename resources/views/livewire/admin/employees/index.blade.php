@@ -81,8 +81,8 @@ new class extends Component {
         $this->validate([
             'employeeId' => 'required|exists:employees,id',
             'selectedLocation.id' => 'required|exists:work_locations,id',
-            'start_date' => 'required|date',
-            'end_date' => 'required|date|after_or_equal:start_date',
+            'start_date' => 'nullable|date',
+            'end_date' => 'nullable|date|after_or_equal:start_date',
         ]);
 
 
@@ -90,8 +90,8 @@ new class extends Component {
         EmployeeAssignment::create([
             'employee_id' => $this->employeeId,
             'work_location_id' => $this->selectedLocation->id,
-            'start_date' => $this->start_date,
-            'end_date' => $this->end_date,
+            'start_date' => $this->start_date ?? null,
+            'end_date' => $this->end_date ?? null,
             'is_current' => true
         ]);
 
@@ -234,6 +234,7 @@ new class extends Component {
         $this->dispatch('show-employee-modal');
 
     }
+
 
     public function updateEmployee()
     {

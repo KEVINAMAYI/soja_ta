@@ -91,6 +91,46 @@ new class extends Component {
         }
     }
 
+
+    #[On('toggle-work-location')]
+    public function toggleWorkLocation($id)
+    {
+        DB::beginTransaction();
+
+        try {
+            $workLocation = WorkLocation::findOrFail($id);
+
+            $newStatus = !$workLocation->active;
+
+            $workLocation->update([
+                'active' => $newStatus,
+            ]);
+
+            DB::commit();
+
+            $this->dispatch('refreshDatatable');
+
+            LivewireAlert::title($newStatus ? 'Activated!' : 'Deactivated!')
+                ->text("Work Location has been " . ($newStatus ? 'activated' : 'deactivated') . " successfully.")
+                ->success()
+                ->toast()
+                ->position('top-end')
+                ->show();
+
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            report($e);
+
+            LivewireAlert::title('Error!')
+                ->text('Failed to update work location status.')
+                ->error()
+                ->toast()
+                ->position('top-end')
+                ->show();
+        }
+    }
+
+
     #[On('edit-worklocation')]
     public function editWorkLocation($id)
     {

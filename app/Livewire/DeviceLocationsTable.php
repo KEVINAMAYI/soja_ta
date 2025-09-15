@@ -17,7 +17,10 @@ class DeviceLocationsTable extends DataTableComponent
     public function configure(): void
     {
         $this->setPrimaryKey('id');
+        $this->setDefaultSort('created_at', 'desc');
+
     }
+
 
 
     public function mount($workLocationId)
@@ -28,8 +31,6 @@ class DeviceLocationsTable extends DataTableComponent
     public function columns(): array
     {
         return [
-            Column::make("Id", "id")
-                ->sortable(),
             Column::make("Name", "name")
                 ->sortable(),
             Column::make("Description", "description")
@@ -40,6 +41,10 @@ class DeviceLocationsTable extends DataTableComponent
             Column::make("Created at", "created_at")
                 ->sortable()
                 ->format(fn($value, $row, Column $column) => $value->format('F d, Y h:i A')),
+
+            Column::make("Action")
+                ->label(fn($row) => view('livewire.admin.location-assignment.device-location-actions', ['device_location' => $row]))
+
         ];
     }
 
