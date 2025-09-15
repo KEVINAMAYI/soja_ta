@@ -28,6 +28,7 @@ new class extends Component {
     public $checkinCount = 0;
     public $googleMapsApiKey;
     public $employeeLocations = [];
+    public $activeTab = 'assigned-users';
 
     public function mount(WorkLocation $workLocation)
     {
@@ -46,9 +47,7 @@ new class extends Component {
             ->toArray();
 
         // Dynamic counts
-        $this->deviceCount = $workLocation->devices()->count();
-        $this->employeeCount = $workLocation->assignments()->count();
-        $this->checkinCount = $workLocation->deviceLocations()->count();
+        $this->refreshCounts();
 
         $today = Carbon::today();
         $employeeIds = Employee::where('organization_id', $this->workLocation->organization_id)
@@ -73,7 +72,7 @@ new class extends Component {
                 return [
                     'name' => $last->employee->name,
                     'department' => $last->employee->department->name ?? 'N/A',
-                    'clock_in' => \Carbon\Carbon::parse($last->check_in_time)->format('h:i A'),
+                    'clock_in' => Carbon::parse($last->check_in_time)->format('h:i A'),
                     'lat' => $last->latitude,
                     'lng' => $last->longitude,
 
@@ -91,7 +90,7 @@ new class extends Component {
     public function refreshCounts()
     {
         $this->deviceCount = $this->workLocation->devices()->count();
-        $this->employeeCount = $this->workLocation->employeeAssignments()->count();
+        $this->employeeCount = $this->workLocation->assignments()->count();
         $this->checkinCount = $this->workLocation->deviceLocations()->count();
     }
 
@@ -127,6 +126,8 @@ new class extends Component {
             DB::commit();
 
             $this->dispatch('hide-device-location-modal');
+            $this->activeTab = 'checkin-points';
+            $this->refreshCounts();
 
             LivewireAlert::title('Awesome!')
                 ->text('Checkpoint added successfully.')
@@ -197,6 +198,9 @@ new class extends Component {
             DB::commit();
 
             $this->dispatch('hide-device-modal');
+            $this->activeTab = 'checkin-points';
+            $this->refreshCounts();
+
             LivewireAlert::title('Awesome!')
                 ->text('Device Added successfully.')
                 ->success()
@@ -240,6 +244,9 @@ new class extends Component {
             DB::commit();
 
             $this->dispatch('refreshDatatable');
+            $this->activeTab = 'checkin-points';
+            $this->refreshCounts();
+
             LivewireAlert::title('Deleted!')
                 ->text('Device removed successfully.')
                 ->success()
@@ -264,7 +271,6 @@ new class extends Component {
                 ->show();
         }
     }
-
 
 
     public function resetForm()
@@ -442,6 +448,33 @@ new class extends Component {
 
 <div>
 
+
+    <livewire:admin.system-settings.bread-crumb
+        title="Work Location"
+        :items="[
+        [
+            'label' => 'Dashboard',
+            'url' => route('dashboard'),
+            'icon' => '<iconify-icon icon=\'solar:home-2-line-duotone\' class=\'fs-5\'></iconify-icon>',
+        ],
+        [
+            'label' => 'Account Settings',
+            'url' => route('account-settings.index'),
+            'icon' => '<iconify-icon icon=\'mdi:cog-outline\' class=\'fs-5\'></iconify-icon>',
+        ],
+        [
+            'label' => 'Location and Assignments',
+            'url' => route('account-settings.index'),
+            'icon' => '<iconify-icon icon=\'mdi:map-marker-radius-outline\' class=\'fs-5\'></iconify-icon>',
+        ],
+        [
+            'label' => Str::title($workLocation->name),
+            'icon' => '<iconify-icon icon=\'mdi:office-building-marker-outline\' class=\'fs-5\'></iconify-icon>',
+        ],
+    ]"
+    />
+
+
     @php
         use Illuminate\Support\Str;
 
@@ -452,7 +485,7 @@ new class extends Component {
         };
     @endphp
 
-    <div class="container py-4">
+    <div class="container">
 
         <!-- Profile Header Card -->
         <div class="d-flex align-items-center p-4 bg-white shadow-sm rounded-3 mb-4">
@@ -495,7 +528,7 @@ new class extends Component {
         <div class="row mb-4">
             <div class="col-lg-8">
                 <div class="card h-100">
-                    <div class="card-header d-flex justify-content-between align-items-center">
+                    <div class="card-header  justify-content-start">
                         <span style="color:black; font-weight:bold;">Location & Geofence</span>
                     </div>
                     <div class="card-body p-0">
@@ -506,10 +539,10 @@ new class extends Component {
 
 
             <!-- Branch Statistics -->
-            <!-- Branch Statistics (Stacked with icons) -->
             <div class="col-md-4">
                 <div class="card shadow-sm rounded-3 h-100">
-                    <div style="color:black; font-weight:bold;" class="card-header fw-bold">Branch Statistics</div>
+                    <div style="color:black; font-weight:bold;" class="card-header fw-bold">Work Location Statistics
+                    </div>
                     <div class="card-body">
                         <div class="row g-3">
 
@@ -551,21 +584,29 @@ new class extends Component {
 
         </div>
 
-
         <!-- Tabs -->
         <ul class="nav nav-tabs mb-4" role="tablist">
             <li class="nav-item">
-                <a class="nav-link active" data-bs-toggle="tab" href="#assigned-users">Assigned Users</a>
+                <a class="nav-link {{ $activeTab === 'assigned-users' ? 'active' : '' }}"
+                   href="#"
+                   wire:click.prevent="$set('activeTab', 'assigned-users')">
+                    Assigned Users
+                </a>
             </li>
             <li class="nav-item">
-                <a class="nav-link" data-bs-toggle="tab" href="#checkin-points">Check-in Points</a>
+                <a class="nav-link {{ $activeTab === 'checkin-points' ? 'active' : '' }}"
+                   href="#"
+                   wire:click.prevent="$set('activeTab', 'checkin-points')">
+                    Check-in Points
+                </a>
             </li>
         </ul>
+
 
         <div class="tab-content">
 
             <!-- Assigned Users Tab -->
-            <div class="tab-pane fade show active" id="assigned-users">
+            <div class="tab-pane fade {{ $activeTab === 'assigned-users' ? 'show active' : '' }}" id="assigned-users">
                 <h6 class="mb-3">Users Assigned to This Location</h6>
 
                 {{-- Livewire Table --}}
@@ -574,7 +615,7 @@ new class extends Component {
             </div>
 
             <!-- Device Check-in Points Tab -->
-            <div class="tab-pane fade" id="checkin-points">
+            <div class="tab-pane fade {{ $activeTab === 'checkin-points' ? 'show active' : '' }}" id="checkin-points">
                 <div class="d-flex justify-content-between align-items-center mb-3">
                     <h6 class="mb-0">Check-in Points for This Location</h6>
                     <button class="btn btn-primary d-flex align-items-center gap-2 px-3 py-2 rounded"
@@ -886,7 +927,7 @@ new class extends Component {
                 map.fitBounds(bounds);
 
                 // 👇 cap zoom (don’t let it zoom out too far)
-                google.maps.event.addListenerOnce(map, "bounds_changed", function() {
+                google.maps.event.addListenerOnce(map, "bounds_changed", function () {
                     if (map.getZoom() > 16) map.setZoom(16);  // street level
                     if (map.getZoom() < 14) map.setZoom(14);  // prevent zooming out too much
                 });
