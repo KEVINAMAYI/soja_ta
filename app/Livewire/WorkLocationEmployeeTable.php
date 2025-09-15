@@ -90,7 +90,7 @@ class WorkLocationEmployeeTable extends DataTableComponent
                 ->collapseOnMobile(),
 
             Column::make("Action")
-                ->label(fn($row) => view('livewire.admin.employees.actions', ['employee' => $row]))
+                ->label(fn($row) => view('livewire.admin.employees.actions', ['employee' => $row, 'workLocationId' => $this->workLocationId]))
 
         ];
     }

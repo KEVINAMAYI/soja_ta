@@ -4,6 +4,7 @@ use App\Models\Attendance;
 use App\Models\Device;
 use App\Models\DeviceLocation;
 use App\Models\Employee;
+use App\Models\EmployeeAssignment;
 use App\Models\WorkLocation;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -273,11 +274,66 @@ new class extends Component {
     }
 
 
+    #[On('unassign-work-location')]
+    public function unassignWorkLocation($id)
+    {
+        DB::beginTransaction();
+
+        try {
+            // Find the current active assignment for this employee
+            $assignment = EmployeeAssignment::where('employee_id', $id)
+                ->where('is_current', true)
+                ->where('work_location_id', $this->workLocationId)
+                ->first();
+
+            if ($assignment) {
+                // Mark assignment as ended instead of deleting (safer for history)
+                $assignment->update([
+                    'is_current' => false,
+                    'end_date' => now(),
+                ]);
+
+                DB::commit();
+
+                $this->dispatch('refreshDatatable');
+
+                LivewireAlert::title('Success!')
+                    ->text('Employee has been unassigned from the work location.')
+                    ->success()
+                    ->toast()
+                    ->position('top-end')
+                    ->show();
+            } else {
+                DB::rollBack();
+
+                LivewireAlert::title('Notice')
+                    ->text('This employee is not currently assigned to any location.')
+                    ->info()
+                    ->toast()
+                    ->position('top-end')
+                    ->show();
+            }
+
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            report($e);
+
+            LivewireAlert::title('Error!')
+                ->text('Failed to unassign employee from location.')
+                ->error()
+                ->toast()
+                ->position('top-end')
+                ->show();
+        }
+    }
+
+
     public function resetForm()
     {
         $this->reset(['device_name', 'platform', 'device_location_id', 'checkpoint_id', 'pin', 'editId']);
         $this->platform = 'android';
     }
+
 
 }; ?>
 

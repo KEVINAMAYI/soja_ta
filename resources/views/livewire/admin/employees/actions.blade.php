@@ -4,43 +4,53 @@
             <i class="ti ti-dots fs-6 text-dark"></i>
         </a>
         <ul class="dropdown-menu" aria-labelledby="employee-actions">
-            <li>
-                <a class="dropdown-item d-flex align-items-center gap-2" href="{{ route('employees.view') }}">
-                    <iconify-icon icon="mdi:eye-outline" class="text-primary w-4 h-4"></iconify-icon>
-                    <span>View</span>
-                </a>
-            </li>
-            <li>
-                <a class="dropdown-item d-flex align-items-center gap-2" href="javascript:void(0)"
-                   wire:click="$dispatch('edit-employee',{ id : {{ $employee->id }} })">
-                    <iconify-icon icon="mdi:pencil-outline" class="text-warning w-4 h-4"></iconify-icon>
-                    <span>Edit</span>
-                </a>
-            </li>
-            <li>
-                <a class="dropdown-item d-flex align-items-center gap-2"
-                   href="javascript:void(0)"
-                   wire:click="$dispatch('assign-work-location',{ id : {{ $employee->id }} })">
-                    <iconify-icon icon="mdi:map-marker-radius-outline" class="text-success w-4 h-4"></iconify-icon>
-                    <span>Assign Location</span>
-                </a>
-            </li>
-            <li>
-                @if($employee->active)
-                    <a class="dropdown-item d-flex align-items-center gap-2 text-warning" href="javascript:void(0)"
-                       wire:click="$dispatch('deactivate-employee', { id: {{ $employee->id }} })">
-                        <iconify-icon icon="mdi:account-off-outline" class="text-warning w-4 h-4"></iconify-icon>
-                        <span>Deactivate</span>
+            @if(empty($workLocationId))
+                <li>
+                    <a class="dropdown-item d-flex align-items-center gap-2" href="{{ route('employees.view') }}">
+                        <iconify-icon icon="mdi:eye-outline" class="text-primary w-4 h-4"></iconify-icon>
+                        <span>View</span>
                     </a>
-                @else
-                    <a class="dropdown-item d-flex align-items-center gap-2 text-success" href="javascript:void(0)"
-                       wire:click="$dispatch('activate-employee', { id: {{ $employee->id }} })">
-                        <iconify-icon icon="mdi:account-check-outline" class="text-success w-4 h-4"></iconify-icon>
-                        <span>Activate</span>
+                </li>
+                <li>
+                    <a class="dropdown-item d-flex align-items-center gap-2" href="javascript:void(0)"
+                       wire:click="$dispatch('edit-employee',{ id : {{ $employee->id }} })">
+                        <iconify-icon icon="mdi:pencil-outline" class="text-warning w-4 h-4"></iconify-icon>
+                        <span>Edit</span>
                     </a>
-                @endif
-            </li>
-
+                </li>
+                <li>
+                    <a class="dropdown-item d-flex align-items-center gap-2"
+                       href="javascript:void(0)"
+                       wire:click="$dispatch('assign-work-location',{ id : {{ $employee->id }} })">
+                        <iconify-icon icon="mdi:map-marker-radius-outline" class="text-success w-4 h-4"></iconify-icon>
+                        <span>Assign Location</span>
+                    </a>
+                </li>
+                <li>
+                    @if($employee->active)
+                        <a class="dropdown-item d-flex align-items-center gap-2 text-warning" href="javascript:void(0)"
+                           wire:click="$dispatch('deactivate-employee', { id: {{ $employee->id }} })">
+                            <iconify-icon icon="mdi:account-off-outline" class="text-warning w-4 h-4"></iconify-icon>
+                            <span>Deactivate</span>
+                        </a>
+                    @else
+                        <a class="dropdown-item d-flex align-items-center gap-2 text-success" href="javascript:void(0)"
+                           wire:click="$dispatch('activate-employee', { id: {{ $employee->id }} })">
+                            <iconify-icon icon="mdi:account-check-outline" class="text-success w-4 h-4"></iconify-icon>
+                            <span>Activate</span>
+                        </a>
+                    @endif
+                </li>
+            @else
+                <li>
+                    <a class="dropdown-item d-flex align-items-center gap-2"
+                       href="javascript:void(0)"
+                       wire:click="$dispatch('unassign-work-location',{ id : {{ $employee->id }} })">
+                        <iconify-icon icon="mdi:map-marker-radius-outline" class="text-success w-4 h-4"></iconify-icon>
+                        <span>Unassign Location</span>
+                    </a>
+                </li>
+            @endif
         </ul>
     </div>
 </div>
