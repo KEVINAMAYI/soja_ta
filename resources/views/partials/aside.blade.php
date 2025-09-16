@@ -40,7 +40,7 @@
                                id="get-url"
                                aria-expanded="false">
                                 <iconify-icon icon="mdi:office-building-outline" class="fs-5"></iconify-icon>
-                                <span class="hide-menu">Employee</span>
+                                <span class="hide-menu">Employees</span>
                             </a>
                         </li>
                     @endcan

@@ -646,7 +646,7 @@ new class extends Component {
                 <a class="nav-link {{ $activeTab === 'assigned-users' ? 'active' : '' }}"
                    href="#"
                    wire:click.prevent="$set('activeTab', 'assigned-users')">
-                    Assigned Users
+                    Assigned Employees
                 </a>
             </li>
             <li class="nav-item">
