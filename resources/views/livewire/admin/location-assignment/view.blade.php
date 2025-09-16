@@ -237,14 +237,14 @@ new class extends Component {
 
 
     #[On('remove-device')]
-    public function removeDevice($deviceId)
+    public function removeDevice($id)
     {
         var_dump('testst');
 
         DB::beginTransaction();
 
         try {
-            $device = Device::findOrFail($deviceId);
+            $device = Device::findOrFail($id);
 
             $device->delete();
 
@@ -267,7 +267,7 @@ new class extends Component {
             Log::error('Device removal failed', [
                 'error' => $e->getMessage(),
                 'user_id' => auth()->id(),
-                'device_id' => $deviceId,
+                'device_id' => $id,
             ]);
 
             LivewireAlert::title('Error!')

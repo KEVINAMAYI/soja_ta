@@ -123,7 +123,7 @@ new class extends Component {
             Log::error('Device removal failed', [
                 'error' => $e->getMessage(),
                 'user_id' => auth()->id(),
-                'device_id' => $deviceId,
+                'device_id' => $id,
             ]);
 
             LivewireAlert::title('Error!')
