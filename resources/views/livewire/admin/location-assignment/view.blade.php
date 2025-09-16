@@ -239,7 +239,6 @@ new class extends Component {
     #[On('remove-device')]
     public function removeDevice($id)
     {
-        var_dump('testst');
 
         DB::beginTransaction();
 
