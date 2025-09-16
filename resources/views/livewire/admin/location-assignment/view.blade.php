@@ -33,6 +33,7 @@ new class extends Component {
 
     public function mount(WorkLocation $workLocation)
     {
+
         $this->googleMapsApiKey = env('GOOGLE_MAPS_API_KEY');
 
         // Current user's employee record (may be null)
@@ -40,6 +41,11 @@ new class extends Component {
 
         // Organization id fallback
         $orgId = $employeeRecord?->organization_id ?? $workLocation->organization_id;
+
+        $this->locations = DeviceLocation::where('organization_id', $orgId)
+            ->where('work_location_id', $workLocation->id)
+            ->pluck('name', 'id')
+            ->toArray();
 
         $this->workLocation = $workLocation;
         $this->workLocationId = $workLocation->id;
@@ -524,7 +530,7 @@ new class extends Component {
             'icon' => '<iconify-icon icon=\'mdi:map-marker-radius-outline\' class=\'fs-5\'></iconify-icon>',
         ],
         [
-            'label' => Str::title($workLocation->name),
+            'label' => Str::title(str_replace('_', ' ', $workLocation->name)),
             'icon' => '<iconify-icon icon=\'mdi:office-building-marker-outline\' class=\'fs-5\'></iconify-icon>',
         ],
     ]"
