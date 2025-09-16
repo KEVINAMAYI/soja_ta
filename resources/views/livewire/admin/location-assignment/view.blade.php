@@ -555,7 +555,7 @@ new class extends Component {
 
             <!-- Info -->
             <div class="flex-grow-1">
-                <h4 class="fw-bold mb-1">{{ Str::title($workLocation->name) }}</h4>
+                <h4 class="fw-bold mb-1">{{ Str::title(str_replace('_', ' ', $workLocation->name)) }}</h4>
 
                 <div class="text-muted small mb-2">
             <span class="me-3">
