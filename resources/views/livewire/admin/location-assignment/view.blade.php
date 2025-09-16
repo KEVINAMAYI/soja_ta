@@ -53,6 +53,8 @@ new class extends Component {
             ->pluck('name', 'id')
             ->toArray();
 
+        $this->device_location_id = $workLocation->id;
+
         // Dynamic counts
         $this->refreshCounts();
 
@@ -812,7 +814,7 @@ new class extends Component {
                         <!-- Location -->
                         <div class="col-md-12">
                             <label class="form-label">Location</label>
-                            <select class="form-select" wire:model="device_location_id">
+                            <select disabled class="form-select" wire:model="device_location_id">
                                 <option value="">Select Location</option>
                                 @foreach($locations as $id => $name)
                                     <option value="{{ $id }}">{{ $name }}</option>
