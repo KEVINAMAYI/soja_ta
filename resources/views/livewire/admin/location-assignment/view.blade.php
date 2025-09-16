@@ -30,6 +30,7 @@ new class extends Component {
     public $googleMapsApiKey;
     public $employeeLocations = [];
     public $activeTab = 'assigned-users';
+    public $device_location_name = '';
 
     public function mount(WorkLocation $workLocation)
     {
@@ -53,7 +54,6 @@ new class extends Component {
             ->pluck('name', 'id')
             ->toArray();
 
-        $this->device_location_id = $workLocation->id;
 
         // Dynamic counts
         $this->refreshCounts();
@@ -107,7 +107,13 @@ new class extends Component {
     public function showDevices($id)
     {
         $this->dispatch('show-devices-offcanvas');
+
+        $this->device_location_id = $id;
+
+        $location = DeviceLocation::find($id);
+        $this->device_location_name = $location?->name ?? 'Unknown';
     }
+
 
     public function addDeviceCheckinPoint()
     {
@@ -761,7 +767,7 @@ new class extends Component {
 
         <div class="offcanvas-header">
             <h5 class="offcanvas-title" id="checkpointDevicesLabel">
-                Devices for Checkpoint
+                Devices for {{ ucfirst($device_location_name) }}
             </h5>
             <button type="button" class="btn-close text-reset" data-bs-dismiss="offcanvas" aria-label="Close"></button>
         </div>
