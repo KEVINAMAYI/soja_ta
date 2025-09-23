@@ -6,7 +6,10 @@ use App\Http\Controllers\Controller;
 use App\Http\Resources\UserResource;
 use App\Models\Department;
 use App\Models\Employee;
+use App\Models\EmployeeAssignment;
+use App\Models\WorkLocation;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 
 class OrganizationController extends Controller
 {
@@ -167,5 +170,86 @@ class OrganizationController extends Controller
             ], 500);
         }
     }
+
+
+    /**
+     * GET /api/work-locations
+     * List work locations by organization
+     */
+    public function workLocations()
+    {
+        $employee = auth()->user()->employee;
+
+        if (!$employee) {
+            return response()->json([
+                'code' => 1003,
+                'message' => 'User is not linked to an employee record'
+            ], 400);
+        }
+
+        $locations = WorkLocation::where('organization_id', $employee->organization_id)->get();
+
+        return response()->json([
+            'code' => 1000,
+            'data' => $locations
+        ]);
+    }
+
+
+    /**
+     * POST /api/work-locations/assign
+     * Assign or activate an employee's work location
+     */
+    public function assignWorkLocation(Request $request)
+    {
+        $request->validate([
+            'work_location_id' => 'required|exists:work_locations,id',
+            'start_date' => 'nullable|date',
+            'end_date' => 'nullable|date|after_or_equal:start_date',
+        ]);
+
+        $employee = auth()->user()->employee;
+
+        if (!$employee) {
+            return response()->json([
+                'success' => false,
+                'message' => 'User is not linked to an employee record'
+            ], 400);
+        }
+
+        // Deactivate all current assignments
+        EmployeeAssignment::where('employee_id', $employee->id)
+            ->update(['is_current' => false]);
+
+        // Check if assignment already exists
+        $assignment = EmployeeAssignment::where('employee_id', $employee->id)
+            ->where('work_location_id', $request->work_location_id)
+            ->first();
+
+        if ($assignment) {
+            // Reactivate existing assignment
+            $assignment->update([
+                'is_current' => true,
+                'start_date' => $request->start_date ?? $assignment->start_date,
+                'end_date' => $request->end_date ?? $assignment->end_date,
+            ]);
+        } else {
+            // Create a new assignment
+            $assignment = EmployeeAssignment::create([
+                'employee_id' => $employee->id,
+                'work_location_id' => $request->work_location_id,
+                'start_date' => $request->start_date,
+                'end_date' => $request->end_date,
+                'is_current' => true,
+            ]);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Work location assigned successfully',
+            'data' => $assignment
+        ]);
+    }
+
 
 }

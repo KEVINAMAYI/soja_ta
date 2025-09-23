@@ -28,6 +28,8 @@ Route::middleware(['auth:sanctum'])->group(function () {
         Route::get('/employees', [OrganizationController::class, 'employees']);
         Route::get('/employee-by-phone', [OrganizationController::class, 'employeeByPhone']);
         Route::get('/employee-working-hours', [OrganizationController::class, 'workingHours']);
+        Route::get('/work-locations', [OrganizationController::class, 'workLocations']);
+        Route::post('/assign-work-location', [OrganizationController::class, 'assignWorkLocation']);
     });
 
     Route::post('/devices/verify', [DeviceController::class, 'verify']);
