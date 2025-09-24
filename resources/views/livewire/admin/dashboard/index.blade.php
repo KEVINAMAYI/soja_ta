@@ -38,7 +38,7 @@ new class extends Component {
             ->whereDate('date', $today)
             ->get();
 
-        $this->presentToday = $attendancesToday->whereNotNull('check_in_time')->count();
+        $this->presentToday = $attendancesToday->where('status', 'clocked_in')->count();
 
         // Late arrivals
         $this->lateArrivals = $attendancesToday->where('status', 'late')->count();
@@ -80,13 +80,18 @@ new class extends Component {
             ->map(fn($att) => [
                 'name' => $att->employee->name,
                 'department' => $att->employee->department->name ?? 'N/A',
-                'status' => $att->status,
-                'clock_in' => $att->check_in_time
-                    ? Carbon::parse($att->check_in_time)->format('h:i A')
-                    : 'N/A',
-                'hours_today' => $att->worked_hours ?? 0,
-                'view_link' => route('attendance.index')
+                'status' => match ($att->status) {
+                    'clocked_in' => 'Clocked In',
+                    'clocked_out' => 'Clocked Out',
+                    'absent', 'unchecked_in' => 'Absent',
+                    default => ucfirst(str_replace('_', ' ', $att->status)), // fallback
+                },
+                'datetime' => $att->check_in_time ?? $att->check_out_time,
+                'location' => $att->location ?? 'Unknown', // Optional if you track location
+                'location_details' => $att->location_details ?? null,
+                'view_link' => route('attendance.index'),
             ]);
+
 
         // Employee locations
         $this->employeeLocations = Attendance::with('employee.department', 'employee.currentAssignment.location')
@@ -257,6 +262,71 @@ new class extends Component {
         .icon-orange {
             background: rgba(251, 146, 60, 0.1);
             color: #fb923c;
+        }
+
+
+        /* Clocked In Badge */
+        .badge-clocked-in {
+            background-color: #D1F2DC;
+            color: #1E7F45;
+            padding: 6px 14px;
+            border-radius: 999px;
+            font-weight: 500;
+            font-size: 0.875rem;
+        }
+
+        /* Clocked Out Badge */
+        .badge-clocked-out {
+            background-color: #F8D7DA;
+            color: #C82333;
+            padding: 6px 14px;
+            border-radius: 999px;
+            font-weight: 500;
+            font-size: 0.875rem;
+        }
+
+        /* View Details Button */
+        .btn-view-details {
+            background-color: #1677FF;
+            color: #FFFFFF;
+            font-size: 0.875rem;
+            padding: 6px 16px;
+            border-radius: 8px;
+            font-weight: 500;
+            border: none;
+            transition: background-color 0.2s ease;
+            text-decoration: none;
+        }
+
+        .btn-view-details:hover {
+            background-color: #0F62D1;
+            color: #fff;
+        }
+
+
+        .pulse-marker {
+            position: absolute;
+            width: 40px;
+            height: 40px;
+            background: rgba(255, 0, 0, 0.4);
+            border-radius: 50%;
+            animation: pulse 1.5s infinite;
+            pointer-events: none;
+        }
+
+        @keyframes pulse {
+            0% {
+                transform: scale(0.8);
+                opacity: 0.6;
+            }
+            50% {
+                transform: scale(1.5);
+                opacity: 0.3;
+            }
+            100% {
+                transform: scale(0.8);
+                opacity: 0.6;
+            }
         }
 
     </style>
@@ -470,44 +540,75 @@ new class extends Component {
 
 
     <!-- Current Employee Status -->
+    <!-- Recent Activity Entries -->
     <div class="col-12">
         <div class="card shadow-sm">
-            <div class="card-header fw-semibold">Recent Entries</div>
+            <div class="card-header fw-semibold">Recent Activity Entries</div>
             <div class="card-body p-0">
                 <table class="table mb-0 align-middle">
                     <thead class="table-light">
                     <tr>
-                        <th>Employee</th>
-                        <th>Department</th>
-                        <th>Clock In</th>
-                        <th>Status</th>
-                        <th>Hours Worked</th>
-                        <th></th>
+                        <th>Employee Name</th>
+                        <th>Activity</th>
+                        <th>Date/Time</th>
+                        <th>Location</th>
+                        <th>Details</th>
                     </tr>
                     </thead>
                     <tbody>
                     @foreach($currentEmployeeStatus as $emp)
                         <tr>
-                            <td>{{ $emp['name'] }}</td>
-                            <td>{{ $emp['department'] }}</td>
-                            <td>{{ $emp['clock_in'] }}</td>
+                            <!-- Name + Department -->
                             <td>
-                                @php
-                                    $badgeClass = match($emp['status']) {
-                                        'present' => 'bg-success',
-                                        'clocked_out' => 'bg-danger',
-                                        'absent' => 'bg-warning text-dark',
-                                        'unchecked_in' => 'bg-secondary text-dark', // new status
-                                        default => 'bg-secondary'
-                                    };
-                                @endphp
-                                <span class="badge {{ $badgeClass }}">
-                                 {{ ucfirst(str_replace('_', ' ', $emp['status'])) }}
+                                <div class="d-flex flex-column">
+                                    <span class="fw-semibold">{{ $emp['name'] }}</span>
+                                    <span class="badge bg-light text-primary fw-normal mt-1"
+                                          style="width: fit-content;">
+                                    {{ $emp['department'] }}
                                 </span>
+                                </div>
                             </td>
-                            <td>{{ $emp['hours_today'] }}</td>
+
+                            <!-- Clocked In / Out -->
                             <td>
-                                <a href="{{ $emp['view_link'] }}" class="btn btn-sm btn-outline-primary">View</a>
+                                @if ($emp['status'] === 'Clocked In')
+                                    <span class="badge-clocked-in">{{ $emp['status'] }}</span>
+                                @elseif ($emp['status'] === 'Clocked Out')
+                                    <span class="badge-clocked-out">{{ $emp['status'] }}</span>
+                                @else
+                                    <span class="badge bg-secondary text-white px-3 py-2 rounded-pill">
+                                {{ $emp['status'] }}
+                                   </span>
+                                @endif
+                            </td>
+
+                            <!-- Date and Time -->
+                            <td>
+                                @if ($emp['datetime'])
+                                    <div class="d-flex flex-column">
+                                        <span>{{ \Carbon\Carbon::parse($emp['datetime'])->format('g:i A') }}</span>
+                                        <small class="text-muted">
+                                            {{ \Carbon\Carbon::parse($emp['datetime'])->format('M d, Y') }}
+                                        </small>
+                                    </div>
+                                @else
+                                    <span class="text-muted">N/A</span>
+                                @endif
+                            </td>
+
+                            <!-- Location -->
+                            <td>
+                                <div class="d-flex flex-column">
+                                    <span>{{ $emp['location'] ?? 'N/A' }}</span>
+                                    @if (!empty($emp['location_details']))
+                                        <small class="text-muted">{{ $emp['location_details'] }}</small>
+                                    @endif
+                                </div>
+                            </td>
+
+                            <!-- View Button -->
+                            <td>
+                                <a href="{{ $emp['view_link'] }}" class="btn btn-sm btn-primary">View Details</a>
                             </td>
                         </tr>
                     @endforeach
@@ -550,6 +651,7 @@ new class extends Component {
                 });
             }
 
+
             // --- Add marker with info window ---
             function addMarker(position, infoContent) {
                 const marker = new google.maps.Marker({
@@ -557,20 +659,42 @@ new class extends Component {
                     map,
                     icon: {
                         url: "/images/map_marker.png",  // custom icon path
-                        scaledSize: new google.maps.Size(55, 60), // resize (width, height)
-                        origin: new google.maps.Point(0, 0),
-                        anchor: new google.maps.Point(20, 40) // center bottom anchor
+                        scaledSize: new google.maps.Size(30, 30), // resize (width, height)
+                        anchor: new google.maps.Point(15, 15) // ⬅️ center of 30x30 icon
                     }
                 });
 
+                // --- Add pulsing overlay ---
+                const pulse = document.createElement("div");
+                pulse.className = "pulse-marker";
+
+                const overlay = new google.maps.OverlayView();
+                overlay.onAdd = function () {
+                    const panes = this.getPanes();
+                    panes.overlayImage.appendChild(pulse);
+
+                    this.draw = function () {
+                        const projection = this.getProjection();
+                        const point = projection.fromLatLngToDivPixel(position);
+                        if (point) {
+                            // ⬅️ pulse is 40x40, so offset by half (20) to keep centered
+                            pulse.style.left = point.x - 20 + "px";
+                            pulse.style.top = point.y - 20 + "px";
+                        }
+                    };
+                };
+                overlay.setMap(map);
+
+                // --- Info window support ---
                 if (infoContent) {
-                    const infoWindow = new google.maps.InfoWindow({content: infoContent});
+                    const infoWindow = new google.maps.InfoWindow({ content: infoContent });
                     marker.addListener("click", () => {
                         if (activeInfoWindow) activeInfoWindow.close();
                         infoWindow.open(map, marker);
                         activeInfoWindow = infoWindow;
                     });
                 }
+
                 return marker;
             }
 
@@ -627,7 +751,7 @@ new class extends Component {
                 map.fitBounds(bounds);
 
                 // 👇 cap zoom (don’t let it zoom out too far)
-                google.maps.event.addListenerOnce(map, "bounds_changed", function() {
+                google.maps.event.addListenerOnce(map, "bounds_changed", function () {
                     if (map.getZoom() > 16) map.setZoom(16);  // street level
                     if (map.getZoom() < 14) map.setZoom(14);  // prevent zooming out too much
                 });

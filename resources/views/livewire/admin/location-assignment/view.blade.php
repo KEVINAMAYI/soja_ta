@@ -99,7 +99,16 @@ new class extends Component {
     public function refreshCounts()
     {
         $this->deviceCount = $this->workLocation->devices()->count();
-        $this->employeeCount = $this->workLocation->assignments()->count();
+
+        $orgId = auth()->user()?->employee?->organization_id;
+
+        $this->employeeCount = $count = Employee::where('organization_id', $orgId)
+            ->whereHas('assignments', function ($q) {
+                $q->where('work_location_id', $this->workLocation->id)
+                    ->where('is_current', true);
+            })
+            ->count();
+
         $this->checkinCount = $this->workLocation->deviceLocations()->count();
     }
 
@@ -512,6 +521,33 @@ new class extends Component {
             margin: 0;
             color: #6c757d;
         }
+
+
+        .pulse-marker {
+            position: absolute;
+            width: 40px;
+            height: 40px;
+            background: rgba(255, 0, 0, 0.4);
+            border-radius: 50%;
+            animation: pulse 1.5s infinite;
+            pointer-events: none;
+        }
+
+        @keyframes pulse {
+            0% {
+                transform: scale(0.8);
+                opacity: 0.6;
+            }
+            50% {
+                transform: scale(1.5);
+                opacity: 0.3;
+            }
+            100% {
+                transform: scale(0.8);
+                opacity: 0.6;
+            }
+        }
+
     </style>
 @endpush
 
@@ -854,7 +890,30 @@ new class extends Component {
                                        class="form-control"
                                        wire:model="pin"
                                        placeholder="Leave empty to auto-generate">
-                                <button type="button"
+                                 .pulse-marker {
+            position: absolute;
+            width: 40px;
+            height: 40px;
+            background: rgba(255, 0, 0, 0.4);
+            border-radius: 50%;
+            animation: pulse 1.5s infinite;
+            pointer-events: none;
+        }
+
+        @keyframes pulse {
+            0% {
+                transform: scale(0.8);
+                opacity: 0.6;
+            }
+            50% {
+                transform: scale(1.5);
+                opacity: 0.3;
+            }
+            100% {
+                transform: scale(0.8);
+                opacity: 0.6;
+            }
+        }<button type="button"
                                         wire:click="generatePin"
                                         class="custom-hover-white btn btn-outline-primary">
                                     Auto-generate
@@ -978,10 +1037,31 @@ new class extends Component {
                 map,
                 icon: {
                     url: "/images/map_marker.png",
-                    scaledSize: new google.maps.Size(55, 60), // resize (width, height)
-                    anchor: new google.maps.Point(20, 40)
+                    scaledSize: new google.maps.Size(30, 30), // resize (width, height)
+                    anchor: new google.maps.Point(15, 15) // ⬅️ center of 30x30 icon
                 }
             });
+
+            // --- Add pulsing overlay ---
+            const pulse = document.createElement("div");
+            pulse.className = "pulse-marker";
+
+            const overlay = new google.maps.OverlayView();
+            overlay.onAdd = function () {
+                const panes = this.getPanes();
+                panes.overlayImage.appendChild(pulse);
+
+                this.draw = function () {
+                    const projection = this.getProjection();
+                    const point = projection.fromLatLngToDivPixel(center);
+                    if (point) {
+                        // ⬅️ pulse is 40x40, so offset by half (20) to keep centered
+                        pulse.style.left = point.x - 20 + "px";
+                        pulse.style.top = point.y - 20 + "px";
+                    }
+                };
+            };
+            overlay.setMap(map);
 
             marker.addListener("click", () => {
                 if (activeInfoWindow) activeInfoWindow.close();
