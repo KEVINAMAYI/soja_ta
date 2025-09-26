@@ -1,3 +1,124 @@
+<?php
+
+use App\Models\Attendance;
+use App\Models\Employee;
+use Carbon\Carbon;
+use Livewire\Attributes\On;
+
+use Livewire\Volt\Component;
+
+new class extends Component {
+
+    public $employee;
+    public $stats = [];
+    public $timeline = [];
+    public $timesheets = [];
+    public $workLocation;
+    public $search = '';
+    public $status = 'all';
+    public $week = 'current'; // current or last
+    public $activeTab = 'overview';
+
+    public function mount($employeeId)
+    {
+        // Load employee
+        $this->employee = Employee::with('department')
+            ->where('organization_id', auth()->user()->employee->organization_id)
+            ->findOrFail($employeeId);
+
+        $this->workLocation = $this->employee->currentAssignment->location;
+
+        // Example stats
+        $this->stats = [
+            'todayHours' => Attendance::where('employee_id', $employeeId)
+                ->whereDate('date', today())
+                ->sum('worked_hours'),
+            'weekHours' => Attendance::where('employee_id', $employeeId)
+                ->whereBetween('date', [now()->startOfWeek(), now()->endOfWeek()])
+                ->sum('worked_hours'),
+            'locations' => $this->employee->currentAssignment ? 1 : 0,
+            'checkins' => Attendance::where('employee_id', $employeeId)
+                ->whereDate('date', today())
+                ->where('status', 'clocked_in')
+                ->count(),
+        ];
+
+        $this->loadTimeline($this->employee->id);
+
+        // Timesheets (this week)
+        $this->timesheets = Attendance::query()
+            ->where('employee_id', $this->employee->id)
+            ->whereBetween('date', [now()->startOfWeek(), now()->endOfWeek()])
+            ->get();
+
+        $this->loadTimesheets();
+
+    }
+
+
+    public function loadTimeline($employeeId)
+    {
+        $todayAttendances = Attendance::where('employee_id', $employeeId)
+            ->whereDate('date', today())
+            ->get();
+
+        $timeline = collect();
+
+        foreach ($todayAttendances as $attendance) {
+            if ($attendance->check_in_time) {
+                $timeline->push([
+                    'time' => Carbon::parse($attendance->check_in_time),
+                    'title' => 'Clocked In',
+                    'location' => $this->employee->currentAssignment->location->name,
+                    'type' => 'clocked-in'
+                ]);
+            }
+
+            if ($attendance->check_out_time) {
+                $timeline->push([
+                    'time' => Carbon::parse($attendance->check_out_time),
+                    'title' => 'Clocked Out',
+                    'location' => $this->employee->currentAssignment->location->name,
+                    'type' => 'clocked-out'
+                ]);
+            }
+        }
+
+        // Sort chronologically ascending
+        $this->timeline = $timeline->sortBy('time')->values();
+    }
+
+
+    public function loadTimesheets()
+    {
+        $dateRange = $this->week === 'last'
+            ? [Carbon::now()->subWeek()->startOfWeek(), Carbon::now()->subWeek()->endOfWeek()]
+            : [Carbon::now()->startOfWeek(), Carbon::now()->endOfWeek()];
+
+        $query = Attendance::query()
+            ->where('employee_id', $this->employee->id)
+            ->whereBetween('date', $dateRange);
+
+        if ($this->status !== 'all') {
+            $query->where('status', $this->status);
+        }
+
+        if ($this->search) {
+            $query->whereHas('employee.user', fn($q) => $q->where('name', 'like', "%{$this->search}%")
+            );
+        }
+
+        $this->timesheets = $query->get();
+    }
+
+    #[On('refresh-timesheets')]
+    public function refreshTimesheets()
+    {
+        $this->loadTimesheets();
+    }
+
+}; ?>
+
 @push('styles')
     <style>
         /* Profile Header */
@@ -10,6 +131,7 @@
             gap: 20px;
             border: 1px solid #e9ecef;
         }
+
         .profile-photo {
             width: 110px;
             height: 110px;
@@ -18,11 +140,13 @@
             object-fit: cover;
             background: white;
         }
+
         .profile-info h3 {
             font-weight: 700;
             margin-bottom: 0.3rem;
             color: #2c3e50;
         }
+
         .profile-info p {
             margin: 0;
             color: #6c757d;
@@ -32,15 +156,17 @@
         .nav-tabs {
             border-bottom: 1px solid #dee2e6;
         }
+
         .nav-tabs .nav-link {
             color: #495057;
             border: none;
             padding: 0.75rem 1.25rem;
         }
+
         .nav-tabs .nav-link.active {
             color: #0d6efd;
             font-weight: 600;
-            border-radius :0px;
+            border-radius: 0px;
             border-bottom: 3px solid #0d6efd;
             background: transparent;
         }
@@ -58,6 +184,7 @@
         .table thead {
             background-color: #f8f9fa;
         }
+
         .table tbody tr:hover {
             background-color: #f1f3f5;
         }
@@ -67,6 +194,7 @@
             background-color: #ffc107;
             color: #212529;
         }
+
         .badge-onleave {
             background-color: #0dcaf0;
             color: #212529;
@@ -81,6 +209,7 @@
             align-items: center; /* vertical center */
             gap: 1.5rem;
         }
+
         .summary-info .summary-left {
             display: flex;
             gap: 1.5rem;
@@ -97,6 +226,7 @@
             gap: 20px;
             border: 1px solid #e9ecef;
         }
+
         .profile-initials {
             width: 110px;
             height: 110px;
@@ -110,16 +240,188 @@
             font-size: 48px;
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             user-select: none;
-            box-shadow: 0 0 10px rgba(13,110,253,0.4);
+            box-shadow: 0 0 10px rgba(13, 110, 253, 0.4);
         }
+
         .profile-info h3 {
             font-weight: 700;
             margin-bottom: 0.3rem;
             color: #2c3e50;
         }
+
         .profile-info p {
             margin: 0;
             color: #6c757d;
+        }
+
+        .card-stat {
+            text-align: center;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 0 8px rgba(0, 0, 0, 0.05);
+        }
+
+        .card-section {
+            border-radius: 12px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.05);
+            padding: 20px;
+        }
+
+        .section-title {
+            font-weight: bold;
+            font-size: 1.2rem;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .status-badge {
+            font-size: 0.9rem;
+        }
+
+        .header-gradient {
+            background: white;
+            color: #e14326;
+            padding: 30px;
+            border-radius: 16px;
+        }
+
+        .map-placeholder {
+            background: #f5f5f5;
+            border: 2px dashed #ccc;
+            text-align: center;
+            padding: 30px;
+            border-radius: 8px;
+            color: #888;
+        }
+
+        .timeline {
+            border-left: 3px solid #0d6efd;
+            margin: 20px;
+            padding-left: 20px;
+            position: relative;
+        }
+
+        .timeline-item {
+            position: relative;
+            margin-bottom: 30px;
+        }
+
+        .timeline-item::before {
+            content: '';
+            width: 14px;
+            height: 14px;
+            background-color: #198754; /* default green */
+            border-radius: 50%;
+            position: absolute;
+            left: -30px;
+            top: 0;
+        }
+
+        .timeline-item.red::before {
+            background-color: #dc3545;
+        }
+
+        .timeline-item.orange::before {
+            background-color: #fd7e14;
+        }
+
+        .timeline-time {
+            font-weight: bold;
+            font-size: 0.9rem;
+        }
+
+        .timeline-title {
+            font-weight: 600;
+            font-size: 1rem;
+        }
+
+        .timeline-location {
+            font-size: 0.875rem;
+            color: #6c757d;
+        }
+
+        .status-badge {
+            padding: 0.35em 0.6em;
+            border-radius: 0.375rem;
+            font-size: 0.85rem;
+            font-weight: 500;
+            text-transform: capitalize;
+        }
+
+        .clocked-in {
+            background-color: #d1e7dd;
+            color: #0f5132;
+        }
+
+        .clocked-out {
+            background-color: #f8d7da;
+            color: #842029;
+        }
+
+        .absent {
+            background-color: #e2e3e5;
+            color: #41464b;
+        }
+
+        .table > :not(caption) > * > * {
+            vertical-align: middle;
+        }
+
+        .overtime-high {
+            color: #dc3545;
+        }
+
+        .overtime-mid {
+            color: #fd7e14;
+        }
+
+        :root {
+            --main-accent: #e14326;
+            --main-accent-light: #f9e6e3;
+        }
+
+        .filter-bar {
+            background-color: white;
+            border: 1px solid #dee2e6;
+            padding: 1rem;
+            border-radius: 8px;
+            box-shadow: 0 0 8px rgba(0, 0, 0, 0.04);
+        }
+
+        .form-control:focus,
+        .form-select:focus {
+            border-color: var(--main-accent);
+            box-shadow: 0 0 0 0.2rem rgba(225, 67, 38, 0.25);
+        }
+
+        .form-select,
+        .form-control {
+            transition: all 0.3s ease-in-out;
+        }
+
+        .form-select:hover,
+        .form-control:hover {
+            border-color: var(--main-accent);
+        }
+
+        .filter-label {
+            font-weight: 500;
+            color: #495057;
+        }
+
+        .highlight-accent {
+            color: var(--main-accent);
+        }
+
+        .btn-accent {
+            background-color: var(--main-accent);
+            color: white;
+            border: none;
+        }
+
+        .btn-accent:hover {
+            background-color: #c9381f;
         }
 
     </style>
@@ -128,175 +430,259 @@
 <div class="container py-4">
 
     <!-- Profile Header -->
-    <div class="profile-header mb-4">
-        <div class="profile-initials">
-            JD
+    <div class="header-gradient mb-4">
+        <a href="#" class="btn btn-light btn-sm mb-3">← Back to Employees List</a>
+        <h2 style="color:#e14326;">{{ $employee->name }}</h2>
+        <p class="mb-0">Comprehensive activity and location tracking</p>
+    </div>
+
+    <!-- Stats -->
+    <div class="row text-center mb-4">
+        <div class="col-md-3">
+            <div class="card-stat bg-white"><h3>{{ $stats['todayHours'] }}</h3>
+                <p class="text-muted">Hours Today</p></div>
         </div>
-        <div class="profile-info">
-            <h3>John Doe</h3>
-            <p>Systems Analyst - IT Support</p>
-            <small>Hired: Jan 10, 2022 | Employee ID: EMP001</small>
+        <div class="col-md-3">
+            <div class="card-stat bg-white"><h3>{{ $stats['weekHours'] }}</h3>
+                <p class="text-muted">Hours This Week</p></div>
+        </div>
+        <div class="col-md-3">
+            <div class="card-stat bg-white"><h3>{{ $stats['locations'] }}</h3>
+                <p class="text-muted">Locations Visited</p></div>
+        </div>
+        <div class="col-md-3">
+            <div class="card-stat bg-white"><h3>{{ $stats['checkins'] }}</h3>
+                <p class="text-muted">Check-ins Today</p></div>
         </div>
     </div>
 
+    <div class="row g-4 align-items-stretch">
+        <!-- Employee Info -->
+        <div class="col-md-6 d-flex">
+            <div class="card-section bg-white w-100 d-flex flex-column">
+                <div class="section-title mb-3">
+                    <iconify-icon icon="mdi:account-badge" class="me-2" style="color: #2563eb;" width="20"
+                                  height="20"></iconify-icon>
+                    Employee Information
+                </div>
+                <div class="mb-2"><strong>Full Name:</strong> {{ $employee->name  }}</div>
+                <div class="mb-2"><strong>Employee ID:</strong> {{ $employee->id_number }}</div>
+                <div class="mb-2"><strong>Department:</strong> <span
+                        class="fw-bold">{{ $employee->department->name  }}</span>
+                </div>
+                <div class="mb-2">
+                    <strong>Role:</strong>
+                    {{ $employee->user?->roles->pluck('name')
+                        ->map(fn($r) => ucwords(str_replace('-', ' ', $r)))
+                        ->join(', ') ?? 'N/A' }}
+                </div>
+                @php
+                    $status = $employee->latestAttendance?->status ?? null;
+
+                    $displayStatus = match ($status) {
+                        'unchecked_in', 'absent' => 'Absent',
+                        'clocked_in' => 'Clocked In',
+                        'clocked_out' => 'Clocked Out',
+                        default => 'Unknown',
+                    };
+
+                    $badgeClass = match ($displayStatus) {
+                        'Clocked In' => 'bg-success',
+                        'Clocked Out' => 'bg-warning',
+                        'Absent' => 'bg-danger',
+                        default => 'bg-secondary',
+                    };
+                @endphp
+
+                <div class="mb-2">
+                    <strong>Current Status:</strong>
+                    <span class="badge {{ $badgeClass }} status-badge">{{ $displayStatus }}</span>
+                </div>
+
+                <div class="mb-2">
+                    <strong>Shift:</strong>
+                    @if($employee->shift)
+                        <span class="badge bg-primary me-1">{{ $employee->shift->name }}</span>
+                        <span class="text-muted"> {{ \Carbon\Carbon::parse($employee->shift->start_time)->format('g:i A') }}
+                            &ndash;  {{ \Carbon\Carbon::parse($employee->shift->end_time)->format('g:i A') }}
+                        </span>
+                    @else
+                        <span class="text-muted">No shift assigned</span>
+                    @endif
+                </div>
+            </div>
+        </div>
+
+        <!-- Current Location -->
+        <div class="col-md-6 d-flex">
+            <div class="card-section bg-white w-100 d-flex flex-column p-4 rounded shadow-sm">
+                <div class="section-title mb-3 d-flex align-items-center">
+                    <iconify-icon icon="mdi:map-marker" class="me-2" style="color: #22c55e;" width="20"
+                                  height="20"></iconify-icon>
+                    <h6 class="mb-0">Current Location</h6>
+                </div>
+
+                <div class="mb-2"><strong>Name:</strong{{ $workLocation->name }}</div>
+                <div class="mb-2"><strong>Building:</strong> {{ $workLocation->type }}</div>
+                <div class="mb-2"><strong>Address:</strong> {{ $workLocation->address }}</div>
+                <div class="mb-2 d-flex align-items-center">
+                    <strong class="me-2">Active:</strong>
+                    @if ($workLocation?->active)
+                        <iconify-icon icon="mdi:check-circle" style="color: #22c55e;" width="18"
+                                      height="18"></iconify-icon>
+                        <span class="ms-1 text-success">Active</span>
+                    @else
+                        <iconify-icon icon="mdi:close-circle" style="color: #dc2626;" width="18"
+                                      height="18"></iconify-icon>
+                        <span class="ms-1 text-danger">Inactive</span>
+                    @endif
+                </div>
+
+                <div class="mb-2"><strong>GPS
+                        Coordinates:</strong>{{ $workLocation->latitude.' '.$workLocation->longitude }}</div>
+
+                <!-- Replacing map placeholder -->
+                <div class="mt-3 text-muted small d-flex align-items-center">
+                    <iconify-icon icon="mdi:information-outline" class="me-1" width="18" height="18"></iconify-icon>
+                    Live location Map view is available in the mobile app.
+                </div>
+            </div>
+        </div>
+
+    </div>
+
     <!-- Tabs -->
-    <ul class="nav nav-tabs mb-4" role="tablist">
-        <li class="nav-item"><a class="nav-link active" data-bs-toggle="tab" href="#overview">Overview</a></li>
-        <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#attendance">Attendance</a></li>
-        <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#overtime">Overtime</a></li>
+    <ul class="nav nav-tabs mb-4 mt-4" role="tablist">
+        <li class="nav-item">
+            <a class="nav-link {{ $activeTab === 'overview' ? 'active' : '' }}"
+               href="#"
+               wire:click.prevent="$set('activeTab', 'overview')">
+                Activity Timeline - Today
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link {{ $activeTab === 'attendance' ? 'active' : '' }}"
+               href="#"
+               wire:click.prevent="$set('activeTab', 'attendance')">
+                Timesheets
+            </a>
+        </li>
     </ul>
+
 
     <div class="tab-content">
 
         <!-- Overview Tab -->
-        <div class="tab-pane fade show active" id="overview">
-            <div class="row g-3 mb-4">
-                <div class="col-md-3">
-                    <div class="stat-card">
-                        <h6 class="text-muted">Monthly Attendance</h6>
-                        <h3 class="text-primary">92%</h3>
-                    </div>
+        <div class="tab-pane fade {{ $activeTab === 'overview' ? 'show active' : '' }}" id="overview">
+            <div class="container mt-5">
+                <div class="timeline">
+                    @forelse($timeline as $item)
+                        <div
+                            class="timeline-item {{ $item['type'] === 'clocked-out' ? 'red' : ($item['type'] === 'clocked-in' ? '' : 'absent') }}">
+                            <div class="timeline-time">
+                                {{ $item['time']->format('g:i A') }}
+                            </div>
+                            <div class="timeline-title">
+                                {{ $item['title'] }}
+                            </div>
+                            <div class="timeline-location">
+                                {{ $item['location'] }}
+                            </div>
+                        </div>
+                    @empty
+                        <div class="p-3 timeline-item absent">
+                            <div class="timeline-time">{{ now()->format('g:i A') }}</div>
+                            <div class="timeline-title">Absent</div>
+                            <div class="timeline-location">No attendance records</div>
+                        </div>
+                    @endforelse
                 </div>
-                <div class="col-md-3">
-                    <div class="stat-card">
-                        <h6 class="text-muted">Overtime Hours</h6>
-                        <h3 class="text-warning">12.5</h3>
-                    </div>
-                </div>
-                <div class="col-md-3">
-                    <div class="stat-card">
-                        <h6 class="text-muted">Days Present</h6>
-                        <h3 class="text-success">21</h3>
-                    </div>
-                </div>
-                <div class="col-md-3">
-                    <div class="stat-card">
-                        <h6 class="text-muted">Days Absent</h6>
-                        <h3 class="text-danger">2</h3>
-                    </div>
-                </div>
-            </div>
 
-            <!-- Start Basic Line Chart -->
-            <div class="card">
-                <div class="card-body">
-                    <h4 class="card-title">Basic Line Chart</h4>
-                    <div id="chart-line-basic"></div>
-                </div>
             </div>
         </div>
 
         <!-- Attendance Tab -->
-        <div class="tab-pane fade" id="attendance">
-            <div class="summary-info">
-                <div class="summary-left">
-                    <div>Days Present: <span class="text-success">21</span></div>
-                    <div>Days Absent: <span class="text-danger">2</span></div>
-                    <div>Late Days: <span class="badge badge-late">3</span></div>
-                    <div>On Leave: <span class="badge badge-onleave">1</span></div>
-                </div>
-                <button class="btn p-2 btn-primary btn-sm d-flex align-items-center" id="exportAttendanceBtn" type="button">
-                    <iconify-icon icon="mdi:download-outline" class="fs-5 me-2 text-white"></iconify-icon>
-                    Download Attendance Reports
-                </button>
-            </div>
-            <h6 class="mb-3">Weekly Attendance Summary</h6>
-            <table class="table table-bordered text-center bg-white">
-                <thead>
-                <tr>
-                    <th>Date</th>
-                    <th>Check-In</th>
-                    <th>Check-Out</th>
-                    <th>Worked Hours</th>
-                    <th>Status</th>
-                </tr>
-                </thead>
-                <tbody>
-                <tr>
-                    <td>2025-08-05</td>
-                    <td>08:00</td>
-                    <td>17:00</td>
-                    <td>9.00</td>
-                    <td><span class="badge bg-success">Present</span></td>
-                </tr>
-                <tr>
-                    <td>2025-08-04</td>
-                    <td>08:10</td>
-                    <td>16:50</td>
-                    <td>8.67</td>
-                    <td><span class="badge bg-warning text-dark">Late</span></td>
-                </tr>
-                <tr>
-                    <td>2025-08-03</td>
-                    <td>-</td>
-                    <td>-</td>
-                    <td>0.00</td>
-                    <td><span class="badge bg-danger">Absent</span></td>
-                </tr>
-                <tr>
-                    <td>2025-08-02</td>
-                    <td>08:00</td>
-                    <td>17:00</td>
-                    <td>9.00</td>
-                    <td><span class="badge bg-info text-dark">On Leave</span></td>
-                </tr>
-                </tbody>
-            </table>
-        </div>
+        <div class="tab-pane fade {{ $activeTab === 'attendance' ? 'show active' : '' }}" id="attendance">
+            <div>
+                <!-- Filter Bar -->
+                <div class="filter-bar d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+                    <input type="text"
+                           wire:model="search"
+                           wire:keyup.debounce.500ms="$dispatch('refresh-timesheets')"
+                           class="form-control w-50"
+                           placeholder="🔍 Search employees...">
 
-        <!-- Overtime Tab -->
-        <div class="tab-pane fade" id="overtime">
-            <div class="summary-info mb-3" style="justify-content: space-between; align-items: center; display: flex;">
-                <div>Total Overtime Hours: <span class="text-warning fw-bold">12.5</span></div>
-                <button class="btn btn-primary p-2 btn-sm d-flex align-items-center" id="exportOvertimeBtn" type="button">
-                    <iconify-icon icon="mdi:download-outline" class="fs-5 me-2 text-white"></iconify-icon>
-                    Download Overtime Reports
-                </button>
+                    <div class="d-flex gap-2">
+                        <select wire:model="status"
+                                wire:change="$dispatch('refresh-timesheets')"
+                                class="form-select" style="width: 160px;">
+                            <option value="all">All Statuses</option>
+                            <option value="clocked_in">Clocked In</option>
+                            <option value="clocked_out">Clocked Out</option>
+                            <option value="absent">Absent</option>
+                        </select>
+
+                        <select wire:model="week"
+                                wire:change="$dispatch('refresh-timesheets')"
+                                class="form-select" style="width: 160px;">
+                            <option value="current">Current Week</option>
+                            <option value="last">Last Week</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Table -->
+                <table class="table table-hover table-bordered align-middle">
+                    <thead class="table-light">
+                    <tr>
+                        <th>Employee</th>
+                        <th>Regular Hours</th>
+                        <th>Overtime Hours</th>
+                        <th>Total Hours</th>
+                        <th>Status</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    @forelse($timesheets as $sheet)
+                        <tr>
+                            <td>{{ $sheet->employee->user->name ?? 'N/A' }}</td>
+                            <td>{{ $sheet->regular_hours ?? '0h' }}</td>
+                            <td class="{{ ($sheet->overtime_hours ?? 0) >= 8 ? 'overtime-high' : (($sheet->overtime_hours ?? 0) > 0 ? 'overtime-mid' : '') }}">
+                                {{ $sheet->overtime_hours ?? '0h' }}
+                            </td>
+                            <td>{{ ($sheet->regular_hours ?? 0) + ($sheet->overtime_hours ?? 0) }}h</td>
+                            <td>
+                                @php
+                                    $statusClass = match($sheet->status) {
+                                        'clocked_in'  => 'clocked-in',
+                                        'clocked_out' => 'clocked-out',
+                                        'absent'      => 'absent',
+                                        default       => 'absent'
+                                    };
+                                    $statusLabel = match($sheet->status) {
+                                        'clocked_in'   => 'Clocked In',
+                                        'clocked_out'  => 'Clocked Out',
+                                        'absent'       => 'Absent',
+                                        'unchecked_in' => 'Absent'
+                                    };
+                                @endphp
+                                <span class="status-badge {{ $statusClass }}">{{ $statusLabel }}</span>
+                            </td>
+                        </tr>
+                    @empty
+                        <tr>
+                            <td colspan="5" class="text-center text-muted">No attendance records found</td>
+                        </tr>
+                    @endforelse
+                    </tbody>
+                </table>
             </div>
-            <h6 class="mb-3">Overtime Summary</h6>
-            <table class="table table-bordered text-center bg-white">
-                <thead>
-                <tr>
-                    <th>Date</th>
-                    <th>Start Time</th>
-                    <th>End Time</th>
-                    <th>Hours</th>
-                    <th>Reason</th>
-                    <th>Approved By</th>
-                </tr>
-                </thead>
-                <tbody>
-                <tr>
-                    <td>2025-08-01</td>
-                    <td>18:00</td>
-                    <td>20:30</td>
-                    <td>2.5</td>
-                    <td>System Upgrade</td>
-                    <td>Jane Admin</td>
-                </tr>
-                <tr>
-                    <td>2025-07-29</td>
-                    <td>17:30</td>
-                    <td>19:00</td>
-                    <td>1.5</td>
-                    <td>Late reporting</td>
-                    <td>-</td>
-                </tr>
-                <tr>
-                    <td>2025-07-25</td>
-                    <td>19:00</td>
-                    <td>21:00</td>
-                    <td>2.0</td>
-                    <td>Emergency Fix</td>
-                    <td>Mark Supervisor</td>
-                </tr>
-                </tbody>
-            </table>
         </div>
 
     </div>
 </div>
 
 @push('scripts')
+    <script src="https://code.iconify.design/iconify-icon/1.0.7/iconify-icon.min.js"></script>
     <script src="../assets/js/apex-chart/apex.line.init.js"></script>
 @endpush

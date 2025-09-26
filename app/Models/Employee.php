@@ -125,5 +125,11 @@ class Employee extends Model
     }
 
 
+    public function latestAttendance()
+    {
+        return $this->hasOne(Attendance::class)->latestOfMany();
+    }
+
+
 }
 

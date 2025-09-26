@@ -19,6 +19,7 @@ new class extends Component {
     public $employeeLocations = [];
     public $googleMapsApiKey;
     public $workLocations = [];
+    public $statusData = [];
 
     public function mount()
     {
@@ -87,7 +88,7 @@ new class extends Component {
                     default => ucfirst(str_replace('_', ' ', $att->status)), // fallback
                 },
                 'datetime' => $att->check_in_time ?? $att->check_out_time,
-                'location' => $att->location ?? 'Unknown', // Optional if you track location
+                'location' => $att->employee->currentAssignment->location->name ?? 'Unknown', // Optional if you track location
                 'location_details' => $att->location_details ?? null,
                 'view_link' => route('attendance.index'),
             ]);
@@ -136,6 +137,45 @@ new class extends Component {
                 ];
             })
             ->toArray();
+
+        $this->dailyAttendancePercentage();
+
+    }
+
+
+    public function dailyAttendancePercentage()
+    {
+        // Get organization_id from logged in user
+        $organizationId = auth()->user()->employee->organization_id;
+
+        // Count employees in this org
+        $totalEmployees = Employee::where('organization_id', $organizationId)->count();
+
+        // Count present employees today
+        $present = Attendance::whereHas('employee', function ($q) use ($organizationId) {
+            $q->where('organization_id', $organizationId);
+        })
+            ->whereDate('date', now()->toDateString())
+            ->whereIn('status', ['clocked_in'])
+            ->count();
+
+
+        // Absent = everyone else not present
+        $absent = max($totalEmployees - $present, 0);
+
+        // Avoid divide by zero
+        if ($totalEmployees > 0) {
+            $presentPercent = round(($present / $totalEmployees) * 100, 2);
+            $absentPercent = round(($absent / $totalEmployees) * 100, 2);
+        } else {
+            $presentPercent = $absentPercent = 0;
+        }
+
+        $this->statusData = [
+            'Present' => $presentPercent,
+            'Absent' => $absentPercent,
+        ];
+
     }
 
 
@@ -411,6 +451,40 @@ new class extends Component {
     </div>
 
     <div class="col-lg-4">
+        <div class="card">
+            <div class="card-body">
+                <h4 class="card-title">Attendance Snapshot</h4>
+                <div id="daily-attendance"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Department Overview -->
+    <div class="col-lg-8 d-flex">
+        <div class="card shadow-sm flex-fill">
+            <div class="card-header department-overview-title fw-semibold">
+                Department Overview
+            </div>
+            <div class="card-body">
+                @foreach ($departmentStats as $dept)
+                    @php
+                        $perc = $dept['total'] ? round(($dept['clocked_in'] / $dept['total']) * 100) : 0;
+                    @endphp
+                    <div class="mb-3">
+                        <div class="d-flex justify-content-between small fw-semibold">
+                            <span>{{ $dept['name'] }}</span>
+                            <span>{{ $dept['clocked_in'] }}/{{ $dept['total'] }} ({{ $perc }}%)</span>
+                        </div>
+                        <div class="progress" style="height:6px;">
+                            <div class="progress-bar bg-primary" style="width: {{ $perc }}%"></div>
+                        </div>
+                    </div>
+                @endforeach
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-4 d-flex">
         <div class="card shadow-sm">
             <div class="card-header quick-actions-title">
                 Quick Actions
@@ -463,77 +537,6 @@ new class extends Component {
                     </div>
 
                 </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Department Overview -->
-    <div class="col-lg-8 d-flex">
-        <div class="card shadow-sm flex-fill">
-            <div class="card-header department-overview-title fw-semibold">
-                Department Overview
-            </div>
-            <div class="card-body">
-                @foreach ($departmentStats as $dept)
-                    @php
-                        $perc = $dept['total'] ? round(($dept['clocked_in'] / $dept['total']) * 100) : 0;
-                    @endphp
-                    <div class="mb-3">
-                        <div class="d-flex justify-content-between small fw-semibold">
-                            <span>{{ $dept['name'] }}</span>
-                            <span>{{ $dept['clocked_in'] }}/{{ $dept['total'] }} ({{ $perc }}%)</span>
-                        </div>
-                        <div class="progress" style="height:6px;">
-                            <div class="progress-bar bg-primary" style="width: {{ $perc }}%"></div>
-                        </div>
-                    </div>
-                @endforeach
-            </div>
-        </div>
-    </div>
-
-    <!-- Recent Activity -->
-    <div class="col-lg-4 d-flex">
-        <div class="card shadow-sm recent-activity-card flex-fill">
-            <div class="card-header d-flex justify-content-between align-items-center">
-                <span class="fw-semibold recent-activity-title">Recent Activity</span>
-            </div>
-            <div class="card-body">
-                <ul class="list-unstyled mb-0">
-
-                    <!-- Recent Activities -->
-                    @foreach ($recentActivities as $activity)
-                        <li class="activity-item d-flex align-items-center mb-3">
-                            <div class="icon-wrap">
-                                <span class="iconify" data-icon="mdi:clock-outline"></span>
-                            </div>
-                            <div class="flex-grow-1 ms-3">
-                                <div class="fw-semibold">{{ $activity->employee->name }}</div>
-                            </div>
-                            <div class="text-end">
-                                <div class="fw-semibold">
-                                    @php
-                                        $time = $activity->check_out_time ?? $activity->check_in_time;
-                                    @endphp
-                                    {{ $time ? Carbon::parse($time)->format('h:i A') : 'N/A' }}
-                                </div>
-
-                                <div class="status small
-                                @switch($activity->status)
-                                   @case('clocked_in') text-success @break
-                                   @case('clocked_out') text-danger @break
-                                   @case('unchecked_in') text-secondary @break
-                                   @case('absent') text-warning @break
-                                   @default text-muted
-                                @endswitch
-                                 ">
-                                    {{ ucfirst(str_replace('_', ' ', $activity->status)) }}
-                                </div>
-                            </div>
-                        </li>
-                    @endforeach
-
-                </ul>
             </div>
         </div>
     </div>
@@ -599,10 +602,7 @@ new class extends Component {
                             <!-- Location -->
                             <td>
                                 <div class="d-flex flex-column">
-                                    <span>{{ $emp['location'] ?? 'N/A' }}</span>
-                                    @if (!empty($emp['location_details']))
-                                        <small class="text-muted">{{ $emp['location_details'] }}</small>
-                                    @endif
+                                    <span>{{ $emp['location'] ? \Illuminate\Support\Str::ucfirst(strtolower($emp['location'])) : 'N/A' }}</span>
                                 </div>
                             </td>
 
@@ -687,7 +687,7 @@ new class extends Component {
 
                 // --- Info window support ---
                 if (infoContent) {
-                    const infoWindow = new google.maps.InfoWindow({ content: infoContent });
+                    const infoWindow = new google.maps.InfoWindow({content: infoContent});
                     marker.addListener("click", () => {
                         if (activeInfoWindow) activeInfoWindow.close();
                         infoWindow.open(map, marker);
@@ -761,6 +761,43 @@ new class extends Component {
             }
 
         }
+
+        const dailydata = @json($statusData);
+
+        const seriesData = Object.values(dailydata);
+        const labels = Object.keys(dailydata);
+
+        const options_simple = {
+            series: seriesData,
+            chart: {
+                fontFamily: "inherit",
+                type: "pie",
+                height: 300,
+            },
+            colors: ["#28a745", "#dc3545"], // Green for present, Red for absent
+            labels: labels,
+            legend: {
+                position: "bottom",
+                horizontalAlign: "center",
+                fontSize: "12px",
+                labels: {
+                    colors: "#a1aab2"
+                },
+            },
+            dataLabels: {
+                enabled: true,
+                formatter: function (val) {
+                    return val.toFixed(0) + "%"; // show clean percentages
+                }
+            },
+        };
+
+        const chart_pie_simple = new ApexCharts(
+            document.querySelector("#daily-attendance"),
+            options_simple
+        );
+        chart_pie_simple.render();
+
     </script>
 
     <script async defer

@@ -6,7 +6,7 @@
         <ul class="dropdown-menu" aria-labelledby="employee-actions">
             @if(empty($workLocationId))
                 <li>
-                    <a class="dropdown-item d-flex align-items-center gap-2" href="{{ route('employees.view') }}">
+                    <a class="dropdown-item d-flex align-items-center gap-2" href="{{ route('employees.view',$employee->id) }}">
                         <iconify-icon icon="mdi:eye-outline" class="text-primary w-4 h-4"></iconify-icon>
                         <span>View</span>
                     </a>

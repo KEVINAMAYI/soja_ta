@@ -19,7 +19,7 @@ new class extends Component {
 
         $orgId = Auth::user()->employee->organization_id ?? null;
 
-        //monhtly attendance data
+        //monthly attendance data
         $start = Carbon::now()->startOfMonth();
         $end = Carbon::now()->endOfMonth();
         $days = $start->diffInDays($end);
