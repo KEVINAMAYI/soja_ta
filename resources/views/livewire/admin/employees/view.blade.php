@@ -632,25 +632,38 @@ new class extends Component {
                 </div>
 
                 <!-- Table -->
+                <!-- Table -->
                 <table class="table table-hover table-bordered align-middle">
                     <thead class="table-light">
                     <tr>
+                        <th>Date</th>
                         <th>Employee</th>
-                        <th>Regular Hours</th>
+                        <th>Worked Hours</th>
                         <th>Overtime Hours</th>
-                        <th>Total Hours</th>
                         <th>Status</th>
                     </tr>
                     </thead>
                     <tbody>
                     @forelse($timesheets as $sheet)
                         <tr>
+                            <!-- Date -->
+                            <td>
+                                {{ $sheet->date ? \Carbon\Carbon::parse($sheet->date)->format('M d, Y') : '-' }}
+                            </td>
+
+                            <!-- Employee -->
                             <td>{{ $sheet->employee->user->name ?? 'N/A' }}</td>
-                            <td>{{ $sheet->regular_hours ?? '0h' }}</td>
+
+                            <!-- Worked Hours -->
+                            <td>{{ $sheet->worked_hours ?? '0h' }}</td>
+
+                            <!-- Overtime Hours -->
                             <td class="{{ ($sheet->overtime_hours ?? 0) >= 8 ? 'overtime-high' : (($sheet->overtime_hours ?? 0) > 0 ? 'overtime-mid' : '') }}">
                                 {{ $sheet->overtime_hours ?? '0h' }}
                             </td>
-                            <td>{{ ($sheet->regular_hours ?? 0) + ($sheet->overtime_hours ?? 0) }}h</td>
+
+
+                            <!-- Status -->
                             <td>
                                 @php
                                     $statusClass = match($sheet->status) {
@@ -671,11 +684,12 @@ new class extends Component {
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="5" class="text-center text-muted">No attendance records found</td>
+                            <td colspan="6" class="text-center text-muted">No attendance records found</td>
                         </tr>
                     @endforelse
                     </tbody>
                 </table>
+
             </div>
         </div>
 
