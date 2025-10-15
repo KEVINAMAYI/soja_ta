@@ -1,4 +1,4 @@
-name: Deploy to Soja Server
+name: Deploy to Soja TA Server
 
 on:
   push:
