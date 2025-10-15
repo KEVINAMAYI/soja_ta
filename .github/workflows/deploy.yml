@@ -6,7 +6,6 @@ on:
       - mocca
       - marksol
       - kingsway
-      - dev
 
 jobs:
   deploy:
@@ -25,8 +24,6 @@ jobs:
             echo "target=/var/www/marksol-ta" >> $GITHUB_ENV
           elif [[ "${GITHUB_REF##*/}" == "kingsway" ]]; then
             echo "target=/var/www/kingsway-ta" >> $GITHUB_ENV
-          elif [[ "${GITHUB_REF##*/}" == "dev" ]]; then
-            echo "target=/var/www/dev-ta" >> $GITHUB_ENV
           fi
 
       - name: Deploy code via rsync
