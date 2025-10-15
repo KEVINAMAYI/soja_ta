@@ -1,0 +1,51 @@
+name: Deploy to Soja Server
+
+on:
+  push:
+    branches:
+      - mocca
+      - marksol
+      - kingsway
+      - dev
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set target folder based on branch
+        id: vars
+        run: |
+          if [[ "${GITHUB_REF##*/}" == "mocca" ]]; then
+            echo "target=/var/www/mocca-ta" >> $GITHUB_ENV
+          elif [[ "${GITHUB_REF##*/}" == "marksol" ]]; then
+            echo "target=/var/www/marksol-ta" >> $GITHUB_ENV
+          elif [[ "${GITHUB_REF##*/}" == "kingsway" ]]; then
+            echo "target=/var/www/kingsway-ta" >> $GITHUB_ENV
+          elif [[ "${GITHUB_REF##*/}" == "dev" ]]; then
+            echo "target=/var/www/dev-ta" >> $GITHUB_ENV
+          fi
+
+      - name: Deploy code via rsync
+        uses: burnett01/rsync-deployments@5.2
+        with:
+          switches: -avzr --delete
+          path: ./
+          remote_path: ${{ env.target }}
+          remote_host: mocca-ta.soja.co.ug
+          remote_user: deploy
+          remote_key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Run post-deployment commands
+        run: |
+          ssh -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=no deploy@mocca-ta.soja.co.ug << 'EOF'
+            cd ${{ env.target }}
+            composer install --no-dev --optimize-autoloader
+            php artisan migrate --force
+            php artisan optimize:clear
+            npm install
+            npm run build
+          EOF
