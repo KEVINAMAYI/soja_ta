@@ -39,8 +39,9 @@ jobs:
             echo "🧹 Removing old vendor and caches..."
             rm -rf vendor/ bootstrap/cache/*.php
 
-            echo "📦 Running full composer update (fresh deps + autoload rebuild)..."
-            COMPOSER_ALLOW_SUPERUSER=1 composer update --no-interaction --prefer-dist --optimize-autoloader --no-self-update
+            echo "📦 Running composer install (fresh + optimized)..."
+            export COMPOSER_ALLOW_SUPERUSER=1
+            composer install --no-interaction --prefer-dist --optimize-autoloader
             composer dump-autoload -o
 
             echo "🧱 Running database migrations..."
@@ -90,8 +91,9 @@ jobs:
             echo "🧹 Cleaning vendor and Laravel cache..."
             rm -rf vendor/ bootstrap/cache/*.php
 
-            echo "📦 Running composer update (production mode)..."
-            COMPOSER_ALLOW_SUPERUSER=1 composer update --no-interaction --prefer-dist --optimize-autoloader --no-dev --no-self-update
+            echo "📦 Running composer install (production mode)..."
+            export COMPOSER_ALLOW_SUPERUSER=1
+            composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader
             composer dump-autoload -o
 
             echo "🧱 Running migrations..."
@@ -140,8 +142,9 @@ jobs:
             echo "🧹 Cleaning vendor and cache..."
             rm -rf vendor/ bootstrap/cache/*.php
 
-            echo "📦 Running composer update (production mode)..."
-            COMPOSER_ALLOW_SUPERUSER=1 composer update --no-interaction --prefer-dist --optimize-autoloader --no-dev --no-self-update
+            echo "📦 Running composer install (production mode)..."
+            export COMPOSER_ALLOW_SUPERUSER=1
+            composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader
             composer dump-autoload -o
 
             echo "🧱 Running migrations..."
