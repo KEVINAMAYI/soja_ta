@@ -1,4 +1,4 @@
-name: Deploy Laravel to Servers
+name: Deploy Laravel to Development/Kenya Production and Uganda Production Servers
 
 on:
   push:
