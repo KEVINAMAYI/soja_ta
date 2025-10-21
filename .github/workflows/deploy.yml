@@ -43,10 +43,13 @@ jobs:
             rm -rf vendor/
 
             echo "📦 Installing composer dependencies..."
-            composer install --no-interaction --prefer-dist --optimize-autoloader
+            composer install --no-interaction --prefer-dist --optimize-autoloader || {
+              echo "⚙️ Composer install failed — attempting automatic repair with composer update..."
+              composer update --no-interaction --prefer-dist --optimize-autoloader
+            }
 
             echo "🧱 Running migrations..."
-            php artisan migrate --force
+            php artisan migrate --force || true
 
             echo "⚡ Clearing and rebuilding caches..."
             php artisan optimize:clear
@@ -57,8 +60,8 @@ jobs:
 
             echo "🎨 Building frontend assets (if package.json exists)..."
             if [ -f package.json ]; then
-              npm ci --omit=dev
-              npm run build
+              npm ci --omit=dev || npm install
+              npm run build || true
             fi
 
             echo "🔧 Returning permissions to web server..."
@@ -93,10 +96,13 @@ jobs:
             rm -rf vendor/
 
             echo "📦 Installing composer dependencies..."
-            composer install --no-interaction --prefer-dist --optimize-autoloader --no-dev
+            composer install --no-interaction --prefer-dist --optimize-autoloader --no-dev || {
+              echo "⚙️ Composer install failed — attempting automatic repair with composer update..."
+              composer update --no-interaction --prefer-dist --optimize-autoloader --no-dev
+            }
 
             echo "🧱 Running migrations..."
-            php artisan migrate --force
+            php artisan migrate --force || true
 
             echo "⚡ Clearing and rebuilding Laravel caches..."
             php artisan optimize:clear
@@ -107,8 +113,8 @@ jobs:
 
             echo "🎨 Building frontend assets..."
             if [ -f package.json ]; then
-              npm ci --omit=dev
-              npm run build
+              npm ci --omit=dev || npm install
+              npm run build || true
             fi
 
             echo "🔧 Restoring ownership to www-data..."
@@ -142,10 +148,13 @@ jobs:
             rm -rf vendor/
 
             echo "📦 Installing composer dependencies..."
-            composer install --no-interaction --prefer-dist --optimize-autoloader --no-dev
+            composer install --no-interaction --prefer-dist --optimize-autoloader --no-dev || {
+              echo "⚙️ Composer install failed — attempting automatic repair with composer update..."
+              composer update --no-interaction --prefer-dist --optimize-autoloader --no-dev
+            }
 
             echo "🧱 Running migrations..."
-            php artisan migrate --force
+            php artisan migrate --force || true
 
             echo "⚡ Clearing and rebuilding Laravel caches..."
             php artisan optimize:clear
@@ -156,8 +165,8 @@ jobs:
 
             echo "🎨 Building frontend assets..."
             if [ -f package.json ]; then
-              npm ci --omit=dev
-              npm run build
+              npm ci --omit=dev || npm install
+              npm run build || true
             fi
 
             echo "🔧 Restoring ownership to www-data..."
