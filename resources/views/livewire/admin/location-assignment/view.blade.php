@@ -890,30 +890,7 @@ new class extends Component {
                                        class="form-control"
                                        wire:model="pin"
                                        placeholder="Leave empty to auto-generate">
-                                 .pulse-marker {
-            position: absolute;
-            width: 40px;
-            height: 40px;
-            background: rgba(255, 0, 0, 0.4);
-            border-radius: 50%;
-            animation: pulse 1.5s infinite;
-            pointer-events: none;
-        }
-
-        @keyframes pulse {
-            0% {
-                transform: scale(0.8);
-                opacity: 0.6;
-            }
-            50% {
-                transform: scale(1.5);
-                opacity: 0.3;
-            }
-            100% {
-                transform: scale(0.8);
-                opacity: 0.6;
-            }
-        }<button type="button"
+                                 <button type="button"
                                         wire:click="generatePin"
                                         class="custom-hover-white btn btn-outline-primary">
                                     Auto-generate
