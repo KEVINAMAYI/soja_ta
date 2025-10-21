@@ -16,7 +16,7 @@ jobs:
         uses: actions/checkout@v4
 
       # =============================
-      # 🚀 DEPLOY TO DEVELOPMENT
+      # 🚀 Deploy to Development
       # =============================
       - name: 🚀 Deploy to Development (dev.ta.soja.co.ke)
         if: github.ref == 'refs/heads/development'
@@ -33,9 +33,9 @@ jobs:
             git fetch origin development
             git reset --hard origin/development
 
-            echo "🔧 Fixing ownership and permissions BEFORE deploy..."
-            sudo chown -R www-data:www-data storage bootstrap/cache
-            sudo chmod -R 775 storage bootstrap/cache
+            echo "🔧 Fix permissions BEFORE deploy..."
+            sudo chown -R www-data:www-data storage bootstrap/cache public
+            sudo chmod -R 775 storage bootstrap/cache public
 
             echo "📦 Installing composer dependencies..."
             composer install --no-interaction --prefer-dist --optimize-autoloader
@@ -43,7 +43,7 @@ jobs:
             echo "🧱 Running migrations..."
             php artisan migrate --force
 
-            echo "⚡ Clearing and optimizing Laravel caches..."
+            echo "⚡ Clearing and optimizing caches..."
             php artisan optimize:clear
             php artisan config:clear
             php artisan route:clear
@@ -52,14 +52,20 @@ jobs:
             php artisan event:clear
             php artisan optimize
 
-            echo "🔧 Fixing ownership and permissions AFTER deploy..."
-            sudo chown -R www-data:www-data storage bootstrap/cache
-            sudo chmod -R 775 storage bootstrap/cache
+            echo "🎨 Rebuilding frontend assets..."
+            if [ -f package.json ]; then
+              npm ci
+              npm run build
+            fi
+
+            echo "🔧 Fix permissions AFTER deploy..."
+            sudo chown -R www-data:www-data storage bootstrap/cache public
+            sudo chmod -R 775 storage bootstrap/cache public
 
             echo "✅ Development deployment successful!"
 
       # =============================
-      # 🇰🇪 DEPLOY TO KENYA PRODUCTION
+      # 🚀 Deploy to Kenya Production
       # =============================
       - name: 🚀 Deploy to Kenya Production (ta.soja.co.ke)
         if: github.ref == 'refs/heads/master'
@@ -77,9 +83,9 @@ jobs:
             git fetch origin master
             git reset --hard origin/master
 
-            echo "🔧 Fixing ownership and permissions BEFORE deploy..."
-            sudo chown -R www-data:www-data storage bootstrap/cache
-            sudo chmod -R 775 storage bootstrap/cache
+            echo "🔧 Fix permissions BEFORE deploy..."
+            sudo chown -R www-data:www-data storage bootstrap/cache public
+            sudo chmod -R 775 storage bootstrap/cache public
 
             echo "📦 Installing composer dependencies..."
             composer install --no-interaction --prefer-dist --optimize-autoloader
@@ -87,7 +93,7 @@ jobs:
             echo "🧱 Running migrations..."
             php artisan migrate --force
 
-            echo "⚡ Clearing and optimizing Laravel caches..."
+            echo "⚡ Clearing and optimizing caches..."
             php artisan optimize:clear
             php artisan config:clear
             php artisan route:clear
@@ -96,14 +102,20 @@ jobs:
             php artisan event:clear
             php artisan optimize
 
-            echo "🔧 Fixing ownership and permissions AFTER deploy..."
-            sudo chown -R www-data:www-data storage bootstrap/cache
-            sudo chmod -R 775 storage bootstrap/cache
+            echo "🎨 Rebuilding frontend assets..."
+            if [ -f package.json ]; then
+              npm ci
+              npm run build
+            fi
+
+            echo "🔧 Fix permissions AFTER deploy..."
+            sudo chown -R www-data:www-data storage bootstrap/cache public
+            sudo chmod -R 775 storage bootstrap/cache public
 
             echo "✅ Kenya production deployment successful!"
 
       # =============================
-      # 🇺🇬 DEPLOY TO UGANDA PRODUCTION
+      # 🚀 Deploy to Uganda Production
       # =============================
       - name: 🚀 Deploy to Uganda Production (ta.soja.co.ug)
         if: github.ref == 'refs/heads/production-ug'
@@ -120,9 +132,9 @@ jobs:
             git fetch origin production-ug
             git reset --hard origin/production-ug
 
-            echo "🔧 Fixing ownership and permissions BEFORE deploy..."
-            sudo chown -R www-data:www-data storage bootstrap/cache
-            sudo chmod -R 775 storage bootstrap/cache
+            echo "🔧 Fix permissions BEFORE deploy..."
+            sudo chown -R www-data:www-data storage bootstrap/cache public
+            sudo chmod -R 775 storage bootstrap/cache public
 
             echo "📦 Installing composer dependencies..."
             composer install --no-interaction --prefer-dist --optimize-autoloader
@@ -130,7 +142,7 @@ jobs:
             echo "🧱 Running migrations..."
             php artisan migrate --force
 
-            echo "⚡ Clearing and optimizing Laravel caches..."
+            echo "⚡ Clearing and optimizing caches..."
             php artisan optimize:clear
             php artisan config:clear
             php artisan route:clear
@@ -139,8 +151,14 @@ jobs:
             php artisan event:clear
             php artisan optimize
 
-            echo "🔧 Fixing ownership and permissions AFTER deploy..."
-            sudo chown -R www-data:www-data storage bootstrap/cache
-            sudo chmod -R 775 storage bootstrap/cache
+            echo "🎨 Rebuilding frontend assets..."
+            if [ -f package.json ]; then
+              npm ci
+              npm run build
+            fi
+
+            echo "🔧 Fix permissions AFTER deploy..."
+            sudo chown -R www-data:www-data storage bootstrap/cache public
+            sudo chmod -R 775 storage bootstrap/cache public
 
             echo "✅ Uganda production deployment successful!"
