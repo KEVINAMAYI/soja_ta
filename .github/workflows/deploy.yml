@@ -42,9 +42,9 @@ jobs:
             echo "🧹 Cleaning vendor and caches..."
             sudo rm -rf vendor bootstrap/cache/*.php
 
-            echo "📦 Installing dependencies..."
+            echo "📦 Updating dependencies (ensures correct PHP versions)..."
             export COMPOSER_ALLOW_SUPERUSER=1
-            sudo composer install --no-interaction --prefer-dist --optimize-autoloader
+            sudo composer update --no-interaction --prefer-dist --optimize-autoloader
             sudo composer dump-autoload -o
 
             echo "🧱 Running migrations..."
@@ -97,9 +97,9 @@ jobs:
             echo "🧹 Cleaning vendor and cache..."
             sudo rm -rf vendor bootstrap/cache/*.php
 
-            echo "📦 Installing composer dependencies (prod)..."
+            echo "📦 Updating composer dependencies..."
             export COMPOSER_ALLOW_SUPERUSER=1
-            sudo composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader
+            sudo composer update --no-dev --no-interaction --prefer-dist --optimize-autoloader
             sudo composer dump-autoload -o
 
             echo "🧱 Running migrations..."
@@ -151,9 +151,9 @@ jobs:
             echo "🧹 Cleaning vendor and cache..."
             sudo rm -rf vendor bootstrap/cache/*.php
 
-            echo "📦 Installing composer dependencies (prod)..."
+            echo "📦 Updating composer dependencies..."
             export COMPOSER_ALLOW_SUPERUSER=1
-            sudo composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader
+            sudo composer update --no-dev --no-interaction --prefer-dist --optimize-autoloader
             sudo composer dump-autoload -o
 
             echo "🧱 Running migrations..."
