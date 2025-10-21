@@ -28,9 +28,11 @@ jobs:
             git fetch origin development
             git reset --hard origin/development
 
-            # Ensure proper permissions before running anything
-            sudo chown -R $USER:www-data storage bootstrap/cache
-            sudo chmod -R ug+rwx storage bootstrap/cache
+            # ✅ Fix permissions before deploy
+            sudo chown -R www-data:www-data storage bootstrap/cache
+            sudo find storage -type d -exec chmod 775 {} \;
+            sudo find storage -type f -exec chmod 664 {} \;
+            sudo chmod -R 775 bootstrap/cache
 
             composer install --no-interaction --prefer-dist --optimize-autoloader
             php artisan migrate --force
@@ -39,11 +41,13 @@ jobs:
             php artisan route:cache
             php artisan view:clear
 
-            # Reset permissions again after build
-            sudo chown -R $USER:www-data storage bootstrap/cache
-            sudo chmod -R ug+rwx storage bootstrap/cache
+            # ✅ Fix permissions again after deploy
+            sudo chown -R www-data:www-data storage bootstrap/cache
+            sudo find storage -type d -exec chmod 775 {} \;
+            sudo find storage -type f -exec chmod 664 {} \;
+            sudo chmod -R 775 bootstrap/cache
 
-            echo "✅ Development deployment successful"
+            echo "✅ Development deployment successful (permissions fixed)"
 
       # ---------------- KENYA PRODUCTION ----------------
       - name: Deploy to Kenya Production (ta.soja.co.ke)
@@ -59,8 +63,11 @@ jobs:
             git fetch origin master
             git reset --hard origin/master
 
-            sudo chown -R $USER:www-data storage bootstrap/cache
-            sudo chmod -R ug+rwx storage bootstrap/cache
+            # ✅ Fix permissions before deploy
+            sudo chown -R www-data:www-data storage bootstrap/cache
+            sudo find storage -type d -exec chmod 775 {} \;
+            sudo find storage -type f -exec chmod 664 {} \;
+            sudo chmod -R 775 bootstrap/cache
 
             composer install --no-interaction --prefer-dist --optimize-autoloader
             php artisan migrate --force
@@ -69,10 +76,13 @@ jobs:
             php artisan route:cache
             php artisan view:clear
 
-            sudo chown -R $USER:www-data storage bootstrap/cache
-            sudo chmod -R ug+rwx storage bootstrap/cache
+            # ✅ Fix permissions again after deploy
+            sudo chown -R www-data:www-data storage bootstrap/cache
+            sudo find storage -type d -exec chmod 775 {} \;
+            sudo find storage -type f -exec chmod 664 {} \;
+            sudo chmod -R 775 bootstrap/cache
 
-            echo "✅ Kenya production deployment successful"
+            echo "✅ Kenya production deployment successful (permissions fixed)"
 
       # ---------------- UGANDA PRODUCTION ----------------
       - name: Deploy to Uganda Production (ta.soja.co.ug)
@@ -87,8 +97,11 @@ jobs:
             git fetch origin production-ug
             git reset --hard origin/production-ug
 
-            sudo chown -R $USER:www-data storage bootstrap/cache
-            sudo chmod -R ug+rwx storage bootstrap/cache
+            # ✅ Fix permissions before deploy
+            sudo chown -R www-data:www-data storage bootstrap/cache
+            sudo find storage -type d -exec chmod 775 {} \;
+            sudo find storage -type f -exec chmod 664 {} \;
+            sudo chmod -R 775 bootstrap/cache
 
             composer install --no-interaction --prefer-dist --optimize-autoloader
             php artisan migrate --force
@@ -97,7 +110,10 @@ jobs:
             php artisan route:cache
             php artisan view:clear
 
-            sudo chown -R $USER:www-data storage bootstrap/cache
-            sudo chmod -R ug+rwx storage bootstrap/cache
+            # ✅ Fix permissions again after deploy
+            sudo chown -R www-data:www-data storage bootstrap/cache
+            sudo find storage -type d -exec chmod 775 {} \;
+            sudo find storage -type f -exec chmod 664 {} \;
+            sudo chmod -R 775 bootstrap/cache
 
-            echo "✅ Uganda production deployment successful"
+            echo "✅ Uganda production deployment successful (permissions fixed)"
