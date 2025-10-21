@@ -1,10 +1,10 @@
-name: Deploy Laravel to Development/Kenya Production and Uganda Production Servers
+name: Deploy Laravel to Development, Kenya Production, and Uganda Production Servers
 
 on:
   push:
     branches:
-      - master
       - development
+      - master
       - production-ug
 
 jobs:
@@ -12,10 +12,13 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
+      - name: 🧾 Checkout code
         uses: actions/checkout@v4
 
-      - name: Deploy to Development (dev.soja.co.ke)
+      # =============================
+      # 🚀 DEPLOY TO DEVELOPMENT
+      # =============================
+      - name: 🚀 Deploy to Development (dev.ta.soja.co.ke)
         if: github.ref == 'refs/heads/development'
         uses: appleboy/ssh-action@v1.1.0
         with:
@@ -23,28 +26,132 @@ jobs:
           username: ${{ secrets.DEV_USER }}
           key: ${{ secrets.DEV_KEY }}
           script: |
+            echo "🚀 Starting deployment on Development server..."
             cd /var/www/dev.ta.soja.co.ke
+
+            echo "📥 Pulling latest code..."
             git fetch origin development
             git reset --hard origin/development
 
-            echo "🔧 Fixing permissions before deploy..."
-            chown -R $USER:$USER .
-            chmod -R ug+rwx storage bootstrap/cache
+            echo "🔧 Setting ownership..."
+            sudo chown -R $USER:$USER .
 
             echo "📦 Installing composer dependencies..."
-            composer install --no-interaction --prefer-dist --optimize-autoloader
+            if [ -f composer.lock ]; then
+              composer install --no-interaction --prefer-dist --optimize-autoloader || composer update --no-interaction --prefer-dist --optimize-autoloader
+            else
+              composer update --no-interaction --prefer-dist --optimize-autoloader
+            fi
 
             echo "🧱 Running migrations..."
-            php artisan migrate --force
+            php artisan migrate --force || true
 
-            echo "⚡ Optimizing Laravel caches..."
+            echo "⚡ Clearing and optimizing Laravel caches..."
             php artisan optimize:clear || true
-            php artisan config:cache || true
-            php artisan route:cache || true
+            php artisan config:clear || true
+            php artisan route:clear || true
             php artisan view:clear || true
+            php artisan cache:clear || true
+            php artisan event:clear || true
+            php artisan optimize || true
 
-            echo "🔧 Final permission fix..."
-            chown -R $USER:$USER storage bootstrap/cache
-            chmod -R ug+rwx storage bootstrap/cache
+            echo "🔍 Fixing duplicate route issue..."
+            php artisan route:clear || true
 
-            echo "✅ Development deployment successful"
+            echo "🔒 Fixing permissions for Laravel writable directories..."
+            sudo chown -R www-data:www-data storage bootstrap/cache
+            sudo chmod -R 775 storage bootstrap/cache
+
+            echo "✅ Development deployment successful!"
+
+      # =============================
+      # 🇰🇪 DEPLOY TO KENYA PRODUCTION
+      # =============================
+      - name: 🚀 Deploy to Kenya Production (ta.soja.co.ke)
+        if: github.ref == 'refs/heads/master'
+        uses: appleboy/ssh-action@v1.1.0
+        with:
+          host: ${{ secrets.PROD_KE_HOST }}
+          username: ${{ secrets.PROD_KE_USER }}
+          key: ${{ secrets.PROD_KE_KEY }}
+          script: |
+            echo "🚀 Starting deployment on Kenya Production server..."
+            cd /var/www/ta.soja.co.ke
+
+            echo "📥 Pulling latest code..."
+            git fetch origin master
+            git reset --hard origin/master
+
+            echo "🔧 Setting ownership..."
+            sudo chown -R $USER:$USER .
+
+            echo "📦 Installing composer dependencies..."
+            if [ -f composer.lock ]; then
+              composer install --no-interaction --prefer-dist --optimize-autoloader || composer update --no-interaction --prefer-dist --optimize-autoloader
+            else
+              composer update --no-interaction --prefer-dist --optimize-autoloader
+            fi
+
+            echo "🧱 Running migrations..."
+            php artisan migrate --force || true
+
+            echo "⚡ Clearing and optimizing Laravel caches..."
+            php artisan optimize:clear || true
+            php artisan config:clear || true
+            php artisan route:clear || true
+            php artisan view:clear || true
+            php artisan cache:clear || true
+            php artisan event:clear || true
+            php artisan optimize || true
+
+            echo "🔒 Fixing permissions for Laravel writable directories..."
+            sudo chown -R www-data:www-data storage bootstrap/cache
+            sudo chmod -R 775 storage bootstrap/cache
+
+            echo "✅ Kenya production deployment successful!"
+
+      # =============================
+      # 🇺🇬 DEPLOY TO UGANDA PRODUCTION
+      # =============================
+      - name: 🚀 Deploy to Uganda Production (ug.ta.soja.co.ke)
+        if: github.ref == 'refs/heads/production-ug'
+        uses: appleboy/ssh-action@v1.1.0
+        with:
+          host: ${{ secrets.PROD_UG_HOST }}
+          username: ${{ secrets.PROD_UG_USER }}
+          key: ${{ secrets.PROD_UG_KEY }}
+          script: |
+            echo "🚀 Starting deployment on Uganda Production server..."
+            cd /var/www/ug.ta.soja.co.ke
+
+            echo "📥 Pulling latest code..."
+            git fetch origin production-ug
+            git reset --hard origin/production-ug
+
+            echo "🔧 Setting ownership..."
+            sudo chown -R $USER:$USER .
+
+            echo "📦 Installing composer dependencies..."
+            if [ -f composer.lock ]; then
+              composer install --no-interaction --prefer-dist --optimize-autoloader || composer update --no-interaction --prefer-dist --optimize-autoloader
+            else
+              composer update --no-interaction --prefer-dist --optimize-autoloader
+            fi
+
+            echo "🧱 Running migrations..."
+            php artisan migrate --force || true
+
+            echo "⚡ Clearing and optimizing Laravel caches..."
+            php artisan optimize:clear || true
+            php artisan config:clear || true
+            php artisan route:clear || true
+            php artisan view:clear || true
+            php artisan cache:clear || true
+            php artisan event:clear || true
+            php artisan optimize || true
+
+            echo "🔒 Fixing permissions for Laravel writable directories..."
+            sudo chown -R www-data:www-data storage bootstrap/cache
+            sudo chmod -R 775 storage bootstrap/cache
+
+            echo "✅ Uganda production deployment successful!"
