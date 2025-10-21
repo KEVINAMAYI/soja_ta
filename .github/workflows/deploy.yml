@@ -36,16 +36,20 @@ jobs:
             git fetch origin development
             git reset --hard origin/development
 
-            echo "🧹 Cleaning old dependencies..."
-            rm -rf vendor/
+            echo "🧹 Removing old vendor and caches..."
+            rm -rf vendor/ bootstrap/cache/*.php
 
-            echo "📦 Running composer update (auto-refresh dependencies)..."
+            echo "🧰 Updating Composer itself..."
+            composer self-update || true
+
+            echo "📦 Running full composer update (fresh deps + autoload rebuild)..."
             composer update --no-interaction --prefer-dist --optimize-autoloader
+            composer dump-autoload -o
 
             echo "🧱 Running database migrations..."
             php artisan migrate --force || true
 
-            echo "⚡ Rebuilding Laravel caches..."
+            echo "⚡ Clearing and rebuilding Laravel caches..."
             php artisan optimize:clear
             php artisan config:cache
             php artisan route:cache
@@ -86,11 +90,13 @@ jobs:
             git fetch origin master
             git reset --hard origin/master
 
-            echo "🧹 Cleaning vendor directory..."
-            rm -rf vendor/
+            echo "🧹 Cleaning vendor and Laravel cache..."
+            rm -rf vendor/ bootstrap/cache/*.php
 
             echo "📦 Running composer update (production mode)..."
+            composer self-update || true
             composer update --no-interaction --prefer-dist --optimize-autoloader --no-dev
+            composer dump-autoload -o
 
             echo "🧱 Running migrations..."
             php artisan migrate --force || true
@@ -135,11 +141,13 @@ jobs:
             git fetch origin production-ug
             git reset --hard origin/production-ug
 
-            echo "🧹 Cleaning vendor directory..."
-            rm -rf vendor/
+            echo "🧹 Cleaning vendor and cache..."
+            rm -rf vendor/ bootstrap/cache/*.php
 
             echo "📦 Running composer update (production mode)..."
+            composer self-update || true
             composer update --no-interaction --prefer-dist --optimize-autoloader --no-dev
+            composer dump-autoload -o
 
             echo "🧱 Running migrations..."
             php artisan migrate --force || true
