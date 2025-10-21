@@ -28,24 +28,29 @@ jobs:
             git fetch origin development
             git reset --hard origin/development
 
-            # ✅ Fix permissions before deploy
-            sudo chown -R www-data:www-data storage bootstrap/cache
-            sudo find storage -type d -exec chmod 775 {} \;
-            sudo find storage -type f -exec chmod 664 {} \;
-            sudo chmod -R 775 bootstrap/cache
+            echo "🔧 Fixing ownership and permissions before deploy..."
+            sudo chown -R $USER:www-data .
+            sudo find storage bootstrap/cache -type d -exec chmod 775 {} \;
+            sudo find storage bootstrap/cache -type f -exec chmod 664 {} \;
+            sudo chmod -R ug+rwx storage bootstrap/cache
 
+            echo "📦 Installing composer dependencies..."
             composer install --no-interaction --prefer-dist --optimize-autoloader
+
+            echo "🧱 Running migrations..."
             php artisan migrate --force
+
+            echo "⚡ Optimizing Laravel caches..."
             php artisan optimize:clear
             php artisan config:cache
             php artisan route:cache
             php artisan view:clear
 
-            # ✅ Fix permissions again after deploy
+            echo "🔧 Re-applying correct ownership for Laravel writable directories..."
             sudo chown -R www-data:www-data storage bootstrap/cache
-            sudo find storage -type d -exec chmod 775 {} \;
-            sudo find storage -type f -exec chmod 664 {} \;
-            sudo chmod -R 775 bootstrap/cache
+            sudo find storage bootstrap/cache -type d -exec chmod 775 {} \;
+            sudo find storage bootstrap/cache -type f -exec chmod 664 {} \;
+            sudo chmod -R ug+rwx storage bootstrap/cache
 
             echo "✅ Development deployment successful (permissions fixed)"
 
@@ -63,11 +68,11 @@ jobs:
             git fetch origin master
             git reset --hard origin/master
 
-            # ✅ Fix permissions before deploy
-            sudo chown -R www-data:www-data storage bootstrap/cache
-            sudo find storage -type d -exec chmod 775 {} \;
-            sudo find storage -type f -exec chmod 664 {} \;
-            sudo chmod -R 775 bootstrap/cache
+            echo "🔧 Fixing ownership and permissions before deploy..."
+            sudo chown -R $USER:www-data .
+            sudo find storage bootstrap/cache -type d -exec chmod 775 {} \;
+            sudo find storage bootstrap/cache -type f -exec chmod 664 {} \;
+            sudo chmod -R ug+rwx storage bootstrap/cache
 
             composer install --no-interaction --prefer-dist --optimize-autoloader
             php artisan migrate --force
@@ -76,11 +81,11 @@ jobs:
             php artisan route:cache
             php artisan view:clear
 
-            # ✅ Fix permissions again after deploy
+            echo "🔧 Re-applying correct ownership for Laravel writable directories..."
             sudo chown -R www-data:www-data storage bootstrap/cache
-            sudo find storage -type d -exec chmod 775 {} \;
-            sudo find storage -type f -exec chmod 664 {} \;
-            sudo chmod -R 775 bootstrap/cache
+            sudo find storage bootstrap/cache -type d -exec chmod 775 {} \;
+            sudo find storage bootstrap/cache -type f -exec chmod 664 {} \;
+            sudo chmod -R ug+rwx storage bootstrap/cache
 
             echo "✅ Kenya production deployment successful (permissions fixed)"
 
@@ -97,11 +102,11 @@ jobs:
             git fetch origin production-ug
             git reset --hard origin/production-ug
 
-            # ✅ Fix permissions before deploy
-            sudo chown -R www-data:www-data storage bootstrap/cache
-            sudo find storage -type d -exec chmod 775 {} \;
-            sudo find storage -type f -exec chmod 664 {} \;
-            sudo chmod -R 775 bootstrap/cache
+            echo "🔧 Fixing ownership and permissions before deploy..."
+            sudo chown -R $USER:www-data .
+            sudo find storage bootstrap/cache -type d -exec chmod 775 {} \;
+            sudo find storage bootstrap/cache -type f -exec chmod 664 {} \;
+            sudo chmod -R ug+rwx storage bootstrap/cache
 
             composer install --no-interaction --prefer-dist --optimize-autoloader
             php artisan migrate --force
@@ -110,10 +115,10 @@ jobs:
             php artisan route:cache
             php artisan view:clear
 
-            # ✅ Fix permissions again after deploy
+            echo "🔧 Re-applying correct ownership for Laravel writable directories..."
             sudo chown -R www-data:www-data storage bootstrap/cache
-            sudo find storage -type d -exec chmod 775 {} \;
-            sudo find storage -type f -exec chmod 664 {} \;
-            sudo chmod -R 775 bootstrap/cache
+            sudo find storage bootstrap/cache -type d -exec chmod 775 {} \;
+            sudo find storage bootstrap/cache -type f -exec chmod 664 {} \;
+            sudo chmod -R ug+rwx storage bootstrap/cache
 
             echo "✅ Uganda production deployment successful (permissions fixed)"
