@@ -1,11 +1,11 @@
-name: Deploy To Soja TA Server
+name: Deploy Laravel to Servers
 
 on:
   push:
     branches:
-      - mocca
-      - marksol
-      - kingsway
+      - master
+      - development
+      - production-ug
 
 jobs:
   deploy:
@@ -15,34 +15,63 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set target folder based on branch
-        id: vars
-        run: |
-          if [[ "${GITHUB_REF##*/}" == "mocca" ]]; then
-            echo "target=/var/www/mocca-ta" >> $GITHUB_ENV
-          elif [[ "${GITHUB_REF##*/}" == "marksol" ]]; then
-            echo "target=/var/www/marksol-ta" >> $GITHUB_ENV
-          elif [[ "${GITHUB_REF##*/}" == "kingsway" ]]; then
-            echo "target=/var/www/kingsway-ta" >> $GITHUB_ENV
-          fi
-
-      - name: Deploy code via rsync
-        uses: burnett01/rsync-deployments@5.2
+      # ---------------- DEV DEPLOYMENT ----------------
+      - name: Deploy to Development (dev.soja.co.ke)
+        if: github.ref == 'refs/heads/development'
+        uses: appleboy/ssh-action@v1.1.0
         with:
-          switches: -avzr --delete
-          path: ./
-          remote_path: ${{ env.target }}
-          remote_host: mocca-ta.soja.co.ug
-          remote_user: deploy
-          remote_key: ${{ secrets.SSH_PRIVATE_KEY }}
-
-      - name: Run post-deployment commands
-        run: |
-          ssh -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=no deploy@mocca-ta.soja.co.ug << 'EOF'
-            cd ${{ env.target }}
-            composer install --no-dev --optimize-autoloader
+          host: ${{ secrets.DEV_HOST }}
+          username: ${{ secrets.DEV_USER }}
+          key: ${{ secrets.DEV_KEY }}
+          script: |
+            cd /var/www/dev.ta.soja.co.ke
+            git fetch origin development
+            git reset --hard origin/development
+            composer install --no-interaction --prefer-dist --optimize-autoloader
             php artisan migrate --force
             php artisan optimize:clear
-            npm install
-            npm run build
-          EOF
+            php artisan config:cache
+            php artisan route:cache
+            php artisan view:clear
+            echo "✅ Development deployment successful"
+
+      # ---------------- KENYA PRODUCTION ----------------
+      - name: Deploy to Kenya Production (ta.soja.co.ke)
+        if: github.ref == 'refs/heads/master'
+        uses: appleboy/ssh-action@v1.1.0
+        with:
+          host: ${{ secrets.KENYA_HOST }}
+          username: ${{ secrets.KENYA_USER }}
+          key: ${{ secrets.KENYA_KEY }}
+          port: ${{ secrets.KENYA_PORT }}
+          script: |
+            cd /var/www/v2.ta.soja.co.ke
+            git fetch origin master
+            git reset --hard origin/master
+            composer install --no-interaction --prefer-dist --optimize-autoloader
+            php artisan migrate --force
+            php artisan optimize:clear
+            php artisan config:cache
+            php artisan route:cache
+            php artisan view:clear
+            echo "✅ Kenya production deployment successful"
+
+      # ---------------- UGANDA PRODUCTION ----------------
+      - name: Deploy to Uganda Production (ta.soja.co.ug)
+        if: github.ref == 'refs/heads/production-ug'
+        uses: appleboy/ssh-action@v1.1.0
+        with:
+          host: ${{ secrets.UGANDA_HOST }}
+          username: ${{ secrets.UGANDA_USER }}
+          key: ${{ secrets.UGANDA_KEY }}
+          script: |
+            cd /var/www/ta.soja.co.ug
+            git fetch origin production-ug
+            git reset --hard origin/production-ug
+            composer install --no-interaction --prefer-dist --optimize-autoloader
+            php artisan migrate --force
+            php artisan optimize:clear
+            php artisan config:cache
+            php artisan route:cache
+            php artisan view:clear
+            echo "✅ Uganda production deployment successful"
