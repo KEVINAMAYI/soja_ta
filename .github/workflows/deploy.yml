@@ -1,4 +1,4 @@
-name: Deploy Laravel to Development, Kenya Production, and Uganda Production Servers
+name: 🚀 Deploy Laravel (Dev, Kenya Prod, Uganda Prod)
 
 on:
   push:
@@ -12,11 +12,11 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: 🧾 Checkout code
+      - name: 🧾 Checkout repository
         uses: actions/checkout@v4
 
       # =============================
-      # 🚀 Deploy to Development
+      # 🌱 Deploy to Development
       # =============================
       - name: 🚀 Deploy to Development (dev.ta.soja.co.ke)
         if: github.ref == 'refs/heads/development'
@@ -26,48 +26,49 @@ jobs:
           username: ${{ secrets.DEV_USER }}
           key: ${{ secrets.DEV_KEY }}
           script: |
-            echo "🚀 Starting deployment on Development server..."
+            set -e
+            echo "🚀 Deploying to Development Server..."
             cd /var/www/dev.ta.soja.co.ke
 
-            echo "🔧 Fixing permissions temporarily..."
+            echo "🔧 Setting temporary permissions..."
             sudo chown -R $USER:$USER .
 
-            echo "📥 Pulling latest code..."
+            echo "📥 Updating code..."
             git fetch origin development
             git reset --hard origin/development
 
-            echo "🧹 Removing old vendor and caches..."
-            rm -rf vendor/ bootstrap/cache/*.php
+            echo "🧹 Cleaning vendor and caches..."
+            rm -rf vendor bootstrap/cache/*.php
 
-            echo "📦 Running composer install (fresh + optimized)..."
+            echo "📦 Installing dependencies..."
             export COMPOSER_ALLOW_SUPERUSER=1
             composer install --no-interaction --prefer-dist --optimize-autoloader
             composer dump-autoload -o
 
-            echo "🧱 Running database migrations..."
+            echo "🧱 Running migrations..."
             php artisan migrate --force || true
 
-            echo "⚡ Clearing and rebuilding Laravel caches..."
+            echo "⚡ Clearing and rebuilding caches..."
             php artisan optimize:clear
             php artisan config:cache
             php artisan route:cache
             php artisan view:cache
             php artisan event:cache
 
-            echo "🎨 Building frontend assets (if package.json exists)..."
+            echo "🎨 Building frontend (if applicable)..."
             if [ -f package.json ]; then
               npm ci --omit=dev || npm install
               npm run build || true
             fi
 
-            echo "🔧 Restoring correct ownership..."
+            echo "🔐 Restoring correct permissions..."
             sudo chown -R www-data:www-data storage bootstrap/cache public
             sudo chmod -R 775 storage bootstrap/cache public
 
-            echo "✅ Development deployment successful!"
+            echo "✅ Development deployment complete!"
 
       # =============================
-      # 🚀 Deploy to Kenya Production
+      # 🇰🇪 Deploy to Kenya Production
       # =============================
       - name: 🚀 Deploy to Kenya Production (ta.soja.co.ke)
         if: github.ref == 'refs/heads/master'
@@ -78,20 +79,21 @@ jobs:
           key: ${{ secrets.KENYA_KEY }}
           port: ${{ secrets.KENYA_PORT }}
           script: |
-            echo "🚀 Starting deployment on Kenya Production server..."
+            set -e
+            echo "🚀 Deploying to Kenya Production..."
             cd /var/www/v2.ta.soja.co.ke
 
-            echo "🔧 Adjusting permissions temporarily..."
+            echo "🔧 Setting temporary permissions..."
             sudo chown -R $USER:$USER .
 
-            echo "📥 Pulling latest code..."
+            echo "📥 Updating code..."
             git fetch origin master
             git reset --hard origin/master
 
-            echo "🧹 Cleaning vendor and Laravel cache..."
-            rm -rf vendor/ bootstrap/cache/*.php
+            echo "🧹 Cleaning vendor and cache..."
+            rm -rf vendor bootstrap/cache/*.php
 
-            echo "📦 Running composer install (production mode)..."
+            echo "📦 Installing composer dependencies (prod)..."
             export COMPOSER_ALLOW_SUPERUSER=1
             composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader
             composer dump-autoload -o
@@ -106,20 +108,20 @@ jobs:
             php artisan view:cache
             php artisan event:cache
 
-            echo "🎨 Building production frontend assets..."
+            echo "🎨 Building production frontend..."
             if [ -f package.json ]; then
               npm ci --omit=dev || npm install
               npm run build || true
             fi
 
-            echo "🔧 Restoring ownership for web server..."
+            echo "🔐 Restoring ownership..."
             sudo chown -R www-data:www-data storage bootstrap/cache public
             sudo chmod -R 775 storage bootstrap/cache public
 
-            echo "✅ Kenya production deployment successful!"
+            echo "✅ Kenya Production deployment complete!"
 
       # =============================
-      # 🚀 Deploy to Uganda Production
+      # 🇺🇬 Deploy to Uganda Production
       # =============================
       - name: 🚀 Deploy to Uganda Production (ta.soja.co.ug)
         if: github.ref == 'refs/heads/production-ug'
@@ -129,20 +131,21 @@ jobs:
           username: ${{ secrets.UGANDA_USER }}
           key: ${{ secrets.UGANDA_KEY }}
           script: |
-            echo "🚀 Starting deployment on Uganda Production server..."
+            set -e
+            echo "🚀 Deploying to Uganda Production..."
             cd /var/www/ta.soja.co.ug
 
-            echo "🔧 Adjusting permissions temporarily..."
+            echo "🔧 Setting temporary permissions..."
             sudo chown -R $USER:$USER .
 
-            echo "📥 Pulling latest code..."
+            echo "📥 Updating code..."
             git fetch origin production-ug
             git reset --hard origin/production-ug
 
             echo "🧹 Cleaning vendor and cache..."
-            rm -rf vendor/ bootstrap/cache/*.php
+            rm -rf vendor bootstrap/cache/*.php
 
-            echo "📦 Running composer install (production mode)..."
+            echo "📦 Installing composer dependencies (prod)..."
             export COMPOSER_ALLOW_SUPERUSER=1
             composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader
             composer dump-autoload -o
@@ -157,14 +160,14 @@ jobs:
             php artisan view:cache
             php artisan event:cache
 
-            echo "🎨 Building frontend assets..."
+            echo "🎨 Building production frontend..."
             if [ -f package.json ]; then
               npm ci --omit=dev || npm install
               npm run build || true
             fi
 
-            echo "🔧 Restoring ownership for web server..."
+            echo "🔐 Restoring permissions..."
             sudo chown -R www-data:www-data storage bootstrap/cache public
             sudo chmod -R 775 storage bootstrap/cache public
 
-            echo "✅ Uganda production deployment successful!"
+            echo "✅ Uganda Production deployment complete!"
