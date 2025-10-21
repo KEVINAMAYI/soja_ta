@@ -15,6 +15,9 @@ jobs:
       - name: 🧾 Checkout code
         uses: actions/checkout@v4
 
+      - name: ✅ Validate composer lock consistency
+        run: composer validate --strict
+
       # =============================
       # 🚀 Deploy to Development
       # =============================
@@ -43,18 +46,16 @@ jobs:
             echo "🧱 Running migrations..."
             php artisan migrate --force
 
-            echo "⚡ Clearing and optimizing caches..."
+            echo "⚡ Clearing and rebuilding Laravel caches..."
             php artisan optimize:clear
-            php artisan config:clear
-            php artisan route:clear
-            php artisan view:clear
-            php artisan cache:clear
-            php artisan event:clear
-            php artisan optimize
+            php artisan config:cache
+            php artisan route:cache
+            php artisan view:cache
+            php artisan event:cache
 
             echo "🎨 Rebuilding frontend assets..."
             if [ -f package.json ]; then
-              npm ci
+              npm ci --omit=dev
               npm run build
             fi
 
@@ -88,23 +89,21 @@ jobs:
             sudo chmod -R 775 storage bootstrap/cache public
 
             echo "📦 Installing composer dependencies..."
-            composer install --no-interaction --prefer-dist --optimize-autoloader
+            composer install --no-interaction --prefer-dist --optimize-autoloader --no-dev
 
             echo "🧱 Running migrations..."
             php artisan migrate --force
 
-            echo "⚡ Clearing and optimizing caches..."
+            echo "⚡ Clearing and rebuilding Laravel caches..."
             php artisan optimize:clear
-            php artisan config:clear
-            php artisan route:clear
-            php artisan view:clear
-            php artisan cache:clear
-            php artisan event:clear
-            php artisan optimize
+            php artisan config:cache
+            php artisan route:cache
+            php artisan view:cache
+            php artisan event:cache
 
             echo "🎨 Rebuilding frontend assets..."
             if [ -f package.json ]; then
-              npm ci
+              npm ci --omit=dev
               npm run build
             fi
 
@@ -137,23 +136,21 @@ jobs:
             sudo chmod -R 775 storage bootstrap/cache public
 
             echo "📦 Installing composer dependencies..."
-            composer install --no-interaction --prefer-dist --optimize-autoloader
+            composer install --no-interaction --prefer-dist --optimize-autoloader --no-dev
 
             echo "🧱 Running migrations..."
             php artisan migrate --force
 
-            echo "⚡ Clearing and optimizing caches..."
+            echo "⚡ Clearing and rebuilding Laravel caches..."
             php artisan optimize:clear
-            php artisan config:clear
-            php artisan route:clear
-            php artisan view:clear
-            php artisan cache:clear
-            php artisan event:clear
-            php artisan optimize
+            php artisan config:cache
+            php artisan route:cache
+            php artisan view:cache
+            php artisan event:cache
 
             echo "🎨 Rebuilding frontend assets..."
             if [ -f package.json ]; then
-              npm ci
+              npm ci --omit=dev
               npm run build
             fi
 
