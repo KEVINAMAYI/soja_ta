@@ -1,51 +1,157 @@
-name: Deploy to Soja Server
+name: Deploy Laravel to Development, Kenya Production, and Uganda Production Servers
 
 on:
   push:
     branches:
-      - mocca
-      - marksol
-      - kingsway
-      - dev
+      - development
+      - master
+      - production-ug
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
+      - name: 🧾 Checkout code
         uses: actions/checkout@v4
 
-      - name: Set target folder based on branch
-        id: vars
-        run: |
-          if [[ "${GITHUB_REF##*/}" == "mocca" ]]; then
-            echo "target=/var/www/mocca-ta" >> $GITHUB_ENV
-          elif [[ "${GITHUB_REF##*/}" == "marksol" ]]; then
-            echo "target=/var/www/marksol-ta" >> $GITHUB_ENV
-          elif [[ "${GITHUB_REF##*/}" == "kingsway" ]]; then
-            echo "target=/var/www/kingsway-ta" >> $GITHUB_ENV
-          elif [[ "${GITHUB_REF##*/}" == "dev" ]]; then
-            echo "target=/var/www/dev-ta" >> $GITHUB_ENV
-          fi
-
-      - name: Deploy code via rsync
-        uses: burnett01/rsync-deployments@5.2
+      # =============================
+      # 🚀 DEPLOY TO DEVELOPMENT
+      # =============================
+      - name: 🚀 Deploy to Development (dev.ta.soja.co.ke)
+        if: github.ref == 'refs/heads/development'
+        uses: appleboy/ssh-action@v1.1.0
         with:
-          switches: -avzr --delete
-          path: ./
-          remote_path: ${{ env.target }}
-          remote_host: mocca-ta.soja.co.ug
-          remote_user: deploy
-          remote_key: ${{ secrets.SSH_PRIVATE_KEY }}
+          host: ${{ secrets.DEV_HOST }}
+          username: ${{ secrets.DEV_USER }}
+          key: ${{ secrets.DEV_KEY }}
+          script: |
+            echo "🚀 Starting deployment on Development server..."
+            cd /var/www/dev.ta.soja.co.ke
 
-      - name: Run post-deployment commands
-        run: |
-          ssh -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=no deploy@mocca-ta.soja.co.ug << 'EOF'
-            cd ${{ env.target }}
-            composer install --no-dev --optimize-autoloader
-            php artisan migrate --force
-            php artisan optimize:clear
-            npm install
-            npm run build
-          EOF
+            echo "📥 Pulling latest code..."
+            git fetch origin development
+            git reset --hard origin/development
+
+            echo "🔧 Setting ownership..."
+            sudo chown -R $USER:$USER .
+
+            echo "📦 Installing composer dependencies..."
+            if [ -f composer.lock ]; then
+              composer install --no-interaction --prefer-dist --optimize-autoloader || composer update --no-interaction --prefer-dist --optimize-autoloader
+            else
+              composer update --no-interaction --prefer-dist --optimize-autoloader
+            fi
+
+            echo "🧱 Running migrations..."
+            php artisan migrate --force || true
+
+            echo "⚡ Clearing and optimizing Laravel caches..."
+            php artisan optimize:clear || true
+            php artisan config:clear || true
+            php artisan route:clear || true
+            php artisan view:clear || true
+            php artisan cache:clear || true
+            php artisan event:clear || true
+            php artisan optimize || true
+
+            echo "🔍 Fixing duplicate route issue..."
+            php artisan route:clear || true
+
+            echo "🔒 Fixing permissions for Laravel writable directories..."
+            sudo chown -R www-data:www-data storage bootstrap/cache
+            sudo chmod -R 775 storage bootstrap/cache
+
+            echo "✅ Development deployment successful!"
+
+      # =============================
+      # 🇰🇪 DEPLOY TO KENYA PRODUCTION
+      # =============================
+      - name: 🚀 Deploy to Kenya Production (ta.soja.co.ke)
+        if: github.ref == 'refs/heads/master'
+        uses: appleboy/ssh-action@v1.1.0
+        with:
+          host: ${{ secrets.PROD_KE_HOST }}
+          username: ${{ secrets.PROD_KE_USER }}
+          key: ${{ secrets.PROD_KE_KEY }}
+          script: |
+            echo "🚀 Starting deployment on Kenya Production server..."
+            cd /var/www/ta.soja.co.ke
+
+            echo "📥 Pulling latest code..."
+            git fetch origin master
+            git reset --hard origin/master
+
+            echo "🔧 Setting ownership..."
+            sudo chown -R $USER:$USER .
+
+            echo "📦 Installing composer dependencies..."
+            if [ -f composer.lock ]; then
+              composer install --no-interaction --prefer-dist --optimize-autoloader || composer update --no-interaction --prefer-dist --optimize-autoloader
+            else
+              composer update --no-interaction --prefer-dist --optimize-autoloader
+            fi
+
+            echo "🧱 Running migrations..."
+            php artisan migrate --force || true
+
+            echo "⚡ Clearing and optimizing Laravel caches..."
+            php artisan optimize:clear || true
+            php artisan config:clear || true
+            php artisan route:clear || true
+            php artisan view:clear || true
+            php artisan cache:clear || true
+            php artisan event:clear || true
+            php artisan optimize || true
+
+            echo "🔒 Fixing permissions for Laravel writable directories..."
+            sudo chown -R www-data:www-data storage bootstrap/cache
+            sudo chmod -R 775 storage bootstrap/cache
+
+            echo "✅ Kenya production deployment successful!"
+
+      # =============================
+      # 🇺🇬 DEPLOY TO UGANDA PRODUCTION
+      # =============================
+      - name: 🚀 Deploy to Uganda Production (ug.ta.soja.co.ke)
+        if: github.ref == 'refs/heads/production-ug'
+        uses: appleboy/ssh-action@v1.1.0
+        with:
+          host: ${{ secrets.PROD_UG_HOST }}
+          username: ${{ secrets.PROD_UG_USER }}
+          key: ${{ secrets.PROD_UG_KEY }}
+          script: |
+            echo "🚀 Starting deployment on Uganda Production server..."
+            cd /var/www/ug.ta.soja.co.ke
+
+            echo "📥 Pulling latest code..."
+            git fetch origin production-ug
+            git reset --hard origin/production-ug
+
+            echo "🔧 Setting ownership..."
+            sudo chown -R $USER:$USER .
+
+            echo "📦 Installing composer dependencies..."
+            if [ -f composer.lock ]; then
+              composer install --no-interaction --prefer-dist --optimize-autoloader || composer update --no-interaction --prefer-dist --optimize-autoloader
+            else
+              composer update --no-interaction --prefer-dist --optimize-autoloader
+            fi
+
+            echo "🧱 Running migrations..."
+            php artisan migrate --force || true
+
+            echo "⚡ Clearing and optimizing Laravel caches..."
+            php artisan optimize:clear || true
+            php artisan config:clear || true
+            php artisan route:clear || true
+            php artisan view:clear || true
+            php artisan cache:clear || true
+            php artisan event:clear || true
+            php artisan optimize || true
+
+            echo "🔒 Fixing permissions for Laravel writable directories..."
+            sudo chown -R www-data:www-data storage bootstrap/cache
+            sudo chmod -R 775 storage bootstrap/cache
+
+            echo "✅ Uganda production deployment successful!"
