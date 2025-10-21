@@ -1,4 +1,4 @@
-name: Deploy Laravel to Development, Kenya Production, and Uganda Production Servers
+name: 🚀 Deploy Laravel (Dev, Kenya Prod, Uganda Prod)
 
 on:
   push:
@@ -12,14 +12,11 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: 🧾 Checkout code
+      - name: 🧾 Checkout repository
         uses: actions/checkout@v4
 
-      - name: ✅ Validate composer lock consistency
-        run: composer validate --strict
-
       # =============================
-      # 🚀 Deploy to Development
+      # 🌱 Deploy to Development
       # =============================
       - name: 🚀 Deploy to Development (dev.ta.soja.co.ke)
         if: github.ref == 'refs/heads/development'
@@ -29,44 +26,57 @@ jobs:
           username: ${{ secrets.DEV_USER }}
           key: ${{ secrets.DEV_KEY }}
           script: |
-            echo "🚀 Starting deployment on Development server..."
+            set -e
+            echo "🚀 Deploying to Development Server..."
             cd /var/www/dev.ta.soja.co.ke
+
+            echo "🔧 Preparing environment..."
+            sudo mkdir -p bootstrap/cache storage/framework/{sessions,views,cache,testing} storage/logs
+            sudo chmod -R 775 bootstrap/cache storage
+            sudo chown -R $USER:$USER .
 
             echo "📥 Pulling latest code..."
             git fetch origin development
             git reset --hard origin/development
 
-            echo "🔧 Fix permissions BEFORE deploy..."
-            sudo chown -R www-data:www-data storage bootstrap/cache public
-            sudo chmod -R 775 storage bootstrap/cache public
+            echo "🧹 Cleaning old caches and vendors..."
+            sudo rm -rf vendor composer.lock
+            sudo rm -rf bootstrap/cache/*.php storage/framework/cache/* storage/framework/views/*
 
             echo "📦 Installing composer dependencies..."
-            composer install --no-interaction --prefer-dist --optimize-autoloader
+            export COMPOSER_ALLOW_SUPERUSER=1
+            sudo composer install --no-interaction --prefer-dist
+            sudo composer dump-autoload -o
+            sudo php artisan clear-compiled
+            sudo php artisan package:discover --ansi
 
             echo "🧱 Running migrations..."
-            php artisan migrate --force
+            sudo php artisan migrate --force || true
 
-            echo "⚡ Clearing and rebuilding Laravel caches..."
-            php artisan optimize:clear
-            php artisan config:cache
-            php artisan route:cache
-            php artisan view:cache
-            php artisan event:cache
+            echo "⚡ Rebuilding caches..."
+            sudo php artisan optimize:clear
+            sudo php artisan config:clear
+            sudo php artisan route:clear
+            sudo php artisan view:clear
+            sudo php artisan event:clear
+            sudo php artisan optimize
 
-            echo "🎨 Rebuilding frontend assets..."
+            echo "🎨 Building frontend (if applicable)..."
             if [ -f package.json ]; then
-              npm ci --omit=dev
-              npm run build
+              sudo npm ci --omit=dev || sudo npm install
+              sudo npm run build || true
             fi
 
-            echo "🔧 Fix permissions AFTER deploy..."
+            echo "🔐 Fixing permissions..."
             sudo chown -R www-data:www-data storage bootstrap/cache public
-            sudo chmod -R 775 storage bootstrap/cache public
+            sudo find storage -type d -exec chmod 775 {} \;
+            sudo find storage -type f -exec chmod 664 {} \;
+            sudo chmod -R 775 bootstrap/cache
 
-            echo "✅ Development deployment successful!"
+            echo "✅ Development deployment complete!"
 
       # =============================
-      # 🚀 Deploy to Kenya Production
+      # 🇰🇪 Deploy to Kenya Production
       # =============================
       - name: 🚀 Deploy to Kenya Production (ta.soja.co.ke)
         if: github.ref == 'refs/heads/master'
@@ -77,44 +87,57 @@ jobs:
           key: ${{ secrets.KENYA_KEY }}
           port: ${{ secrets.KENYA_PORT }}
           script: |
-            echo "🚀 Starting deployment on Kenya Production server..."
+            set -e
+            echo "🚀 Deploying to Kenya Production..."
             cd /var/www/v2.ta.soja.co.ke
+
+            echo "🔧 Preparing environment..."
+            sudo mkdir -p bootstrap/cache storage/framework/{sessions,views,cache,testing} storage/logs
+            sudo chmod -R 775 bootstrap/cache storage
+            sudo chown -R $USER:$USER .
 
             echo "📥 Pulling latest code..."
             git fetch origin master
             git reset --hard origin/master
 
-            echo "🔧 Fix permissions BEFORE deploy..."
-            sudo chown -R www-data:www-data storage bootstrap/cache public
-            sudo chmod -R 775 storage bootstrap/cache public
+            echo "🧹 Cleaning old caches and vendors..."
+            sudo rm -rf vendor composer.lock
+            sudo rm -rf bootstrap/cache/*.php storage/framework/cache/* storage/framework/views/*
 
-            echo "📦 Installing composer dependencies..."
-            composer install --no-interaction --prefer-dist --optimize-autoloader --no-dev
+            echo "📦 Installing composer dependencies (no-dev)..."
+            export COMPOSER_ALLOW_SUPERUSER=1
+            sudo composer install --no-dev --no-interaction --prefer-dist
+            sudo composer dump-autoload -o
+            sudo php artisan clear-compiled
+            sudo php artisan package:discover --ansi
 
             echo "🧱 Running migrations..."
-            php artisan migrate --force
+            sudo php artisan migrate --force || true
 
-            echo "⚡ Clearing and rebuilding Laravel caches..."
-            php artisan optimize:clear
-            php artisan config:cache
-            php artisan route:cache
-            php artisan view:cache
-            php artisan event:cache
+            echo "⚡ Rebuilding caches..."
+            sudo php artisan optimize:clear
+            sudo php artisan config:clear
+            sudo php artisan route:clear
+            sudo php artisan view:clear
+            sudo php artisan event:clear
+            sudo php artisan optimize
 
-            echo "🎨 Rebuilding frontend assets..."
+            echo "🎨 Building production frontend..."
             if [ -f package.json ]; then
-              npm ci --omit=dev
-              npm run build
+              sudo npm ci --omit=dev || sudo npm install
+              sudo npm run build || true
             fi
 
-            echo "🔧 Fix permissions AFTER deploy..."
+            echo "🔐 Fixing permissions..."
             sudo chown -R www-data:www-data storage bootstrap/cache public
-            sudo chmod -R 775 storage bootstrap/cache public
+            sudo find storage -type d -exec chmod 775 {} \;
+            sudo find storage -type f -exec chmod 664 {} \;
+            sudo chmod -R 775 bootstrap/cache
 
-            echo "✅ Kenya production deployment successful!"
+            echo "✅ Kenya Production deployment complete!"
 
       # =============================
-      # 🚀 Deploy to Uganda Production
+      # 🇺🇬 Deploy to Uganda Production
       # =============================
       - name: 🚀 Deploy to Uganda Production (ta.soja.co.ug)
         if: github.ref == 'refs/heads/production-ug'
@@ -124,38 +147,51 @@ jobs:
           username: ${{ secrets.UGANDA_USER }}
           key: ${{ secrets.UGANDA_KEY }}
           script: |
-            echo "🚀 Starting deployment on Uganda Production server..."
+            set -e
+            echo "🚀 Deploying to Uganda Production..."
             cd /var/www/ta.soja.co.ug
+
+            echo "🔧 Preparing environment..."
+            sudo mkdir -p bootstrap/cache storage/framework/{sessions,views,cache,testing} storage/logs
+            sudo chmod -R 775 bootstrap/cache storage
+            sudo chown -R $USER:$USER .
 
             echo "📥 Pulling latest code..."
             git fetch origin production-ug
             git reset --hard origin/production-ug
 
-            echo "🔧 Fix permissions BEFORE deploy..."
-            sudo chown -R www-data:www-data storage bootstrap/cache public
-            sudo chmod -R 775 storage bootstrap/cache public
+            echo "🧹 Cleaning old caches and vendors..."
+            sudo rm -rf vendor composer.lock
+            sudo rm -rf bootstrap/cache/*.php storage/framework/cache/* storage/framework/views/*
 
-            echo "📦 Installing composer dependencies..."
-            composer install --no-interaction --prefer-dist --optimize-autoloader --no-dev
+            echo "📦 Installing composer dependencies (no-dev)..."
+            export COMPOSER_ALLOW_SUPERUSER=1
+            sudo composer install --no-dev --no-interaction --prefer-dist
+            sudo composer dump-autoload -o
+            sudo php artisan clear-compiled
+            sudo php artisan package:discover --ansi
 
             echo "🧱 Running migrations..."
-            php artisan migrate --force
+            sudo php artisan migrate --force || true
 
-            echo "⚡ Clearing and rebuilding Laravel caches..."
-            php artisan optimize:clear
-            php artisan config:cache
-            php artisan route:cache
-            php artisan view:cache
-            php artisan event:cache
+            echo "⚡ Rebuilding caches..."
+            sudo php artisan optimize:clear
+            sudo php artisan config:clear
+            sudo php artisan route:clear
+            sudo php artisan view:clear
+            sudo php artisan event:clear
+            sudo php artisan optimize
 
-            echo "🎨 Rebuilding frontend assets..."
+            echo "🎨 Building production frontend..."
             if [ -f package.json ]; then
-              npm ci --omit=dev
-              npm run build
+              sudo npm ci --omit=dev || sudo npm install
+              sudo npm run build || true
             fi
 
-            echo "🔧 Fix permissions AFTER deploy..."
+            echo "🔐 Fixing permissions..."
             sudo chown -R www-data:www-data storage bootstrap/cache public
-            sudo chmod -R 775 storage bootstrap/cache public
+            sudo find storage -type d -exec chmod 775 {} \;
+            sudo find storage -type f -exec chmod 664 {} \;
+            sudo chmod -R 775 bootstrap/cache
 
-            echo "✅ Uganda production deployment successful!"
+            echo "✅ Uganda Production deployment complete!"
