@@ -27,12 +27,22 @@ jobs:
             cd /var/www/dev.ta.soja.co.ke
             git fetch origin development
             git reset --hard origin/development
+
+            # Ensure proper permissions before running anything
+            sudo chown -R $USER:www-data storage bootstrap/cache
+            sudo chmod -R ug+rwx storage bootstrap/cache
+
             composer install --no-interaction --prefer-dist --optimize-autoloader
             php artisan migrate --force
             php artisan optimize:clear
             php artisan config:cache
             php artisan route:cache
             php artisan view:clear
+
+            # Reset permissions again after build
+            sudo chown -R $USER:www-data storage bootstrap/cache
+            sudo chmod -R ug+rwx storage bootstrap/cache
+
             echo "✅ Development deployment successful"
 
       # ---------------- KENYA PRODUCTION ----------------
@@ -48,12 +58,20 @@ jobs:
             cd /var/www/v2.ta.soja.co.ke
             git fetch origin master
             git reset --hard origin/master
+
+            sudo chown -R $USER:www-data storage bootstrap/cache
+            sudo chmod -R ug+rwx storage bootstrap/cache
+
             composer install --no-interaction --prefer-dist --optimize-autoloader
             php artisan migrate --force
             php artisan optimize:clear
             php artisan config:cache
             php artisan route:cache
             php artisan view:clear
+
+            sudo chown -R $USER:www-data storage bootstrap/cache
+            sudo chmod -R ug+rwx storage bootstrap/cache
+
             echo "✅ Kenya production deployment successful"
 
       # ---------------- UGANDA PRODUCTION ----------------
@@ -68,10 +86,18 @@ jobs:
             cd /var/www/ta.soja.co.ug
             git fetch origin production-ug
             git reset --hard origin/production-ug
+
+            sudo chown -R $USER:www-data storage bootstrap/cache
+            sudo chmod -R ug+rwx storage bootstrap/cache
+
             composer install --no-interaction --prefer-dist --optimize-autoloader
             php artisan migrate --force
             php artisan optimize:clear
             php artisan config:cache
             php artisan route:cache
             php artisan view:clear
+
+            sudo chown -R $USER:www-data storage bootstrap/cache
+            sudo chmod -R ug+rwx storage bootstrap/cache
+
             echo "✅ Uganda production deployment successful"
