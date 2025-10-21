@@ -4,8 +4,7 @@ use Illuminate\Support\Facades\Route;
 use Livewire\Volt\Volt;
 
 
-Volt::route('/', 'admin.dashboard.index')->middleware(['auth', 'verified'])
-    ->name('dashboard');
+Volt::route('/', 'admin.dashboard.index')->middleware(['auth', 'verified']);
 
 // Group all admin routes under the 'admin' prefix
 Route::middleware(['auth'])->prefix('admin')->group(function () {
