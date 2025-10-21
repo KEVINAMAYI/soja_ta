@@ -30,27 +30,27 @@ jobs:
             echo "🚀 Deploying to Development Server..."
             cd /var/www/dev.ta.soja.co.ke
 
-            echo "🔧 Setting temporary permissions..."
-            sudo chown -R $USER:$USER .
-            sudo mkdir -p bootstrap/cache
+            echo "🔧 Preparing environment..."
+            sudo mkdir -p bootstrap/cache storage/framework/{sessions,views,cache,testing}
             sudo chmod -R 775 bootstrap/cache storage
+            sudo chown -R $USER:$USER .
 
-            echo "📥 Updating code..."
+            echo "📥 Pulling latest code..."
             git fetch origin development
             git reset --hard origin/development
 
-            echo "🧹 Cleaning vendor and caches..."
+            echo "🧹 Cleaning old files..."
             sudo rm -rf vendor bootstrap/cache/*.php
 
-            echo "📦 Updating dependencies (ensures correct PHP versions)..."
+            echo "📦 Installing composer dependencies..."
             export COMPOSER_ALLOW_SUPERUSER=1
-            sudo composer update --no-interaction --prefer-dist --optimize-autoloader
+            sudo composer install --no-interaction --prefer-dist --optimize-autoloader
             sudo composer dump-autoload -o
 
             echo "🧱 Running migrations..."
             sudo php artisan migrate --force || true
 
-            echo "⚡ Clearing and rebuilding caches..."
+            echo "⚡ Optimizing caches..."
             sudo php artisan optimize:clear
             sudo php artisan config:cache
             sudo php artisan route:cache
@@ -63,9 +63,11 @@ jobs:
               sudo npm run build || true
             fi
 
-            echo "🔐 Restoring correct permissions..."
+            echo "🔐 Fixing permissions..."
             sudo chown -R www-data:www-data storage bootstrap/cache public
-            sudo chmod -R 775 storage bootstrap/cache public
+            sudo find storage -type d -exec chmod 775 {} \;
+            sudo find storage -type f -exec chmod 664 {} \;
+            sudo chmod -R 775 bootstrap/cache bootstrap/logs
 
             echo "✅ Development deployment complete!"
 
@@ -85,27 +87,27 @@ jobs:
             echo "🚀 Deploying to Kenya Production..."
             cd /var/www/v2.ta.soja.co.ke
 
-            echo "🔧 Setting temporary permissions..."
-            sudo chown -R $USER:$USER .
-            sudo mkdir -p bootstrap/cache
+            echo "🔧 Preparing environment..."
+            sudo mkdir -p bootstrap/cache storage/framework/{sessions,views,cache,testing}
             sudo chmod -R 775 bootstrap/cache storage
+            sudo chown -R $USER:$USER .
 
-            echo "📥 Updating code..."
+            echo "📥 Pulling latest code..."
             git fetch origin master
             git reset --hard origin/master
 
-            echo "🧹 Cleaning vendor and cache..."
+            echo "🧹 Cleaning old files..."
             sudo rm -rf vendor bootstrap/cache/*.php
 
-            echo "📦 Updating composer dependencies..."
+            echo "📦 Installing composer dependencies (no-dev)..."
             export COMPOSER_ALLOW_SUPERUSER=1
-            sudo composer update --no-dev --no-interaction --prefer-dist --optimize-autoloader
+            sudo composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader
             sudo composer dump-autoload -o
 
             echo "🧱 Running migrations..."
             sudo php artisan migrate --force || true
 
-            echo "⚡ Rebuilding caches..."
+            echo "⚡ Optimizing caches..."
             sudo php artisan optimize:clear
             sudo php artisan config:cache
             sudo php artisan route:cache
@@ -118,9 +120,11 @@ jobs:
               sudo npm run build || true
             fi
 
-            echo "🔐 Restoring ownership..."
+            echo "🔐 Fixing permissions..."
             sudo chown -R www-data:www-data storage bootstrap/cache public
-            sudo chmod -R 775 storage bootstrap/cache public
+            sudo find storage -type d -exec chmod 775 {} \;
+            sudo find storage -type f -exec chmod 664 {} \;
+            sudo chmod -R 775 bootstrap/cache bootstrap/logs
 
             echo "✅ Kenya Production deployment complete!"
 
@@ -139,27 +143,27 @@ jobs:
             echo "🚀 Deploying to Uganda Production..."
             cd /var/www/ta.soja.co.ug
 
-            echo "🔧 Setting temporary permissions..."
-            sudo chown -R $USER:$USER .
-            sudo mkdir -p bootstrap/cache
+            echo "🔧 Preparing environment..."
+            sudo mkdir -p bootstrap/cache storage/framework/{sessions,views,cache,testing}
             sudo chmod -R 775 bootstrap/cache storage
+            sudo chown -R $USER:$USER .
 
-            echo "📥 Updating code..."
+            echo "📥 Pulling latest code..."
             git fetch origin production-ug
             git reset --hard origin/production-ug
 
-            echo "🧹 Cleaning vendor and cache..."
+            echo "🧹 Cleaning old files..."
             sudo rm -rf vendor bootstrap/cache/*.php
 
-            echo "📦 Updating composer dependencies..."
+            echo "📦 Installing composer dependencies (no-dev)..."
             export COMPOSER_ALLOW_SUPERUSER=1
-            sudo composer update --no-dev --no-interaction --prefer-dist --optimize-autoloader
+            sudo composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader
             sudo composer dump-autoload -o
 
             echo "🧱 Running migrations..."
             sudo php artisan migrate --force || true
 
-            echo "⚡ Rebuilding caches..."
+            echo "⚡ Optimizing caches..."
             sudo php artisan optimize:clear
             sudo php artisan config:cache
             sudo php artisan route:cache
@@ -172,8 +176,10 @@ jobs:
               sudo npm run build || true
             fi
 
-            echo "🔐 Restoring permissions..."
+            echo "🔐 Fixing permissions..."
             sudo chown -R www-data:www-data storage bootstrap/cache public
-            sudo chmod -R 775 storage bootstrap/cache public
+            sudo find storage -type d -exec chmod 775 {} \;
+            sudo find storage -type f -exec chmod 664 {} \;
+            sudo chmod -R 775 bootstrap/cache bootstrap/logs
 
             echo "✅ Uganda Production deployment complete!"
