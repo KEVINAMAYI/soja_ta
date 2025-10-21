@@ -31,7 +31,7 @@ jobs:
             cd /var/www/dev.ta.soja.co.ke
 
             echo "🔧 Preparing environment..."
-            sudo mkdir -p bootstrap/cache storage/framework/{sessions,views,cache,testing}
+            sudo mkdir -p bootstrap/cache storage/framework/{sessions,views,cache,testing} storage/logs
             sudo chmod -R 775 bootstrap/cache storage
             sudo chown -R $USER:$USER .
 
@@ -67,7 +67,7 @@ jobs:
             sudo chown -R www-data:www-data storage bootstrap/cache public
             sudo find storage -type d -exec chmod 775 {} \;
             sudo find storage -type f -exec chmod 664 {} \;
-            sudo chmod -R 775 bootstrap/cache bootstrap/logs
+            sudo chmod -R 775 bootstrap/cache
 
             echo "✅ Development deployment complete!"
 
@@ -88,7 +88,7 @@ jobs:
             cd /var/www/v2.ta.soja.co.ke
 
             echo "🔧 Preparing environment..."
-            sudo mkdir -p bootstrap/cache storage/framework/{sessions,views,cache,testing}
+            sudo mkdir -p bootstrap/cache storage/framework/{sessions,views,cache,testing} storage/logs
             sudo chmod -R 775 bootstrap/cache storage
             sudo chown -R $USER:$USER .
 
@@ -124,7 +124,7 @@ jobs:
             sudo chown -R www-data:www-data storage bootstrap/cache public
             sudo find storage -type d -exec chmod 775 {} \;
             sudo find storage -type f -exec chmod 664 {} \;
-            sudo chmod -R 775 bootstrap/cache bootstrap/logs
+            sudo chmod -R 775 bootstrap/cache
 
             echo "✅ Kenya Production deployment complete!"
 
@@ -144,7 +144,7 @@ jobs:
             cd /var/www/ta.soja.co.ug
 
             echo "🔧 Preparing environment..."
-            sudo mkdir -p bootstrap/cache storage/framework/{sessions,views,cache,testing}
+            sudo mkdir -p bootstrap/cache storage/framework/{sessions,views,cache,testing} storage/logs
             sudo chmod -R 775 bootstrap/cache storage
             sudo chown -R $USER:$USER .
 
@@ -180,6 +180,6 @@ jobs:
             sudo chown -R www-data:www-data storage bootstrap/cache public
             sudo find storage -type d -exec chmod 775 {} \;
             sudo find storage -type f -exec chmod 664 {} \;
-            sudo chmod -R 775 bootstrap/cache bootstrap/logs
+            sudo chmod -R 775 bootstrap/cache
 
             echo "✅ Uganda Production deployment complete!"
