@@ -32,13 +32,15 @@ jobs:
             echo "🚀 Starting deployment on Development server..."
             cd /var/www/dev.ta.soja.co.ke
 
+            echo "🔧 Taking ownership temporarily for deployment..."
+            sudo chown -R $USER:$USER .
+
             echo "📥 Pulling latest code..."
             git fetch origin development
             git reset --hard origin/development
 
-            echo "🔧 Fix permissions BEFORE deploy..."
-            sudo chown -R www-data:www-data storage bootstrap/cache public
-            sudo chmod -R 775 storage bootstrap/cache public
+            echo "🧹 Cleaning vendor directory for fresh dependency sync..."
+            rm -rf vendor/
 
             echo "📦 Installing composer dependencies..."
             composer install --no-interaction --prefer-dist --optimize-autoloader
@@ -46,20 +48,20 @@ jobs:
             echo "🧱 Running migrations..."
             php artisan migrate --force
 
-            echo "⚡ Clearing and rebuilding Laravel caches..."
+            echo "⚡ Clearing and rebuilding caches..."
             php artisan optimize:clear
             php artisan config:cache
             php artisan route:cache
             php artisan view:cache
             php artisan event:cache
 
-            echo "🎨 Rebuilding frontend assets..."
+            echo "🎨 Building frontend assets (if package.json exists)..."
             if [ -f package.json ]; then
               npm ci --omit=dev
               npm run build
             fi
 
-            echo "🔧 Fix permissions AFTER deploy..."
+            echo "🔧 Returning permissions to web server..."
             sudo chown -R www-data:www-data storage bootstrap/cache public
             sudo chmod -R 775 storage bootstrap/cache public
 
@@ -80,15 +82,13 @@ jobs:
             echo "🚀 Starting deployment on Kenya Production server..."
             cd /var/www/v2.ta.soja.co.ke
 
+            echo "🔧 Taking ownership temporarily for deployment..."
+            sudo chown -R $USER:$USER .
+
             echo "📥 Pulling latest code..."
             git fetch origin master
             git reset --hard origin/master
 
-            echo "🔧 Fix permissions BEFORE deploy..."
-            sudo chown -R www-data:www-data storage bootstrap/cache public
-            sudo chmod -R 775 storage bootstrap/cache public
-
-            # FIX: Ensure a clean install to resolve map dependency issues
             echo "🧹 Cleaning vendor directory for a fresh install..."
             rm -rf vendor/
 
@@ -105,13 +105,13 @@ jobs:
             php artisan view:cache
             php artisan event:cache
 
-            echo "🎨 Rebuilding frontend assets..."
+            echo "🎨 Building frontend assets..."
             if [ -f package.json ]; then
               npm ci --omit=dev
               npm run build
             fi
 
-            echo "🔧 Fix permissions AFTER deploy..."
+            echo "🔧 Restoring ownership to www-data..."
             sudo chown -R www-data:www-data storage bootstrap/cache public
             sudo chmod -R 775 storage bootstrap/cache public
 
@@ -131,15 +131,13 @@ jobs:
             echo "🚀 Starting deployment on Uganda Production server..."
             cd /var/www/ta.soja.co.ug
 
+            echo "🔧 Taking ownership temporarily for deployment..."
+            sudo chown -R $USER:$USER .
+
             echo "📥 Pulling latest code..."
             git fetch origin production-ug
             git reset --hard origin/production-ug
 
-            echo "🔧 Fix permissions BEFORE deploy..."
-            sudo chown -R www-data:www-data storage bootstrap/cache public
-            sudo chmod -R 775 storage bootstrap/cache public
-
-            # FIX: Ensure a clean install to resolve map dependency issues
             echo "🧹 Cleaning vendor directory for a fresh install..."
             rm -rf vendor/
 
@@ -156,13 +154,13 @@ jobs:
             php artisan view:cache
             php artisan event:cache
 
-            echo "🎨 Rebuilding frontend assets..."
+            echo "🎨 Building frontend assets..."
             if [ -f package.json ]; then
               npm ci --omit=dev
               npm run build
             fi
 
-            echo "🔧 Fix permissions AFTER deploy..."
+            echo "🔧 Restoring ownership to www-data..."
             sudo chown -R www-data:www-data storage bootstrap/cache public
             sudo chmod -R 775 storage bootstrap/cache public
 
