@@ -39,23 +39,27 @@ jobs:
             git fetch origin development
             git reset --hard origin/development
 
-            echo "🧹 Cleaning old files..."
-            sudo rm -rf vendor bootstrap/cache/*.php
+            echo "🧹 Cleaning old caches and vendors..."
+            sudo rm -rf vendor composer.lock
+            sudo rm -rf bootstrap/cache/*.php storage/framework/cache/* storage/framework/views/*
 
             echo "📦 Installing composer dependencies..."
             export COMPOSER_ALLOW_SUPERUSER=1
-            sudo composer install --no-interaction --prefer-dist --optimize-autoloader
+            sudo composer install --no-interaction --prefer-dist
             sudo composer dump-autoload -o
+            sudo php artisan clear-compiled
+            sudo php artisan package:discover --ansi
 
             echo "🧱 Running migrations..."
             sudo php artisan migrate --force || true
 
-            echo "⚡ Optimizing caches..."
+            echo "⚡ Rebuilding caches..."
             sudo php artisan optimize:clear
-            sudo php artisan config:cache
-            sudo php artisan route:cache
-            sudo php artisan view:cache
-            sudo php artisan event:cache
+            sudo php artisan config:clear
+            sudo php artisan route:clear
+            sudo php artisan view:clear
+            sudo php artisan event:clear
+            sudo php artisan optimize
 
             echo "🎨 Building frontend (if applicable)..."
             if [ -f package.json ]; then
@@ -96,23 +100,27 @@ jobs:
             git fetch origin master
             git reset --hard origin/master
 
-            echo "🧹 Cleaning old files..."
-            sudo rm -rf vendor bootstrap/cache/*.php
+            echo "🧹 Cleaning old caches and vendors..."
+            sudo rm -rf vendor composer.lock
+            sudo rm -rf bootstrap/cache/*.php storage/framework/cache/* storage/framework/views/*
 
             echo "📦 Installing composer dependencies (no-dev)..."
             export COMPOSER_ALLOW_SUPERUSER=1
-            sudo composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader
+            sudo composer install --no-dev --no-interaction --prefer-dist
             sudo composer dump-autoload -o
+            sudo php artisan clear-compiled
+            sudo php artisan package:discover --ansi
 
             echo "🧱 Running migrations..."
             sudo php artisan migrate --force || true
 
-            echo "⚡ Optimizing caches..."
+            echo "⚡ Rebuilding caches..."
             sudo php artisan optimize:clear
-            sudo php artisan config:cache
-            sudo php artisan route:cache
-            sudo php artisan view:cache
-            sudo php artisan event:cache
+            sudo php artisan config:clear
+            sudo php artisan route:clear
+            sudo php artisan view:clear
+            sudo php artisan event:clear
+            sudo php artisan optimize
 
             echo "🎨 Building production frontend..."
             if [ -f package.json ]; then
@@ -152,23 +160,27 @@ jobs:
             git fetch origin production-ug
             git reset --hard origin/production-ug
 
-            echo "🧹 Cleaning old files..."
-            sudo rm -rf vendor bootstrap/cache/*.php
+            echo "🧹 Cleaning old caches and vendors..."
+            sudo rm -rf vendor composer.lock
+            sudo rm -rf bootstrap/cache/*.php storage/framework/cache/* storage/framework/views/*
 
             echo "📦 Installing composer dependencies (no-dev)..."
             export COMPOSER_ALLOW_SUPERUSER=1
-            sudo composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader
+            sudo composer install --no-dev --no-interaction --prefer-dist
             sudo composer dump-autoload -o
+            sudo php artisan clear-compiled
+            sudo php artisan package:discover --ansi
 
             echo "🧱 Running migrations..."
             sudo php artisan migrate --force || true
 
-            echo "⚡ Optimizing caches..."
+            echo "⚡ Rebuilding caches..."
             sudo php artisan optimize:clear
-            sudo php artisan config:cache
-            sudo php artisan route:cache
-            sudo php artisan view:cache
-            sudo php artisan event:cache
+            sudo php artisan config:clear
+            sudo php artisan route:clear
+            sudo php artisan view:clear
+            sudo php artisan event:clear
+            sudo php artisan optimize
 
             echo "🎨 Building production frontend..."
             if [ -f package.json ]; then
