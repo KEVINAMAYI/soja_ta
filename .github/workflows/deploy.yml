@@ -34,7 +34,7 @@ jobs:
             git reset --hard origin/development
 
             echo "🔧 Setting ownership..."
-            sudo chown -R $USER:$USER .
+            chown -R $USER:$USER .
 
             echo "📦 Installing composer dependencies..."
             if [ -f composer.lock ]; then
@@ -55,12 +55,9 @@ jobs:
             php artisan event:clear || true
             php artisan optimize || true
 
-            echo "🔍 Fixing duplicate route issue..."
-            php artisan route:clear || true
-
             echo "🔒 Fixing permissions for Laravel writable directories..."
-            sudo chown -R www-data:www-data storage bootstrap/cache
-            sudo chmod -R 775 storage bootstrap/cache
+            chown -R www-data:www-data storage bootstrap/cache
+            chmod -R 775 storage bootstrap/cache
 
             echo "✅ Development deployment successful!"
 
@@ -71,9 +68,10 @@ jobs:
         if: github.ref == 'refs/heads/master'
         uses: appleboy/ssh-action@v1.1.0
         with:
-          host: ${{ secrets.PROD_KE_HOST }}
-          username: ${{ secrets.PROD_KE_USER }}
-          key: ${{ secrets.PROD_KE_KEY }}
+          host: ${{ secrets.KENYA_HOST }}
+          username: ${{ secrets.KENYA_USER }}
+          key: ${{ secrets.KENYA_KEY }}
+          port: ${{ secrets.KENYA_PORT }}
           script: |
             echo "🚀 Starting deployment on Kenya Production server..."
             cd /var/www/ta.soja.co.ke
@@ -83,7 +81,7 @@ jobs:
             git reset --hard origin/master
 
             echo "🔧 Setting ownership..."
-            sudo chown -R $USER:$USER .
+            chown -R $USER:$USER .
 
             echo "📦 Installing composer dependencies..."
             if [ -f composer.lock ]; then
@@ -105,31 +103,31 @@ jobs:
             php artisan optimize || true
 
             echo "🔒 Fixing permissions for Laravel writable directories..."
-            sudo chown -R www-data:www-data storage bootstrap/cache
-            sudo chmod -R 775 storage bootstrap/cache
+            chown -R www-data:www-data storage bootstrap/cache
+            chmod -R 775 storage bootstrap/cache
 
             echo "✅ Kenya production deployment successful!"
 
       # =============================
       # 🇺🇬 DEPLOY TO UGANDA PRODUCTION
       # =============================
-      - name: 🚀 Deploy to Uganda Production (ug.ta.soja.co.ke)
+      - name: 🚀 Deploy to Uganda Production (ta.soja.co.ug)
         if: github.ref == 'refs/heads/production-ug'
         uses: appleboy/ssh-action@v1.1.0
         with:
-          host: ${{ secrets.PROD_UG_HOST }}
-          username: ${{ secrets.PROD_UG_USER }}
-          key: ${{ secrets.PROD_UG_KEY }}
+          host: ${{ secrets.UGANDA_HOST }}
+          username: ${{ secrets.UGANDA_USER }}
+          key: ${{ secrets.UGANDA_KEY }}
           script: |
             echo "🚀 Starting deployment on Uganda Production server..."
-            cd /var/www/ug.ta.soja.co.ke
+            cd /var/www/ta.soja.co.ug
 
             echo "📥 Pulling latest code..."
             git fetch origin production-ug
             git reset --hard origin/production-ug
 
             echo "🔧 Setting ownership..."
-            sudo chown -R $USER:$USER .
+            chown -R $USER:$USER .
 
             echo "📦 Installing composer dependencies..."
             if [ -f composer.lock ]; then
@@ -151,7 +149,7 @@ jobs:
             php artisan optimize || true
 
             echo "🔒 Fixing permissions for Laravel writable directories..."
-            sudo chown -R www-data:www-data storage bootstrap/cache
-            sudo chmod -R 775 storage bootstrap/cache
+            chown -R www-data:www-data storage bootstrap/cache
+            chmod -R 775 storage bootstrap/cache
 
             echo "✅ Uganda production deployment successful!"
