@@ -33,8 +33,9 @@ jobs:
             git fetch origin development
             git reset --hard origin/development
 
-            echo "🔧 Setting ownership..."
-            chown -R $USER:$USER .
+            echo "🔧 Fixing ownership and permissions BEFORE deploy..."
+            sudo chown -R www-data:www-data storage bootstrap/cache
+            sudo chmod -R 775 storage bootstrap/cache
 
             echo "📦 Installing composer dependencies..."
             if [ -f composer.lock ]; then
@@ -55,9 +56,9 @@ jobs:
             php artisan event:clear || true
             php artisan optimize || true
 
-            echo "🔒 Fixing permissions for Laravel writable directories..."
-            chown -R www-data:www-data storage bootstrap/cache
-            chmod -R 775 storage bootstrap/cache
+            echo "🔧 Fixing ownership and permissions AFTER deploy..."
+            sudo chown -R www-data:www-data storage bootstrap/cache
+            sudo chmod -R 775 storage bootstrap/cache
 
             echo "✅ Development deployment successful!"
 
@@ -80,8 +81,9 @@ jobs:
             git fetch origin master
             git reset --hard origin/master
 
-            echo "🔧 Setting ownership..."
-            chown -R $USER:$USER .
+            echo "🔧 Fixing ownership and permissions BEFORE deploy..."
+            sudo chown -R www-data:www-data storage bootstrap/cache
+            sudo chmod -R 775 storage bootstrap/cache
 
             echo "📦 Installing composer dependencies..."
             if [ -f composer.lock ]; then
@@ -102,9 +104,9 @@ jobs:
             php artisan event:clear || true
             php artisan optimize || true
 
-            echo "🔒 Fixing permissions for Laravel writable directories..."
-            chown -R www-data:www-data storage bootstrap/cache
-            chmod -R 775 storage bootstrap/cache
+            echo "🔧 Fixing ownership and permissions AFTER deploy..."
+            sudo chown -R www-data:www-data storage bootstrap/cache
+            sudo chmod -R 775 storage bootstrap/cache
 
             echo "✅ Kenya production deployment successful!"
 
@@ -126,8 +128,9 @@ jobs:
             git fetch origin production-ug
             git reset --hard origin/production-ug
 
-            echo "🔧 Setting ownership..."
-            chown -R $USER:$USER .
+            echo "🔧 Fixing ownership and permissions BEFORE deploy..."
+            sudo chown -R www-data:www-data storage bootstrap/cache
+            sudo chmod -R 775 storage bootstrap/cache
 
             echo "📦 Installing composer dependencies..."
             if [ -f composer.lock ]; then
@@ -148,8 +151,8 @@ jobs:
             php artisan event:clear || true
             php artisan optimize || true
 
-            echo "🔒 Fixing permissions for Laravel writable directories..."
-            chown -R www-data:www-data storage bootstrap/cache
-            chmod -R 775 storage bootstrap/cache
+            echo "🔧 Fixing ownership and permissions AFTER deploy..."
+            sudo chown -R www-data:www-data storage bootstrap/cache
+            sudo chmod -R 775 storage bootstrap/cache
 
             echo "✅ Uganda production deployment successful!"
