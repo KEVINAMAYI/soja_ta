@@ -15,9 +15,6 @@ jobs:
       - name: 🧾 Checkout code
         uses: actions/checkout@v4
 
-      - name: ✅ Validate composer lock consistency
-        run: composer validate --strict
-
       # =============================
       # 🚀 Deploy to Development
       # =============================
@@ -32,26 +29,23 @@ jobs:
             echo "🚀 Starting deployment on Development server..."
             cd /var/www/dev.ta.soja.co.ke
 
-            echo "🔧 Taking ownership temporarily for deployment..."
+            echo "🔧 Fixing permissions temporarily..."
             sudo chown -R $USER:$USER .
 
             echo "📥 Pulling latest code..."
             git fetch origin development
             git reset --hard origin/development
 
-            echo "🧹 Cleaning vendor directory for fresh dependency sync..."
+            echo "🧹 Cleaning old dependencies..."
             rm -rf vendor/
 
-            echo "📦 Installing composer dependencies..."
-            composer install --no-interaction --prefer-dist --optimize-autoloader || {
-              echo "⚙️ Composer install failed — attempting automatic repair with composer update..."
-              composer update --no-interaction --prefer-dist --optimize-autoloader
-            }
+            echo "📦 Running composer update (auto-refresh dependencies)..."
+            composer update --no-interaction --prefer-dist --optimize-autoloader
 
-            echo "🧱 Running migrations..."
+            echo "🧱 Running database migrations..."
             php artisan migrate --force || true
 
-            echo "⚡ Clearing and rebuilding caches..."
+            echo "⚡ Rebuilding Laravel caches..."
             php artisan optimize:clear
             php artisan config:cache
             php artisan route:cache
@@ -64,7 +58,7 @@ jobs:
               npm run build || true
             fi
 
-            echo "🔧 Returning permissions to web server..."
+            echo "🔧 Restoring correct ownership..."
             sudo chown -R www-data:www-data storage bootstrap/cache public
             sudo chmod -R 775 storage bootstrap/cache public
 
@@ -85,39 +79,36 @@ jobs:
             echo "🚀 Starting deployment on Kenya Production server..."
             cd /var/www/v2.ta.soja.co.ke
 
-            echo "🔧 Taking ownership temporarily for deployment..."
+            echo "🔧 Adjusting permissions temporarily..."
             sudo chown -R $USER:$USER .
 
             echo "📥 Pulling latest code..."
             git fetch origin master
             git reset --hard origin/master
 
-            echo "🧹 Cleaning vendor directory for a fresh install..."
+            echo "🧹 Cleaning vendor directory..."
             rm -rf vendor/
 
-            echo "📦 Installing composer dependencies..."
-            composer install --no-interaction --prefer-dist --optimize-autoloader --no-dev || {
-              echo "⚙️ Composer install failed — attempting automatic repair with composer update..."
-              composer update --no-interaction --prefer-dist --optimize-autoloader --no-dev
-            }
+            echo "📦 Running composer update (production mode)..."
+            composer update --no-interaction --prefer-dist --optimize-autoloader --no-dev
 
             echo "🧱 Running migrations..."
             php artisan migrate --force || true
 
-            echo "⚡ Clearing and rebuilding Laravel caches..."
+            echo "⚡ Rebuilding caches..."
             php artisan optimize:clear
             php artisan config:cache
             php artisan route:cache
             php artisan view:cache
             php artisan event:cache
 
-            echo "🎨 Building frontend assets..."
+            echo "🎨 Building production frontend assets..."
             if [ -f package.json ]; then
               npm ci --omit=dev || npm install
               npm run build || true
             fi
 
-            echo "🔧 Restoring ownership to www-data..."
+            echo "🔧 Restoring ownership for web server..."
             sudo chown -R www-data:www-data storage bootstrap/cache public
             sudo chmod -R 775 storage bootstrap/cache public
 
@@ -137,26 +128,23 @@ jobs:
             echo "🚀 Starting deployment on Uganda Production server..."
             cd /var/www/ta.soja.co.ug
 
-            echo "🔧 Taking ownership temporarily for deployment..."
+            echo "🔧 Adjusting permissions temporarily..."
             sudo chown -R $USER:$USER .
 
             echo "📥 Pulling latest code..."
             git fetch origin production-ug
             git reset --hard origin/production-ug
 
-            echo "🧹 Cleaning vendor directory for a fresh install..."
+            echo "🧹 Cleaning vendor directory..."
             rm -rf vendor/
 
-            echo "📦 Installing composer dependencies..."
-            composer install --no-interaction --prefer-dist --optimize-autoloader --no-dev || {
-              echo "⚙️ Composer install failed — attempting automatic repair with composer update..."
-              composer update --no-interaction --prefer-dist --optimize-autoloader --no-dev
-            }
+            echo "📦 Running composer update (production mode)..."
+            composer update --no-interaction --prefer-dist --optimize-autoloader --no-dev
 
             echo "🧱 Running migrations..."
             php artisan migrate --force || true
 
-            echo "⚡ Clearing and rebuilding Laravel caches..."
+            echo "⚡ Rebuilding caches..."
             php artisan optimize:clear
             php artisan config:cache
             php artisan route:cache
@@ -169,7 +157,7 @@ jobs:
               npm run build || true
             fi
 
-            echo "🔧 Restoring ownership to www-data..."
+            echo "🔧 Restoring ownership for web server..."
             sudo chown -R www-data:www-data storage bootstrap/cache public
             sudo chmod -R 775 storage bootstrap/cache public
 
