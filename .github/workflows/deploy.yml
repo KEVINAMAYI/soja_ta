@@ -74,7 +74,7 @@ jobs:
           port: ${{ secrets.KENYA_PORT }}
           script: |
             echo "🚀 Starting deployment on Kenya Production server..."
-            cd /var/www/ta.soja.co.ke
+            cd /var/www/v2.ta.soja.co.ke
 
             echo "📥 Pulling latest code..."
             git fetch origin master
