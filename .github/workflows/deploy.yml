@@ -15,7 +15,6 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # ---------------- DEV DEPLOYMENT ----------------
       - name: Deploy to Development (dev.soja.co.ke)
         if: github.ref == 'refs/heads/development'
         uses: appleboy/ssh-action@v1.1.0
@@ -28,11 +27,9 @@ jobs:
             git fetch origin development
             git reset --hard origin/development
 
-            echo "🔧 Fixing ownership and permissions before deploy..."
-            sudo chown -R $USER:www-data .
-            sudo find storage bootstrap/cache -type d -exec chmod 775 {} \;
-            sudo find storage bootstrap/cache -type f -exec chmod 664 {} \;
-            sudo chmod -R ug+rwx storage bootstrap/cache
+            echo "🔧 Fixing permissions before deploy..."
+            chown -R $USER:$USER .
+            chmod -R ug+rwx storage bootstrap/cache
 
             echo "📦 Installing composer dependencies..."
             composer install --no-interaction --prefer-dist --optimize-autoloader
@@ -41,84 +38,13 @@ jobs:
             php artisan migrate --force
 
             echo "⚡ Optimizing Laravel caches..."
-            php artisan optimize:clear
-            php artisan config:cache
-            php artisan route:cache
-            php artisan view:clear
+            php artisan optimize:clear || true
+            php artisan config:cache || true
+            php artisan route:cache || true
+            php artisan view:clear || true
 
-            echo "🔧 Re-applying correct ownership for Laravel writable directories..."
-            sudo chown -R www-data:www-data storage bootstrap/cache
-            sudo find storage bootstrap/cache -type d -exec chmod 775 {} \;
-            sudo find storage bootstrap/cache -type f -exec chmod 664 {} \;
-            sudo chmod -R ug+rwx storage bootstrap/cache
+            echo "🔧 Final permission fix..."
+            chown -R $USER:$USER storage bootstrap/cache
+            chmod -R ug+rwx storage bootstrap/cache
 
-            echo "✅ Development deployment successful (permissions fixed)"
-
-      # ---------------- KENYA PRODUCTION ----------------
-      - name: Deploy to Kenya Production (ta.soja.co.ke)
-        if: github.ref == 'refs/heads/master'
-        uses: appleboy/ssh-action@v1.1.0
-        with:
-          host: ${{ secrets.KENYA_HOST }}
-          username: ${{ secrets.KENYA_USER }}
-          key: ${{ secrets.KENYA_KEY }}
-          port: ${{ secrets.KENYA_PORT }}
-          script: |
-            cd /var/www/v2.ta.soja.co.ke
-            git fetch origin master
-            git reset --hard origin/master
-
-            echo "🔧 Fixing ownership and permissions before deploy..."
-            sudo chown -R $USER:www-data .
-            sudo find storage bootstrap/cache -type d -exec chmod 775 {} \;
-            sudo find storage bootstrap/cache -type f -exec chmod 664 {} \;
-            sudo chmod -R ug+rwx storage bootstrap/cache
-
-            composer install --no-interaction --prefer-dist --optimize-autoloader
-            php artisan migrate --force
-            php artisan optimize:clear
-            php artisan config:cache
-            php artisan route:cache
-            php artisan view:clear
-
-            echo "🔧 Re-applying correct ownership for Laravel writable directories..."
-            sudo chown -R www-data:www-data storage bootstrap/cache
-            sudo find storage bootstrap/cache -type d -exec chmod 775 {} \;
-            sudo find storage bootstrap/cache -type f -exec chmod 664 {} \;
-            sudo chmod -R ug+rwx storage bootstrap/cache
-
-            echo "✅ Kenya production deployment successful (permissions fixed)"
-
-      # ---------------- UGANDA PRODUCTION ----------------
-      - name: Deploy to Uganda Production (ta.soja.co.ug)
-        if: github.ref == 'refs/heads/production-ug'
-        uses: appleboy/ssh-action@v1.1.0
-        with:
-          host: ${{ secrets.UGANDA_HOST }}
-          username: ${{ secrets.UGANDA_USER }}
-          key: ${{ secrets.UGANDA_KEY }}
-          script: |
-            cd /var/www/ta.soja.co.ug
-            git fetch origin production-ug
-            git reset --hard origin/production-ug
-
-            echo "🔧 Fixing ownership and permissions before deploy..."
-            sudo chown -R $USER:www-data .
-            sudo find storage bootstrap/cache -type d -exec chmod 775 {} \;
-            sudo find storage bootstrap/cache -type f -exec chmod 664 {} \;
-            sudo chmod -R ug+rwx storage bootstrap/cache
-
-            composer install --no-interaction --prefer-dist --optimize-autoloader
-            php artisan migrate --force
-            php artisan optimize:clear
-            php artisan config:cache
-            php artisan route:cache
-            php artisan view:clear
-
-            echo "🔧 Re-applying correct ownership for Laravel writable directories..."
-            sudo chown -R www-data:www-data storage bootstrap/cache
-            sudo find storage bootstrap/cache -type d -exec chmod 775 {} \;
-            sudo find storage bootstrap/cache -type f -exec chmod 664 {} \;
-            sudo chmod -R ug+rwx storage bootstrap/cache
-
-            echo "✅ Uganda production deployment successful (permissions fixed)"
+            echo "✅ Development deployment successful"
