@@ -88,6 +88,10 @@ jobs:
             sudo chown -R www-data:www-data storage bootstrap/cache public
             sudo chmod -R 775 storage bootstrap/cache public
 
+            # FIX: Ensure a clean install to resolve map dependency issues
+            echo "🧹 Cleaning vendor directory for a fresh install..."
+            rm -rf vendor/
+
             echo "📦 Installing composer dependencies..."
             composer install --no-interaction --prefer-dist --optimize-autoloader --no-dev
 
@@ -134,6 +138,10 @@ jobs:
             echo "🔧 Fix permissions BEFORE deploy..."
             sudo chown -R www-data:www-data storage bootstrap/cache public
             sudo chmod -R 775 storage bootstrap/cache public
+
+            # FIX: Ensure a clean install to resolve map dependency issues
+            echo "🧹 Cleaning vendor directory for a fresh install..."
+            rm -rf vendor/
 
             echo "📦 Installing composer dependencies..."
             composer install --no-interaction --prefer-dist --optimize-autoloader --no-dev
