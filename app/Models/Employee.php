@@ -22,6 +22,7 @@ class Employee extends Model
         'status',
         'face_id',
         'shift_id',
+        'qr_code'
     ];
 
 
