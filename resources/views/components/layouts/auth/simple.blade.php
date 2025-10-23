@@ -2,14 +2,10 @@
 <html lang="en" dir="ltr" data-bs-theme="light" data-color-theme="Blue_Theme" data-layout="vertical">
 
 <head>
+
     @include('partials.head')
 
-    @if (app()->environment('local'))
-        @vite(['resources/css/app.css', 'resources/js/app.js'])
-    @else
-        <link rel="stylesheet" href="{{ asset('build/assets/app-BBrtBEBR.css') }}">
-        <script type="module" src="{{ asset('build/assets/app-CFeSwWEE.js') }}"></script>
-    @endif
+    @vite(['resources/css/app.css', 'resources/js/app.js'])
 
     <style>
         body {
@@ -40,16 +36,21 @@
                     </div>
                 </div>
 
-                <div class="col-lg-6 col-xl-7 col-xxl-8 d-none d-lg-block position-relative overflow-hidden" style="background-color: rgb(10,37,64);">
+                <div class="col-lg-6 col-xl-7 col-xxl-8 d-none d-lg-block position-relative overflow-hidden"
+                     style="background-color: rgb(10,37,64);">
                     <!-- Optional filter layer (can be removed if not needed) -->
-                    <div class="position-absolute top-0 start-0 w-100 h-100" style="filter: brightness(0.9) contrast(1.1) saturate(1.1); transform: scale(1.02);"></div>
+                    <div class="position-absolute top-0 start-0 w-100 h-100"
+                         style="filter: brightness(0.9) contrast(1.1) saturate(1.1); transform: scale(1.02);"></div>
 
                     <!-- Gradient overlay (semi-transparent) -->
-                    <div class="position-absolute top-0 start-0 w-100 h-100" style="background: linear-gradient(to right, rgba(0, 0, 0, 0.35), rgba(0, 0, 0, 0.1));"></div>
+                    <div class="position-absolute top-0 start-0 w-100 h-100"
+                         style="background: linear-gradient(to right, rgba(0, 0, 0, 0.35), rgba(0, 0, 0, 0.1));"></div>
 
                     <!-- Centered text layer -->
-                    <div class="position-absolute top-50 start-50 translate-middle text-white text-center" style="z-index: 2;">
-                        <h1 style="color:white; font-size: 3rem; font-weight: 700; letter-spacing: 2px;">SOJA TIME & ATTENDANCE</h1>
+                    <div class="position-absolute top-50 start-50 translate-middle text-white text-center"
+                         style="z-index: 2;">
+                        <h1 style="color:white; font-size: 3rem; font-weight: 700; letter-spacing: 2px;">SOJA TIME &
+                            ATTENDANCE</h1>
                     </div>
                 </div>
 
