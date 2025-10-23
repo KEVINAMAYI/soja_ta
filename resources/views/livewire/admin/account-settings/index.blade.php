@@ -214,6 +214,32 @@ new class extends Component {
             overflow: hidden;
         }
 
+        /* Inner tabs underline style */
+        #innerRolesTab .nav-link {
+            border: none !important;
+            border-bottom: 2px solid transparent !important;
+            color: #6b7280 !important; /* neutral gray */
+            font-weight: 500 !important;
+            transition: all 0.2s ease-in-out !important;
+            background-color: transparent !important;
+        }
+
+        #innerRolesTab .nav-link.active {
+            border-bottom: 2px solid #e14326 !important; /* custom underline color */
+            color: #e14326 !important;
+            background-color: transparent !important;
+        }
+
+        #innerRolesTab .nav-link:hover {
+            color: #e14326 !important;
+        }
+
+        /* Remove the gray divider completely */
+        #innerRolesTab {
+            border: none !important;
+        }
+
+
     </style>
 @endpush
 <div class="row">
@@ -318,7 +344,52 @@ new class extends Component {
                     <div class="tab-pane fade {{ $activeTab === 'roles' ? 'show active' : '' }}"
                          id="tab-roles-permissions">
 
-                        <livewire:admin.roles.index/>
+                        <!-- Inner Nav Tabs -->
+                        <ul class="nav nav-pills user-profile-tab border-bottom mb-4" id="innerRolesTab" role="tablist">
+                            <li class="nav-item" role="presentation">
+                                <button
+                                    class="nav-link position-relative rounded-0 active d-flex align-items-center justify-content-center bg-transparent fs-3 py-3"
+                                    id="user-roles-tab"
+                                    data-bs-toggle="tab"
+                                    data-bs-target="#user-roles"
+                                    type="button"
+                                    role="tab"
+                                    aria-controls="user-roles"
+                                    aria-selected="true">
+                                    <i class="ti ti-shield mx-1 fs-6"></i>
+                                    <span class="d-none d-md-block">User Roles & Permissions</span>
+                                </button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button
+                                    class="nav-link position-relative rounded-0 d-flex align-items-center justify-content-center bg-transparent fs-3 py-3"
+                                    id="qr-token-tab"
+                                    data-bs-toggle="tab"
+                                    data-bs-target="#qr-token"
+                                    type="button"
+                                    role="tab"
+                                    aria-controls="qr-token"
+                                    aria-selected="false">
+                                    <i class="ti ti-qrcode mx-1 fs-6"></i>
+                                    <span class="d-none d-md-block">QR Token Management</span>
+                                </button>
+                            </li>
+                        </ul>
+
+                        <!-- Inner Tab Content -->
+                        <div class="tab-content" id="innerRolesTabContent">
+
+                            <!-- User Roles & Permissions Content -->
+                            <div class="tab-pane fade show active" id="user-roles" role="tabpanel"
+                                 aria-labelledby="user-roles-tab">
+                                <livewire:admin.roles.index/>
+                            </div>
+
+                            <!-- QR Token Management Placeholder -->
+                            <div class="tab-pane fade" id="qr-token" role="tabpanel" aria-labelledby="qr-token-tab">
+                                <livewire:admin.account-settings.token_management/>
+                            </div>
+                        </div>
 
                     </div>
 
