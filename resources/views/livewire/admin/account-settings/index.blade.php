@@ -313,7 +313,7 @@ new class extends Component {
                         aria-controls="tab-users"
                         aria-selected="false">
                         <i class="ti ti-users mx-1 fs-6"></i>
-                        <span class="d-none d-md-block">User & Departments</span>
+                        <span class="d-none d-md-block">Employees & Departments</span>
                     </button>
                 </li>
 
@@ -422,7 +422,7 @@ new class extends Component {
                                         <button class="fs-4 accordion-button fw-bold collapsed" type="button"
                                                 data-bs-toggle="collapse" data-bs-target="#collapseUsers"
                                                 aria-expanded="false" aria-controls="collapseUsers">
-                                            Users
+                                            Employees
                                         </button>
                                     </h2>
                                     <div id="collapseUsers" class="accordion-collapse collapse"
