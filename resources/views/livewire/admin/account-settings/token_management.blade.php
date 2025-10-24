@@ -3,6 +3,7 @@
 use App\Models\Employee;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Livewire\Volt\Component;
 use SimpleSoftwareIO\QrCode\Facades\QrCode;
 use Illuminate\Support\Str;
@@ -67,63 +68,72 @@ new class extends Component {
     }
 
 
-    /**
-     * Generate and download bulk signed QR tokens (no DB storage)
-     */
     public function generateBulkTokens()
     {
-        $this->validate([
-            'bulk_count' => 'required|integer|min:1|max:100',
-        ]);
+        try {
+            $this->validate([
+                'bulk_count' => 'required|integer|min:1|max:100',
+            ]);
 
-        $tokens = [];
+            $tokens = [];
 
-        // ... key file checks and setup remain the same ...
-        $privateKeyPath = storage_path('app/keys/private.pem');
+            $privateKeyPath = storage_path('app/keys/private.pem');
 
-        if (!file_exists($privateKeyPath)) {
+            if (!file_exists($privateKeyPath)) {
+                throw new Exception('Private key not found on server.');
+            }
+
+            $privateKey = file_get_contents($privateKeyPath);
+            $orgId = Auth::user()->employee->organization_id ?? null;
+
+            if (!$orgId) {
+                throw new Exception('Organization ID not found for the current user.');
+            }
+
+            for ($i = 0; $i < $this->bulk_count; $i++) {
+                $payload = [
+                    'o' => $orgId,
+                    'n' => Str::random(5),
+                ];
+
+                // Sign the token
+                $token = JWT::encode($payload, $privateKey, 'ES256');
+
+                // Generate QR code PNG
+                $qrPng = QrCode::format('png')
+                    ->size(200)
+                    ->margin(0)
+                    ->generate($token);
+
+                $tokens[] = [
+                    'token' => $token,
+                    'qr' => base64_encode($qrPng),
+                ];
+            }
+
+            // Generate PDF with tokens
+            $pdf = Pdf::loadView('pdf.bulk_tokens', compact('tokens'))
+                ->setPaper('a4', 'portrait');
+
+            $this->dispatch('stopGenerating');
+
+            return response()->streamDownload(function () use ($pdf) {
+                echo $pdf->output();
+            }, 'bulk_qr_tokens.pdf');
+
+        } catch (Exception $e) {
+            // Log the full error for debugging
+            Log::error('Bulk token generation failed: ' . $e->getMessage(), [
+                'trace' => $e->getTraceAsString(),
+                'user_id' => Auth::id(),
+            ]);
+
+            // Return a simple JSON error message (safe for production)
             return response()->json([
-                'error' => 'Private key not found on server.'
+                'error' => 'An unexpected error occurred while generating tokens.',
+                'details' => app()->environment('local') ? $e->getMessage() : null, // Show message only in local
             ], 500);
         }
-
-        $privateKey = file_get_contents($privateKeyPath);
-        $orgId = Auth::user()->employee->organization_id;
-
-        for ($i = 0; $i < $this->bulk_count; $i++) {
-
-            // ✅ NEW: Shortened Payload for a shorter QR code
-            $payload = [
-                'o' => $orgId,             // Use a short claim 'o' for organization ID
-                'n' => Str::random(5),     // Reduced nonce length from 10 to 5
-            ];
-
-            // ✅ Sign JWT with ES256 + private.pem
-            // Note: The signature length is fixed by ES256, so the payload is the focus.
-            $token = JWT::encode($payload, $privateKey, 'ES256');
-
-            // ... rest of the code remains the same ...
-            // ✅ Generate QR PNG
-            $qrPng = QrCode::format('png')
-                ->size(200)
-                ->margin(0)
-                ->generate($token);
-
-            $tokens[] = [
-                'token' => $token,
-                'qr' => base64_encode($qrPng),
-            ];
-        }
-
-        // ✅ Generate PDF with tokens
-        $pdf = Pdf::loadView('pdf.bulk_tokens', compact('tokens'))
-            ->setPaper('a4', 'portrait');
-
-        $this->dispatch('stopGenerating');
-
-        return response()->streamDownload(function () use ($pdf) {
-            echo $pdf->output();
-        }, 'bulk_qr_tokens.pdf');
     }
 
 
