@@ -48,6 +48,14 @@ class DatabaseSeeder extends Seeder
                 'role' => 'admin',
                 'user_name' => 'Cafe Mocca Admin',
             ],
+            [
+                'name' => 'Ismax Security',
+                'email' => 'chief-operations@ismaxsecurity.com',
+                'phone_number' => '+254795704301',
+                'address' => 'Ismax Security Limited, Mombasa Road',
+                'role' => 'admin',
+                'user_name' => 'Ismax Security',
+            ],
         ];
 
         // --- 2. Seed Test Organization (SUPER-ADMIN) ---
