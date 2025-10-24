@@ -252,7 +252,7 @@ new class extends Component {
             <form wire:submit.prevent="generateBulkTokens" class="position-relative">
                 <div class="mb-3">
                     <label class="form-label fw-semibold">Number of Tokens to Generate</label>
-                    <input type="number" wire:model.defer="bulk_count" class="form-control" min="1" max="100"/>
+                    <input type="number" wire:model.defer="bulk_count" class="form-control"/>
                     <small class="text-muted">
                         Tokens will be arranged in a printable grid format (3 per row, 4 per column)
                     </small>
