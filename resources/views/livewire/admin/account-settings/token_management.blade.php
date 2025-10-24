@@ -71,9 +71,6 @@ new class extends Component {
     public function generateBulkTokens()
     {
         try {
-            $this->validate([
-                'bulk_count' => 'required|integer|min:1|max:100',
-            ]);
 
             $tokens = [];
 
