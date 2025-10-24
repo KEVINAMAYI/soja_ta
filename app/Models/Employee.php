@@ -96,7 +96,7 @@ class Employee extends Model
 
     public function currentAssignment()
     {
-        return $this->hasOne(EmployeeAssignment::class)->where('is_current', true);
+        return $this->hasMany(EmployeeAssignment::class)->where('is_current', true);
     }
 
     public function weeklyWorkedHours($employeeId)

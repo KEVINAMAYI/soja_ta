@@ -86,13 +86,19 @@ new class extends Component {
         ]);
 
 
-        // create new assignment
+        // Deactivate any existing current assignment for this employee at this same location
+        EmployeeAssignment::where('employee_id', $this->employeeId)
+            ->where('work_location_id', $this->selectedLocation->id)
+            ->where('is_current', true)
+            ->update(['is_current' => false]);
+
+        // Create the new current assignment
         EmployeeAssignment::create([
             'employee_id' => $this->employeeId,
             'work_location_id' => $this->selectedLocation->id,
             'start_date' => $this->start_date ?? null,
             'end_date' => $this->end_date ?? null,
-            'is_current' => true
+            'is_current' => true,
         ]);
 
         $this->dispatch('hide-work-location-modal');

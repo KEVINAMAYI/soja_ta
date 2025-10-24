@@ -5,6 +5,7 @@ namespace App\Http\Resources;
 use App\Models\Employee;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
+use App\Http\Resources\WorkLocationResource;
 
 class UserResource extends JsonResource
 {
@@ -26,7 +27,12 @@ class UserResource extends JsonResource
             'employee_qr_code' => $this->employee->qr_code,
             'employee_organization' => $this->employee->organization,
             'employee_department' => $this->employee->department,
-            'employee_work_location' => $this->employee->currentAssignment?->location,
+            'employee_work_locations' => $this->employee->currentAssignment()
+                ->with('location')
+                ->get()
+                ->map(fn($a) => $a->location)
+                ->filter()
+                ->values(),
             'roles' => $this->getRoleNames(),
             'permissions' => $this->getAllPermissions()->pluck('name'),
             'working_hours' => [

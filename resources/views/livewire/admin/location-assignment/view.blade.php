@@ -75,20 +75,14 @@ new class extends Component {
             ->get()
             ->groupBy('employee_id') // only keep one row per employee
             ->map(function ($records) use ($employeeRecord) {
-                $last = $records->first(); // most recent check-in
-                $workLocation = $last->employee->currentAssignment?->location;
-
+                $last = $records->first();
                 return [
                     'name' => $last->employee->name,
                     'department' => $last->employee->department->name ?? 'N/A',
                     'clock_in' => Carbon::parse($last->check_in_time)->format('h:i A'),
                     'lat' => $last->latitude,
                     'lng' => $last->longitude,
-
-                    // 🔑 key for filtering/grouping in JS
-                    'work_location_id' => $workLocation?->id
-                        ?? $employeeRecord->organization->location?->id
-                            ?? null,
+                    'work_location_id' => $last->work_location_id
                 ];
             })
             ->values()

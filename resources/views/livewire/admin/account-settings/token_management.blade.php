@@ -26,7 +26,7 @@ new class extends Component {
         if ($orgId) {
             $this->employees = Employee::where('organization_id', $orgId)
                 ->orderBy('name')
-                ->get(['id', 'name']);
+                ->get(['id', 'name', 'qr_code']);
         }
     }
 
@@ -223,11 +223,16 @@ new class extends Component {
                 <select wire:model.defer="employee_id" class="form-select">
                     <option value="">-- Select an employee --</option>
                     @foreach($employees as $emp)
-                        <option value="{{ $emp->id }}">{{ $emp->name }}</option>
+                        <option value="{{ $emp->id }}">
+                            {{ $emp->name }}{{ $emp->qr_code ? ' (Has Token)' : '' }}
+                        </option>
                     @endforeach
                 </select>
-                @error('employee_id') <small class="text-danger">{{ $message }}</small> @enderror
+                @error('employee_id')
+                <small class="text-danger">{{ $message }}</small>
+                @enderror
             </div>
+
 
             <button type="submit" class="btn btn-primary w-100 py-2">
                 <i class="ti ti-user-check me-1"></i> Assign Token to Employee

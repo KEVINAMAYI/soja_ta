@@ -26,7 +26,7 @@ new class extends Component {
             ->where('organization_id', auth()->user()->employee->organization_id)
             ->findOrFail($employeeId);
 
-        $this->workLocation = $this->employee->currentAssignment->location;
+        $this->workLocation = $this->employee->currentAssignment->first()?->location;
 
         // Example stats
         $this->stats = [
@@ -58,18 +58,21 @@ new class extends Component {
 
     public function loadTimeline($employeeId)
     {
-        $todayAttendances = Attendance::where('employee_id', $employeeId)
+        $todayAttendances = Attendance::with('location') // eager load the attendance location
+        ->where('employee_id', $employeeId)
             ->whereDate('date', today())
             ->get();
 
         $timeline = collect();
 
         foreach ($todayAttendances as $attendance) {
+            $locationName = $attendance->location?->name ?? 'Unknown'; // use attendance location
+
             if ($attendance->check_in_time) {
                 $timeline->push([
                     'time' => Carbon::parse($attendance->check_in_time),
                     'title' => 'Clocked In',
-                    'location' => $this->employee->currentAssignment->location->name,
+                    'location' => $locationName,
                     'type' => 'clocked-in'
                 ]);
             }
@@ -78,7 +81,7 @@ new class extends Component {
                 $timeline->push([
                     'time' => Carbon::parse($attendance->check_out_time),
                     'title' => 'Clocked Out',
-                    'location' => $this->employee->currentAssignment->location->name,
+                    'location' => $locationName,
                     'type' => 'clocked-out'
                 ]);
             }

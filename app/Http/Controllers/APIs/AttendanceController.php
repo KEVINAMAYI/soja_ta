@@ -30,10 +30,11 @@ class AttendanceController extends Controller
             'latitude' => 'required|numeric',
             'longitude' => 'required|numeric',
             'device_id' => 'nullable|exists:devices,id',
+            'work_location_id' => 'required|exists:work_locations,id',
         ]);
 
         return $this->processCheckIn($validated['identifier_value'],
-            $validated['identifier_type'], $validated['check_in_time'], $validated['latitude'], $validated['longitude'], $validated['device_id'] ?? null);
+            $validated['identifier_type'], $validated['check_in_time'], $validated['latitude'], $validated['longitude'], $validated['work_location_id'], $validated['device_id'] ?? null);
     }
 
     /**
@@ -51,7 +52,7 @@ class AttendanceController extends Controller
     }
 
 
-    private function processCheckIn(string $value, string $column, string $checkInTime, $latitude, $longitude, $deviceId = null)
+    private function processCheckIn(string $value, string $column, string $checkInTime, $latitude, $longitude, $work_location_id, $deviceId = null)
     {
         DB::beginTransaction();
 
@@ -169,8 +170,10 @@ class AttendanceController extends Controller
              * ✅ 1. Fetch assigned work location (geofence check)
              */
             $assignment = EmployeeAssignment::where('employee_id', $employee->id)
+                ->where('work_location_id', $work_location_id)
                 ->where('is_current', true)
                 ->first();
+
 
             if (!$assignment || !$assignment->location) {
                 return response()->json([
@@ -181,11 +184,13 @@ class AttendanceController extends Controller
 
             $workLocation = $assignment->location;
             $distance = $workLocation->distanceTo((float)$latitude, (float)$longitude);
-            $radius = $workLocation->radius ?? 100;
+            $radius = $workLocation->radius_m ?? 100;
 
             if ($distance > $radius) {
                 return response()->json([
                     'code' => 1003,
+                    'distance' => $distance,
+                    'radius' => $radius,
                     'message' => 'You are outside the allowed geofence. Move closer to your work location.'
                 ], 403);
             }
@@ -221,6 +226,7 @@ class AttendanceController extends Controller
             $attendance->latitude = $latitude;
             $attendance->longitude = $longitude;
             $attendance->device_id = $deviceId;
+            $attendance->work_location_id = $work_location_id; // ✅ new line
             $attendance->save();
 
             DB::commit();

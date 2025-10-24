@@ -88,39 +88,35 @@ new class extends Component {
                     default => ucfirst(str_replace('_', ' ', $att->status)), // fallback
                 },
                 'datetime' => $att->check_in_time ?? $att->check_out_time,
-                'location' => $att->employee->currentAssignment->location->name ?? 'Unknown', // Optional if you track location
+                'location' => $att->location->name ?? 'Unknown', // Optional if you track location
                 'location_details' => $att->location_details ?? null,
                 'view_link' => route('attendance.index'),
             ]);
 
 
-        // Employee locations
-        $this->employeeLocations = Attendance::with('employee.department', 'employee.currentAssignment.location')
+        $this->employeeLocations = Attendance::with('employee.department', 'location')
             ->whereIn('employee_id', $employeeIds)
             ->whereDate('date', $today)
             ->whereNotNull('check_in_time')
             ->whereNotNull('latitude')
             ->whereNotNull('longitude')
-            ->orderBy('check_in_time', 'desc')
+            ->orderBy('check_in_time', 'desc') // latest first
             ->get()
-            ->groupBy('employee_id')
-            ->map(function ($group) use ($employeeRecord) {
-                $last = $group->first();
-                $workLocation = $last->employee->currentAssignment?->location;
-
+            ->groupBy('employee_id') // group by employee
+            ->map(fn($group) => $group->first()) // pick the latest attendance per employee
+            ->map(function ($att) {
                 return [
-                    'name' => $last->employee->name,
-                    'department' => $last->employee->department->name ?? 'N/A',
-                    'clock_in' => Carbon::parse($last->check_in_time)->format('h:i A'),
-                    'lat' => $last->latitude,
-                    'lng' => $last->longitude,
-                    'work_location_id' => $workLocation?->id
-                        ?? $employeeRecord->organization->location?->id
-                            ?? null,
+                    'name' => $att->employee->name,
+                    'department' => $att->employee->department->name ?? 'N/A',
+                    'clock_in' => Carbon::parse($att->check_in_time)->format('h:i A'),
+                    'lat' => $att->latitude,
+                    'lng' => $att->longitude,
+                    'work_location_id' => $att->work_location_id,
                 ];
             })
             ->values()
             ->toArray();
+
 
         // Work locations with id
         $this->workLocations = WorkLocation::where('organization_id', $orgId)

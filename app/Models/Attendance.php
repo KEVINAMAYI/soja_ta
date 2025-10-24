@@ -36,5 +36,11 @@ class Attendance extends Model
     {
         return $this->hasMany(Overtime::class);
     }
+
+    public function location()
+    {
+        return $this->belongsTo(WorkLocation::class, 'work_location_id');
+    }
+
 }
 

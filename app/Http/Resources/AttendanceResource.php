@@ -32,6 +32,7 @@ class AttendanceResource extends JsonResource
             'latitude' => $this->latitude,
             'status' => $this->status,
             'device_id' => $this->device_id,
+            'employee_check_in_location' => new WorkLocationResource($this->location)
         ];
     }
 
