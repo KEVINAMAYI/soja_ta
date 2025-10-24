@@ -29,7 +29,16 @@ class Employee extends Model
     protected static function booted()
     {
         static::creating(function ($employee) {
-            if (!$employee->qr_code) {
+            $orgId = $employee->organization_id;
+
+            // Get the setting for the org
+            $setting = OrganizationSetting::where('organization_id', $orgId)
+                ->where('key', 'generate_employee_qr_on_create')
+                ->first();
+
+            $generateQr = $setting ? filter_var($setting->value, FILTER_VALIDATE_BOOLEAN) : false;
+
+            if ($generateQr && !$employee->qr_code) {
                 $employee->qr_code = QRCodeGenerator::generateEmployeeCode(
                     $employee->organization_id,
                     $employee->id ?? (Employee::max('id') + 1)
@@ -37,6 +46,7 @@ class Employee extends Model
             }
         });
     }
+
 
 
     public function organization()

@@ -1,12 +1,14 @@
 <?php
 
-
 use App\Models\Employee;
-use App\Helpers\QRCodeGenerator;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
-use Jantinnerezo\LivewireAlert\Facades\LivewireAlert;
 use Livewire\Volt\Component;
+use SimpleSoftwareIO\QrCode\Facades\QrCode;
+use Illuminate\Support\Str;
+use Barryvdh\DomPDF\Facade\Pdf;
+use Jantinnerezo\LivewireAlert\Facades\LivewireAlert;
+use Firebase\JWT\JWT;
 
 new class extends Component {
 
@@ -14,6 +16,7 @@ new class extends Component {
     public $token_id;
     public $employee_id;
     public $employees = [];
+    public $bulk_count = 10; // Default number of bulk tokens
 
     public function mount()
     {
@@ -36,16 +39,11 @@ new class extends Component {
         $this->validate();
 
         DB::beginTransaction();
-
         try {
             $employee = Employee::findOrFail($this->employee_id);
-
-            $employee->update([
-                'qr_code' => $this->token_id,
-            ]);
+            $employee->update(['qr_code' => $this->token_id]);
 
             DB::commit();
-
             $this->reset(['token_id', 'employee_id']);
 
             LivewireAlert::title('Awesome!')
@@ -68,49 +66,69 @@ new class extends Component {
         }
     }
 
-    public function generateToken()
+
+    /**
+     * Generate and download bulk signed QR tokens (no DB storage)
+     */
+    public function generateBulkTokens()
     {
         $this->validate([
-            'employee_id' => 'required|exists:employees,id',
+            'bulk_count' => 'required|integer|min:1|max:100',
         ]);
 
-        DB::beginTransaction();
+        $tokens = [];
 
-        try {
-            $employee = Employee::findOrFail($this->employee_id);
+        // ... key file checks and setup remain the same ...
+        $privateKeyPath = storage_path('app/keys/private.pem');
 
-            $employee->qr_code = QRCodeGenerator::generateEmployeeCode(
-                $employee->organization_id,
-                $employee->id ?? (Employee::max('id') + 1)
-            );
-
-            $employee->save();
-
-            DB::commit();
-
-            $this->reset('employee_id');
-
-            LivewireAlert::title('Awesome!')
-                ->text('New QR token generated successfully.')
-                ->success()
-                ->toast()
-                ->position('top-end')
-                ->show();
-
-        } catch (\Throwable $e) {
-            DB::rollBack();
-            report($e);
-
-            LivewireAlert::title('Error!')
-                ->text('Something went wrong while generating the token.')
-                ->error()
-                ->toast()
-                ->position('top-end')
-                ->show();
+        if (!file_exists($privateKeyPath)) {
+            return response()->json([
+                'error' => 'Private key not found on server.'
+            ], 500);
         }
+
+        $privateKey = file_get_contents($privateKeyPath);
+        $orgId = Auth::user()->employee->organization_id;
+
+        for ($i = 0; $i < $this->bulk_count; $i++) {
+
+            // ✅ NEW: Shortened Payload for a shorter QR code
+            $payload = [
+                'o' => $orgId,             // Use a short claim 'o' for organization ID
+                'n' => Str::random(5),     // Reduced nonce length from 10 to 5
+            ];
+
+            // ✅ Sign JWT with ES256 + private.pem
+            // Note: The signature length is fixed by ES256, so the payload is the focus.
+            $token = JWT::encode($payload, $privateKey, 'ES256');
+
+            // ... rest of the code remains the same ...
+            // ✅ Generate QR PNG
+            $qrPng = QrCode::format('png')
+                ->size(200)
+                ->margin(0)
+                ->generate($token);
+
+            $tokens[] = [
+                'token' => $token,
+                'qr' => base64_encode($qrPng),
+            ];
+        }
+
+        // ✅ Generate PDF with tokens
+        $pdf = Pdf::loadView('pdf.bulk_tokens', compact('tokens'))
+            ->setPaper('a4', 'portrait');
+
+        $this->dispatch('stopGenerating');
+
+        return response()->streamDownload(function () use ($pdf) {
+            echo $pdf->output();
+        }, 'bulk_qr_tokens.pdf');
     }
 
+
 } ?>
+
 
 @push('styles')
 
@@ -148,6 +166,8 @@ new class extends Component {
         #qrTokenTabs {
             border: none !important;
         }
+
+
     </style>
 @endpush
 
@@ -209,27 +229,84 @@ new class extends Component {
 
         <!-- Generate Token Tab -->
     @else
-        <div class="alert alert-light border text-primary py-2 mb-4">
-            <i class="ti ti-qrcode me-1"></i>
-            Generate a new QR token for an existing employee
-        </div>
-
-        <form wire:submit.prevent="generateToken" class="space-y-3">
-            <div class="mb-3">
-                <label class="form-label fw-semibold">Select Employee</label>
-                <select wire:model.defer="employee_id" class="form-select">
-                    <option value="">-- Select an employee --</option>
-                    @foreach($employees as $emp)
-                        <option value="{{ $emp->id }}">{{ $emp->name }}</option>
-                    @endforeach
-                </select>
-                @error('employee_id') <small class="text-danger">{{ $message }}</small> @enderror
+        <div
+            x-data="{ generating: false }"
+            x-on:generate-start.window="generating = true"
+            x-on:generate-stop.window="generating = false"
+        >
+            <div class="alert alert-light border text-primary py-2 mb-4">
+                <i class="ti ti-grid-dots me-1"></i>
+                Generate multiple QR tokens at once for printing
             </div>
 
-            <button type="submit" class="btn btn-primary w-100 py-2">
-                <i class="ti ti-qrcode me-1"></i> Generate New Token
-            </button>
-        </form>
+            <form wire:submit.prevent="generateBulkTokens" class="position-relative">
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Number of Tokens to Generate</label>
+                    <input type="number" wire:model.defer="bulk_count" class="form-control" min="1" max="100"/>
+                    <small class="text-muted">
+                        Tokens will be arranged in a printable grid format (3 per row, 4 per column)
+                    </small>
+                </div>
+
+                <div class="p-3 mb-3 rounded border bg-light">
+                    <h6 class="fw-bold text-dark mb-2">
+                        <i class="ti ti-info-circle text-primary me-1"></i> What you will get:
+                    </h6>
+                    <ul class="mb-3 ps-3" style="line-height: 1.6;">
+                        <li>Unique token IDs signed securely using ECDSA (ES256)</li>
+                        <li>QR codes automatically generated for each token</li>
+                        <li>Ready-to-print PDF file arranged in a 3×4 grid layout</li>
+                        <li>Approximately 12 tokens per page for easy printing</li>
+                    </ul>
+                    <div class="alert alert-warning bg-light text-warning border-0 py-2 mb-0" style="font-size: 13px;">
+                        ⚠ <strong>Note:</strong> These tokens are <strong>not assigned</strong> to employees.
+                        Use <em>Assign Token</em> later to link them after printing.
+                    </div>
+                </div>
+
+                <!-- ✅ Loader overlay (only when the generateBulkTokens action is running) -->
+                <div wire:loading.flex wire:target="generateBulkTokens"
+                     class="position-absolute top-0 start-0 w-100 h-100 justify-content-center align-items-center bg-white bg-opacity-75 rounded"
+                     style="z-index: 1000;">
+                    <div class="text-center">
+                        <div class="spinner-border text-primary mb-2" role="status"
+                             style="width: 3rem; height: 3rem;"></div>
+                        <p class="fw-semibold text-dark mb-0">Generating QR Tokens...</p>
+                        <small class="text-muted">Please wait while we prepare your PDF</small>
+                    </div>
+                </div>
+
+                <button type="submit"
+                        class="btn btn-primary w-100 py-2"
+                        wire:loading.attr="disabled"
+                        wire:target="generateBulkTokens">
+        <span wire:loading.remove wire:target="generateBulkTokens">
+            <i class="ti ti-download me-1"></i> Generate & Download Bulk Tokens
+        </span>
+                    <span wire:loading wire:target="generateBulkTokens">
+            <i class="ti ti-loader-2 me-1 ti-spin"></i> Processing...
+        </span>
+                </button>
+            </form>
+
+        </div>
     @endif
 </div>
+
+@push('scripts')
+    <script>
+        document.addEventListener('livewire:load', () => {
+            Livewire.on('startGenerating', () => {
+                const loader = document.getElementById('qr-loader');
+                if (loader) loader.style.display = 'flex';
+            });
+
+            Livewire.on('stopGenerating', () => {
+                const loader = document.getElementById('qr-loader');
+                if (loader) loader.style.display = 'none';
+            });
+        });
+    </script>
+@endpush
+
 
