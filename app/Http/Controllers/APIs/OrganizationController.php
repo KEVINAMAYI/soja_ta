@@ -218,7 +218,6 @@ class OrganizationController extends Controller
     }
 
 
-
     /**
      * POST /api/work-locations/assign
      * Assign or activate an employee's work location
@@ -240,32 +239,20 @@ class OrganizationController extends Controller
             ], 400);
         }
 
-        // Deactivate all current assignments
+        // Delete existing assignment for this employee + location
         EmployeeAssignment::where('employee_id', $employee->id)
-            ->update(['is_current' => false]);
-
-        // Check if assignment already exists
-        $assignment = EmployeeAssignment::where('employee_id', $employee->id)
             ->where('work_location_id', $request->work_location_id)
-            ->first();
+            ->delete();
 
-        if ($assignment) {
-            // Reactivate existing assignment
-            $assignment->update([
-                'is_current' => true,
-                'start_date' => $request->start_date ?? $assignment->start_date,
-                'end_date' => $request->end_date ?? $assignment->end_date,
-            ]);
-        } else {
-            // Create a new assignment
-            $assignment = EmployeeAssignment::create([
-                'employee_id' => $employee->id,
-                'work_location_id' => $request->work_location_id,
-                'start_date' => $request->start_date,
-                'end_date' => $request->end_date,
-                'is_current' => true,
-            ]);
-        }
+        // Create a new assignment
+        $assignment = EmployeeAssignment::create([
+            'employee_id' => $employee->id,
+            'work_location_id' => $request->work_location_id,
+            'start_date' => $request->start_date ?? null,
+            'end_date' => $request->end_date ?? null,
+            'is_current' => true,
+        ]);
+
 
         return response()->json([
             'success' => true,

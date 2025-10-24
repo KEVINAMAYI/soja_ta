@@ -77,7 +77,6 @@ new class extends Component {
 
     public function assignWorkLocation()
     {
-
         $this->validate([
             'employeeId' => 'required|exists:employees,id',
             'selectedLocation.id' => 'required|exists:work_locations,id',
@@ -85,14 +84,12 @@ new class extends Component {
             'end_date' => 'nullable|date|after_or_equal:start_date',
         ]);
 
-
-        // Deactivate any existing current assignment for this employee at this same location
+        // Delete existing assignment for this employee + location
         EmployeeAssignment::where('employee_id', $this->employeeId)
             ->where('work_location_id', $this->selectedLocation->id)
-            ->where('is_current', true)
-            ->update(['is_current' => false]);
+            ->delete();
 
-        // Create the new current assignment
+        // Create a new assignment
         EmployeeAssignment::create([
             'employee_id' => $this->employeeId,
             'work_location_id' => $this->selectedLocation->id,
@@ -100,6 +97,7 @@ new class extends Component {
             'end_date' => $this->end_date ?? null,
             'is_current' => true,
         ]);
+
 
         $this->dispatch('hide-work-location-modal');
 
