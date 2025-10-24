@@ -20,7 +20,7 @@ return new class extends Migration
             $table->decimal('cost', 8, 2)->nullable();
             $table->time('available_from')->nullable();
             $table->time('available_to')->nullable();
-            $table->json('days_available')->nullable(); // ["Mon", "Tue", "Wed"]
+            $table->longText('days_available')->nullable(); // ["Mon", "Tue", "Wed"]
             $table->enum('clocking_type', ['auto', 'manual'])->default('manual');
             $table->timestamps();
         });
