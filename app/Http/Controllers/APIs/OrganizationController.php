@@ -176,7 +176,7 @@ class OrganizationController extends Controller
      * GET /api/work-locations
      * List work locations by organization
      */
-    public function workLocations()
+    public function workLocations(Request $request)
     {
         $employee = auth()->user()->employee;
 
@@ -187,13 +187,36 @@ class OrganizationController extends Controller
             ], 400);
         }
 
-        $locations = WorkLocation::where('organization_id', $employee->organization_id)->get();
+        $employeeId = $request->query('employee_id');
+
+        if ($employeeId) {
+            // Get current assignments for this employee
+            $assignments = EmployeeAssignment::with('location')
+                ->where('employee_id', $employeeId)
+                ->where('is_current', true)
+                ->get();
+
+            $locations = $assignments->pluck('location')->filter()->values();
+
+            if ($locations->isEmpty()) {
+                return response()->json([
+                    'code' => 1003,
+                    'message' => 'No assigned work location found for this employee.'
+                ], 403);
+            }
+        } else {
+            // Default: all active locations in the organization
+            $locations = WorkLocation::where('organization_id', $employee->organization_id)
+                ->where('active', true)
+                ->get();
+        }
 
         return response()->json([
             'code' => 1000,
             'data' => $locations
         ]);
     }
+
 
 
     /**
