@@ -2,6 +2,10 @@
 
 namespace App\Http\Controllers\APIs;
 
+use Firebase\JWT\JWT;
+use Firebase\JWT\Key;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use App\Http\Controllers\Controller;
 use App\Models\Employee;
 use App\Models\Attendance;
@@ -47,15 +51,11 @@ class AttendanceController extends Controller
     }
 
 
-    /**
-     * Handle check-in logic
-     */
     private function processCheckIn(string $value, string $column, string $checkInTime, $latitude, $longitude, $deviceId = null)
     {
         DB::beginTransaction();
-        try {
 
-            $employee = Employee::where($column, $value)->firstOrFail();
+        try {
             $loggedInEmployee = auth()->user()->employee;
 
             if (!$loggedInEmployee) {
@@ -65,10 +65,91 @@ class AttendanceController extends Controller
                 ], 404);
             }
 
+            /**
+             * ✅ Case 1: Check-in via QR Code (JWT or Legacy)
+             */
+            if ($column === 'qr_code') {
+                $incomingQr = trim($value);
+                $employee = null;
+
+                // 🧩 CASE A: Legacy 5-char (no dots, old style)
+                if (substr_count($incomingQr, '.') !== 2) {
+                    $employee = Employee::where('qr_code', $incomingQr)->first();
+
+                    if (!$employee) {
+                        return response()->json([
+                            'code' => 1003,
+                            'message' => 'Legacy QR code not recognized.'
+                        ], 404);
+                    }
+                } // 🧩 CASE B: Signed JWT QR (new style)
+                else {
+
+                    $publicKeyPath = storage_path('app/keys/public.pem');
+                    if (!file_exists($publicKeyPath)) {
+                        return response()->json([
+                            'code' => 1003,
+                            'message' => 'Public key not found on server.'
+                        ], 500);
+                    }
+
+                    try {
+                        $decoded = JWT::decode($incomingQr, new Key(file_get_contents($publicKeyPath), 'ES256'));
+                    } catch (\Exception $e) {
+                        return response()->json([
+                            'code' => 1003,
+                            'message' => 'Invalid or tampered QR code.',
+                            'error' => $e->getMessage(),
+                        ], 400);
+                    }
+
+                    $orgId = $decoded->o ?? null;
+
+                    if (!$orgId) {
+                        return response()->json([
+                            'code' => 1003,
+                            'message' => 'QR code expired or invalid.'
+                        ], 400);
+                    }
+
+                    // Find employee under the same organization
+                    $employee = Employee::where('organization_id', $orgId)
+                        ->where('id', $loggedInEmployee->id)
+                        ->first();
+
+                    if (!$employee) {
+                        return response()->json([
+                            'code' => 1003,
+                            'message' => 'Employee not found for this organization.'
+                        ], 404);
+                    }
+
+                    // If employee already has a QR code, it must match
+                    if (!empty($employee->qr_code)) {
+                        if ($employee->qr_code !== $incomingQr) {
+                            return response()->json([
+                                'code' => 1003,
+                                'message' => 'This QR code does not belong to this employee.'
+                            ], 403);
+                        }
+                    } else {
+                        // Assign the verified QR to employee
+                        $employee->qr_code = $incomingQr;
+                        $employee->save();
+                    }
+                }
+            } /**
+             * ✅ Case 2: Normal check-in (ID number, face_id, etc.)
+             */
+            else {
+                $employee = Employee::where($column, $value)->firstOrFail();
+            }
+
+            /**
+             * ✅ Authorization and Organization Validation
+             */
             $isSelf = $employee->id === $loggedInEmployee->id;
-
             if (!$isSelf) {
-
                 if ($employee->organization_id !== $loggedInEmployee->organization_id) {
                     return response()->json([
                         'code' => 1003,
@@ -84,62 +165,57 @@ class AttendanceController extends Controller
                 }
             }
 
-            $today = today()->toDateString();
-
-
-            // ✅ 1. Fetch geofence location (e.g. from WorkLocation / DeviceLocation / EmployeeAssignment)
+            /**
+             * ✅ 1. Fetch assigned work location (geofence check)
+             */
             $assignment = EmployeeAssignment::where('employee_id', $employee->id)
                 ->where('is_current', true)
                 ->first();
 
             if (!$assignment || !$assignment->location) {
                 return response()->json([
-                    'code' => 1005,
+                    'code' => 1003,
                     'message' => 'No assigned work location found.'
                 ], 403);
             }
 
             $workLocation = $assignment->location;
-
-            // ✅ 2. Compute distance using Haversine
             $distance = $workLocation->distanceTo((float)$latitude, (float)$longitude);
+            $radius = $workLocation->radius ?? 100;
 
-
-            // ✅ 3. Check if within geofence (say radius = 100 meters)
-            $radius = $workLocation->radius ?? 100; // default 100m if not set
             if ($distance > $radius) {
                 return response()->json([
-                    'code' => 1006,
+                    'code' => 1003,
                     'message' => 'You are outside the allowed geofence. Move closer to your work location.'
                 ], 403);
             }
 
-
-            // Try to fetch today's attendance (seeded as absent/unchecked_in or none)
+            /**
+             * ✅ 2. Prevent duplicate check-ins
+             */
+            $today = today()->toDateString();
             $existing = Attendance::where('employee_id', $employee->id)
                 ->whereDate('date', $today)
                 ->latest()
                 ->first();
 
-            // Prevent check-in if already checked in and not checked out
             if ($existing && $existing->check_in_time && is_null($existing->check_out_time)) {
                 return response()->json([
-                    'code' => 1004,
+                    'code' => 1003,
                     'message' => 'Already checked in and not checked out.'
                 ], 409);
             }
 
-            // Determine whether to use existing record or create new
-            if (!$existing || ($existing->check_in_time && $existing->check_out_time)) {
-                $attendance = new Attendance([
+            /**
+             * ✅ 3. Create or update attendance record
+             */
+            $attendance = $existing && !$existing->check_out_time
+                ? $existing
+                : new Attendance([
                     'employee_id' => $employee->id,
                     'date' => $today,
                 ]);
-            } else {
-                $attendance = $existing;
-            }
 
-            // Set check-in data
             $attendance->status = 'clocked_in';
             $attendance->check_in_time = $checkInTime ? Carbon::parse($checkInTime) : now();
             $attendance->latitude = $latitude;
@@ -160,6 +236,7 @@ class AttendanceController extends Controller
             return $this->errorResponse('Check-in failed', $e);
         }
     }
+
 
     /**
      * Handle check-out logic
