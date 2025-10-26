@@ -7,6 +7,7 @@ use App\Http\Resources\UserResource;
 use App\Models\Department;
 use App\Models\Employee;
 use App\Models\EmployeeAssignment;
+use App\Models\Role;
 use App\Models\WorkLocation;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -260,6 +261,39 @@ class OrganizationController extends Controller
             'data' => $assignment
         ]);
     }
+
+
+    /**
+     * Get all roles.
+     */
+    public function getAllRoles(Request $request)
+    {
+        try {
+
+            // Fetch all roles but exclude 'Super Admin' (case-insensitive)
+            $roles = Role::whereNotIn('name', ['super-admin','admin'])->get();
+
+
+            if ($roles->isEmpty()) {
+                return response()->json([
+                    'code' => 1003,
+                    'message' => 'No roles found.'
+                ], 404);
+            }
+
+            return response()->json([
+                'code' => 1000,
+                'data' => $roles
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'code' => 1003,
+                'message' => 'An error occurred while fetching roles.',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
 
 
 }

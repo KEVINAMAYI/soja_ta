@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Resources\UserResource;
 use App\Models\Employee;
 use App\Models\EmployeeAssignment;
+use App\Models\Role;
 use App\Models\Shift;
 use App\Models\User;
 use App\Models\WorkLocation;
@@ -19,9 +20,9 @@ class AuthController extends Controller
 
     public function enroll(Request $request)
     {
-        $currentUser = auth()->user();
 
-        $org_id = auth()->user()->employee->organization->id;
+        $currentUser = auth()->user();
+        $org_id = $currentUser->employee->organization->id;
 
         // Only supervisors can enroll
         if (!$currentUser->can('enroll-employee')) {
@@ -39,36 +40,35 @@ class AuthController extends Controller
             'phone' => 'nullable|string|max:20',
             'department_id' => 'required|exists:departments,id',
             'id_number' => 'required|string|unique:employees,id_number',
+            'role_id' => 'required|exists:roles,id', // ✅ validate role_id
         ]);
 
         DB::beginTransaction();
         try {
-
-            // Create user
+            // 1️⃣ Create user
             $user = User::create([
                 'name' => $request->name,
                 'email' => $request->email,
                 'password' => Hash::make($request->password),
             ]);
 
-            // Determine shift_id
+            // 2️⃣ Determine shift_id
             $shiftId = $request->shift_id;
-
             if (!$shiftId) {
-                $firstShift = Shift::where('organization_id', $currentUser->employee->organization_id ?? null)
+                $firstShift = Shift::where('organization_id', $org_id)
                     ->orderBy('id')
                     ->first();
 
                 $shiftId = $firstShift ? $firstShift->id : null;
             }
 
-            // Create employee linked to the new user
+            // 3️⃣ Create employee linked to the new user
             $employee = Employee::create([
                 'name' => $request->name,
                 'email' => $request->email,
                 'phone' => $request->phone,
                 'shift_id' => $shiftId,
-                'organization_id' => auth()->user()->employee->organization_id,
+                'organization_id' => $org_id,
                 'id_number' => $request->id_number,
                 'active' => true,
                 'user_id' => $user->id,
@@ -76,25 +76,30 @@ class AuthController extends Controller
                 'face_id' => $request->face_id,
             ]);
 
-            DB::commit();
+            // 4️⃣ Assign the role using role_id
+            $role = Role::find($request->role_id);
 
-            // Assign the supervisor role
-            $user->assignRole('employee');
+            if (!$role) {
+                DB::rollBack();
+                return response()->json([
+                    'code' => 1003,
+                    'message' => 'Invalid role ID.'
+                ], 400);
+            }
 
-            // Generate token for immediate login
+            $user->assignRole($role->name);
+
+            // 5️⃣ Generate token
             $token = $user->createToken('Api Token')->plainTextToken;
 
-
-            // 5. 🔥 Assign default work location
+            // 6️⃣ Assign default work location
             $defaultLocation = WorkLocation::where('organization_id', $org_id)
                 ->where('is_default', 1)
                 ->first();
 
             if ($defaultLocation) {
                 EmployeeAssignment::updateOrCreate(
-                    [
-                        'employee_id' => $employee->id,
-                    ],
+                    ['employee_id' => $employee->id],
                     [
                         'work_location_id' => $defaultLocation->id,
                         'start_date' => null,
@@ -104,18 +109,19 @@ class AuthController extends Controller
                 );
             }
 
+            DB::commit();
 
             return response()->json([
                 'message' => 'Employee successfully enrolled',
                 'data' => new UserResource($user),
-                'token' => $token
+                'token' => $token,
             ], 201);
 
         } catch (\Exception $e) {
             DB::rollBack();
             return response()->json([
                 'error' => 'Enrollment failed',
-                'details' => $e->getMessage()
+                'details' => $e->getMessage(),
             ], 500);
         }
     }
