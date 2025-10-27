@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\Password;
 use Jantinnerezo\LivewireAlert\Facades\LivewireAlert;
 use Livewire\Attributes\On;
 use Livewire\Volt\Component;
+use App\Helpers\PhoneSanitizer;
 
 new class extends Component {
 
@@ -146,11 +147,13 @@ new class extends Component {
                 'password' => Hash::make('password'),
             ]);
 
+            $phone = PhoneSanitizer::sanitize($this->phone);
+
             // 2. Create the employee
             $employee = Employee::create([
                 'name' => $this->name,
                 'email' => $this->email,
-                'phone' => $this->phone,
+                'phone' => $phone,
                 'shift_id' => $this->shift_id,
                 'organization_id' => $org->id,
                 'id_number' => $this->id_number,
@@ -250,10 +253,12 @@ new class extends Component {
 
             $employee = Employee::with('user.roles')->findOrFail($this->editId);
 
+            $phone = PhoneSanitizer::sanitize($this->phone);
+
             $employee->update([
                 'name' => $this->name,
                 'email' => $this->email,
-                'phone' => $this->phone,
+                'phone' => $phone,
                 'shift_id' => $this->shift_id,
                 'department_id' => $this->department_id,
                 'id_number' => $this->id_number,

@@ -2,10 +2,12 @@
 
 namespace App\Http\Controllers\APIs;
 
+use App\Helpers\PhoneSanitizer;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\UserResource;
 use App\Models\Employee;
 use App\Models\EmployeeAssignment;
+use App\Models\Otp;
 use App\Models\Role;
 use App\Models\Shift;
 use App\Models\User;
@@ -14,6 +16,9 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use App\Services\AfricasTalkingSmsService;
+use Illuminate\Support\Facades\Cache;
+
 
 class AuthController extends Controller
 {
@@ -62,11 +67,13 @@ class AuthController extends Controller
                 $shiftId = $firstShift ? $firstShift->id : null;
             }
 
+            $phone = PhoneSanitizer::sanitize($request->phone);
+
             // 3️⃣ Create employee linked to the new user
             $employee = Employee::create([
                 'name' => $request->name,
                 'email' => $request->email,
-                'phone' => $request->phone,
+                'phone' => $phone,
                 'shift_id' => $shiftId,
                 'organization_id' => $org_id,
                 'id_number' => $request->id_number,
@@ -127,6 +134,127 @@ class AuthController extends Controller
     }
 
 
+    /**
+     * Send OTP to user's registered phone number.
+     */
+    public function sendOtp(Request $request, AfricasTalkingSmsService $smsService)
+    {
+        $request->validate([
+            'phone' => 'required|string',
+        ]);
+
+        $phone = PhoneSanitizer::sanitize($request->phone);
+
+        $employee = Employee::where('phone', $phone)->first();
+
+        if (!$employee) {
+            return response()->json([
+                'code' => 1003,
+                'message' => 'Phone number not found in employee records.'
+            ], 404);
+        }
+
+        $otpCode = rand(100000, 999999);
+
+        // Store in DB with 5 min expiry
+        Otp::updateOrCreate(
+            ['phone' => $phone],
+            ['otp' => $otpCode, 'expires_at' => now()->addMinutes(5)]
+        );
+
+        try {
+            $smsService->sendSms($phone, "Your login OTP code is: {$otpCode}");
+        } catch (\Exception $e) {
+            return response()->json([
+                'code' => 1003,
+                'message' => 'Failed to send OTP',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+
+        return response()->json([
+            'code' => 1000,
+            'message' => 'OTP sent successfully',
+        ], 200);
+    }
+
+    /**
+     * Login using OTP code.
+     */
+    public function loginViaOtp(Request $request)
+    {
+        $request->validate([
+            'phone' => 'required|string',
+            'otp' => 'required|digits:6',
+        ]);
+
+        $phone = PhoneSanitizer::sanitize($request->phone);
+
+        $otp = Otp::where('phone', $phone)->latest()->first();
+
+        if (!$otp || $otp->otp !== $request->otp || $otp->isExpired()) {
+            return response()->json([
+                'code' => 1003,
+                'message' => 'Invalid or expired OTP',
+            ], 401);
+        }
+
+        $employee = Employee::where('phone', $phone)->first();
+
+        if (!$employee || !$employee->user) {
+            return response()->json([
+                'code' => 1003,
+                'message' => 'No user found for this phone number.',
+            ], 404);
+        }
+
+        // Delete OTP after successful use
+        $otp->delete();
+
+        $user = $employee->user;
+        $token = $user->createToken('Api Token')->plainTextToken;
+
+        return response()->json([
+            'code' => 1000,
+            'message' => 'Login successful via OTP',
+            'data' => new UserResource($user),
+            'token' => $token,
+        ], 200);
+    }
+
+    /**
+     * Login using Face ID.
+     */
+    public function loginViaFaceId(Request $request)
+    {
+        $request->validate([
+            'face_id' => 'required|string',
+        ]);
+
+        $employee = Employee::where('face_id', $request->face_id)->first();
+
+        if (!$employee || !$employee->user) {
+            return response()->json([
+                'code' => 1003,
+                'message' => 'Invalid face ID or employee not found.',
+            ], 404);
+        }
+
+        $user = $employee->user;
+        $token = $user->createToken('Api Token')->plainTextToken;
+
+        return response()->json([
+            'code' => 1000,
+            'message' => 'Login successful via Face ID',
+            'data' => new UserResource($user),
+            'token' => $token,
+        ], 200);
+    }
+
+
+    /**
+     * Login using Email and Password.
+     */
     public function login(Request $request)
     {
 

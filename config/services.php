@@ -35,4 +35,12 @@ return [
         ],
     ],
 
+    'africastalking' => [
+        'username' => env('AFRICASTALKING_USERNAME'),
+        'key' => env('AFRICASTALKING_API_KEY'),
+        'from'     => env('SMS_FROM', 'IDENTIGATE'), // 👈 default sender fallback
+
+    ],
+
+
 ];

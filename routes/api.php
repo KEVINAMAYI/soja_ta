@@ -9,6 +9,9 @@ use Illuminate\Support\Facades\Route;
 
 // Public authentication routes
 Route::post('/login', [AuthController::class, 'login']);
+Route::post('/send-otp', [AuthController::class, 'sendOtp']);
+Route::post('/login-otp', [AuthController::class, 'loginViaOtp']);
+Route::post('/login-face', [AuthController::class, 'loginViaFaceId']);
 
 // Protected routes
 Route::middleware(['auth:sanctum'])->group(function () {
