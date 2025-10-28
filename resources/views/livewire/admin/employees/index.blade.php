@@ -193,13 +193,14 @@ new class extends Component {
             $this->resetForm();
             $this->dispatch('refreshDatatable');
 
+
             // 6. Send password reset with organization context
-            Password::broker()->sendResetLink(
-                ['email' => $user->email],
-                function ($user, $token) use ($org) {
-                    $user->sendPasswordResetNotificationWithOrganization($token, $org);
-                }
-            );
+//            Password::broker()->sendResetLink(
+//                ['email' => $user->email],
+//                function ($user, $token) use ($org) {
+//                    $user->sendPasswordResetNotificationWithOrganization($token, $org);
+//                }
+//            );
 
         } catch (\Exception $e) {
             DB::rollBack();
