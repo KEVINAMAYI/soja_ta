@@ -43,17 +43,13 @@ new class extends Component {
         // Organization id fallback
         $orgId = $employeeRecord?->organization_id ?? $workLocation->organization_id;
 
-        $this->locations = DeviceLocation::where('organization_id', $orgId)
-            ->where('work_location_id', $workLocation->id)
-            ->pluck('name', 'id')
-            ->toArray();
 
         $this->workLocation = $workLocation;
         $this->workLocationId = $workLocation->id;
         $this->locations = DeviceLocation::where('organization_id', $orgId)
+            ->where('work_location_id', $workLocation->id)
             ->pluck('name', 'id')
             ->toArray();
-
 
         // Dynamic counts
         $this->refreshCounts();
