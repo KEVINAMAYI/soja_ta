@@ -850,10 +850,12 @@ new class extends Component {
                         <!-- Location -->
                         <div class="col-md-12">
                             <label class="form-label">Location</label>
-                            <select disabled class="form-select" wire:model="device_location_id">
+                            <select class="form-select" wire:model="device_location_id">
                                 <option value="">Select Location</option>
                                 @foreach($locations as $id => $name)
-                                    <option value="{{ $id }}">{{ $name }}</option>
+                                    <option value="{{ $id }}">
+                                        {{ $name }}
+                                    </option>
                                 @endforeach
                             </select>
                             @error('device_location_id') <small class="text-danger">{{ $message }}</small>@enderror
