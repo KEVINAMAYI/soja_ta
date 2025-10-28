@@ -47,16 +47,35 @@ class DepartmentalAttendanceTable extends DataTableComponent
                 'employees.department_id',
                 'departments.name as department_name',
                 DB::raw("DATE_FORMAT(attendances.date, '%Y-%m') as attendance_month"),
-                DB::raw("SUM(CASE WHEN attendances.status = 'Present' THEN 1 ELSE 0 END) as present_days"),
-                DB::raw("SUM(CASE WHEN attendances.status = 'Absent' THEN 1 ELSE 0 END) as absent_days"),
-                DB::raw("SUM(CASE WHEN attendances.status = 'Leave' THEN 1 ELSE 0 END) as leave_days"),
+
+                // ✅ Updated: count both 'clocked_in' and 'clocked_out'
+                DB::raw("
+                SUM(
+                    CASE
+                        WHEN attendances.status IN ('clocked_in', 'clocked_out') THEN 1
+                        ELSE 0
+                    END
+                ) as present_days
+            "),
+
+                // ✅ Updated: count both 'absent' and 'unchecked_in'
+                DB::raw("
+                SUM(
+                    CASE
+                        WHEN attendances.status IN ('absent', 'unchecked_in') THEN 1
+                        ELSE 0
+                    END
+                ) as absent_days
+            "),
+
+                DB::raw("SUM(CASE WHEN attendances.status = 'leave' THEN 1 ELSE 0 END) as leave_days"),
                 DB::raw("COUNT(*) as total_days"),
                 DB::raw("SUM(attendances.worked_hours) as total_worked_hours"),
                 DB::raw("SUM(attendances.overtime_hours) as total_ot_hours")
             )
             ->groupBy('employees.department_id', 'departments.name', DB::raw("DATE_FORMAT(attendances.date, '%Y-%m')"));
-
     }
+
 
     public function columns(): array
     {

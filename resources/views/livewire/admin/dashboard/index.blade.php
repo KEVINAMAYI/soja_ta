@@ -39,7 +39,9 @@ new class extends Component {
             ->whereDate('date', $today)
             ->get();
 
-        $this->presentToday = $attendancesToday->where('status', 'clocked_in')->count();
+        $this->presentToday = $attendancesToday
+            ->whereIn('status', ['clocked_in', 'clocked_out'])
+            ->count();
 
         // Late arrivals
         $this->lateArrivals = $attendancesToday->where('status', 'late')->count();

@@ -103,9 +103,6 @@ new class extends Component {
             'present' => $attendances->whereIn('status', ['clocked_in', 'clocked_out'])->count(),
             'absent' => $attendances->whereIn('status', ['absent', 'unchecked_in'])->count(),
             'onLeave' => $attendances->where('status', 'leave')->count(),
-            'partial' => $attendances->where('status', 'clocked_in')
-                ->whereNull('check_out_time')
-                ->count(),
         ];
 
 
@@ -280,7 +277,6 @@ new class extends Component {
             const seriesData = Object.values(dailydata);
             const labels = Object.keys(dailydata).map(key => {
                 if (key === 'onLeave') return 'On Leave';
-                if (key === 'partial') return 'Partial';
                 return key.charAt(0).toUpperCase() + key.slice(1);
             });
 

@@ -28,7 +28,7 @@ new class extends Component {
         )->whereDate('date', $today)->get();
 
         // Use Laravel Collections to filter statuses
-        $this->present = $attendances->whereIn('status', ['clock_in', 'clock_out'])->count();
+        $this->present = $attendances->whereIn('status', ['clocked_in', 'clocked_out'])->count();
         $this->absent  = $attendances->whereIn('status', ['absent', 'unchecked_in'])->count();
         $this->onLeave = $attendances->where('status', 'leave')->count();
     }
