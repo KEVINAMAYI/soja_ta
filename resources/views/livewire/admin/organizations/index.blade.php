@@ -132,12 +132,12 @@ new class extends Component {
             $this->dispatch('refreshDatatable');
 
             // Send password reset link to the new org admin
-            Password::broker()->sendResetLink(
-                ['email' => $user->email],
-                function ($user, $token) use ($organization) {
-                    $user->sendPasswordResetNotificationWithOrganization($token, $organization);
-                }
-            );
+//            Password::broker()->sendResetLink(
+//                ['email' => $user->email],
+//                function ($user, $token) use ($organization) {
+//                    $user->sendPasswordResetNotificationWithOrganization($token, $organization);
+//                }
+//            );
 
         } catch (\Exception $e) {
             DB::rollBack();
