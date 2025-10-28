@@ -99,10 +99,10 @@ new class extends Component {
         $this->employeeLocations = Attendance::with('employee.department', 'location')
             ->whereIn('employee_id', $employeeIds)
             ->whereDate('date', $today)
-            ->whereNotNull('check_in_time')
             ->whereNotNull('latitude')
             ->whereNotNull('longitude')
-            ->orderBy('check_in_time', 'desc') // latest first
+            ->orderByRaw("FIELD(status, 'clocked_in', 'clocked_out', 'late') ASC")
+            ->orderBy('check_in_time', 'desc')
             ->get()
             ->groupBy('employee_id') // group by employee
             ->map(fn($group) => $group->first()) // pick the latest attendance per employee
