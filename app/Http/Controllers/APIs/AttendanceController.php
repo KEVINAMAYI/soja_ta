@@ -70,11 +70,13 @@ class AttendanceController extends Controller
              * ✅ Case 1: Check-in via QR Code (JWT or Legacy)
              */
             if ($column === 'qr_code') {
+
                 $incomingQr = trim($value);
                 $employee = null;
 
                 // 🧩 CASE A: Legacy 5-char (no dots, old style)
                 if (substr_count($incomingQr, '.') !== 2) {
+                    // 🧩 Legacy 5-char QR (no dots)
                     $employee = Employee::where('qr_code', $incomingQr)->first();
 
                     if (!$employee) {
@@ -83,9 +85,9 @@ class AttendanceController extends Controller
                             'message' => 'Legacy QR code not recognized.'
                         ], 404);
                     }
-                } // 🧩 CASE B: Signed JWT QR (new style)
+                }
+                // 🧩 Signed JWT QR (new style)
                 else {
-
                     $publicKeyPath = storage_path('app/keys/public.pem');
                     if (!file_exists($publicKeyPath)) {
                         return response()->json([
@@ -113,32 +115,44 @@ class AttendanceController extends Controller
                         ], 400);
                     }
 
-                    // Find employee under the same organization
-                    $employee = Employee::where('organization_id', $orgId)
-                        ->where('id', $loggedInEmployee->id)
-                        ->first();
+                    /**
+                     * ✅ Step 1: Try to find employee already assigned this QR code
+                     */
+                    $employee = Employee::where('qr_code', $incomingQr)->first();
 
                     if (!$employee) {
-                        return response()->json([
-                            'code' => 1003,
-                            'message' => 'Employee not found for this organization.'
-                        ], 404);
-                    }
 
-                    // If employee already has a QR code, it must match
-                    if (!empty($employee->qr_code)) {
-                        if ($employee->qr_code !== $incomingQr) {
+                        /**
+                         * ✅ Step 2: Fall back to logged-in employee (link new QR)
+                         */
+                        $loggedInEmployee = auth()->user()->employee;
+
+                        if (!$loggedInEmployee) {
                             return response()->json([
                                 'code' => 1003,
-                                'message' => 'This QR code does not belong to this employee.'
-                            ], 403);
+                                'message' => 'No employee profile found for logged-in user.'
+                            ], 404);
                         }
-                    } else {
-                        // Assign the verified QR to employee
-                        $employee->qr_code = $incomingQr;
-                        $employee->save();
+
+                        $employee = Employee::where('organization_id', $orgId)
+                            ->where('id', $loggedInEmployee->id)
+                            ->first();
+
+                        if (!$employee) {
+                            return response()->json([
+                                'code' => 1003,
+                                'message' => 'Employee not found for this organization.'
+                            ], 404);
+                        }
+
+                        // Assign QR code if missing
+                        if (empty($employee->qr_code)) {
+                            $employee->qr_code = $incomingQr;
+                            $employee->save();
+                        }
                     }
                 }
+
             } /**
              * ✅ Case 2: Normal check-in (ID number, face_id, etc.)
              */
