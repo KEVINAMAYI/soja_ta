@@ -263,22 +263,33 @@ class OrganizationController extends Controller
     }
 
 
-
     /**
      * Get all roles.
      */
     public function getAllRoles(Request $request)
     {
         try {
+            $user = auth()->user();
+            $employee = $user->employee;
 
-            // Fetch all roles but exclude 'Super Admin' (case-insensitive)
-            $roles = Role::whereNotIn('name', ['super-admin','admin'])->get();
+            if (!$employee || !$employee->organization_id) {
+                return response()->json([
+                    'code' => 1003,
+                    'message' => 'User is not linked to any organization.'
+                ], 403);
+            }
 
+            $orgId = $employee->organization_id;
+
+            // Fetch roles for this organization, excluding system roles
+            $roles = Role::where('organization_id', $orgId)
+                ->whereNotIn('name', ['super-admin', 'admin'])
+                ->get();
 
             if ($roles->isEmpty()) {
                 return response()->json([
                     'code' => 1003,
-                    'message' => 'No roles found.'
+                    'message' => 'No roles found for this organization.'
                 ], 404);
             }
 
@@ -286,6 +297,7 @@ class OrganizationController extends Controller
                 'code' => 1000,
                 'data' => $roles
             ]);
+
         } catch (\Exception $e) {
             return response()->json([
                 'code' => 1003,
@@ -294,7 +306,6 @@ class OrganizationController extends Controller
             ], 500);
         }
     }
-
 
 
 }
