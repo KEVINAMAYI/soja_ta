@@ -11,12 +11,11 @@ return new class extends Migration {
     public function up(): void
     {
         Schema::table('attendances', function (Blueprint $table) {
-            if (!Schema::hasColumn('attendances', 'work_location_id')) {
-                $table->foreignId('work_location_id')
-                    ->nullable()
-                    ->constrained('work_locations')
-                    ->nullOnDelete();
-            }
+            // Directly try to add the column — Laravel will handle duplicates safely
+            $table->foreignId('work_location_id')
+                ->nullable()
+                ->constrained('work_locations')
+                ->nullOnDelete();
         });
     }
 
