@@ -321,4 +321,63 @@ class AuthController extends Controller
     }
 
 
+    public function assignToken(Request $request)
+    {
+        try {
+            // Validate request data
+            $validated = $request->validate([
+                'employee_id' => 'required|integer|exists:employees,id',
+                'qr_code' => 'required|string|max:255',
+            ]);
+
+            $employeeId = $validated['employee_id'];
+            $qrCode = trim($validated['qr_code']);
+
+            // Check if this QR code is already assigned to someone else
+            $existingQr = Employee::where('qr_code', $qrCode)
+                ->where('id', '!=', $employeeId)
+                ->first();
+
+            if ($existingQr) {
+                return response()->json([
+                    'code' => 1003,
+                    'message' => 'This token is already assigned to another employee.',
+                ], 409);
+            }
+
+            // Check if this employee already has a token assigned
+            $employee = Employee::findOrFail($employeeId);
+
+            if (!empty($employee->qr_code)) {
+                return response()->json([
+                    'code' => 1003,
+                    'message' => 'This employee already has a token assigned.',
+                ], 409);
+            }
+
+            // Assign the new QR code
+            $employee->update(['qr_code' => $qrCode]);
+
+            return response()->json([
+                'code' => 1000,
+                'message' => 'Token Assigned  successful',
+                'data' => new UserResource($employee->user),
+            ], 200);
+
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'code' => 1003,
+                'message' => 'Validation failed.',
+                'errors' => $e->errors(),
+            ], 422);
+        } catch (\Throwable $e) {
+            report($e);
+            return response()->json([
+                'code' => 1003,
+                'message' => 'An error occurred while assigning the token.',
+            ], 500);
+        }
+    }
+
+
 }
