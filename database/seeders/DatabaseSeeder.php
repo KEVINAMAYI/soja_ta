@@ -25,30 +25,6 @@ class DatabaseSeeder extends Seeder
         // --- 1. Define All Organizations Data ---
         $organizationsData = [
             [
-                'name' => 'Kingsway Enterprises Ltd',
-                'email' => 'info@kingswayenterprises.net',
-                'phone_number' => '+256704247124',
-                'address' => 'Plot 14, Fourth Street, Industrial area, Kampala, Uganda',
-                'role' => 'admin',
-                'user_name' => 'Kingsway Admin',
-            ],
-            [
-                'name' => 'Marksol Ltd',
-                'email' => 'admin@marksolinc.com',
-                'phone_number' => '+211926475689',
-                'address' => 'NRA Yard, Rock City, Nimule, South Sudan',
-                'role' => 'admin',
-                'user_name' => 'Marksol Admin',
-            ],
-            [
-                'name' => 'Cafe Mocca Ltd',
-                'email' => 'info@cafemocca.net',
-                'phone_number' => '+256750500600',
-                'address' => 'NIC Building, Portal Avenue, Kampala, Uganda',
-                'role' => 'admin',
-                'user_name' => 'Cafe Mocca Admin',
-            ],
-            [
                 'name' => 'Ismax Security',
                 'email' => 'chief-operations@ismaxsecurity.com',
                 'phone_number' => '+254795704301',
@@ -60,9 +36,9 @@ class DatabaseSeeder extends Seeder
 
         // --- 2. Seed Test Organization (SUPER-ADMIN) ---
         $testOrganization = Organization::firstOrCreate(
-            ['email' => 'test@example.com'],
+            ['email' => 'techsupport@identigate.co.ke'],
             [
-                'name' => 'Test Org',
+                'name' => 'Identigate',
                 'phone_number' => '254795704301',
             ]
         );
@@ -70,8 +46,8 @@ class DatabaseSeeder extends Seeder
         $testUser = User::firstOrCreate(
             ['email' => $testOrganization->email],
             [
-                'name' => 'Test User',
-                'password' => bcrypt('password'),
+                'name' => 'Tech Support',
+                'password' => bcrypt('Test#2025'),
             ]
         );
 
@@ -83,11 +59,11 @@ class DatabaseSeeder extends Seeder
             ['organization_id' => $testOrganization->id, 'name' => 'Morning Shift'],
             [
                 'start_time' => '08:00:00',
-                'end_time' => '16:00:00',
-                'break_minutes' => 30,
+                'end_time' => '17:00:00',
+                'break_minutes' => 60,
                 'overtime_rate' => 1.5,
                 'status' => 'active',
-                'notes' => 'Standard 8-hour day shift with 30-minute break.',
+                'notes' => 'Standard 8-hour day shift with 60-minute break.',
             ]
         );
 
@@ -104,7 +80,7 @@ class DatabaseSeeder extends Seeder
             [
                 'department_id' => $department->id,
                 'shift_id' => $shift->id,
-                'name' => 'Test Employee',
+                'name' => 'Tech Support',
                 'id_number' => 'EMP999',
                 'email' => $testUser->email,
                 'phone' => '254712345678',
