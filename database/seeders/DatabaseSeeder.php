@@ -25,13 +25,29 @@ class DatabaseSeeder extends Seeder
         // --- 1. Define All Organizations Data ---
         $organizationsData = [
             [
-                'name' => 'Ismax Security',
-                'email' => 'chief-operations@ismaxsecurity.com',
-                'phone_number' => '+254795704301',
-                'address' => 'Ismax Security Limited, Mombasa Road',
+                'name' => 'Kingsway Enterprises Ltd',
+                'email' => 'info@kingswayenterprises.net',
+                'phone_number' => '+256704247124',
+                'address' => 'Plot 14, Fourth Street, Industrial area, Kampala, Uganda.',
                 'role' => 'admin',
-                'user_name' => 'Ismax Security',
+                'user_name' => 'Kingsway Enterprises Ltd',
             ],
+            [
+                'name' => 'Marksol Ltd',
+                'email' => 'admin@marksolinc.com',
+                'phone_number' => '+211926475689',
+                'address' => 'NRA Yard, Rock City, Nimule, South Sudan.',
+                'role' => 'admin',
+                'user_name' => 'Marksol Ltd',
+            ],
+            [
+                'name' => 'Cafe Mocca Ltd',
+                'email' => 'info@cafemocca.net',
+                'phone_number' => '+256750500600',
+                'address' => 'NIC Building, Portal Avenue, Kampala, Uganda.',
+                'role' => 'admin',
+                'user_name' => 'Cafe Mocca Ltd',
+            ]
         ];
 
         // --- 2. Seed Test Organization (SUPER-ADMIN) ---
