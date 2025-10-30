@@ -398,7 +398,7 @@ class DatabaseSeeder extends Seeder
                         'name' => $staff['name'],
                         'id_number' => $idNumber,
                         'email' => $email,
-                        'phone' => null,
+                        'phone' => 0700077000,
                         'active' => true,
                     ]
                 );
