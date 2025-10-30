@@ -46,6 +46,7 @@ new class extends Component {
 
         $this->workLocation = $workLocation;
         $this->workLocationId = $workLocation->id;
+
         $this->locations = DeviceLocation::where('organization_id', $orgId)
             ->where('work_location_id', $workLocation->id)
             ->pluck('name', 'id')
@@ -84,6 +85,18 @@ new class extends Component {
             ->values()
             ->toArray();
     }
+
+
+    #[On('refreshDeviceLocations')]
+    public function refreshDeviceLocations()
+    {
+        $org_id = auth()->user()->employee->organization_id;
+        $this->locations = DeviceLocation::where('organization_id', $org_id)
+            ->where('work_location_id', $this->workLocation->id)
+            ->pluck('name', 'id')
+            ->toArray();
+    }
+
 
     #[On('refreshCounts')]
     public function refreshCounts()
@@ -140,8 +153,10 @@ new class extends Component {
             DB::commit();
 
             $this->dispatch('hide-device-location-modal');
+            $this->dispatch('refreshDeviceLocations'); // 🔥 Add this line
             $this->activeTab = 'checkin-points';
             $this->refreshCounts();
+
 
             LivewireAlert::title('Awesome!')
                 ->text('Checkpoint added successfully.')
@@ -283,6 +298,8 @@ new class extends Component {
                 ->position('top-end')
                 ->show();
         }
+
+
     }
 
 
@@ -346,6 +363,12 @@ new class extends Component {
         $this->platform = 'android';
     }
 
+    #[On('showDeviceModal')]
+    public function onShowDeviceModal()
+    {
+        $this->dispatch('show-device-modal');
+        $this->refreshDeviceLocations();
+    }
 
 }; ?>
 
@@ -802,7 +825,7 @@ new class extends Component {
 
             <!-- Add Device Button -->
             <div class="d-flex justify-content-end my-3">
-                <button class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#deviceModal">
+                <button class="btn btn-outline-primary" wire:click="$dispatch('showDeviceModal')">
                     <i class="ti ti-plus"></i> Add Device
                 </button>
             </div>
@@ -845,9 +868,9 @@ new class extends Component {
 
                         <!-- Location -->
                         <div class="col-md-12">
-                            <label class="form-label">Location</label>
+                            <label class="form-label">Clock-in Point</label>
                             <select class="form-select" wire:model="device_location_id">
-                                <option value="">Select Location</option>
+                                <option value="">Select Clock-in Point</option>
                                 @foreach($locations as $id => $name)
                                     <option value="{{ $id }}">
                                         {{ $name }}
@@ -882,7 +905,7 @@ new class extends Component {
                                        class="form-control"
                                        wire:model="pin"
                                        placeholder="Leave empty to auto-generate">
-                                 <button type="button"
+                                <button type="button"
                                         wire:click="generatePin"
                                         class="custom-hover-white btn btn-outline-primary">
                                     Auto-generate
