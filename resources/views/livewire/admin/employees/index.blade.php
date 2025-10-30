@@ -60,6 +60,7 @@ new class extends Component {
         if (strlen($this->search) > 1) {
             $this->workLocations = WorkLocation::query()
                 ->where('name', 'like', "%{$this->search}%")
+                ->where('organization_id', auth()->user()->employee->organization_id)
                 ->orWhere('address', 'like', "%{$this->search}%")
                 ->limit(10)
                 ->get();
@@ -819,7 +820,7 @@ new class extends Component {
                                         <li class="list-group-item list-group-item-action"
                                             wire:click="selectWorkLocation({{ $location->id }})"
                                             style="cursor: pointer;">
-                                            <strong>{{ $location->name }}</strong>
+                                            <strong>{{ ucfirst(str_replace('_', ' ', $location->name)) }}</strong>
                                             <br><small class="text-muted">{{ $location->address }}</small>
                                         </li>
                                     @empty
