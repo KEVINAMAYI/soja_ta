@@ -360,7 +360,7 @@ class AuthController extends Controller
 
             return response()->json([
                 'code' => 1000,
-                'message' => 'Token Assigned  successful',
+                'message' => 'Token Assigned successful',
                 'data' => new UserResource($employee->user),
             ], 200);
 
