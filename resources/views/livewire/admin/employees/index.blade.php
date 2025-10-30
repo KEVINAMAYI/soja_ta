@@ -54,14 +54,17 @@ new class extends Component {
         $this->dispatch('show-work-location-modal');
     }
 
+
     #[On('search-work-location')]
     public function searchLocation()
     {
         if (strlen($this->search) > 1) {
             $this->workLocations = WorkLocation::query()
-                ->where('name', 'like', "%{$this->search}%")
                 ->where('organization_id', auth()->user()->employee->organization_id)
-                ->orWhere('address', 'like', "%{$this->search}%")
+                ->where(function ($query) {
+                    $query->where('name', 'like', "%{$this->search}%")
+                        ->orWhere('address', 'like', "%{$this->search}%");
+                })
                 ->limit(10)
                 ->get();
         } else {
