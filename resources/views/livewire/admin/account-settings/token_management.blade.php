@@ -47,6 +47,14 @@ new class extends Component {
             DB::commit();
             $this->reset(['token_id', 'employee_id']);
 
+            $orgId = Auth::user()->employee->organization_id ?? null;
+
+            if ($orgId) {
+                $this->employees = Employee::where('organization_id', $orgId)
+                    ->orderBy('name')
+                    ->get(['id', 'name', 'qr_code']);
+            }
+
             LivewireAlert::title('Awesome!')
                 ->text('Token assigned successfully.')
                 ->success()
@@ -224,7 +232,7 @@ new class extends Component {
                     <option value="">-- Select an employee --</option>
                     @foreach($employees as $emp)
                         <option value="{{ $emp->id }}">
-                            {{ $emp->name }}{{ $emp->qr_code ? ' (Has Token)' : '' }}
+                            {{ $emp->name }}{{ $emp->qr_code ? '  [✅ Has Token]' : '' }}
                         </option>
                     @endforeach
                 </select>

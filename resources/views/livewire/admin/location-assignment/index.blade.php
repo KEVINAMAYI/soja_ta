@@ -3,6 +3,7 @@
 use App\Models\WorkLocation;
 use App\Models\Organization;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Livewire\Attributes\On;
 use Livewire\Volt\Component;
 use Jantinnerezo\LivewireAlert\Facades\LivewireAlert;
@@ -156,7 +157,7 @@ new class extends Component {
             DB::beginTransaction();
 
             WorkLocation::findOrFail($this->editId)->update([
-                'name' => $this->name,
+                'name' => Str::of($this->name)->replace('_', ' ')->title(),
                 'type' => $this->type,
                 'address' => $this->address,
                 'latitude' => $this->latitude,
@@ -220,8 +221,20 @@ new class extends Component {
 
     public function resetForm()
     {
-        $this->reset(['organization_id', 'name', 'type', 'radius_m', 'description', 'active', 'editId']);
+        $this->reset([
+            'organization_id',
+            'name',
+            'type',
+            'address',
+            'latitude',
+            'longitude',
+            'radius_m',
+            'description',
+            'active',
+            'editId',
+        ]);
     }
+
 
 }; ?>
 
@@ -420,8 +433,17 @@ new class extends Component {
         document.getElementById('worklocationModal').addEventListener('shown.bs.modal', function () {
             if (typeof google !== 'undefined' && google.maps) {
                 initializeMapAutocomplete();
+
+                // Pre-fill address when editing
+                setTimeout(() => {
+                    const addressInput = document.getElementById('address-input');
+                    if (@this.get('address')) {
+                        addressInput.value = @this.get('address');
+                    }
+                }, 300);
             }
         });
+
 
         window.addEventListener('show-worklocation-modal', () => {
             new bootstrap.Modal(document.getElementById('worklocationModal')).show();
