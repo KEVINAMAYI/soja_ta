@@ -121,12 +121,7 @@ new class extends Component {
         return [
             'name' => 'required|string|max:255',
             'email' => 'nullable|email|unique:employees,email,' . $this->editId,
-            'phone' => [
-                'nullable',
-                'string',
-                'max:20',
-                'regex:/^[2-9][0-9]{6,19}$/' // <-- New rule here
-            ],
+            'phone' => 'required|string|max:20',
             'shift_id' => 'required|exists:shifts,id',
             'department_id' => 'required|exists:departments,id',
             'id_number' => 'required|string|unique:employees,id_number,' . $this->editId,
@@ -694,10 +689,6 @@ new class extends Component {
                                 <small class="text-danger">{{ $message }}</small>
                                 @enderror
 
-                                <!-- Phone number hint -->
-                                <span class="form-text text-danger mt-1">
-                                 Please start the phone number with <strong>25</strong> (e.g., 2512345678).
-                                </span>
                             </div>
 
 
@@ -727,9 +718,9 @@ new class extends Component {
 
                             <!-- ID Number -->
                             <div class="col-md-6 mb-3">
-                                <label for="empIdNumber" class="form-label">Employee ID Number</label>
+                                <label for="empIdNumber" class="form-label">ID Number</label>
                                 <input type="text" id="empIdNumber" wire:model="id_number" class="form-control"
-                                       placeholder="EMP123456"/>
+                                       />
                                 @error('id_number') <small class="text-danger">{{ $message }}</small> @enderror
                             </div>
 
