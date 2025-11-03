@@ -154,9 +154,8 @@ new class extends Component {
             $q->where('organization_id', $organizationId);
         })
             ->whereDate('date', now()->toDateString())
-            ->whereIn('status', ['clocked_in'])
+            ->whereIn('status', ['clocked_in', 'clocked_out']) // ✅ include both
             ->count();
-
 
         // Absent = everyone else not present
         $absent = max($totalEmployees - $present, 0);
