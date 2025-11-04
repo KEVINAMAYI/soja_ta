@@ -23,9 +23,21 @@ class AttendanceSeeder
                 continue; // skip employees with no shift
             }
 
-            // Build full timestamps for today
-            $shiftStart = Carbon::parse("{$today} {$shift->start_time}");
-            $shiftEnd = Carbon::parse("{$today} {$shift->end_time}");
+
+            if (preg_match('/\d{4}-\d{2}-\d{2}/', $shift->start_time)) {
+                // already contains a date
+                $shiftStart = Carbon::parse($shift->start_time);
+            } else {
+                $shiftStart = Carbon::parse("{$today} {$shift->start_time}");
+            }
+
+            if (preg_match('/\d{4}-\d{2}-\d{2}/', $shift->end_time)) {
+                // already contains a date
+                $shiftEnd = Carbon::parse($shift->end_time);
+            } else {
+                $shiftEnd = Carbon::parse("{$today} {$shift->end_time}");
+            }
+
 
             // Handle overnight shifts
             if ($shiftEnd->lessThanOrEqualTo($shiftStart)) {
