@@ -18,6 +18,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use App\Services\AfricasTalkingSmsService;
 use Illuminate\Support\Facades\Cache;
+use App\Services\OtpService;
 
 
 class AuthController extends Controller
@@ -178,6 +179,8 @@ class AuthController extends Controller
         ], 200);
     }
 
+
+
     /**
      * Login using OTP code.
      */
@@ -188,17 +191,16 @@ class AuthController extends Controller
             'otp' => 'required|digits:6',
         ]);
 
-        $phone = PhoneSanitizer::sanitize($request->phone);
+        $result = OtpService::validateOtp($request->phone, $request->otp);
 
-        $otp = Otp::where('phone', $phone)->latest()->first();
-
-        if (!$otp || $otp->otp !== $request->otp || $otp->isExpired()) {
+        if (!$result['valid']) {
             return response()->json([
                 'code' => 1003,
-                'message' => 'Invalid or expired OTP',
+                'message' => $result['message'],
             ], 401);
         }
 
+        $phone = \App\Helpers\PhoneSanitizer::sanitize($request->phone);
         $employee = Employee::where('phone', $phone)->first();
 
         if (!$employee || !$employee->user) {
@@ -207,9 +209,6 @@ class AuthController extends Controller
                 'message' => 'No user found for this phone number.',
             ], 404);
         }
-
-        // Delete OTP after successful use
-        $otp->delete();
 
         $user = $employee->user;
         $token = $user->createToken('Api Token')->plainTextToken;
@@ -221,6 +220,30 @@ class AuthController extends Controller
             'token' => $token,
         ], 200);
     }
+
+
+    public function verifyOtp(Request $request)
+    {
+        $request->validate([
+            'phone' => 'required|string',
+            'otp' => 'required|digits:6',
+        ]);
+
+        $result = OtpService::validateOtp($request->phone, $request->otp);
+
+        if (!$result['valid']) {
+            return response()->json([
+                'code' => 1003,
+                'message' => $result['message'],
+            ], 401);
+        }
+
+        return response()->json([
+            'code' => 1000,
+            'message' => 'OTP verified successfully',
+        ], 200);
+    }
+
 
     /**
      * Login using Face ID.
