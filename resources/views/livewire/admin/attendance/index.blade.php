@@ -73,6 +73,29 @@ new class extends Component {
             transition: all 0.2s ease-in-out !important;
         }
 
+        table.dataTable td {
+            vertical-align: middle !important;
+        }
+
+        .fw-semibold {
+            font-weight: 600 !important;
+        }
+
+        .text-secondary {
+            color: #46259a !important;
+        }
+
+        .text-muted {
+            color: #adb5bd !important;
+        }
+
+        table.dataTable tbody tr:hover {
+            background-color: #f8f9fa !important;
+        }
+
+        iconify-icon {
+            vertical-align: middle !important;
+        }
     </style>
 @endpush
 

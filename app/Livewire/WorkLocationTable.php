@@ -39,31 +39,52 @@ class WorkLocationTable extends DataTableComponent
     {
         return [
 
+            // 🏷️ Location Name
             Column::make("Name", "name")
                 ->sortable()
-                ->format(
-                    function ($value) {
-                        // Replace underscores with spaces
-                        $formattedName = str_replace('_', ' ', $value);
+                ->format(function ($value) {
+                    $formattedName = str_replace('_', ' ', $value);
+                    return "<span class='fw-semibold text-dark'>" . ucwords($formattedName) . "</span>";
+                })
+                ->html(),
 
-                        // Capitalize the first letter of each word
-                        return ucwords($formattedName);
-                    }
-                ),
+            // 🏷️ Type
             Column::make("Type", "type")
-                ->sortable(),
+                ->sortable()
+                ->format(fn($value) => "<span class='text-primary fw-semibold'>{$value}</span>")
+                ->html(),
+
+            // 🏠 Address
             Column::make("Address", "address")
-                ->sortable(),
+                ->sortable()
+                ->format(fn($value) => "<span class='text-muted'>{$value}</span>")
+                ->html(),
+
+            // 📏 Geofence Radius
             Column::make("Geofence Radius(m)", "radius_m")
-                ->sortable(),
+                ->sortable()
+                ->format(fn($value) => "<span class='fw-semibold text-info'>{$value} m</span>")
+                ->html(),
+
+            // 📝 Description
             Column::make("Description", "description")
-                ->sortable(),
+                ->sortable()
+                ->format(fn($value) => "<span class='text-muted'>{$value}</span>")
+                ->html(),
+
+            // ✅ Active Status
             BooleanColumn::make('Active')
                 ->sortable()
+                ->format(fn($value) => $value
+                    ? "<span class='badge bg-success'>Active</span>"
+                    : "<span class='badge bg-danger'>Inactive</span>")
+                ->html()
                 ->collapseOnMobile(),
 
+            // ⚙️ Actions
             Column::make("Action")
                 ->label(fn($row) => view('livewire.admin.location-assignment.actions', ['work_location' => $row]))
+                ->html(),
         ];
     }
 }

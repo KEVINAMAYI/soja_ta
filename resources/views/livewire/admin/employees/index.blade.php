@@ -29,6 +29,7 @@ new class extends Component {
     public $end_date;
     public $roleName = 'employee';
     public $roles = [];
+    public $employee_title;
 
     public function mount($roleId = null)
     {
@@ -127,6 +128,7 @@ new class extends Component {
             'id_number' => 'required|string|unique:employees,id_number,' . $this->editId,
             'active' => 'boolean',
             'roleName' => 'required|exists:roles,name', // <-- Role validation
+            'employee_title' => 'nullable|string|max:255',
         ];
     }
 
@@ -159,6 +161,7 @@ new class extends Component {
                 'active' => $this->active,
                 'user_id' => $user->id,
                 'department_id' => $this->department_id,
+                'employee_title' => $this->employee_title, // 👈 added here
             ]);
 
             // 3. Assign the role (comes from UI select or default "employee")
@@ -237,6 +240,7 @@ new class extends Component {
         $this->id_number = $employee->id_number;
         $this->active = $employee->active;
         $this->roleName = $employee->user->roles->first()->name ?? '';
+        $this->employee_title = $employee->employee_title; // 👈 added here
 
         $this->dispatch('show-employee-modal');
 
@@ -263,6 +267,7 @@ new class extends Component {
                 'department_id' => $this->department_id,
                 'id_number' => $this->id_number,
                 'active' => $this->active,
+                'employee_title' => $this->employee_title, // 👈 added here
             ]);
 
             // 3. Remove old roles and assign the new one
@@ -607,6 +612,30 @@ new class extends Component {
             color: #1f2937;
         }
 
+        table.dataTable td {
+            vertical-align: middle !important;
+        }
+
+        .fw-semibold {
+            font-weight: 600 !important;
+        }
+
+        .text-secondary {
+            color: #46259a !important;
+        }
+
+        .text-muted {
+            color: #adb5bd !important;
+        }
+
+        table.dataTable tbody tr:hover {
+            background-color: #f8f9fa !important;
+        }
+
+        iconify-icon {
+            vertical-align: middle !important;
+        }
+
     </style>
 @endpush
 
@@ -652,7 +681,7 @@ new class extends Component {
     <div class="modal fade" id="employeeModal" tabindex="-1"
          aria-labelledby="employeeModalTitle"
          aria-hidden="true" wire:ignore.self>
-        <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-dialog modal-xl modal-dialog-centered">
             <div class="modal-content">
                 <div class="modal-header d-flex align-items-center">
                     <h5 class="modal-title">{{ $editId ? 'Edit Employee' : 'New Employee' }}</h5>
@@ -720,12 +749,20 @@ new class extends Component {
                             <div class="col-md-6 mb-3">
                                 <label for="empIdNumber" class="form-label">ID Number</label>
                                 <input type="text" id="empIdNumber" wire:model="id_number" class="form-control"
-                                       />
+                                />
                                 @error('id_number') <small class="text-danger">{{ $message }}</small> @enderror
                             </div>
 
+                            <!-- Employee Title -->
+                            <div class="col-md-6 mb-3">
+                                <label for="empTitle" class="form-label">Employee Title</label>
+                                <input type="text" id="empTitle" wire:model="employee_title" class="form-control"
+                                       placeholder="e.g. Senior Accountant, HR Assistant"/>
+                                @error('employee_title') <small class="text-danger">{{ $message }}</small> @enderror
+                            </div>
+
                             <!-- Role -->
-                            <div class="col-md-12 mb-3">
+                            <div class="col-md-6 mb-3">
                                 <label for="empRole" class="form-label">Role</label>
                                 <select id="empRole" wire:model="roleName" class="form-control">
                                     <option value="">Select Role</option>

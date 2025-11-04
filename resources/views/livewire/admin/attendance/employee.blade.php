@@ -1,14 +1,31 @@
-<div class="space-y-1 leading-tight text-sm text-gray-800">
-    <div class="font-semibold text-base text-black">{{ $attendance->employee->name }}</div>
+<div class="d-flex align-items-start">
+    <!-- Employee Icon -->
+    <iconify-icon icon="tabler:user" class="me-2 text-primary" width="20"></iconify-icon>
 
-    <div class="text-xs flex items-center gap-1">
-        <a href="mailto:{{ $attendance->employee->email }}" class="text-blue-600 hover:underline">
-            {{ $attendance->employee->email }}
-        </a>
-    </div>
+    <!-- Employee Details -->
+    <div class="d-flex flex-column">
+        <!-- Name -->
+        <span class="fw-semibold text-dark">{{ $attendance->employee->name }}</span>
 
-    <div class="text-xs flex items-center gap-1">
-        <iconify-icon style="color:green;" icon="mdi:phone-outline" class="w-4 h-4"></iconify-icon>
-        <span class="text-gray-700">{{ $attendance->employee->phone ?? 'N/A' }}</span>
+        <!-- Title -->
+        @if($attendance->employee->employee_title)
+            <small class="text-secondary d-block">{{ $attendance->employee->employee_title }}</small>
+        @endif
+
+        <!-- Email -->
+        @if($attendance->employee->email)
+            <small class="text-muted d-block">
+                <i class="ti ti-mail me-1 text-info"></i>
+                {{ $attendance->employee->email }}
+            </small>
+        @endif
+
+        <!-- ID Number -->
+        @if($attendance->employee->id_number)
+            <small class="text-muted d-block">
+                <i class="ti ti-id me-1 text-success"></i>
+                ID: {{ $attendance->employee->id_number }}
+            </small>
+        @endif
     </div>
 </div>

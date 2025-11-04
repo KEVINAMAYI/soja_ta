@@ -51,37 +51,77 @@ class EmployeeTable extends DataTableComponent
 
     public function columns(): array
     {
-
         return [
 
+            // 🕓 Shift
             Column::make("Shift", "shift_id")
-                ->format(fn($value, $row) => $row->shift?->name ?? '—')
+                ->format(fn($value, $row) =>
+                $row->shift?->name
+                    ? "<span class='fw-semibold text-primary'>{$row->shift->name}</span>"
+                    : "<span class='text-muted'>—</span>"
+                )
+                ->html()
                 ->sortable(),
 
+            // 👤 Employee (with icon, title, email, and ID number)
             Column::make("Employee", "name")
-                ->label(fn($row) => view('livewire.admin.employees.contact', ['employee' => $row]))
+                ->format(function ($value, $row) {
+                    $icon = '<iconify-icon icon="tabler:user" class="me-2 text-primary" width="20"></iconify-icon>';
+
+                    $title = $row->employee_title
+                        ? "<small class='text-secondary d-block'>{$row->employee_title}</small>"
+                        : '';
+
+                    $email = $row->email
+                        ? "<small class='text-muted d-block'><i class='ti ti-mail me-1 text-info'></i>{$row->email}</small>"
+                        : '';
+
+                    $idNumber = $row->id_number
+                        ? "<small class='text-muted d-block'><i class='ti ti-id me-1 text-success'></i>ID: {$row->id_number}</small>"
+                        : '';
+
+                    return "
+            <div class='d-flex align-items-start'>
+                {$icon}
+                <div class='d-flex flex-column'>
+                    <span class='fw-semibold text-dark'>{$row->name}</span>
+                    {$title}
+                    {$email}
+                    {$idNumber}
+                </div>
+            </div>
+        ";
+                })
+                ->html()
                 ->sortable(),
 
-            Column::make("Id Number", "id_number")
-                ->sortable(),
 
+            // 🏢 Department
             Column::make("Department", "department_id")
-                ->format(fn($value, $row) => $row->department?->name ?? '—')
+                ->format(fn($value, $row) =>
+                $row->department?->name
+                    ? "<span class='badge bg-light text-dark border px-3 py-2'>{$row->department->name}</span>"
+                    : "<span class='text-muted'>—</span>"
+                )
+                ->html()
                 ->sortable(),
 
+            // 🧩 Roles
             Column::make("Roles")
                 ->label(fn($row) => view('livewire.admin.employees.roles', ['employee' => $row]))
                 ->collapseOnMobile(),
 
+            // 🟢 Active
             BooleanColumn::make('Active')
                 ->sortable()
                 ->collapseOnMobile(),
 
+            // ⚙️ Actions
             Column::make("Action")
-                ->label(fn($row) => view('livewire.admin.employees.actions', ['employee' => $row]))
-
+                ->label(fn($row) => view('livewire.admin.employees.actions', ['employee' => $row])),
         ];
     }
+
 
 
     public function filters(): array

@@ -108,13 +108,13 @@ class AttendanceDailyTable extends DataTableComponent
 
         $isAbsentFilter = in_array($this->status, ['absent', 'unchecked_in', 'off_shift']);
 
-
         return [
 
+            // 👤 Employee Column (beautified, consistent with other table)
             Column::make("Employee")
                 ->label(fn($row) => view('livewire.admin.attendance.employee', ['attendance' => $row])),
 
-            // Updated Shift Column with start and end times
+            // 🕒 Shift Column
             Column::make("Shift")
                 ->label(function ($row) {
                     if (!$row->employee->shift) {
@@ -128,6 +128,7 @@ class AttendanceDailyTable extends DataTableComponent
                 })
                 ->html(),
 
+            // ⏰ Clock In Column
             Column::make($isAbsentFilter ? "Last Clock-In" : "Clock In", "check_in_time")
                 ->format(function ($value, $row) {
                     $label = '';
@@ -144,10 +145,11 @@ class AttendanceDailyTable extends DataTableComponent
                     return "<div>
                     <span class='fw-semibold text-success'>{$formatted}</span>
                     {$label}
-                    </div>";
+                </div>";
                 })
                 ->html(),
 
+            // ⏳ Clock Out Column
             Column::make($isAbsentFilter ? "Last Clock-Out" : "Clock Out", "check_out_time")
                 ->format(function ($value, $row) {
                     $label = '';
@@ -161,7 +163,6 @@ class AttendanceDailyTable extends DataTableComponent
 
                     $formatted = $value ? Carbon::parse($value)->format('M d, Y g:i A') : '';
 
-                    // 🔴 Show red badge if user is still checked in (no checkout but has checkin)
                     if ($row->status === 'clocked_in' && $row->check_in_time && !$row->check_out_time) {
                         $badge = "<span style='background-color:green; color:#fff; padding:4px 12px; border-radius:4px; font-size:0.75rem; margin-left:6px;'>Still In</span>";
                     } else {
@@ -169,21 +170,20 @@ class AttendanceDailyTable extends DataTableComponent
                     }
 
                     return "<div>
-            <span class='fw-semibold' style='color: #dc3545;'>{$formatted}</span>
-            {$badge}
-            {$label}
-        </div>";
+                    <span class='fw-semibold' style='color: #dc3545;'>{$formatted}</span>
+                    {$badge}
+                    {$label}
+                </div>";
                 })
                 ->html(),
 
-
+            // ⏱️ Overtime Column
             Column::make("Overtime (hours)", "overtime_hours")
                 ->sortable()
                 ->format(function ($value) use ($threshold) {
                     return $value;
                 })
                 ->html()
-
         ];
     }
 

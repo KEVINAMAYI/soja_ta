@@ -38,13 +38,17 @@ class DepartmentTable extends DataTableComponent
     public function columns(): array
     {
         return [
+            // 🏷️ Department Name
             Column::make("Name", "name")
-                ->sortable(),
+                ->sortable()
+                ->format(fn($value) => "<span class='fw-semibold text-dark'>" . ucwords(str_replace(['-', '_'], ' ', $value)) . "</span>")
+                ->html(),
 
+            // 👤 Manager
             Column::make("Manager", "manager.name")
                 ->label(function ($row) {
                     if ($row->manager) {
-                        return "<span class='badge bg-primary'>{$row->manager->name}</span>";
+                        return "<span class='badge bg-primary fw-semibold'>{$row->manager->name}</span>";
                     }
                     return "<span class='text-muted'>—</span>";
                 })
@@ -54,14 +58,16 @@ class DepartmentTable extends DataTableComponent
                         ->orderBy('managers.name', $direction);
                 }),
 
+            // 📅 Created At
             Column::make("Created at", "created_at")
                 ->sortable()
-                ->format(fn($value, $row, Column $column) => $value->format('F d, Y h:i A')),
+                ->format(fn($value) => "<span class='text-muted'>" . $value->format('F d, Y h:i A') . "</span>")
+                ->html(),
 
+            // ⚙️ Actions
             Column::make('Actions')
                 ->label(fn($row) => view('livewire.admin.departments.actions', ['department' => $row]))
                 ->html(),
         ];
-
     }
 }
