@@ -38,17 +38,23 @@ class RoleTable extends DataTableComponent
     {
         return [
 
+            // 👤 Role Name
             Column::make("Name", "name")
                 ->sortable()
-                ->format(fn($value) => ucwords(str_replace(['-', '_'], ' ', $value))),
+                ->format(fn($value) => "<span class='fw-semibold text-dark'>" . ucwords(str_replace(['-', '_'], ' ', $value)) . "</span>")
+                ->html(),
 
+            // 📅 Created At
             Column::make("Created at", "created_at")
                 ->sortable()
-                ->format(fn($value, $row, Column $column) => $value->format('F d, Y h:i A')),
+                ->format(fn($value) => "<span class='text-muted'>" . $value->format('F d, Y h:i A') . "</span>")
+                ->html(),
 
+            // ⚙️ Actions
             Column::make('Actions')
                 ->label(fn($row) => view('livewire.admin.roles.actions', ['roles' => $row]))
                 ->html(),
         ];
     }
+
 }

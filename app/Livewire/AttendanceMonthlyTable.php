@@ -50,32 +50,44 @@ class AttendanceMonthlyTable extends DataTableComponent
     {
         return [
 
+            // 🗓 Month
             Column::make("Month")
-                ->label(fn($row) => \Carbon\Carbon::createFromFormat('Y-m', $row->attendance_month)->format('F Y')),
+                ->label(fn($row) => '<span class="fw-semibold text-primary">' . \Carbon\Carbon::createFromFormat('Y-m', $row->attendance_month)->format('F Y') . '</span>')
+                ->html(),
 
+            // 👤 Employee Column (beautified, consistent with other table)
             Column::make("Employee")
-                ->label(fn($row) => optional($row->employee)->name ?? 'N/A'),
+                ->label(fn($row) => view('livewire.admin.attendance.employee', ['attendance' => $row])),
 
+            // ✅ Present Days
             Column::make("Present")
-                ->label(fn($row) => "<span class='badge bg-success'>{$row->present_days}</span>")
+                ->label(fn($row) => "<span class='badge bg-success rounded-pill px-2 py-1'>{$row->present_days}</span>")
                 ->html(),
 
+            // ❌ Absent Days
             Column::make("Absent")
-                ->label(fn($row) => "<span class='badge bg-danger'>{$row->absent_days}</span>")
+                ->label(fn($row) => "<span class='badge bg-danger rounded-pill px-2 py-1'>{$row->absent_days}</span>")
                 ->html(),
 
+            // 🟡 Leave Days
             Column::make("Leave")
-                ->label(fn($row) => "<span class='badge bg-warning text-dark'>{$row->leave_days}</span>")
+                ->label(fn($row) => "<span class='badge bg-warning text-dark rounded-pill px-2 py-1'>{$row->leave_days}</span>")
                 ->html(),
 
+            // 📊 Total Days
             Column::make("Total Days")
-                ->label(fn($row) => $row->total_days),
+                ->label(fn($row) => "<span class='fw-semibold'>{$row->total_days}</span>")
+                ->html(),
 
+            // ⏱ Working Hours
             Column::make("Working Hours")
-                ->label(fn($row) => number_format($row->total_worked_hours, 2)),
+                ->label(fn($row) => "<span class='text-muted'>" . number_format($row->total_worked_hours, 2) . "</span>")
+                ->html(),
 
+            // ⏰ OT Hours
             Column::make("OT Hours")
-                ->label(fn($row) => number_format($row->total_ot_hours, 2)),
+                ->label(fn($row) => "<span class='text-muted'>" . number_format($row->total_ot_hours, 2) . "</span>")
+                ->html(),
 
         ];
     }

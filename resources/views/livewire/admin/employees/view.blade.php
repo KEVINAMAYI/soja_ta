@@ -525,32 +525,56 @@ new class extends Component {
                     <h6 class="mb-0">Current Location</h6>
                 </div>
 
-                <div class="mb-2"><strong>Name:</strong{{ $workLocation->name }}</div>
-                <div class="mb-2"><strong>Building:</strong> {{ $workLocation->type }}</div>
-                <div class="mb-2"><strong>Address:</strong> {{ $workLocation->address }}</div>
-                <div class="mb-2 d-flex align-items-center">
-                    <strong class="me-2">Active:</strong>
-                    @if ($workLocation?->active)
-                        <iconify-icon icon="mdi:check-circle" style="color: #22c55e;" width="18"
-                                      height="18"></iconify-icon>
-                        <span class="ms-1 text-success">Active</span>
-                    @else
-                        <iconify-icon icon="mdi:close-circle" style="color: #dc2626;" width="18"
-                                      height="18"></iconify-icon>
-                        <span class="ms-1 text-danger">Inactive</span>
-                    @endif
-                </div>
+                @if ($workLocation)
+                    <div class="mb-2">
+                        <strong>Name:</strong>
+                        {{ $workLocation ? ucwords(str_replace('_', ' ', $workLocation->name)) : '' }}
+                    </div>
 
-                <div class="mb-2"><strong>GPS
-                        Coordinates:</strong>{{ $workLocation->latitude.' '.$workLocation->longitude }}</div>
+                    <div class="mb-2">
+                        <strong>Building:</strong>
+                        {{ $workLocation ? ucwords(str_replace('_', ' ', $workLocation->type)) : '' }}
+                    </div>
 
-                <!-- Replacing map placeholder -->
-                <div class="mt-3 text-muted small d-flex align-items-center">
-                    <iconify-icon icon="mdi:information-outline" class="me-1" width="18" height="18"></iconify-icon>
-                    Live location Map view is available in the mobile app.
-                </div>
+                    <div class="mb-2">
+                        <strong>Address:</strong>
+                        {{ $workLocation ? ucwords(str_replace('_', ' ', $workLocation->address)) : '' }}
+                    </div>
+
+                    <div class="mb-2 d-flex align-items-center">
+                        <strong class="me-2">Active:</strong>
+                        @if ($workLocation->active)
+                            <iconify-icon icon="mdi:check-circle" style="color: #22c55e;" width="18"
+                                          height="18"></iconify-icon>
+                            <span class="ms-1 text-success">Active</span>
+                        @else
+                            <iconify-icon icon="mdi:close-circle" style="color: #dc2626;" width="18"
+                                          height="18"></iconify-icon>
+                            <span class="ms-1 text-danger">Inactive</span>
+                        @endif
+                    </div>
+                    <div class="mb-2">
+                        <strong>GPS Coordinates:</strong> {{ $workLocation->latitude }} , {{ $workLocation->longitude }}
+                    </div>
+
+                    <div class="mt-3 text-muted small d-flex align-items-center">
+                        <iconify-icon icon="mdi:information-outline" class="me-1" width="18" height="18"></iconify-icon>
+                        Live location Map view is available in the mobile app.
+                    </div>
+
+                @else
+                    <div class="text-center py-4 px-3 border rounded bg-light">
+                        <iconify-icon icon="mdi:map-marker-off" width="48" height="48"
+                                      style="color:#adb5bd;"></iconify-icon>
+                        <h6 class="mt-3 mb-1 text-secondary fw-bold">No Work Location Assigned</h6>
+                        <p class="text-muted mb-0 small">
+                            This employee is not currently assigned to any work location.
+                        </p>
+                    </div>
+                @endif
             </div>
         </div>
+
 
     </div>
 

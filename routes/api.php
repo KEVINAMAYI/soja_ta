@@ -34,6 +34,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
         Route::get('/work-locations', [OrganizationController::class, 'workLocations']);
         Route::post('/assign-work-location', [OrganizationController::class, 'assignWorkLocation']);
         Route::post('/assign-qr-code', [AuthController::class, 'assignToken']);
+        Route::post('/assign-face-id', [AuthController::class, 'assignFaceId']);
         Route::get('/roles', [OrganizationController::class, 'getAllRoles']);
     });
 

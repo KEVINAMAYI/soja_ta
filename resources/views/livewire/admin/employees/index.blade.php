@@ -29,6 +29,7 @@ new class extends Component {
     public $end_date;
     public $roleName = 'employee';
     public $roles = [];
+    public $employee_title;
 
     public function mount($roleId = null)
     {
@@ -54,13 +55,17 @@ new class extends Component {
         $this->dispatch('show-work-location-modal');
     }
 
+
     #[On('search-work-location')]
     public function searchLocation()
     {
         if (strlen($this->search) > 1) {
             $this->workLocations = WorkLocation::query()
-                ->where('name', 'like', "%{$this->search}%")
-                ->orWhere('address', 'like', "%{$this->search}%")
+                ->where('organization_id', auth()->user()->employee->organization_id)
+                ->where(function ($query) {
+                    $query->where('name', 'like', "%{$this->search}%")
+                        ->orWhere('address', 'like', "%{$this->search}%");
+                })
                 ->limit(10)
                 ->get();
         } else {
@@ -117,17 +122,13 @@ new class extends Component {
         return [
             'name' => 'required|string|max:255',
             'email' => 'nullable|email|unique:employees,email,' . $this->editId,
-            'phone' => [
-                'nullable',
-                'string',
-                'max:20',
-                'regex:/^[2-9][0-9]{6,19}$/' // <-- New rule here
-            ],
+            'phone' => 'required|string|max:20',
             'shift_id' => 'required|exists:shifts,id',
             'department_id' => 'required|exists:departments,id',
             'id_number' => 'required|string|unique:employees,id_number,' . $this->editId,
             'active' => 'boolean',
             'roleName' => 'required|exists:roles,name', // <-- Role validation
+            'employee_title' => 'nullable|string|max:255',
         ];
     }
 
@@ -160,6 +161,7 @@ new class extends Component {
                 'active' => $this->active,
                 'user_id' => $user->id,
                 'department_id' => $this->department_id,
+                'employee_title' => $this->employee_title, // 👈 added here
             ]);
 
             // 3. Assign the role (comes from UI select or default "employee")
@@ -238,6 +240,7 @@ new class extends Component {
         $this->id_number = $employee->id_number;
         $this->active = $employee->active;
         $this->roleName = $employee->user->roles->first()->name ?? '';
+        $this->employee_title = $employee->employee_title; // 👈 added here
 
         $this->dispatch('show-employee-modal');
 
@@ -264,6 +267,7 @@ new class extends Component {
                 'department_id' => $this->department_id,
                 'id_number' => $this->id_number,
                 'active' => $this->active,
+                'employee_title' => $this->employee_title, // 👈 added here
             ]);
 
             // 3. Remove old roles and assign the new one
@@ -608,6 +612,30 @@ new class extends Component {
             color: #1f2937;
         }
 
+        table.dataTable td {
+            vertical-align: middle !important;
+        }
+
+        .fw-semibold {
+            font-weight: 600 !important;
+        }
+
+        .text-secondary {
+            color: #46259a !important;
+        }
+
+        .text-muted {
+            color: #adb5bd !important;
+        }
+
+        table.dataTable tbody tr:hover {
+            background-color: #f8f9fa !important;
+        }
+
+        iconify-icon {
+            vertical-align: middle !important;
+        }
+
     </style>
 @endpush
 
@@ -653,7 +681,7 @@ new class extends Component {
     <div class="modal fade" id="employeeModal" tabindex="-1"
          aria-labelledby="employeeModalTitle"
          aria-hidden="true" wire:ignore.self>
-        <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-dialog modal-xl modal-dialog-centered">
             <div class="modal-content">
                 <div class="modal-header d-flex align-items-center">
                     <h5 class="modal-title">{{ $editId ? 'Edit Employee' : 'New Employee' }}</h5>
@@ -690,10 +718,6 @@ new class extends Component {
                                 <small class="text-danger">{{ $message }}</small>
                                 @enderror
 
-                                <!-- Phone number hint -->
-                                <span class="form-text text-danger mt-1">
-                                 Please start the phone number with <strong>25</strong> (e.g., 2512345678).
-                                </span>
                             </div>
 
 
@@ -723,14 +747,22 @@ new class extends Component {
 
                             <!-- ID Number -->
                             <div class="col-md-6 mb-3">
-                                <label for="empIdNumber" class="form-label">Employee ID Number</label>
+                                <label for="empIdNumber" class="form-label">ID Number</label>
                                 <input type="text" id="empIdNumber" wire:model="id_number" class="form-control"
-                                       placeholder="EMP123456"/>
+                                />
                                 @error('id_number') <small class="text-danger">{{ $message }}</small> @enderror
                             </div>
 
+                            <!-- Employee Title -->
+                            <div class="col-md-6 mb-3">
+                                <label for="empTitle" class="form-label">Employee Title</label>
+                                <input type="text" id="empTitle" wire:model="employee_title" class="form-control"
+                                       placeholder="e.g. Senior Accountant, HR Assistant"/>
+                                @error('employee_title') <small class="text-danger">{{ $message }}</small> @enderror
+                            </div>
+
                             <!-- Role -->
-                            <div class="col-md-12 mb-3">
+                            <div class="col-md-6 mb-3">
                                 <label for="empRole" class="form-label">Role</label>
                                 <select id="empRole" wire:model="roleName" class="form-control">
                                     <option value="">Select Role</option>
@@ -819,7 +851,7 @@ new class extends Component {
                                         <li class="list-group-item list-group-item-action"
                                             wire:click="selectWorkLocation({{ $location->id }})"
                                             style="cursor: pointer;">
-                                            <strong>{{ $location->name }}</strong>
+                                            <strong>{{ ucfirst(str_replace('_', ' ', $location->name)) }}</strong>
                                             <br><small class="text-muted">{{ $location->address }}</small>
                                         </li>
                                     @empty

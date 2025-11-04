@@ -380,4 +380,65 @@ class AuthController extends Controller
     }
 
 
+    public function assignFaceId(Request $request)
+    {
+        try {
+
+            // Validate request data
+            $validated = $request->validate([
+                'employee_id' => 'required|integer|exists:employees,id',
+                'face_id' => 'required|string|max:255',
+            ]);
+
+            $employeeId = $validated['employee_id'];
+            $faceId = trim($validated['face_id']);
+
+            // Check if this face_id is already assigned to someone else
+            $existingFace = Employee::where('face_id', $faceId)
+                ->where('id', '!=', $employeeId)
+                ->first();
+
+            if ($existingFace) {
+                return response()->json([
+                    'code' => 1003,
+                    'message' => 'This face ID is already assigned to another employee.',
+                ], 409);
+            }
+
+            // Check if this employee already has a face_id assigned
+            $employee = Employee::findOrFail($employeeId);
+
+            if (!empty($employee->face_id)) {
+                return response()->json([
+                    'code' => 1003,
+                    'message' => 'This employee already has a face ID assigned.',
+                ], 409);
+            }
+
+            // Assign the new face ID
+            $employee->update(['face_id' => $faceId]);
+
+            return response()->json([
+                'code' => 1000,
+                'message' => 'Face ID assigned successfully.',
+                'data' => new UserResource($employee->user),
+            ], 200);
+
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'code' => 1003,
+                'message' => 'Validation failed.',
+                'errors' => $e->errors(),
+            ], 422);
+        } catch (\Throwable $e) {
+            report($e);
+            return response()->json([
+                'code' => 1003,
+                'message' => 'An error occurred while assigning the face ID.',
+            ], 500);
+        }
+    }
+
+
+
 }

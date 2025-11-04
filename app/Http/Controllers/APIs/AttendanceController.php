@@ -52,11 +52,20 @@ class AttendanceController extends Controller
     }
 
 
-    private function processCheckIn(string $value, string $column, string $checkInTime, $latitude, $longitude, $work_location_id, $deviceId = null)
+    private function processCheckIn(
+        string $value,
+        string $column,
+        string $checkInTime,
+               $latitude,
+               $longitude,
+               $work_location_id,
+               $deviceId = null
+    )
     {
         DB::beginTransaction();
 
         try {
+
             $loggedInEmployee = auth()->user()->employee;
 
             if (!$loggedInEmployee) {
@@ -70,24 +79,24 @@ class AttendanceController extends Controller
              * ✅ Case 1: Check-in via QR Code (JWT or Legacy)
              */
             if ($column === 'qr_code') {
-
                 $incomingQr = trim($value);
                 $employee = null;
 
-                // 🧩 CASE A: Legacy 5-char (no dots, old style)
-                if (substr_count($incomingQr, '.') !== 2) {
-                    // 🧩 Legacy 5-char QR (no dots)
-                    $employee = Employee::where('qr_code', $incomingQr)->first();
+                // ✅ Step 1: Try to find employee by QR directly (DB first)
+                $employee = Employee::where('qr_code', $incomingQr)->first();
 
-                    if (!$employee) {
+                if (!$employee) {
+
+                    // ✅ Step 2: Only if not found, decide if legacy or new JWT QR
+                    if (substr_count($incomingQr, '.') !== 2) {
+                        // 🧩 Legacy 5-char (no dots, old style)
                         return response()->json([
                             'code' => 1003,
-                            'message' => 'Legacy QR code not recognized.'
+                            'message' => 'Legacy QR code not recognized or not linked to any employee.'
                         ], 404);
                     }
-                }
-                // 🧩 Signed JWT QR (new style)
-                else {
+
+                    // 🧩 Signed JWT QR (new style)
                     $publicKeyPath = storage_path('app/keys/public.pem');
                     if (!file_exists($publicKeyPath)) {
                         return response()->json([
@@ -116,43 +125,38 @@ class AttendanceController extends Controller
                     }
 
                     /**
-                     * ✅ Step 1: Try to find employee already assigned this QR code
+                     * ✅ Step 3: Handle unassigned QR cases
                      */
-                    $employee = Employee::where('qr_code', $incomingQr)->first();
-
-                    if (!$employee) {
-
-                        /**
-                         * ✅ Step 2: Fall back to logged-in employee (link new QR)
-                         */
-                        $loggedInEmployee = auth()->user()->employee;
-
-                        if (!$loggedInEmployee) {
-                            return response()->json([
-                                'code' => 1003,
-                                'message' => 'No employee profile found for logged-in user.'
-                            ], 404);
-                        }
-
-                        $employee = Employee::where('organization_id', $orgId)
-                            ->where('id', $loggedInEmployee->id)
-                            ->first();
-
-                        if (!$employee) {
-                            return response()->json([
-                                'code' => 1003,
-                                'message' => 'Employee not found for this organization.'
-                            ], 404);
-                        }
-
-                        // Assign QR code if missing
-                        if (empty($employee->qr_code)) {
-                            $employee->qr_code = $incomingQr;
-                            $employee->save();
-                        }
+                    if (!empty($deviceId)) {
+                        // Supervisor/admin scanning from device
+                        return response()->json([
+                            'code' => 1003,
+                            'message' => 'QR code is valid but not yet assigned to any employee. Please assign it before use.'
+                        ], 403);
                     }
-                }
 
+                    // Regular employee scanning (self-assignment)
+                    if ($loggedInEmployee->organization_id != $orgId) {
+                        return response()->json([
+                            'code' => 1003,
+                            'message' => 'QR code belongs to a different organization.'
+                        ], 400);
+                    }
+
+                    // Check if code already assigned
+                    if (Employee::where('qr_code', $incomingQr)->exists()) {
+                        return response()->json([
+                            'code' => 1003,
+                            'message' => 'This QR code is already linked to another employee.'
+                        ], 409);
+                    }
+
+                    // ✅ Assign QR to logged-in employee (self registration)
+                    $loggedInEmployee->qr_code = $incomingQr;
+                    $loggedInEmployee->save();
+
+                    $employee = $loggedInEmployee;
+                }
             } /**
              * ✅ Case 2: Normal check-in (ID number, face_id, etc.)
              */
@@ -164,6 +168,7 @@ class AttendanceController extends Controller
              * ✅ Authorization and Organization Validation
              */
             $isSelf = $employee->id === $loggedInEmployee->id;
+
             if (!$isSelf) {
                 if ($employee->organization_id !== $loggedInEmployee->organization_id) {
                     return response()->json([
@@ -187,7 +192,6 @@ class AttendanceController extends Controller
                 ->where('work_location_id', $work_location_id)
                 ->where('is_current', true)
                 ->first();
-
 
             if (!$assignment || !$assignment->location) {
                 return response()->json([
@@ -240,7 +244,7 @@ class AttendanceController extends Controller
             $attendance->latitude = $latitude;
             $attendance->longitude = $longitude;
             $attendance->device_id = $deviceId;
-            $attendance->work_location_id = $work_location_id; // ✅ new line
+            $attendance->work_location_id = $work_location_id;
             $attendance->save();
 
             DB::commit();

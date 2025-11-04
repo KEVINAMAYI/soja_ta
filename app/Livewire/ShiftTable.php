@@ -39,41 +39,45 @@ class ShiftTable extends DataTableComponent
 
     public function columns(): array
     {
-
         return [
+            // 👤 Name
             Column::make("Name", "name")
                 ->searchable()
-                ->sortable(),
+                ->sortable()
+                ->format(fn($value) => "<span class='fw-semibold text-dark'>{$value}</span>")
+                ->html(),
 
+            // ⏰ Time (From - To with colors)
             Column::make("Time","start_time")
                 ->format(function ($value, $row) {
+                    $start = Carbon::parse($row->start_time)->format('g:i A');
+                    $end = Carbon::parse($row->end_time)->format('g:i A');
+
                     return '
-            <div class="d-flex justify-content-between">
-                <div>
-                    <div><small class="text-muted">From</small> <span class="text-primary fw-semibold">' . Carbon::parse($row->start_time)->format('g:i A') . '</span></div>
-                    <div><small class="text-muted">To</small> <span class="text-danger fw-semibold">' . Carbon::parse($row->end_time)->format('g:i A') . '</span></div>
-                </div>
-            </div>';
+                <div class="d-flex flex-column gap-1">
+                    <div><small class="text-muted">From</small> <span class="text-primary fw-semibold">' . $start . '</span></div>
+                    <div><small class="text-muted">To</small> <span class="text-danger fw-semibold">' . $end . '</span></div>
+                </div>';
                 })
                 ->html()
                 ->sortable(),
 
-
+            // 👥 Employees count
             Column::make("Employees","start_time")
-                ->format(function ($value, $row) {
-                    return '<span class="text-danger fw-bold">' . $row->employees->count() . '</span>';
-                })
+                ->format(fn($value, $row) => '<span class="badge bg-danger fw-bold">' . $row->employees->count() . '</span>')
                 ->html(),
 
-
+            // ⏱ Break minutes
             Column::make("Break (min)", "break_minutes")
                 ->format(fn($value) => '<span class="badge bg-secondary">' . $value . ' min</span>')
                 ->html(),
 
+            // 💰 Overtime Rate
             Column::make("Overtime Rate", "overtime_rate")
                 ->format(fn($value) => '<span class="text-success fw-bold">' . number_format($value, 1) . '</span>')
                 ->html(),
 
+            // 🔖 Status
             Column::make("Status", "status")
                 ->format(fn($value) => match ($value) {
                     'active' => '<span class="badge bg-success">Active</span>',
@@ -82,10 +86,11 @@ class ShiftTable extends DataTableComponent
                 })
                 ->html(),
 
+            // ⚙️ Action
             Column::make("Action")
                 ->label(fn($row) => view('livewire.admin.shifts.actions', ['shift' => $row]))
+                ->html(),
         ];
-
     }
 
 }

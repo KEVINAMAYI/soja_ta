@@ -13,6 +13,14 @@
                 </a>
             </li>
             <li>
+                <a href="javascript:void(0)"
+                   class="dropdown-item d-flex align-items-center gap-2"
+                   wire:click="$dispatch('edit-worklocation',{ id : {{ $work_location->id }} })">
+                    <iconify-icon icon="mdi:pencil-outline" class="text-warning w-4 h-4"></iconify-icon>
+                    <span>Edit</span>
+                </a>
+            </li>
+            <li>
                 <a class="dropdown-item d-flex align-items-center gap-2 {{ $work_location->active ? 'text-warning' : 'text-success' }}"
                    href="javascript:void(0)"
                    wire:click="$dispatch('toggle-work-location', { id : {{ $work_location->id }}})">

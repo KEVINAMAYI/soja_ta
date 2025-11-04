@@ -31,22 +31,44 @@ class DeviceLocationsTable extends DataTableComponent
     public function columns(): array
     {
         return [
+            // 🏷️ Device Name
             Column::make("Name", "name")
-                ->sortable(),
-            Column::make("Description", "description")
-                ->sortable(),
-            BooleanColumn::make('Active')
                 ->sortable()
-                ->collapseOnMobile(),
+                ->format(fn($value) => "<span class='fw-semibold text-dark'>" . ucwords(str_replace(['-', '_'], ' ', $value)) . "</span>")
+                ->html(),
+
+            // 📝 Description
+            Column::make("Description", "description")
+                ->sortable()
+                ->format(fn($value) => "<span class='text-muted'>{$value}</span>")
+                ->html(),
+
+            // ✅ Active Status
+            Column::make("Active", "active")
+                ->sortable()
+                ->collapseOnMobile()
+                ->format(fn($value) => $value
+                    ? "<span class='badge bg-success fw-semibold'>Active</span>"
+                    : "<span class='badge bg-danger fw-semibold'>Inactive</span>"
+                )
+                ->html(),
+
+            // 📅 Created At
             Column::make("Created at", "created_at")
                 ->sortable()
-                ->format(fn($value, $row, Column $column) => $value->format('F d, Y h:i A')),
+                ->format(fn($value) => "<span class='text-muted'>" . $value->format('F d, Y h:i A') . "</span>")
+                ->html(),
 
+            // ⚙️ Actions
             Column::make("Action")
-                ->label(fn($row) => view('livewire.admin.location-assignment.device-location-actions', ['device_location' => $row]))
-
+                ->label(fn($row) => view(
+                    'livewire.admin.location-assignment.device-location-actions',
+                    ['device_location' => $row]
+                ))
+                ->html(),
         ];
     }
+
 
     public function builder(): Builder
     {
