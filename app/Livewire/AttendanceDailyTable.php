@@ -49,36 +49,16 @@ class AttendanceDailyTable extends DataTableComponent
         $status = $this->status;
         $search = $this->search;
 
-        // Base Attendance query
+        // Base Attendance query (no more last check in/out subselects)
         $query = Attendance::query()
             ->select('attendances.*')
             ->with(['employee', 'employee.shift'])
             ->whereDate('date', $today)
             ->whereHas('employee', fn($q) => $q->where('organization_id', $orgId));
 
-
-        // Add subselects for last check_in/out from *previous* records
-        $query->addSelect([
-            'last_check_in' => Attendance::select('check_in_time')
-                ->whereColumn('employee_id', 'attendances.employee_id')
-                ->whereNotNull('check_in_time')
-                ->where('date', '<', $today)  // 👈 this line is critical
-                ->orderByDesc('date')
-                ->limit(1),
-
-            'last_check_out' => Attendance::select('check_out_time')
-                ->whereColumn('employee_id', 'attendances.employee_id')
-                ->whereNotNull('check_out_time')
-                ->where('date', '<', $today)  // 👈 this line too
-                ->orderByDesc('date')
-                ->limit(1),
-        ]);
-
         if (!empty($status)) {
-
             if ($status === 'absent') {
                 $query->whereIn('status', ['absent', 'unchecked_in']);
-
             } elseif ($status === 'off_shift') {
                 $query->whereHas('employee.shift', function ($q) {
                     $q->where('status', 'inactive');
@@ -88,13 +68,11 @@ class AttendanceDailyTable extends DataTableComponent
             }
         }
 
-
         // Apply search
         if ($search) {
             $query->where(function ($q) use ($search) {
                 $q->where('status', 'like', "%$search%")
-                    ->orWhereHas('employee', fn($q) => $q->where('name', 'like', "%$search%")
-                    );
+                    ->orWhereHas('employee', fn($q) => $q->where('name', 'like', "%$search%"));
             });
         }
 
@@ -102,19 +80,37 @@ class AttendanceDailyTable extends DataTableComponent
     }
 
 
+    /**
+     * Get the last known attendance record for an employee before today.
+     */
+    protected function getLastAttendance($employeeId)
+    {
+        if (!$employeeId) {
+            return null;
+        }
+
+        $today = now()->toDateString();
+
+        return Attendance::where('employee_id', $employeeId)
+            ->where('date', '<', $today)
+            ->where(function ($q) {
+                $q->whereNotNull('check_in_time')
+                    ->orWhereNotNull('check_out_time');
+            })
+            ->orderByDesc('date')
+            ->first();
+    }
+
+
     public function columns(): array
     {
         $threshold = $this->min_ot_threshold;
 
-        $isAbsentFilter = in_array($this->status, ['absent', 'unchecked_in', 'off_shift']);
-
         return [
 
-            // 👤 Employee Column (beautified, consistent with other table)
             Column::make("Employee")
                 ->label(fn($row) => view('livewire.admin.attendance.employee', ['attendance' => $row])),
 
-            // 🕒 Shift Column
             Column::make("Shift")
                 ->label(function ($row) {
                     if (!$row->employee->shift) {
@@ -128,62 +124,58 @@ class AttendanceDailyTable extends DataTableComponent
                 })
                 ->html(),
 
-            // ⏰ Clock In Column
-            Column::make($isAbsentFilter ? "Last Clock-In" : "Clock In", "check_in_time")
+            // Clock In
+            Column::make("Clock In", "check_in_time")
+                ->format(function ($value, $row) {
+                    $label = '';
+
+                    // Show last known check-in for absentees
+                    if (in_array($row->status, ['absent', 'unchecked_in'])) {
+                        $last = $this->getLastAttendance($row->employee_id);
+                        $value = $last?->check_in_time;
+                        if ($value) {
+                            $label = "<br><small class='text-muted'>(Last Clock-In)</small>";
+                        }
+                    }
+
+                    $formatted = $value ? Carbon::parse($value)->format('M d, Y g:i A') : '-';
+                    return "<span class='fw-semibold text-success'>{$formatted}</span>{$label}";
+                })
+                ->html(),
+
+
+            // Clock Out
+            Column::make("Clock Out", "check_out_time")
                 ->format(function ($value, $row) {
                     $label = '';
 
                     if (in_array($row->status, ['absent', 'unchecked_in'])) {
-                        $value = $row->last_check_in;
-                        if (is_null($this->status)) {
-                            $label = "<br><small class='text-muted'>(Last Clock-in)</small>";
+                        $last = $this->getLastAttendance($row->employee_id);
+                        $value = $last?->check_out_time;
+                        if ($value) {
+                            $label = "<br><small class='text-muted'>(Last Clock-Out)</small>";
                         }
                     }
 
                     $formatted = $value ? Carbon::parse($value)->format('M d, Y g:i A') : '-';
 
-                    return "<div>
-                    <span class='fw-semibold text-success'>{$formatted}</span>
-                    {$label}
-                </div>";
-                })
-                ->html(),
-
-            // ⏳ Clock Out Column
-            Column::make($isAbsentFilter ? "Last Clock-Out" : "Clock Out", "check_out_time")
-                ->format(function ($value, $row) {
-                    $label = '';
-
-                    if (in_array($row->status, ['absent', 'unchecked_in'])) {
-                        $value = $row->last_check_out;
-                        if (is_null($this->status)) {
-                            $label = "<br><small class='text-muted'>(Last Clock-Out)</small>";
-                        }
-                    }
-
-                    $formatted = $value ? Carbon::parse($value)->format('M d, Y g:i A') : '';
-
+                    $badge = '';
                     if ($row->status === 'clocked_in' && $row->check_in_time && !$row->check_out_time) {
                         $badge = "<span style='background-color:green; color:#fff; padding:4px 12px; border-radius:4px; font-size:0.75rem; margin-left:6px;'>Still In</span>";
-                    } else {
-                        $badge = '';
                     }
 
                     return "<div>
-                    <span class='fw-semibold' style='color: #dc3545;'>{$formatted}</span>
-                    {$badge}
-                    {$label}
-                </div>";
+            <span class='fw-semibold' style='color:#dc3545;'>{$formatted}</span>
+            {$badge}{$label}
+        </div>";
                 })
                 ->html(),
 
-            // ⏱️ Overtime Column
+
             Column::make("Overtime (hours)", "overtime_hours")
                 ->sortable()
-                ->format(function ($value) use ($threshold) {
-                    return $value;
-                })
-                ->html()
+                ->format(fn($value) => $value ?? '-')
+                ->html(),
         ];
     }
 
