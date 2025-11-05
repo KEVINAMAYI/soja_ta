@@ -13,6 +13,7 @@ Route::post('/send-otp', [AuthController::class, 'sendOtp']);
 Route::post('/verify-otp', [AuthController::class, 'verifyOtp']);
 Route::post('/login-otp', [AuthController::class, 'loginViaOtp']);
 Route::post('/login-face', [AuthController::class, 'loginViaFaceId']);
+Route::post('/reset-password', [AuthController::class, 'resetPassword']);
 
 // Protected routes
 Route::middleware(['auth:sanctum'])->group(function () {

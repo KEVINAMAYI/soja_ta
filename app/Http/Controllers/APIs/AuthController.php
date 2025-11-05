@@ -18,7 +18,8 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use App\Services\AfricasTalkingSmsService;
 use Illuminate\Support\Facades\Cache;
-use App\Services\OtpService;
+use App\Services\OtpValidate;
+use App\Services\OtpSender;
 
 
 class AuthController extends Controller
@@ -138,33 +139,32 @@ class AuthController extends Controller
     /**
      * Send OTP to user's registered phone number.
      */
-    public function sendOtp(Request $request, AfricasTalkingSmsService $smsService)
+    public function sendOtp(Request $request, OtpSender $otpSender)
     {
         $request->validate([
-            'phone' => 'required|string',
+            'phone' => 'sometimes|required_without:email|string',
+            'email' => 'sometimes|required_without:phone|email',
         ]);
 
-        $phone = PhoneSanitizer::sanitize($request->phone);
-
-        $employee = Employee::where('phone', $phone)->first();
+        if ($request->filled('phone')) {
+            $employee = Employee::where('phone', $request->phone)->first();
+            $type = 'phone';
+            $value = $request->phone;
+        } else {
+            $employee = Employee::where('email', $request->email)->first();
+            $type = 'email';
+            $value = $request->email;
+        }
 
         if (!$employee) {
             return response()->json([
                 'code' => 1003,
-                'message' => 'Phone number not found in employee records.'
+                'message' => 'Employee not found'
             ], 404);
         }
 
-        $otpCode = rand(100000, 999999);
-
-        // Store in DB with 5 min expiry
-        Otp::updateOrCreate(
-            ['phone' => $phone],
-            ['otp' => $otpCode, 'expires_at' => now()->addMinutes(5)]
-        );
-
         try {
-            $smsService->sendSms($phone, "Your login OTP code is: {$otpCode}");
+            $otpSender->sendOtp($type, $value);
         } catch (\Exception $e) {
             return response()->json([
                 'code' => 1003,
@@ -180,7 +180,6 @@ class AuthController extends Controller
     }
 
 
-
     /**
      * Login using OTP code.
      */
@@ -191,7 +190,7 @@ class AuthController extends Controller
             'otp' => 'required|digits:6',
         ]);
 
-        $result = OtpService::validateOtp($request->phone, $request->otp);
+        $result = OtpValidate::validateOtp('phone', $request->phone, $request->otp);
 
         if (!$result['valid']) {
             return response()->json([
@@ -224,12 +223,26 @@ class AuthController extends Controller
 
     public function verifyOtp(Request $request)
     {
+        // Validate that at least one of phone or email is provided
         $request->validate([
-            'phone' => 'required|string',
+            'phone' => 'nullable|string',
+            'email' => 'nullable|email',
             'otp' => 'required|digits:6',
         ]);
 
-        $result = OtpService::validateOtp($request->phone, $request->otp);
+        if (!$request->phone && !$request->email) {
+            return response()->json([
+                'code' => 1002,
+                'message' => 'Either phone or email is required',
+            ], 422);
+        }
+
+        // Determine the type and value to validate
+        $type = $request->phone ? 'phone' : 'email';
+        $value = $request->phone ?? $request->email;
+
+        // Call your OTP validation logic
+        $result = OtpValidate::validateOtp($type, $value, $request->otp);
 
         if (!$result['valid']) {
             return response()->json([
@@ -462,6 +475,44 @@ class AuthController extends Controller
         }
     }
 
+
+    public function resetPassword(Request $request)
+    {
+        // Validate input
+        $request->validate([
+            'email' => 'required|email',
+            'otp' => 'required|digits:6',
+            'password' => 'required|string|min:8',
+        ]);
+
+        // Verify OTP
+        $result = OtpValidate::validateOtp('email', $request->email, $request->otp);
+
+        if (!$result['valid']) {
+            return response()->json([
+                'code' => 1003,
+                'message' => $result['message'],
+            ], 401);
+        }
+
+        // Find the user by email
+        $user = User::where('email', $request->email)->first();
+        if (!$user) {
+            return response()->json([
+                'code' => 1004,
+                'message' => 'User not found',
+            ], 404);
+        }
+
+        // Update password
+        $user->password = Hash::make($request->password);
+        $user->save();
+
+        return response()->json([
+            'code' => 1000,
+            'message' => 'Password reset successfully',
+        ], 200);
+    }
 
 
 }
