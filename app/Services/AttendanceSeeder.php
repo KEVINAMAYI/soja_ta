@@ -20,30 +20,41 @@ class AttendanceSeeder
         foreach ($employees as $employee) {
             $shift = $employee->shift;
             if (!$shift) {
-                continue;
+                continue; // skip employees with no shift
             }
 
-            // Build full timestamps for today
-            $shiftStart = Carbon::hasFormat($shift->start_time, 'H:i:s')
-                ? Carbon::parse("{$today} {$shift->start_time}")
-                : Carbon::parse($shift->start_time);
 
-            $shiftEnd = Carbon::hasFormat($shift->end_time, 'H:i:s')
-                ? Carbon::parse("{$today} {$shift->end_time}")
-                : Carbon::parse($shift->end_time);
+            if (preg_match('/\d{4}-\d{2}-\d{2}/', $shift->start_time)) {
+                // already contains a date
+                $shiftStart = Carbon::parse($shift->start_time);
+            } else {
+                $shiftStart = Carbon::parse("{$today} {$shift->start_time}");
+            }
+
+            if (preg_match('/\d{4}-\d{2}-\d{2}/', $shift->end_time)) {
+                // already contains a date
+                $shiftEnd = Carbon::parse($shift->end_time);
+            } else {
+                $shiftEnd = Carbon::parse("{$today} {$shift->end_time}");
+            }
+
 
             // Handle overnight shifts
             if ($shiftEnd->lessThanOrEqualTo($shiftStart)) {
                 $shiftEnd->addDay();
             }
 
+            // Get or create today's attendance
             $attendance = Attendance::firstOrNew([
                 'employee_id' => $employee->id,
                 'date' => $today,
             ]);
 
+            // ========================
             // CASE 1: No check-in yet
+            // ========================
             if (!$attendance->check_in_time) {
+
                 if ($now->greaterThan($shiftEnd)) {
                     $attendance->status = 'absent';
                 } elseif ($now->between($shiftStart, $shiftEnd)) {
@@ -57,27 +68,18 @@ class AttendanceSeeder
                     $attendance->overtime_hours = 0;
                     $attendance->save();
                 }
+
+                // Skip CASE 2 if they never clocked in
+                continue;
             }
 
-            // CASE 2: Auto clock-out if still clocked_in after shift end
-            elseif ($attendance->status === 'clocked_in' && $now->greaterThan($shiftEnd)) {
-
-                // --- DEBUG LOGGING START ---
-                info("======================================");
-                info("AUTO CLOCK OUT DEBUG");
-                info("Employee ID: {$employee->id}");
-                info("Attendance ID: {$attendance->id}");
-                info("Shift start: {$shiftStart}");
-                info("Shift end:   {$shiftEnd}");
-                info("Now:         {$now}");
-                info("Check-in:    {$attendance->check_in_time}");
-                info("--------------------------------------");
-                // --- DEBUG LOGGING END ---
+            // =================================================
+            // CASE 2: Auto clock-out if still clocked_in
+            // =================================================
+            if ($attendance->status === 'clocked_in' && $attendance->check_in_time && $now->greaterThan($shiftEnd)) {
 
                 $checkIn = Carbon::parse($attendance->check_in_time);
-                $workedHours = $checkIn->diffInHours($shiftEnd, false); // false → preserve sign
-
-                info("Raw worked hours (can be negative): {$workedHours}");
+                $workedHours = $checkIn->diffInHours($shiftEnd, false);
 
                 // Skip invalid values
                 if ($workedHours < 0 || $workedHours > 24) {
@@ -91,9 +93,12 @@ class AttendanceSeeder
                     'worked_hours' => $workedHours,
                 ]);
 
-                info("✅ Attendance {$attendance->id} clocked out successfully.");
-                info("======================================");
+                info("✅ Attendance {$attendance->id} auto clocked out successfully.");
             }
+
+            // =================================================
+            // CASE 3: Already clocked out → do nothing
+            // =================================================
         }
     }
 }
