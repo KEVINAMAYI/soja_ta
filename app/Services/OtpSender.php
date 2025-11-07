@@ -10,7 +10,7 @@ class OtpSender
 {
     protected $smsService;
 
-    public function __construct($smsService = null)
+    public function __construct(AfricasTalkingSmsService $smsService)
     {
         $this->smsService = $smsService;
     }

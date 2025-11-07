@@ -146,10 +146,14 @@ class AuthController extends Controller
             'email' => 'sometimes|required_without:phone|email',
         ]);
 
+
         if ($request->filled('phone')) {
-            $employee = Employee::where('phone', $request->phone)->first();
+
+            $phone = PhoneSanitizer::sanitize($request->phone);
+            $employee = Employee::where('phone', $phone)->first();
             $type = 'phone';
-            $value = $request->phone;
+            $value = $phone;
+
         } else {
             $employee = Employee::where('email', $request->email)->first();
             $type = 'email';
