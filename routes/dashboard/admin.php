@@ -41,9 +41,11 @@ Route::middleware(['auth'])->prefix('admin')->group(function () {
     Volt::route('reports/departments', 'admin.reports.departments')->name('reports.departments');
     Volt::route('reports/organization', 'admin.reports.organization')->name('reports.organization');
 
-
     //Work Locations
     Volt::route('work-locations/view/{workLocation}', 'admin.location-assignment.view')->name('work-location.view');
+
+    //Leaves Locations
+    Volt::route('leaves', 'admin.leaves.index')->name('leaves.index');
 
 
 });

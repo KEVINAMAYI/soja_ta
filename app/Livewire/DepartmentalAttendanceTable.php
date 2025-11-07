@@ -19,6 +19,7 @@ class DepartmentalAttendanceTable extends DataTableComponent
     public function configure(): void
     {
         $this->setPrimaryKey('department_id');
+        $this->setDefaultSort('attendance_month', 'desc');
     }
 
     public function filters(): array
@@ -48,7 +49,10 @@ class DepartmentalAttendanceTable extends DataTableComponent
                 'departments.name as department_name',
                 DB::raw("DATE_FORMAT(attendances.date, '%Y-%m') as attendance_month"),
 
-                // ✅ Updated: count both 'clocked_in' and 'clocked_out'
+                // NEW AGGREGATION: Count of unique employees in the department for this month
+                DB::raw("COUNT(DISTINCT employees.id) as employee_count"),
+
+                // Present Days (clocked_in/clocked_out)
                 DB::raw("
                 SUM(
                     CASE
@@ -58,7 +62,7 @@ class DepartmentalAttendanceTable extends DataTableComponent
                 ) as present_days
             "),
 
-                // ✅ Updated: count both 'absent' and 'unchecked_in'
+                // Absent Days (absent/unchecked_in)
                 DB::raw("
                 SUM(
                     CASE
@@ -68,8 +72,15 @@ class DepartmentalAttendanceTable extends DataTableComponent
                 ) as absent_days
             "),
 
-                DB::raw("SUM(CASE WHEN attendances.status = 'leave' THEN 1 ELSE 0 END) as leave_days"),
+                // Leave Days (on_leave)
+                DB::raw("SUM(CASE WHEN attendances.status = 'on_leave' THEN 1 ELSE 0 END) as leave_days"),
+
+                // Off Shift Days (off_shift)
+                DB::raw("SUM(CASE WHEN attendances.status = 'off_shift' THEN 1 ELSE 0 END) as off_shift_days"),
+
+                // Total expected attendance days (denominator for rates)
                 DB::raw("COUNT(*) as total_days"),
+
                 DB::raw("SUM(attendances.worked_hours) as total_worked_hours"),
                 DB::raw("SUM(attendances.overtime_hours) as total_ot_hours")
             )
@@ -80,47 +91,65 @@ class DepartmentalAttendanceTable extends DataTableComponent
     public function columns(): array
     {
         return [
-
-            // 🗓 Month (bold and highlighted)
+            // 🗓 Month
             Column::make("Month")
                 ->label(fn($row) => '<span class="fw-semibold text-primary">' . \Carbon\Carbon::createFromFormat('Y-m', $row->attendance_month)->format('F Y') . '</span>')
                 ->html(),
 
-            // 🏢 Department (subtle and elegant)
+            // 🏢 Department
             Column::make("Department")
                 ->label(fn($row) => '<span class="text-dark fw-medium">' . ($row->department_name ?? 'N/A') . '</span>')
                 ->html(),
 
-            // ✅ Present Days (rounded badge)
-            Column::make("Present")
-                ->label(fn($row) => "<span class='badge bg-success rounded-pill px-3 py-1'>{$row->present_days}</span>")
+            // 👤 Employee Count (NEW)
+            Column::make("Employees")
+                ->label(fn($row) => "<span class='badge bg-info text-white rounded-pill px-3 py-1'>{$row->employee_count}</span>")
                 ->html(),
 
-            // ❌ Absent Days (rounded badge)
-            Column::make("Absent")
-                ->label(fn($row) => "<span class='badge bg-danger rounded-pill px-3 py-1'>{$row->absent_days}</span>")
+            // ✅ Attendance Rate (DERIVED)
+            Column::make("Attendance %", 'present_days')
+                ->label(function($row) {
+                    $rate = ($row->total_days > 0) ? ($row->present_days / $row->total_days) * 100 : 0;
+                    $class = $rate >= 90 ? 'bg-success' : ($rate >= 80 ? 'bg-warning text-dark' : 'bg-danger');
+                    return "<span class='badge {$class} rounded-pill px-3 py-1'>" . number_format($rate, 1) . "%</span>";
+                })
+                ->sortable()
                 ->html(),
 
-            // 🟡 Leave Days (rounded badge)
-            Column::make("Leave")
-                ->label(fn($row) => "<span class='badge bg-warning text-dark rounded-pill px-3 py-1'>{$row->leave_days}</span>")
+            // ❌ Absenteeism Rate (DERIVED)
+            Column::make("Absenteeism %", 'absent_days')
+                ->label(function($row) {
+                    $rate = ($row->total_days > 0) ? ($row->absent_days / $row->total_days) * 100 : 0;
+                    $class = $rate < 10 ? 'bg-success' : ($rate < 20 ? 'bg-warning text-dark' : 'bg-danger');
+                    return "<span class='badge {$class} rounded-pill px-3 py-1'>" . number_format($rate, 1) . "%</span>";
+                })
+                ->sortable()
                 ->html(),
 
-            // 📊 Total Days (clean emphasis)
-            Column::make("Total Days")
-                ->label(fn($row) => "<span class='fw-semibold text-dark'>{$row->total_days}</span>")
+            // --- Raw Data (Now simple text output) ---
+
+            Column::make("Present Days", 'present_days')
+                ->label(fn($row) => "{$row->present_days} days"),
+
+            Column::make("Absent Days", 'absent_days')
+                ->label(fn($row) => "{$row->absent_days} days"),
+
+            Column::make("Leave Days", 'leave_days')
+                ->label(fn($row) => "{$row->leave_days} days"),
+
+            // New Column: Off Shift Days
+            Column::make("Off Shift Days", 'off_shift_days')
+                ->label(fn($row) => "{$row->off_shift_days} days"),
+
+            // ⏱ Working Hours (Kept HTML for styling/formatting)
+            Column::make("Working Hours", 'total_worked_hours')
+                ->label(fn($row) => "<span class='text-muted'>" . number_format($row->total_worked_hours, 2) . "h</span>")
                 ->html(),
 
-            // ⏱ Working Hours
-            Column::make("Working Hours")
-                ->label(fn($row) => "<span class='text-muted'>" . number_format($row->total_worked_hours, 2) . "</span>")
+            // ⏰ OT Hours (Kept HTML for styling/formatting)
+            Column::make("OT Hours", 'total_ot_hours')
+                ->label(fn($row) => "<span class='text-muted'>" . number_format($row->total_ot_hours, 2) . "h</span>")
                 ->html(),
-
-            // ⏰ OT Hours
-            Column::make("OT Hours")
-                ->label(fn($row) => "<span class='text-muted'>" . number_format($row->total_ot_hours, 2) . "</span>")
-                ->html(),
-
         ];
     }
 

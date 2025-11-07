@@ -486,6 +486,7 @@ new class extends Component {
                         'unchecked_in', 'absent' => 'Absent',
                         'clocked_in' => 'Clocked In',
                         'clocked_out' => 'Clocked Out',
+                        'on_leave' => 'On Leave',
                         default => 'Unknown',
                     };
 
@@ -697,12 +698,14 @@ new class extends Component {
                                         'clocked_in'  => 'clocked-in',
                                         'clocked_out' => 'clocked-out',
                                         'absent'      => 'absent',
+                                        'on_leave'    => 'on-leave',
                                         default       => 'absent'
                                     };
                                     $statusLabel = match($sheet->status) {
                                         'clocked_in'   => 'Clocked In',
                                         'clocked_out'  => 'Clocked Out',
                                         'absent'       => 'Absent',
+                                        'on_leave'     => 'On Leave',
                                         'unchecked_in' => 'Absent'
                                     };
                                 @endphp

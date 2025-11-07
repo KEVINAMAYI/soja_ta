@@ -11,6 +11,9 @@ new class extends Component {
 
     public $totalEmployees = 0;
     public $presentToday = 0;
+    public $absentToday = 0;
+    public $leaveToday = 0;
+    public $OffShiftToday = 0;
     public $lateArrivals = 0;
     public $overtimeHours = 0;
     public $departmentStats = [];
@@ -43,8 +46,16 @@ new class extends Component {
             ->whereIn('status', ['clocked_in', 'clocked_out'])
             ->count();
 
-        // Late arrivals
-        $this->lateArrivals = $attendancesToday->where('status', 'late')->count();
+        // Leave arrivals
+        $this->absentToday = $attendancesToday
+            ->whereIn('status', ['absent', 'unchecked_in'])
+            ->count();;
+
+        // Leave arrivals
+        $this->leaveToday = $attendancesToday->where('status', 'on_leave')->count();
+
+        //Off Shift
+        $this->OffShiftToday = $attendancesToday->where('status', 'off_shift')->count();
 
         // Overtime hours this week
         $weekStart = Carbon::now()->startOfWeek();
@@ -372,66 +383,73 @@ new class extends Component {
 
 <div class="row g-3">
 
-    <!-- Total Employees -->
-    <div class="col-lg-3 col-6">
-        <div class="card shadow-sm h-100">
-            <div class="stat-card">
-                <div class="stat-text">
-                    <h6 class="text-muted mb-1">Total Employees</h6>
-                    <h3 class="fw-bold text-dark">{{ $totalEmployees }}</h3>
-                    <small style="visibility:hidden;" class="text-muted">Everyone in</small>
-                </div>
-                <div class="stat-icon icon-green">
-                    <span class="iconify" data-icon="mdi:account-check"></span>
+    <div class="row g-3">
+
+        <div class="col-lg-3 col-6">
+            <div class="card shadow-sm h-100">
+                <div class="stat-card p-3">
+                    <div class="stat-text">
+                        <h6 class="text-muted mb-1">Present Today</h6>
+                        <h3 class="fw-bold text-success">{{ $presentToday }}</h3>
+                        <small class="text-muted">
+                            {{ number_format(($presentToday / $totalEmployees) * 100, 2) }}%
+                            (Total: {{ $totalEmployees }})
+                        </small>
+                    </div>
+                    <div class="stat-icon icon-green fs-3">
+                        <span class="iconify" data-icon="mdi:account-check" width="30"></span>
+                    </div>
                 </div>
             </div>
         </div>
-    </div>
 
-    <!-- Present Today -->
-    <div class="col-lg-3 col-6">
-        <div class="card shadow-sm h-100">
-            <div class="stat-card">
-                <div class="stat-text">
-                    <h6 class="text-muted mb-1">Present Today</h6>
-                    <h3 class="fw-bold text-success">{{ $presentToday }}</h3>
-                    <small class="text-muted">{{ number_format(($presentToday / $totalEmployees) * 100, 2) }}%
-                        attendance</small>
-                </div>
-                <div class="stat-icon icon-green">
-                    <span class="iconify" data-icon="mdi:account-check"></span>
+        <div class="col-lg-3 col-6">
+            <div class="card shadow-sm h-100">
+                <div class="stat-card p-3">
+                    <div class="stat-text">
+                        <h6 class="text-muted mb-1">Absent Today</h6>
+                        <h3 class="fw-bold text-danger">{{ $absentToday }}</h3>
+                        <small class="text-muted">
+                            Out of {{ $totalEmployees }} Total
+                        </small>
+                    </div>
+                    <div class="stat-icon icon-red fs-3">
+                        <span class="iconify" data-icon="mdi:account-remove" width="30"></span>
+                    </div>
                 </div>
             </div>
         </div>
-    </div>
 
-    <!-- Late Arrivals -->
-    <div class="col-lg-3 col-6">
-        <div class="card shadow-sm h-100">
-            <div class="stat-card">
-                <div class="stat-text">
-                    <h6 class="text-muted mb-1">Late Arrivals</h6>
-                    <h3 class="fw-bold text-danger">{{ $lateArrivals }}</h3>
-                    <small class="text-muted">Today</small>
-                </div>
-                <div class="stat-icon icon-red">
-                    <span class="iconify" data-icon="mdi:alert-circle-outline"></span>
+        <div class="col-lg-3 col-6">
+            <div class="card shadow-sm h-100">
+                <div class="stat-card p-3">
+                    <div class="stat-text">
+                        <h6 class="text-muted mb-1">On Leave Today</h6>
+                        <h3 class="fw-bold text-warning">{{ $leaveToday }}</h3>
+                        <small class="text-muted">
+                            Out of {{ $totalEmployees }} Total
+                        </small>
+                    </div>
+                    <div class="stat-icon icon-orange fs-3">
+                        <span class="iconify" data-icon="mdi:airplane-takeoff" width="30"></span>
+                    </div>
                 </div>
             </div>
         </div>
-    </div>
 
-    <!-- Overtime Hours -->
-    <div class="col-lg-3 col-6">
-        <div class="card shadow-sm h-100">
-            <div class="stat-card">
-                <div class="stat-text">
-                    <h6 class="text-muted mb-1">Overtime Hours</h6>
-                    <h3 class="fw-bold text-warning">{{ $overtimeHours }}</h3>
-                    <small class="text-muted">This week</small>
-                </div>
-                <div class="stat-icon icon-orange">
-                    <span class="iconify" data-icon="mdi:chart-line"></span>
+        <div class="col-lg-3 col-6">
+            <div class="card shadow-sm h-100">
+                <div class="stat-card p-3">
+                    <div class="stat-text">
+                        <h6 class="text-muted mb-1">Off Shift Today</h6>
+                        <h3 class="fw-bold text-secondary">{{ $OffShiftToday }}</h3>
+                        <small class="text-muted">
+                            Out of {{ $totalEmployees }} Total
+                        </small>
+                    </div>
+                    <div class="stat-icon bg-secondary fs-3">
+                        <span class="iconify text-white" data-icon="mdi:clock-remove-outline" width="30"></span>
+                    </div>
                 </div>
             </div>
         </div>

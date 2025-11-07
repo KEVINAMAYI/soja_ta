@@ -37,7 +37,8 @@ class AttendanceMonthlyTable extends DataTableComponent
                 // Only check for NOT NULL for DATETIME column
                 DB::raw("SUM(CASE WHEN attendances.check_in_time IS NOT NULL THEN 1 ELSE 0 END) as present_days"),
                 DB::raw("SUM(CASE WHEN attendances.status = 'absent' THEN 1 ELSE 0 END) as absent_days"),
-                DB::raw("SUM(CASE WHEN attendances.status = 'leave' THEN 1 ELSE 0 END) as leave_days"),
+                DB::raw("SUM(CASE WHEN attendances.status = 'on_leave' THEN 1 ELSE 0 END) as leave_days"),
+                DB::raw("SUM(CASE WHEN attendances.status = 'off_shift' THEN 1 ELSE 0 END) as off_shift_days"),
                 DB::raw("COUNT(*) as total_days"),
                 DB::raw("SUM(attendances.worked_hours) as total_worked_hours"),
                 DB::raw("SUM(attendances.overtime_hours) as total_ot_hours")
@@ -72,6 +73,11 @@ class AttendanceMonthlyTable extends DataTableComponent
             // 🟡 Leave Days
             Column::make("Leave")
                 ->label(fn($row) => "<span class='badge bg-warning text-dark rounded-pill px-2 py-1'>{$row->leave_days}</span>")
+                ->html(),
+
+            // 🟡 Leave Days
+            Column::make("Off Shift")
+                ->label(fn($row) => "<span class='badge bg-info text-dark rounded-pill px-2 py-1'>{$row->off_shift_days}</span>")
                 ->html(),
 
             // 📊 Total Days

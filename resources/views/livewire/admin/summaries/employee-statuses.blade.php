@@ -12,6 +12,8 @@ new class extends Component {
     public $present;
     public $absent;
     public $onLeave;
+    public $offShift;
+
 
     public function mount()
     {
@@ -23,14 +25,14 @@ new class extends Component {
         $today = Carbon::today();
 
         // Fetch all today's attendances for this org
-        $attendances = Attendance::whereHas('employee', fn($q) =>
-        $q->where('organization_id', $orgId)
+        $attendances = Attendance::whereHas('employee', fn($q) => $q->where('organization_id', $orgId)
         )->whereDate('date', $today)->get();
 
         // Use Laravel Collections to filter statuses
         $this->present = $attendances->whereIn('status', ['clocked_in', 'clocked_out'])->count();
-        $this->absent  = $attendances->whereIn('status', ['absent', 'unchecked_in'])->count();
-        $this->onLeave = $attendances->where('status', 'leave')->count();
+        $this->absent = $attendances->whereIn('status', ['absent', 'unchecked_in'])->count();
+        $this->onLeave = $attendances->where('status', 'on_leave')->count();
+        $this->offShift = $attendances->where('status', 'off_shift')->count();
     }
 
 }; ?>
@@ -43,6 +45,7 @@ new class extends Component {
             ['title'=>'Present', 'count'=>$present, 'icon'=>'mdi:account-check-outline', 'bg'=>'success-gradient'],
             ['title'=>'Absent', 'count'=>$absent, 'icon'=>'mdi:account-cancel-outline', 'bg'=>'danger-gradient'],
             ['title'=>'On Leave', 'count'=>$onLeave, 'icon'=>'mdi:beach', 'bg'=>'warning-gradient'],
+            ['title'=>'Off Shift', 'count'=>$offShift, 'icon'=>'mdi:briefcase-off-outline', 'bg'=>'info-gradient'],
         ];
     @endphp
 
@@ -63,7 +66,6 @@ new class extends Component {
     @endforeach
 
 </div>
-
 
 
 

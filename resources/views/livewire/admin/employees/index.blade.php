@@ -30,10 +30,13 @@ new class extends Component {
     public $roleName = 'employee';
     public $roles = [];
     public $employee_title;
+    public $editEmployee = null;
+
 
     public function mount($roleId = null)
     {
         $this->roleId = $roleId;
+        $this->editEmployee = auth()->user()->employee;
 
         if ($roleId) {
             $this->role = Role::find($roleId);
@@ -229,6 +232,7 @@ new class extends Component {
     public function editEmployee($id)
     {
 
+
         $employee = Employee::findOrFail($id);
         $this->editId = $id;
 
@@ -241,7 +245,7 @@ new class extends Component {
         $this->active = $employee->active;
         $this->roleName = $employee->user->roles->first()->name ?? '';
         $this->employee_title = $employee->employee_title; // 👈 added here
-
+        $this->dispatch('refresh-status', employee : $employee);
         $this->dispatch('show-employee-modal');
 
     }
@@ -686,6 +690,14 @@ new class extends Component {
                 <div class="modal-header d-flex align-items-center">
                     <h5 class="modal-title">{{ $editId ? 'Edit Employee' : 'New Employee' }}</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+
+                <div class="row p-4 ">
+                    <!-- Shift Status Toggle -->
+                    <div class="col-md-12 d-flex justify-content-end">
+                        <livewire:admin.employees.shift-status-toggle :employeeId="$editEmployee->id"
+                                                                      :shiftStatus="$editEmployee->shift_status"/>
+                    </div>
                 </div>
 
                 <form wire:submit.prevent="{{ $editId ? 'updateEmployee' : 'createEmployee' }}">

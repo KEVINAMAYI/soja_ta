@@ -313,6 +313,22 @@ new class extends Component {
                         <span class="d-none d-md-block">Monthly Attendance</span>
                     </button>
                 </li>
+
+                <!-- Leave -->
+                <!-- Monthly -->
+                <li class="nav-item" role="presentation">
+                    <button
+                        type="button"
+                        class="nav-link position-relative rounded-0 d-flex align-items-center justify-content-center bg-transparent fs-3 py-3
+                   {{ $report_type === 'leave' ? 'active' : '' }}"
+                        onclick="Livewire.dispatch('setReportType', { type: 'leave' })"
+                        role="tab"
+                        aria-selected="{{ $report_type === 'leave' ? 'true' : 'false' }}">
+                        <i class="ti ti-clock-pause mx-2 fs-6"></i>
+                        <span class="d-none d-md-block">Leave Report</span>
+                    </button>
+                </li>
+
             </ul>
 
             <div class="card-body">
@@ -444,6 +460,17 @@ new class extends Component {
                                 </div>
                             </div>
                         </div>
+                    </div>
+
+
+                    <div class="tab-pane fade show {{ $report_type === 'leave' ? 'show active' : '' }}"
+                         id="tab-daily-attendance"
+                         role="tabpanel"
+                         aria-labelledby="tab-daily-attendance-tab"
+                         tabindex="0">
+
+                        <livewire:admin.leaves.index :isReporting="true"/>
+
                     </div>
 
                 </div>
@@ -593,9 +620,6 @@ new class extends Component {
         window.addEventListener('hide-report-settings-modal', () => {
             bootstrap.Modal.getInstance(document.getElementById('reportModal'))?.hide();
         });
-
-
-
 
 
     </script>

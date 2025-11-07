@@ -45,6 +45,18 @@
                         </li>
                     @endcan
 
+                    @can('view-employees')
+                        <li class="sidebar-item">
+                            <a class="sidebar-link {{ request()->routeIs('leaves.index') ? 'active' : '' }}"
+                               href="{{ route('leaves.index') }}"
+                               id="get-url"
+                               aria-expanded="false">
+                                <iconify-icon icon="mdi:exit-run" class="fs-5"></iconify-icon>
+                                <span class="hide-menu">Leaves</span>
+                            </a>
+                        </li>
+                    @endcan
+
                     @can('view-all-attendance')
                         <li class="sidebar-item">
                             <a class="sidebar-link {{ request()->routeIs('attendance.*') ? 'active' : '' }}"
@@ -95,6 +107,14 @@
                                     <a class="sidebar-link {{ request()->routeIs('attendance.status.index') && request()->status === 'off_shift' ? 'active' : '' }}"
                                        href="{{ route('attendance.status.index', ['status' => 'off_shift']) }}">
                                         <span class="icon-small"></span> Off Shift
+                                    </a>
+                                </li>
+
+                                <!-- Absent -->
+                                <li class="sidebar-item">
+                                    <a class="sidebar-link {{ request()->routeIs('attendance.status.index') && request()->status === 'on_leave' ? 'active' : '' }}"
+                                       href="{{ route('leaves.index') }}">
+                                        <span class="icon-small"></span> On Leave
                                     </a>
                                 </li>
                             </ul>

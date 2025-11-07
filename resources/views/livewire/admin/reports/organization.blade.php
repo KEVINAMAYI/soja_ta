@@ -16,10 +16,9 @@ new class extends Component {
 
     public function mount()
     {
-
         $orgId = Auth::user()->employee->organization_id ?? null;
 
-        //monthly attendance data
+        // --- 1. Monthly Attendance Data ---
         $start = Carbon::now()->startOfMonth();
         $end = Carbon::now()->endOfMonth();
         $days = $start->diffInDays($end);
@@ -27,37 +26,28 @@ new class extends Component {
         for ($i = 0; $i <= $days; $i++) {
             $date = $start->copy()->addDays($i)->toDateString();
 
-            $present = Attendance::whereHas('employee', function ($q) use ($orgId) {
+            // Base query for the day
+            $baseQuery = Attendance::whereHas('employee', function ($q) use ($orgId) {
                 $q->where('organization_id', $orgId);
-            })
-                ->whereDate('date', $date)
-                ->whereIn('status', ['clocked_in', 'clocked_out'])
-                ->count();
+            })->whereDate('date', $date);
 
-            $absent = Attendance::whereHas('employee', function ($q) use ($orgId) {
-                $q->where('organization_id', $orgId);
-            })
-                ->whereDate('date', $date)
-                ->whereIn('status', ['absent', 'unchecked_in'])
-                ->count();
-
-            $leave = Attendance::whereHas('employee', function ($q) use ($orgId) {
-                $q->where('organization_id', $orgId);
-            })
-                ->whereDate('date', $date)
-                ->where('status', 'leave')
-                ->count();
+            // Clone and count for each status
+            $present = (clone $baseQuery)->whereIn('status', ['clocked_in', 'clocked_out'])->count();
+            $absent = (clone $baseQuery)->whereIn('status', ['absent', 'unchecked_in'])->count();
+            $leave = (clone $baseQuery)->where('status', 'on_leave')->count();
+            $offShift = (clone $baseQuery)->where('status', 'off_shift')->count(); // <-- NEW STATUS
 
             $this->monthlyData[] = [
                 'date' => $date,
                 'present' => $present,
                 'absent' => $absent,
                 'leave' => $leave,
+                'off_shift' => $offShift, // <-- ADDED
             ];
         }
 
 
-        //department weekly data
+        // --- 2. Department Weekly Data (Chart Data) ---
         $startOfWeek = Carbon::now()->startOfWeek(); // Monday
         $endOfWeek = Carbon::now()->endOfWeek();     // Sunday
 
@@ -67,6 +57,7 @@ new class extends Component {
         $presentData = [];
         $absentData = [];
         $leaveData = [];
+        $offShiftData = []; // <-- NEW SERIES
 
         foreach ($departments as $dept) {
             $categories[] = $dept->name;
@@ -76,9 +67,11 @@ new class extends Component {
                     ->where('department_id', $dept->id)
                 )->get();
 
+            // Filter counts directly from the collection
             $presentData[] = $attendances->whereIn('status', ['clocked_in', 'clocked_out'])->count();
             $absentData[] = $attendances->whereIn('status', ['absent', 'unchecked_in'])->count();
-            $leaveData[] = $attendances->where('status', 'leave')->count();
+            $leaveData[] = $attendances->where('status', 'on_leave')->count();
+            $offShiftData[] = $attendances->where('status', 'off_shift')->count(); // <-- NEW STATUS
         }
 
         $this->chartData = [
@@ -87,27 +80,31 @@ new class extends Component {
                 ['name' => 'Present', 'data' => $presentData],
                 ['name' => 'Absent', 'data' => $absentData],
                 ['name' => 'Leave', 'data' => $leaveData],
+                ['name' => 'Off Shift', 'data' => $offShiftData], // <-- ADDED SERIES
             ]
         ];
 
 
+        // --- 3. Daily Attendance Status (Pie Chart Data) ---
         $today = Carbon::today();
 
         // Get the attendance for today
-        $attendances = Attendance::whereHas('employee', fn($q) => $q->where('organization_id', $orgId))
+        $attendancesToday = Attendance::whereHas('employee', fn($q) => $q->where('organization_id', $orgId))
             ->whereDate('date', $today)
             ->get();
 
         // Aggregate by status and store in the new single array
         $this->statusData = [
-            'present' => $attendances->whereIn('status', ['clocked_in', 'clocked_out'])->count(),
-            'absent' => $attendances->whereIn('status', ['absent', 'unchecked_in'])->count(),
-            'onLeave' => $attendances->where('status', 'leave')->count(),
+            'present' => $attendancesToday->whereIn('status', ['clocked_in', 'clocked_out'])->count(),
+            'absent' => $attendancesToday->whereIn('status', ['absent', 'unchecked_in'])->count(),
+            'onLeave' => $attendancesToday->where('status', 'on_leave')->count(),
+            'offShift' => $attendancesToday->where('status', 'off_shift')->count(), // <-- NEW STATUS
         ];
 
 
-        $startOfWeek = Carbon::now()->startOfWeek(); // Monday
-        $endOfWeek = Carbon::now()->endOfWeek();   // Sunday
+        // --- 4. Overtime Data (No change needed) ---
+        $startOfWeek = Carbon::now()->startOfWeek();
+        $endOfWeek = Carbon::now()->endOfWeek();
 
         $departments = Department::where('organization_id', $orgId)->get();
 
@@ -122,7 +119,6 @@ new class extends Component {
                     ->where('department_id', $dept->id)
                 )->get();
 
-            // Example: if you have overtime_hours column
             $totalOvertime = $attendances->sum('overtime_hours');
 
             $overtimeSeriesData[] = $totalOvertime;
@@ -143,7 +139,6 @@ new class extends Component {
             ->take(5)
             ->with('employee')
             ->get();
-
     }
 
 
@@ -188,70 +183,67 @@ new class extends Component {
         </div>
     </div>
 
-    <div class="col-lg-8">
-        <div class="card">
-            <div class="card-body">
-                <h5 class="card-title mb-4">Weekly Departmental Attendance</h5>
-                <div id="department-weekly-data"></div>
+    <div class="row d-flex align-items-stretch mb-4">
+        <div class="col-lg-8">
+            <div class="card h-100">
+                <div class="card-body">
+                    <h5 class="card-title mb-4">Weekly Departmental Attendance</h5>
+                    <div id="department-weekly-data"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-4">
+            <div class="card h-100">
+                <div class="card-body">
+                    <h4 class="card-title">Daily Attendance Status</h4>
+                    <div id="daily-attendance"></div>
+                </div>
             </div>
         </div>
     </div>
-
-    <!-- Start Simple Pie Chart -->
-    <div class="col-lg-4">
-        <div class="card">
-            <div class="card-body">
-                <h4 class="card-title">Daily Attendance Status</h4>
-                <div id="daily-attendance"></div>
+    <div class="row d-flex align-items-stretch">
+        <div class="col-lg-8">
+            <div class="card h-100">
+                <div class="card-body">
+                    <h5 class="card-title mb-4">Weekly Departmental Overtime Hours</h5>
+                    <div id="department-weekly-overtime"></div>
+                </div>
             </div>
         </div>
-    </div>
 
-    <div class="col-lg-8">
-        <div class="card">
-            <div class="card-body">
-                <h5 class="card-title mb-4">Weekly Departmental Overtime Hours</h5>
-                <div id="department-weekly-overtime"></div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Recent Activity -->
-    <div class="col-lg-4 d-flex">
-        <div class="card shadow-sm recent-activity-card flex-fill">
-            <!-- Top 5 Overtime Employees -->
-            <div class="card">
+        <div class="col-lg-4">
+            <div class="card h-100 shadow-sm recent-activity-card">
                 <div class="card-header">
                     <h5 class="mb-0">Top 5 Overtime Employees (This Week)</h5>
                 </div>
                 <div class="card-body">
                     @if ($topOvertimeEmployees->isEmpty())
                         <div class="text-center py-4">
-                            <span class="iconify text-muted mb-2" data-icon="mdi:emoticon-sad-outline"
-                                  style="font-size: 32px;"></span>
+                    <span class="iconify text-muted mb-2" data-icon="mdi:emoticon-sad-outline"
+                          style="font-size: 32px;"></span>
                             <div class="fw-semibold text-muted">No Overtime Data Available</div>
                         </div>
                     @else
                         <ul class="list-unstyled">
                             @foreach ($topOvertimeEmployees as $emp)
-                                <li class="activity-item d-flex align-items-center mb-3">
-                                    <!-- Icon -->
-                                    <div class="icon-wrap">
-                                        <span class="iconify text-warning" data-icon="mdi:clock-plus-outline"
-                                              style="font-size: 24px;"></span>
-                                    </div>
+                                <li class="activity-item d-flex align-items-center mb-4">
 
-                                    <!-- Employee Name -->
-                                    <div class="flex-grow-1 ms-3">
-                                        <div class="fw-semibold">{{ $emp->employee->name }}</div>
-                                    </div>
+                                    <div class="d-flex align-items-center flex-grow-1">
+                                        <iconify-icon icon="mdi:account-circle" class="me-3 text-primary" width="32"></iconify-icon>
 
-                                    <!-- Overtime Hours -->
-                                    <div class="text-end">
-                                        <div class="fw-semibold text-primary">
-                                            {{ number_format($emp->total_overtime, 1) }} hrs
+                                        <div class="d-flex flex-column">
+                                            <span class="fw-semibold text-dark">{{ $emp->employee->name }}</span>
+
+                                            <small class='text-muted d-block'>{{ $emp->employee->department->name ?? 'N/A' }}</small>
                                         </div>
-                                        <div class="small text-muted">Overtime</div>
+                                    </div>
+
+                                    <div class="text-end">
+                                        <div class="fw-bold fs-5 text-warning">
+                                            {{ number_format($emp->total_overtime, 1) }}
+                                        </div>
+                                        <div class="small text-muted">hrs</div>
                                     </div>
                                 </li>
                             @endforeach
@@ -259,13 +251,10 @@ new class extends Component {
                     @endif
                 </div>
             </div>
-
         </div>
+
     </div>
-
-
 </div>
-
 @push('scripts')
     <script>
         document.addEventListener('DOMContentLoaded', function () {
@@ -277,6 +266,7 @@ new class extends Component {
             const seriesData = Object.values(dailydata);
             const labels = Object.keys(dailydata).map(key => {
                 if (key === 'onLeave') return 'On Leave';
+                if (key === 'offShift') return 'Off Shift'; // <-- NEW LABEL
                 return key.charAt(0).toUpperCase() + key.slice(1);
             });
 
@@ -285,8 +275,9 @@ new class extends Component {
                 chart: {
                     fontFamily: "inherit",
                     type: "pie",
-                    height: 300, // responsive, no fixed width
+                    height: 300,
                 },
+                // Present (blue), Absent (red), Leave (yellow), Off Shift (gray) <-- NEW COLOR ADDED
                 colors: ["#0d6efd", "#dc3545", "#ffc107", "#6c757d"],
                 labels: labels,
                 legend: {
@@ -332,6 +323,11 @@ new class extends Component {
                 y: d.leave
             }));
 
+            const offShiftSeries = data.map(d => ({ // <-- NEW SERIES FOR MONTHLY CHART
+                x: new Date(d.date).toISOString(),
+                y: d.off_shift
+            }));
+
             const options_zoomable = {
                 series: [
                     {
@@ -345,6 +341,10 @@ new class extends Component {
                     {
                         name: "Leave",
                         data: leaveSeries
+                    },
+                    { // <-- ADDED SERIES
+                        name: "Off Shift",
+                        data: offShiftSeries
                     }
                 ],
                 chart: {
@@ -374,7 +374,8 @@ new class extends Component {
                         left: 0,
                     },
                 },
-                colors: ["#0d6efd", "#dc3545", "#ffc107"], // Present, Absent, Leave
+                // Present (blue), Absent (red), Leave (yellow), Off Shift (gray) <-- NEW COLOR ADDED
+                colors: ["#0d6efd", "#dc3545", "#ffc107", "#6c757d"],
                 markers: {
                     size: 3,
                 },
@@ -424,11 +425,11 @@ new class extends Component {
             chart.render();
 
 
-            //department weekly data
+            // Department Weekly Data (Stacked Bar Chart)
             const chartData = @json($chartData);
 
             const options_stacked = {
-                series: chartData.series,
+                series: chartData.series, // Now contains 4 series
                 chart: {
                     fontFamily: "inherit",
                     type: "bar",
@@ -444,7 +445,8 @@ new class extends Component {
                 grid: {
                     borderColor: "transparent",
                 },
-                colors: ["#0d6efd", "#dc3545", "#ffc107"], // Present, Absent, Leave
+                // Present (blue), Absent (red), Leave (yellow), Off Shift (gray) <-- NEW COLOR ADDED
+                colors: ["#0d6efd", "#dc3545", "#ffc107", "#6c757d"],
                 xaxis: {
                     categories: chartData.categories,
                     labels: {
@@ -480,6 +482,7 @@ new class extends Component {
             const dchart = new ApexCharts(document.querySelector("#department-weekly-data"), options_stacked);
             dchart.render();
 
+            // Overtime Chart and Top Employees data remain the same
             const overtimeChartData = @json($overtimeChartData);
 
             const overtimeOptions = {
@@ -533,7 +536,6 @@ new class extends Component {
         });
     </script>
 @endpush
-
 
 
 

@@ -58,15 +58,14 @@ class AttendanceDailyTable extends DataTableComponent
 
         if (!empty($status)) {
             if ($status === 'absent') {
+                // Checking for 'absent' or 'unchecked_in' statuses
                 $query->whereIn('status', ['absent', 'unchecked_in']);
-            } elseif ($status === 'off_shift') {
-                $query->whereHas('employee.shift', function ($q) {
-                    $q->where('status', 'inactive');
-                });
             } else {
+                // Handle other statuses
                 $query->where('status', $status);
             }
         }
+
 
         // Apply search
         if ($search) {
