@@ -34,9 +34,8 @@ class AttendanceMonthlyTable extends DataTableComponent
             ->select(
                 'attendances.employee_id',
                 DB::raw("DATE_FORMAT(attendances.date, '%Y-%m') as attendance_month"),
-                // Only check for NOT NULL for DATETIME column
                 DB::raw("SUM(CASE WHEN attendances.check_in_time IS NOT NULL THEN 1 ELSE 0 END) as present_days"),
-                DB::raw("SUM(CASE WHEN attendances.status = 'absent' THEN 1 ELSE 0 END) as absent_days"),
+                DB::raw("SUM(CASE WHEN attendances.status = 'absent' OR attendances.status = 'unchecked_in' THEN 1 ELSE 0 END) as absent_days"),
                 DB::raw("SUM(CASE WHEN attendances.status = 'on_leave' THEN 1 ELSE 0 END) as leave_days"),
                 DB::raw("SUM(CASE WHEN attendances.status = 'off_shift' THEN 1 ELSE 0 END) as off_shift_days"),
                 DB::raw("COUNT(*) as total_days"),
