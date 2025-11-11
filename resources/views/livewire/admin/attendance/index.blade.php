@@ -150,11 +150,23 @@ new class extends Component {
 
 
         <div class="card card-body">
+            <div class="d-flex justify-content-end align-items-center mb-3">
+                <label for="attendance-date" class="form-label mb-0 me-2">Select Date</label>
+                <input
+                    type="date"
+                    id="attendance-date"
+                    class="form-control"
+                    wire:model="selectedDate"
+                    wire:change="$dispatch('date-changed', { date: $event.target.value })"
+                    style="max-width: 200px;"
+                />
+            </div>
 
             {{-- Livewire Table --}}
             <livewire:attendance-daily-table :status="$status ?? null" theme="bootstrap-4"/>
-
         </div>
+
+
     </div>
 </div>
 

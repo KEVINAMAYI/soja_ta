@@ -18,6 +18,7 @@ class AttendanceDailyTable extends DataTableComponent
     protected $model = Attendance::class;
     public $min_ot_threshold = 0;
     public $status;
+    public $selectedDate;
 
     protected AttendanceSeeder $seeder;
 
@@ -36,6 +37,12 @@ class AttendanceDailyTable extends DataTableComponent
 
     }
 
+    #[On('date-changed')]
+    public function dateChanged($date)
+    {
+        $this->selectedDate = $date;
+    }
+
 
     public function configure(): void
     {
@@ -45,7 +52,7 @@ class AttendanceDailyTable extends DataTableComponent
     public function builder(): \Illuminate\Database\Eloquent\Builder
     {
         $orgId = auth()->user()->employee->organization_id ?? null;
-        $today = now()->toDateString();
+        $date = $this->selectedDate ?: now()->toDateString();
         $status = $this->status;
         $search = $this->search;
 
@@ -53,7 +60,7 @@ class AttendanceDailyTable extends DataTableComponent
         $query = Attendance::query()
             ->select('attendances.*')
             ->with(['employee', 'employee.shift'])
-            ->whereDate('date', $today)
+            ->whereDate('date', $date)
             ->whereHas('employee', fn($q) => $q->where('organization_id', $orgId));
 
         if (!empty($status)) {
