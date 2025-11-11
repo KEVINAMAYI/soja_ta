@@ -52,7 +52,7 @@
                                id="get-url"
                                aria-expanded="false">
                                 <iconify-icon icon="mdi:exit-run" class="fs-5"></iconify-icon>
-                                <span class="hide-menu">Leaves</span>
+                                <span class="hide-menu">Leave</span>
                             </a>
                         </li>
                     @endcan

@@ -61,6 +61,18 @@ class AttendanceSeeder
                 continue; // skip the rest of the logic
             }
 
+
+            // =========================
+            // Mark employee off-shift if their off-shift date has passed
+            // =========================
+            if ($employee->shift_status === 'on_shift' && $employee->end_off_shift_date && Carbon::parse($employee->end_off_shift_date)->isBefore($today)) {
+                // Employee is still marked as 'active' but their off-shift date has passed
+                $employee->update([
+                    'shift_status' => 'off_shift',
+                ]);
+            }
+
+
             // =========================
             // Check shift status if it's 'off_shift' or 'inactive'
             // =========================

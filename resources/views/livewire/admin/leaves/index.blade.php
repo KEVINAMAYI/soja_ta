@@ -207,8 +207,8 @@ new class extends Component {
          'icon' => '<iconify-icon icon=\'solar:home-2-line-duotone\' class=\'fs-5\'></iconify-icon>',
        ],
        [
-         'label' => 'Leaves',
-         'icon' => '<iconify-icon icon=\'mdi:leaf\' class=\'fs-5\'></iconify-icon>',
+         'label' => 'Leave',
+         'icon' => '<iconify-icon icon=\'mdi:exit-run\' class=\'fs-5\'></iconify-icon>',
        ],
     ]"
         />
