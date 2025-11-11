@@ -31,7 +31,10 @@ new class extends Component {
     public $roles = [];
     public $employee_title;
     public $editEmployee = null;
-
+    public $employeeName;
+    public $start_off_shift_date;
+    public $end_off_shift_date;
+    public $shiftStatus;
 
     public function mount($roleId = null)
     {
@@ -245,7 +248,7 @@ new class extends Component {
         $this->active = $employee->active;
         $this->roleName = $employee->user->roles->first()->name ?? '';
         $this->employee_title = $employee->employee_title; // 👈 added here
-        $this->dispatch('refresh-status', employee : $employee);
+        $this->dispatch('refresh-status', employee: $employee);
         $this->dispatch('show-employee-modal');
 
     }
@@ -466,6 +469,50 @@ new class extends Component {
         ];
     }
 
+
+    #[On('set-off-shift')]
+    public function openModal($id, $name)
+    {
+        $this->employeeId = $id;
+        $this->employeeName = $name ?? '';
+
+        $employee = Employee::find($id);
+        if ($employee) {
+            $this->shiftStatus = $employee->shift_status ?? 'active';
+            $this->start_off_shift_date = $employee->start_off_shift_date;
+            $this->end_off_shift_date = $employee->end_off_shift_date;
+        }
+
+        $this->dispatch('show-off-shift-modal');
+    }
+
+    public function saveOffShiftDates()
+    {
+        $this->validate([
+            'start_off_shift_date' => 'required|date',
+            'end_off_shift_date' => 'required|date|after_or_equal:start_off_shift_date',
+        ]);
+
+        $employee = Employee::find($this->employeeId);
+        if ($employee) {
+            $employee->update([
+                'shift_status' => 'off_shift',
+                'start_off_shift_date' => $this->start_off_shift_date,
+                'end_off_shift_date' => $this->end_off_shift_date,
+            ]);
+        }
+
+        // Dispatch event to hide the modal after saving
+        $this->dispatch('hide-off-shift-modal');
+
+
+        LivewireAlert::title('Awesome!')
+            ->text('Employee off shift updated successfully.')
+            ->success()
+            ->toast()
+            ->position('top-end')
+            ->show();
+    }
 
 }; ?>
 
@@ -692,14 +739,6 @@ new class extends Component {
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
 
-                <div class="row p-4 ">
-                    <!-- Shift Status Toggle -->
-                    <div class="col-md-12 d-flex justify-content-end">
-                        <livewire:admin.employees.shift-status-toggle :employeeId="$editEmployee->id"
-                                                                      :shiftStatus="$editEmployee->shift_status"/>
-                    </div>
-                </div>
-
                 <form wire:submit.prevent="{{ $editId ? 'updateEmployee' : 'createEmployee' }}">
                     <div class="modal-body">
                         <div class="row">
@@ -885,6 +924,50 @@ new class extends Component {
     </div>
 
 
+    <!-- Off-Shift Modal -->
+    <div class="modal fade" id="offShiftModal" tabindex="-1" aria-labelledby="offShiftModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-xl">
+            <div class="modal-content shadow-lg">
+                <div class="modal-header bg-light rounded-top">
+                    <h5 class="modal-title" id="offShiftModalLabel">Set Off-Shift Dates for {{ $employeeName }}</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+
+                <div class="modal-body">
+                    <!-- Shift status display -->
+                    <div class="alert {{ $shiftStatus === 'off_shift' ? 'alert-warning' : 'alert-success' }}">
+                        Current status:
+                        <strong>
+                            {{ $shiftStatus === 'off_shift' ? 'Off Shift' : 'On Active Shift' }}
+                        </strong>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Start Off-Shift Date</label>
+                        <input type="date" wire:model="start_off_shift_date" class="form-control">
+                        @error('start_off_shift_date') <small class="text-danger">{{ $message }}</small> @enderror
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">End Off-Shift Date</label>
+                        <input type="date" wire:model="end_off_shift_date" class="form-control">
+                        @error('end_off_shift_date') <small class="text-danger">{{ $message }}</small> @enderror
+                    </div>
+                </div>
+
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-danger" data-bs-dismiss="modal">Cancel</button>
+
+                    <!-- Disable Save button if the employee is off-shift -->
+                    <button type="button" class="btn btn-success" wire:click="saveOffShiftDates">
+                        Save
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+
 </div>
 
 @push('scripts')
@@ -904,6 +987,14 @@ new class extends Component {
 
         window.addEventListener('hide-employee-modal', () => {
             bootstrap.Modal.getInstance(document.getElementById('employeeModal'))?.hide();
+        });
+
+        window.addEventListener('show-off-shift-modal', () => {
+            new bootstrap.Modal(document.getElementById('offShiftModal')).show();
+        });
+
+        window.addEventListener('hide-off-shift-modal', () => {
+            bootstrap.Modal.getInstance(document.getElementById('offShiftModal'))?.hide();
         });
 
 

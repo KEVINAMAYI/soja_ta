@@ -24,6 +24,9 @@ class Employee extends Model
         'shift_id',
         'qr_code',
         'employee_title',
+        'shift_status',
+        'start_off_shift_date',
+        'end_off_shift_date',
     ];
 
 
@@ -47,7 +50,6 @@ class Employee extends Model
             }
         });
     }
-
 
 
     public function organization()

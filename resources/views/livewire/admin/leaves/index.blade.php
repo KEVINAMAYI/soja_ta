@@ -414,10 +414,21 @@ new class extends Component {
 
                                 <div class="col-md-6">
                                     <label class="form-label">Leave Type</label>
-                                    <input type="text" wire:model="leave_type" class="form-control"
-                                           placeholder="e.g. Annual Leave">
-                                    @error('leave_type') <small class="text-danger">{{ $message }}</small>@enderror
+                                    <select wire:model="leave_type" class="form-control">
+                                        <option value="">-- Select Leave Type --</option>
+                                        <option value="Annual Leave">Annual Leave</option>
+                                        <option value="Sick Leave">Sick Leave</option>
+                                        <option value="Maternity Leave">Maternity Leave</option>
+                                        <option value="Paternity Leave">Paternity Leave</option>
+                                        <option value="Compassionate Leave">Compassionate Leave</option>
+                                        <option value="Study Leave">Study Leave</option>
+                                        <option value="Unpaid Leave">Unpaid Leave</option>
+                                    </select>
+                                    @error('leave_type')
+                                    <small class="text-danger">{{ $message }}</small>
+                                    @enderror
                                 </div>
+
 
                                 <div class="col-md-3">
                                     <label class="form-label">Start Date</label>

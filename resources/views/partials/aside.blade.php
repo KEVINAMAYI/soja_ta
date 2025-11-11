@@ -113,7 +113,7 @@
                                 <!-- Absent -->
                                 <li class="sidebar-item">
                                     <a class="sidebar-link {{ request()->routeIs('attendance.status.index') && request()->status === 'on_leave' ? 'active' : '' }}"
-                                       href="{{ route('leaves.index') }}">
+                                       href="{{ route('attendance.status.index', ['status' => 'on_leave']) }}">
                                         <span class="icon-small"></span> On Leave
                                     </a>
                                 </li>

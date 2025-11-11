@@ -6,7 +6,8 @@
         <ul class="dropdown-menu" aria-labelledby="employee-actions">
             @if(empty($workLocationId))
                 <li>
-                    <a class="dropdown-item d-flex align-items-center gap-2" href="{{ route('employees.view',$employee->id) }}">
+                    <a class="dropdown-item d-flex align-items-center gap-2"
+                       href="{{ route('employees.view',$employee->id) }}">
                         <iconify-icon icon="mdi:eye-outline" class="text-primary w-4 h-4"></iconify-icon>
                         <span>View</span>
                     </a>
@@ -24,6 +25,14 @@
                        wire:click="$dispatch('assign-work-location',{ id : {{ $employee->id }} })">
                         <iconify-icon icon="mdi:map-marker-radius-outline" class="text-success w-4 h-4"></iconify-icon>
                         <span>Assign Location</span>
+                    </a>
+                </li>
+                <!-- Offshift Action -->
+                <li>
+                    <a class="dropdown-item d-flex align-items-center gap-2" href="javascript:void(0)"
+                       wire:click="$dispatch('set-off-shift', { id: {{ $employee->id }}, name: '{{ $employee->name }}' })">
+                        <iconify-icon icon="mdi:timer-sand" class="text-info w-4 h-4"></iconify-icon>
+                        <span>Offshift</span>
                     </a>
                 </li>
                 <li>
