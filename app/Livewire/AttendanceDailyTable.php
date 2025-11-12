@@ -12,6 +12,7 @@ use Rappasoft\LaravelLivewireTables\DataTableComponent;
 use Rappasoft\LaravelLivewireTables\Views\Column;
 use App\Models\Attendance;
 use App\Services\AttendanceSeeder;
+use Illuminate\Support\Facades\DB;
 
 class AttendanceDailyTable extends DataTableComponent
 {
@@ -63,7 +64,6 @@ class AttendanceDailyTable extends DataTableComponent
         $status = $this->status;
         $search = $this->search;
 
-        // Base Attendance query (no more last check in/out subselects)
         $query = Attendance::query()
             ->select('attendances.*')
             ->with(['employee', 'employee.shift'])
@@ -72,22 +72,22 @@ class AttendanceDailyTable extends DataTableComponent
 
         if (!empty($status)) {
             if ($status === 'absent') {
-                // Checking for 'absent' or 'unchecked_in' statuses
                 $query->whereIn('status', ['absent', 'unchecked_in']);
             } else {
-                // Handle other statuses
                 $query->where('status', $status);
             }
         }
 
-
-        // Apply search
         if ($search) {
             $query->where(function ($q) use ($search) {
                 $q->where('status', 'like', "%$search%")
                     ->orWhereHas('employee', fn($q) => $q->where('name', 'like', "%$search%"));
             });
         }
+
+        // ✅ Smarter ordering:
+        $query->orderByDesc('date')
+            ->orderByDesc(DB::raw('COALESCE(GREATEST(check_in_time, check_out_time), updated_at)'));
 
         return $query;
     }
