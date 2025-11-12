@@ -482,20 +482,24 @@ new class extends Component {
                 @php
                     $status = $employee->latestAttendance?->status ?? null;
 
-                    $displayStatus = match ($status) {
-                        'unchecked_in', 'absent' => 'Absent',
-                        'clocked_in' => 'Clocked In',
-                        'clocked_out' => 'Clocked Out',
-                        'on_leave' => 'On Leave',
-                        default => 'Unknown',
-                    };
+                   $displayStatus = match ($status) {
+                                             'unchecked_in', 'absent' => 'Absent',
+                                             'clocked_in' => 'Clocked In',
+                                             'clocked_out' => 'Clocked Out',
+                                             'on_leave' => 'On Leave',
+                                             'off_shift' => 'Off Shift',
+                                             default => 'Unknown',
+                                            };
 
-                    $badgeClass = match ($displayStatus) {
-                        'Clocked In' => 'bg-success',
-                        'Clocked Out' => 'bg-warning',
-                        'Absent' => 'bg-danger',
-                        default => 'bg-secondary',
-                    };
+                        $badgeClass = match ($displayStatus) {
+                                                'Clocked In' => 'bg-success',
+                                                'Clocked Out' => 'bg-warning',
+                                                'Absent' => 'bg-danger',
+                                                'On Leave' => 'bg-info',
+                                                'Off Shift' => 'bg-dark',
+                                                default => 'bg-secondary',
+                                            };
+
                 @endphp
 
                 <div class="mb-2">
@@ -648,6 +652,8 @@ new class extends Component {
                             <option value="clocked_in">Clocked In</option>
                             <option value="clocked_out">Clocked Out</option>
                             <option value="absent">Absent</option>
+                            <option value="on_leave">On Leave</option>
+                            <option value="off_shift">OffShift</option>
                         </select>
 
                         <select wire:model="week"
@@ -699,6 +705,7 @@ new class extends Component {
                                         'clocked_out' => 'clocked-out',
                                         'absent'      => 'absent',
                                         'on_leave'    => 'on-leave',
+                                        'off_shift'    => 'off-shift',
                                         default       => 'absent'
                                     };
                                     $statusLabel = match($sheet->status) {
@@ -706,6 +713,7 @@ new class extends Component {
                                         'clocked_out'  => 'Clocked Out',
                                         'absent'       => 'Absent',
                                         'on_leave'     => 'On Leave',
+                                        'off_shift'    => 'Off Shift',
                                         'unchecked_in' => 'Absent'
                                     };
                                 @endphp
