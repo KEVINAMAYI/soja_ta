@@ -1,17 +1,30 @@
 <?php
 
+use Livewire\Attributes\On;
 use Livewire\Volt\Component;
 
 new class extends Component {
 
 
     public $status;
+    public $startDate;
+    public $endDate;
 
     public function mount($status = null)
     {
         $this->status = $status;
+        $this->startDate = now()->toDateString();
+        $this->endDate = now()->toDateString();
 
     }
+
+    #[On('date-changed')]
+    public function dateChaged()
+    {
+        // Emit event to other Livewire components
+        $this->dispatch('date-range-updated', startDate: $this->startDate, endDate: $this->endDate);
+    }
+
 
 }; ?>
 
@@ -150,16 +163,30 @@ new class extends Component {
 
 
         <div class="card card-body">
-            <div class="d-flex justify-content-end align-items-center mb-3">
-                <label for="attendance-date" class="form-label mb-0 me-2">Select Date</label>
-                <input
-                    type="date"
-                    id="attendance-date"
-                    class="form-control"
-                    wire:model="selectedDate"
-                    wire:change="$dispatch('date-changed', { date: $event.target.value })"
-                    style="max-width: 200px;"
-                />
+
+            <div class="row">
+                {{-- DATE FILTER --}}
+                <div class="col-4 mb-4">
+                    <label class="form-label">Start Date</label>
+                    <input
+                        type="date"
+                        id="attendance-start-date"
+                        class="form-control"
+                        wire:model="startDate"
+                        wire:change="$dispatch('date-changed')"
+                    />
+                </div>
+
+                <div class="col-4 mb-4">
+                    <label class="form-label">End Date</label>
+                    <input
+                        type="date"
+                        id="attendance-end-date"
+                        class="form-control"
+                        wire:model="endDate"
+                        wire:change="$dispatch('date-changed')"
+                    />
+                </div>
             </div>
 
             {{-- Livewire Table --}}

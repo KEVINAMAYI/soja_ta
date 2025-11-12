@@ -22,6 +22,8 @@ new class extends Component {
     public $availableFrequencies = ['daily', 'weekly', 'monthly'];
     public $availableDays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
     public $availableTimezones = [];
+    public $startDate;
+    public $endDate;
 
     public function mount()
     {
@@ -34,7 +36,17 @@ new class extends Component {
 
         // 👇 preload supported PHP timezones
         $this->availableTimezones = \DateTimeZone::listIdentifiers();
+        $this->startDate = now()->toDateString();
+        $this->endDate = now()->toDateString();
 
+    }
+
+
+    #[On('date-changed')]
+    public function dateChaged()
+    {
+        // Emit event to other Livewire components
+        $this->dispatch('date-range-updated', startDate: $this->startDate, endDate: $this->endDate);
     }
 
 
@@ -257,6 +269,8 @@ new class extends Component {
             margin-bottom: 8px;
         }
 
+
+
     </style>
 
 @endpush
@@ -390,6 +404,32 @@ new class extends Component {
                                                 <span>Email Reports</span>
                                             </button>
                                         </div>
+
+                                        <div class="row">
+                                            {{-- DATE FILTER --}}
+                                            <div class="col-4 mb-4">
+                                                <label class="form-label">Start Date</label>
+                                                <input
+                                                    type="date"
+                                                    id="attendance-start-date"
+                                                    class="form-control"
+                                                    wire:model="startDate"
+                                                    wire:change="$dispatch('date-changed')"
+                                                />
+                                            </div>
+
+                                            <div class="col-4 mb-4">
+                                                <label class="form-label">End Date</label>
+                                                <input
+                                                    type="date"
+                                                    id="attendance-end-date"
+                                                    class="form-control"
+                                                    wire:model="endDate"
+                                                    wire:change="$dispatch('date-changed')"
+                                                />
+                                            </div>
+                                        </div>
+
 
                                         <!-- Livewire Component -->
                                         <livewire:attendance-daily-table theme="bootstrap-4"/>
