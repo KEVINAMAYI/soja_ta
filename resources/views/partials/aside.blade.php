@@ -35,6 +35,20 @@
 
                     @can('view-employees')
                         <li class="sidebar-item">
+                            <a class="sidebar-link {{ request()->routeIs('analytics') ? 'active' : '' }}"
+                               href="{{ route('analytics') }}"
+                               id="get-url"
+                               aria-expanded="false">
+                                <iconify-icon icon="mdi:chart-line" class="fs-5"></iconify-icon>
+                                <span class="hide-menu">
+                                    Analytics
+                                </span>
+                            </a>
+                        </li>
+                    @endcan
+
+                    @can('view-employees')
+                        <li class="sidebar-item">
                             <a class="sidebar-link {{ request()->routeIs('employees.index') ? 'active' : '' }}"
                                href="{{ route('employees.index') }}"
                                id="get-url"
@@ -44,6 +58,8 @@
                             </a>
                         </li>
                     @endcan
+
+
 
                     @can('view-employees')
                         <li class="sidebar-item">
@@ -160,14 +176,6 @@
                                        href="{{ route('reports.departments') }}">
                                         <span class="icon-small"></span>
                                         Department Reports
-                                    </a>
-                                </li>
-
-                                <li class="sidebar-item">
-                                    <a class="sidebar-link {{ request()->routeIs('reports.organization') ? 'active' : '' }}"
-                                       href="{{ route('reports.organization') }}">
-                                        <span class="icon-small"></span>
-                                        Organization Reports
                                     </a>
                                 </li>
 

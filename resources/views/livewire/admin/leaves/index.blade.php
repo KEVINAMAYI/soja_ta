@@ -42,6 +42,8 @@ new class extends Component {
     #[On('filterChanged')]
     public function filterLeaves()
     {
+
+
         $org = auth()->user()->employee->organization;
 
         $query = Leave::where('organization_id', $org->id)
@@ -62,6 +64,10 @@ new class extends Component {
 
         if ($this->to_date) {
             $query->whereDate('end_date', '<=', $this->to_date);
+        }
+
+        if ($this->leave_type) {
+            $query->where('leave_type', $this->leave_type);
         }
 
         if ($this->search) {
@@ -85,7 +91,7 @@ new class extends Component {
 
     public function clearFilters()
     {
-        $this->reset(['search', 'department_id', 'status', 'from_date', 'to_date']);
+        $this->reset(['search', 'department_id', 'status', 'from_date', 'to_date', 'leave_type']);
         $this->dispatch('filterChanged'); // trigger filtering after clearing
     }
 
@@ -256,6 +262,21 @@ new class extends Component {
                     <option value="approved">Approved</option>
                     <option value="pending">Pending</option>
                     <option value="rejected">Rejected</option>
+                </select>
+            </div>
+
+            {{--LEAVE TYPE FILTER--}}
+            <div class="col-4 mb-2">
+                <label class="form-label">Leave Type</label>
+                <select class="form-control" wire:model="leave_type" wire:change="$dispatch('filterChanged')">
+                    <option value="">-- Select Leave Type --</option>
+                    <option value="Annual Leave">Annual Leave</option>
+                    <option value="Sick Leave">Sick Leave</option>
+                    <option value="Maternity Leave">Maternity Leave</option>
+                    <option value="Paternity Leave">Paternity Leave</option>
+                    <option value="Compassionate Leave">Compassionate Leave</option>
+                    <option value="Study Leave">Study Leave</option>
+                    <option value="Unpaid Leave">Unpaid Leave</option>
                 </select>
             </div>
 
