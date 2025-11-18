@@ -289,7 +289,7 @@ new class extends Component {
                 </button>
 
 
-                <a href="{{ route('leaves.create') }}" class="btn btn-primary">+ New Leave</a>
+                <a href="{{ route('leaves.create') }}" class="btn btn-primary">+ New Request</a>
 
             </div>
 

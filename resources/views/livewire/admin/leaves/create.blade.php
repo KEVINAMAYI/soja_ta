@@ -37,7 +37,7 @@ new class extends Component {
     ];
 
     // --- Properties for New Form Fields (Optional, but included for complete logic) ---
-    public $reason = 'Assigned via Absence Management tool.';
+    public $reason = '';
     public $contact_during_leave = '';
     public $emergency_contact = '';
     public $handover_to = '';
@@ -47,6 +47,8 @@ new class extends Component {
     {
 
         $orgId = auth()->user()->employee->organization_id ?? null;
+
+        $this->startDate = $this->startDate ?: now()->toDateString();
 
         $employeeCollection = Employee::where('organization_id', $orgId)
             ->with('department')
@@ -608,7 +610,7 @@ new class extends Component {
                 <div class="col-12">
                     <label for="reason" class="form-label font-weight-bold">Reason / Notes</label>
                     <textarea id="reason" rows="3" wire:model="reason" class="form-control"
-                              placeholder="Add any additional notes or reasons..."></textarea>
+                              placeholder=""></textarea>
                     @error('reason') <small class="text-primary">{{ $message }}</small>@enderror
                 </div>
 
