@@ -638,7 +638,7 @@ new class extends Component {
                 <button wire:click="$set('step',3)"
                         class="btn btn-primary btn-md"
                         @if(empty($leaveType) || empty($startDate) || ($durationType === 'dateRange' && empty($endDate)) || ($durationType === 'numberOfDays' && empty($numberOfDays))) disabled @endif>
-                    Review Assignment
+                    Review
                     <iconify-icon icon="mdi:arrow-right" class="fs-5 align-middle ms-1"></iconify-icon>
                 </button>
             </div>
