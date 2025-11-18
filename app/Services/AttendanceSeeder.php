@@ -18,6 +18,7 @@ class AttendanceSeeder
             ->when($orgId, fn($q) => $q->where('organization_id', $orgId))
             ->get();
 
+
         foreach ($employees as $employee) {
 
             // Check if the employee has an associated shift
@@ -62,29 +63,68 @@ class AttendanceSeeder
             }
 
 
-            // =========================
-            // Mark employee off-shift if their off-shift date has passed
-            // =========================
-            if ($employee->shift_status === 'on_shift' && $employee->end_off_shift_date && Carbon::parse($employee->end_off_shift_date)->isBefore($today)) {
-                // Employee is still marked as 'active' but their off-shift date has passed
-                $employee->update([
-                    'shift_status' => 'off_shift',
-                ]);
+            $today = Carbon::today();
+
+            // ==================================================
+            // OFF_SHIFT LOGIC
+            // ==================================================
+            if ($employee->shift_status === 'off_shift'
+                && $employee->start_off_shift_date
+                && $employee->end_off_shift_date
+            ) {
+                $start = Carbon::parse($employee->start_off_shift_date);
+                $end = Carbon::parse($employee->end_off_shift_date);
+
+                // If current date is AFTER the off_shift period → back to on_shift
+                if ($today->isAfter($end)) {
+                    $employee->update([
+                        'shift_status' => 'on_shift',
+                    ]);
+                } // If we are inside the off-shift window → mark attendance off_shift
+                elseif ($today->between($start, $end, true)) {
+                    $attendance->status = 'off_shift';
+                    $attendance->check_in_time = null;
+                    $attendance->check_out_time = null;
+                    $attendance->worked_hours = 0;
+                    $attendance->overtime_hours = 0;
+                    $attendance->save();
+                    continue;
+                }
             }
 
 
-            // =========================
-            // Check shift status if it's 'off_shift' or 'inactive'
-            // =========================
-            if ($employee->shift_status === 'off_shift' || ($shift && $shift->status === 'inactive')) {
-                // Mark attendance as 'off_shift' if employee is off shift or shift is inactive
-                $attendance->status = 'off_shift';
-                $attendance->check_in_time = null;
-                $attendance->check_out_time = null;
-                $attendance->worked_hours = 0;
-                $attendance->overtime_hours = 0;
-                $attendance->save();
-                continue; // skip the rest of the logic
+            // ==================================================
+            // SICK_OFF LOGIC
+            // ==================================================
+            if ($employee->shift_status === 'sick_off'
+                && $employee->start_off_shift_date
+                && $employee->end_off_shift_date
+            ) {
+
+                $start = Carbon::parse($employee->start_off_shift_date);
+                $end = Carbon::parse($employee->end_off_shift_date);
+
+                // If sick-off period has ended → back to on_shift
+                if ($today->isAfter($end)) {
+                    $employee->update([
+                        'shift_status' => 'on_shift',
+                    ]);
+                } // If today is inside the sick-off window → mark attendance sick_off
+                elseif ($today->between($start, $end, true)) {
+                    $attendance->status = 'sick_off';
+                    $attendance->check_in_time = null;
+                    $attendance->check_out_time = null;
+                    $attendance->worked_hours = 0;
+                    $attendance->overtime_hours = 0;
+                    $attendance->save();
+                    continue;
+                }
+            }
+
+
+            // Skip processing for employees who are not actually on shift
+            if (in_array($employee->shift_status, ['off_shift', 'sick_off', 'on_leave'])) {
+                continue;
             }
 
             // =========================

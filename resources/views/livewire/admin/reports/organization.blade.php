@@ -68,10 +68,25 @@ new class extends Component {
                 )->get();
 
             // Filter counts directly from the collection
-            $presentData[] = $attendances->whereIn('status', ['clocked_in', 'clocked_out'])->count();
-            $absentData[] = $attendances->whereIn('status', ['absent', 'unchecked_in'])->count();
-            $leaveData[] = $attendances->where('status', 'on_leave')->count();
-            $offShiftData[] = $attendances->where('status', 'off_shift')->count(); // <-- NEW STATUS
+            $presentData[] = $attendances->whereIn('status', ['clocked_in', 'clocked_out'])
+                ->pluck('employee_id')
+                ->unique()
+                ->count();
+
+            $absentData[] = $attendances->whereIn('status', ['absent', 'unchecked_in'])
+                ->pluck('employee_id')
+                ->unique()
+                ->count();
+
+            $leaveData[] = $attendances->where('status', 'on_leave')
+                ->pluck('employee_id')
+                ->unique()
+                ->count();
+
+            $offShiftData[] = $attendances->where('status', 'off_shift')
+                ->pluck('employee_id')
+                ->unique()
+                ->count();
         }
 
         $this->chartData = [
@@ -230,12 +245,14 @@ new class extends Component {
                                 <li class="activity-item d-flex align-items-center mb-4">
 
                                     <div class="d-flex align-items-center flex-grow-1">
-                                        <iconify-icon icon="mdi:account-circle" class="me-3 text-primary" width="32"></iconify-icon>
+                                        <iconify-icon icon="mdi:account-circle" class="me-3 text-primary"
+                                                      width="32"></iconify-icon>
 
                                         <div class="d-flex flex-column">
                                             <span class="fw-semibold text-dark">{{ $emp->employee->name }}</span>
 
-                                            <small class='text-muted d-block'>{{ $emp->employee->department->name ?? 'N/A' }}</small>
+                                            <small
+                                                class='text-muted d-block'>{{ $emp->employee->department->name ?? 'N/A' }}</small>
                                         </div>
                                     </div>
 

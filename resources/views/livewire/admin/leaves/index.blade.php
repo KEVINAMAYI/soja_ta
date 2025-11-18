@@ -205,7 +205,7 @@ new class extends Component {
 
     @if(!$isReporting)
         <livewire:admin.system-settings.bread-crumb
-            title="Leaves"
+            title="Leave Requests"
             :items="[
         [
          'label' => 'Dashboard',
@@ -289,9 +289,8 @@ new class extends Component {
                 </button>
 
 
-                <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#leaveModal">
-                    + New Leave
-                </button>
+                <a href="{{ route('leaves.create') }}" class="btn btn-primary">+ New Leave</a>
+
             </div>
 
         </div>

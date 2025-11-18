@@ -164,9 +164,10 @@ new class extends Component {
 
         <div class="card card-body">
 
-            <div class="row">
-                {{-- DATE FILTER --}}
-                <div class="col-4 mb-4">
+
+            <div class="row align-items-end mb-4">
+                {{-- DATE FILTERS --}}
+                <div class="col-md-4">
                     <label class="form-label">Start Date</label>
                     <input
                         type="date"
@@ -177,7 +178,7 @@ new class extends Component {
                     />
                 </div>
 
-                <div class="col-4 mb-4">
+                <div class="col-md-4">
                     <label class="form-label">End Date</label>
                     <input
                         type="date"
@@ -187,6 +188,28 @@ new class extends Component {
                         wire:change="$dispatch('date-changed')"
                     />
                 </div>
+
+                {{-- BUTTON ON THE RIGHT --}}
+                <div class="col-md-4 text-end">
+                    @php
+                        $currentRoute = request()->path(); // get actual URL path
+                    @endphp
+
+                    @if (str_contains($currentRoute, 'attendance/status/sick_off'))
+                        <a href="{{ route('leaves.create') }}" class="btn btn-primary">
+                            + Create Sick Off
+                        </a>
+                    @elseif (str_contains($currentRoute, 'attendance/status/off_shift'))
+                        <a href="{{ route('leaves.create') }}" class="btn btn-primary">
+                            + Create Off Shifts
+                        </a>
+                    @elseif (str_contains($currentRoute, 'attendance/status/on_leave'))
+                        <a href="{{ route('leaves.create') }}" class="btn btn-primary">
+                            + Create Leave Request
+                        </a>
+                    @endif
+                </div>
+
             </div>
 
             {{-- Livewire Table --}}

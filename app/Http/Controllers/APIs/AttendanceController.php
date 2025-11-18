@@ -4,6 +4,7 @@ namespace App\Http\Controllers\APIs;
 
 use Firebase\JWT\JWT;
 use Firebase\JWT\Key;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use App\Http\Controllers\Controller;
@@ -75,6 +76,16 @@ class AttendanceController extends Controller
                 ], 404);
             }
 
+
+            if ($loggedInEmployee->active == 0) {
+                Auth::logout();
+                return response()->json([
+                    'code' => 1003,
+                    'message' => 'Your account is inactive. Kindly Contact admin.',
+                ], 403);
+            }
+
+
             /**
              * ✅ Case 1: Check-in via QR Code (JWT or Legacy)
              */
@@ -84,6 +95,14 @@ class AttendanceController extends Controller
 
                 // ✅ Step 1: Try to find employee by QR directly (DB first)
                 $employee = Employee::where('qr_code', $incomingQr)->first();
+
+                if ($employee && $employee->active == 0) {
+                    Auth::logout();
+                    return response()->json([
+                        'code' => 1003,
+                        'message' => 'Employee account is inactive. Kindly Contact admin.',
+                    ], 403);
+                }
 
                 if (!$employee) {
 
@@ -162,6 +181,15 @@ class AttendanceController extends Controller
              */
             else {
                 $employee = Employee::where($column, $value)->firstOrFail();
+
+                if ($employee && $employee->active == 0) {
+                    Auth::logout();
+                    return response()->json([
+                        'code' => 1003,
+                        'message' => 'Employee account is inactive. Kindly Contact admin.',
+                    ], 403);
+                }
+
             }
 
             /**

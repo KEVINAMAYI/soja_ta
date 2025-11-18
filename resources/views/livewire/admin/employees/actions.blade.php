@@ -28,13 +28,13 @@
                     </a>
                 </li>
                 <!-- Offshift Action -->
-                <li>
-                    <a class="dropdown-item d-flex align-items-center gap-2" href="javascript:void(0)"
-                       wire:click="$dispatch('set-off-shift', { id: {{ $employee->id }}, name: '{{ $employee->name }}' })">
-                        <iconify-icon icon="mdi:timer-sand" class="text-info w-4 h-4"></iconify-icon>
-                        <span>Offshift</span>
-                    </a>
-                </li>
+                {{--                <li>--}}
+                {{--                    <a class="dropdown-item d-flex align-items-center gap-2" href="javascript:void(0)"--}}
+                {{--                       wire:click="$dispatch('set-off-shift', { id: {{ $employee->id }}, name: '{{ $employee->name }}' })">--}}
+                {{--                        <iconify-icon icon="mdi:timer-sand" class="text-info w-4 h-4"></iconify-icon>--}}
+                {{--                        <span>Offshift</span>--}}
+                {{--                    </a>--}}
+                {{--                </li>--}}
                 <li>
                     @if($employee->active)
                         <a class="dropdown-item d-flex align-items-center gap-2 text-warning" href="javascript:void(0)"

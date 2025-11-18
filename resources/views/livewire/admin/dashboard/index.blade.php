@@ -44,18 +44,30 @@ new class extends Component {
 
         $this->presentToday = $attendancesToday
             ->whereIn('status', ['clocked_in', 'clocked_out'])
+            ->pluck('employee_id')
+            ->unique()
             ->count();
 
         // Leave arrivals
         $this->absentToday = $attendancesToday
             ->whereIn('status', ['absent', 'unchecked_in'])
+            ->pluck('employee_id')
+            ->unique()
             ->count();;
 
         // Leave arrivals
-        $this->leaveToday = $attendancesToday->where('status', 'on_leave')->count();
+        $this->leaveToday = $attendancesToday
+            ->where('status', 'on_leave')
+            ->pluck('employee_id')
+            ->unique()
+            ->count();
 
         //Off Shift
-        $this->OffShiftToday = $attendancesToday->where('status', 'off_shift')->count();
+        $this->OffShiftToday = $attendancesToday
+            ->where('status', 'off_shift')
+            ->pluck('employee_id')
+            ->unique()
+            ->count();
 
         // Overtime hours this week
         $weekStart = Carbon::now()->startOfWeek();

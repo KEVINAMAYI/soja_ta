@@ -85,9 +85,8 @@ class AttendanceDailyTable extends DataTableComponent
             });
         }
 
-        // ✅ Smarter ordering:
         $query->orderByDesc('date')
-            ->orderByDesc(DB::raw('COALESCE(GREATEST(check_in_time, check_out_time), updated_at)'));
+            ->orderByDesc(DB::raw('COALESCE(check_out_time, check_in_time, updated_at)'));
 
         return $query;
     }

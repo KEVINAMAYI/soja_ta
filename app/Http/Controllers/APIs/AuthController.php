@@ -297,27 +297,32 @@ class AuthController extends Controller
      */
     public function login(Request $request)
     {
-
         $request->validate([
             'email' => 'required|email',
             'password' => 'required|string|max:255',
         ]);
 
-        $credentials = request(['email', 'password']);
+        $credentials = $request->only('email', 'password');
 
         if (!Auth::attempt($credentials)) {
-
             return response()->json([
                 'code' => 1003,
                 'message' => 'User not Authenticated',
             ], 401);
-
         }
 
         $user = User::where('email', $request->email)->first();
 
-        $tokenResult = $user->createToken('Api Token');
+        // Check if the employee is active
+        if ($user->employee && $user->employee->active == 0) {
+            Auth::logout(); // log the user out just in case
+            return response()->json([
+                'code' => 1003,
+                'message' => 'Your account is inactive. Kindly Contact admin.',
+            ], 403);
+        }
 
+        $tokenResult = $user->createToken('Api Token');
         $token = $tokenResult->plainTextToken;
 
         return response()->json([
@@ -326,7 +331,6 @@ class AuthController extends Controller
             'data' => new UserResource($user),
             'token' => $token,
         ], 200);
-
     }
 
 

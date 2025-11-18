@@ -68,7 +68,7 @@
                                id="get-url"
                                aria-expanded="false">
                                 <iconify-icon icon="mdi:exit-run" class="fs-5"></iconify-icon>
-                                <span class="hide-menu">Leave</span>
+                                <span class="hide-menu">Leave Requests</span>
                             </a>
                         </li>
                     @endcan
@@ -123,6 +123,14 @@
                                     <a class="sidebar-link {{ request()->routeIs('attendance.status.index') && request()->status === 'off_shift' ? 'active' : '' }}"
                                        href="{{ route('attendance.status.index', ['status' => 'off_shift']) }}">
                                         <span class="icon-small"></span> Off Shift
+                                    </a>
+                                </li>
+
+                                <!-- Unchecked In -->
+                                <li class="sidebar-item">
+                                    <a class="sidebar-link {{ request()->routeIs('attendance.status.index') && request()->status === 'suck_off' ? 'active' : '' }}"
+                                       href="{{ route('attendance.status.index', ['status' => 'sick_off']) }}">
+                                        <span class="icon-small"></span> Sick Off
                                     </a>
                                 </li>
 

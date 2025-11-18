@@ -4,12 +4,15 @@ namespace App\Models;
 
 use App\Helpers\QRCodeGenerator;
 use Carbon\Carbon;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 
 class Employee extends Model
 {
     use HasFactory;
+
+    protected $appends = ['current_status_badge'];
 
     protected $fillable = [
         'organization_id',
@@ -144,6 +147,50 @@ class Employee extends Model
         return $this->hasOne(Attendance::class)->latestOfMany();
     }
 
+
+    protected function currentStatusBadge(): Attribute
+    {
+        return Attribute::make(
+            get: function () {
+                $today = Carbon::today()->toDateString();
+
+                // 1. Check for Active Off-Shift Status
+                if ($this->shift_status === 'off_shift' &&
+                    $this->start_off_shift_date <= $today &&
+                    $this->end_off_shift_date >= $today) {
+                    return '<span class="badge border border-primary text-primary fs-1 fw-bold p-2 bg-transparent">🌙 OFF SHIFT</span>';
+                }
+
+
+                // 1. Check for Active Off-Shift Status
+                if ($this->shift_status === 'sick_off' &&
+                    $this->start_off_shift_date <= $today &&
+                    $this->end_off_shift_date >= $today) {
+                    return '<span class="badge border border-primary text-primary fs-1 fw-bold p-2 bg-transparent">🤒 SICK OFF</span>';
+                }
+
+                // 2. Check for Active Approved/Pending Leave
+                $activeLeave = $this->leaves()
+                    ->whereIn('status', ['approved', 'pending'])
+                    ->where('start_date', '<=', $today)
+                    ->where('end_date', '>=', $today)
+                    ->first();
+
+                if ($activeLeave) {
+                    // Use the primary outline style for on-leave status
+                    $title = htmlspecialchars($activeLeave->leave_type);
+                    return "<span class='badge border border-primary text-primary fw-bold p-2 fs-1 bg-transparent' title='{$title}'>📅 ON LEAVE</span>";
+                }
+
+                return null;
+            },
+        );
+    }
+
+    public function leaves()
+    {
+        return $this->hasMany(Leave::class);
+    }
 
 }
 
