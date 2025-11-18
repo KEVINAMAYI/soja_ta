@@ -695,18 +695,18 @@ new class extends Component {
                 @endforeach
             </div>
 
-            <div class="form-check mb-2">
-                <input class="form-check-input" type="checkbox" wire:model="sendNotifications" id="sendNotifications">
-                <label class="form-check-label" for="sendNotifications">
-                    Send notification to affected employees
-                </label>
-            </div>
-            <div class="form-check mb-4">
-                <input class="form-check-input" type="checkbox" wire:model="notifyManagers" id="notifyManagers">
-                <label class="form-check-label" for="notifyManagers">
-                    Notify department managers
-                </label>
-            </div>
+{{--            <div class="form-check mb-2">--}}
+{{--                <input class="form-check-input" type="checkbox" wire:model="sendNotifications" id="sendNotifications">--}}
+{{--                <label class="form-check-label" for="sendNotifications">--}}
+{{--                    Send notification to affected employees--}}
+{{--                </label>--}}
+{{--            </div>--}}
+{{--            <div class="form-check mb-4">--}}
+{{--                <input class="form-check-input" type="checkbox" wire:model="notifyManagers" id="notifyManagers">--}}
+{{--                <label class="form-check-label" for="notifyManagers">--}}
+{{--                    Notify department managers--}}
+{{--                </label>--}}
+{{--            </div>--}}
 
             <div class="d-flex justify-content-between mt-4">
                 <button wire:click="$set('step',2)" class="btn btn-outline-primary btn-md">
