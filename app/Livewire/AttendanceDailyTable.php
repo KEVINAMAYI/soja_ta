@@ -86,7 +86,8 @@ class AttendanceDailyTable extends DataTableComponent
         }
 
         $query->orderByDesc('date')
-            ->orderByDesc(DB::raw('COALESCE(check_out_time, check_in_time, updated_at)'));
+            ->orderByRaw('check_in_time IS NULL')   // NULLs last
+            ->orderByDesc(DB::raw('COALESCE(check_in_time, updated_at)'));
 
         return $query;
     }

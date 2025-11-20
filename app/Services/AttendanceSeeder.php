@@ -21,6 +21,11 @@ class AttendanceSeeder
 
         foreach ($employees as $employee) {
 
+            // 🚫 Skip inactive employees
+            if ($employee->active == 0) {
+                continue;
+            }
+
             // Check if the employee has an associated shift
             $shift = $employee->shift;
             if (!$shift) continue;

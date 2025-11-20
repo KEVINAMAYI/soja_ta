@@ -38,6 +38,28 @@ class extends Component {
             ]);
         }
 
+
+        $user = Auth::user();
+
+        // 🚫 Check if user has an employee record
+        if (!$user->employee) {
+            Auth::logout();
+
+            throw ValidationException::withMessages([
+                'email' => 'Employee profile not found. Please contact admin.',
+            ]);
+        }
+
+        // 🚫 Check if employee is inactive (active = 0)
+        if ($user->employee->active == 0) {
+            Auth::logout();
+
+            throw ValidationException::withMessages([
+                'email' => 'Your employee account is inactive. Contact your administrator.',
+            ]);
+        }
+
+
         RateLimiter::clear($this->throttleKey());
         Session::regenerate();
 
