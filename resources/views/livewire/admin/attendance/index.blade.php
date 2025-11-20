@@ -7,22 +7,24 @@ new class extends Component {
 
 
     public $status;
+    public $filterStatus;
     public $startDate;
     public $endDate;
 
     public function mount($status = null)
     {
         $this->status = $status;
+        $this->filterStatus = $status;
         $this->startDate = now()->toDateString();
         $this->endDate = now()->toDateString();
 
     }
 
-    #[On('date-changed')]
+    #[On('filter-updated')]
     public function dateChaged()
     {
         // Emit event to other Livewire components
-        $this->dispatch('date-range-updated', startDate: $this->startDate, endDate: $this->endDate);
+        $this->dispatch('date-range-updated', startDate: $this->startDate, endDate: $this->endDate, status: $this->filterStatus);
     }
 
 
@@ -165,29 +167,7 @@ new class extends Component {
         <div class="card card-body">
 
 
-            <div class="row align-items-end mb-4">
-                {{-- DATE FILTERS --}}
-                <div class="col-md-4">
-                    <label class="form-label">Start Date</label>
-                    <input
-                        type="date"
-                        id="attendance-start-date"
-                        class="form-control"
-                        wire:model="startDate"
-                        wire:change="$dispatch('date-changed')"
-                    />
-                </div>
-
-                <div class="col-md-4">
-                    <label class="form-label">End Date</label>
-                    <input
-                        type="date"
-                        id="attendance-end-date"
-                        class="form-control"
-                        wire:model="endDate"
-                        wire:change="$dispatch('date-changed')"
-                    />
-                </div>
+            <div class="row align-items-end mb-4 justify-content-end">
 
                 {{-- BUTTON ON THE RIGHT --}}
                 <div class="col-md-4 text-end">
@@ -208,6 +188,49 @@ new class extends Component {
                             + Create Leave Request
                         </a>
                     @endif
+                </div>
+
+            </div>
+
+            <div class="row align-items-end mb-4">
+                {{-- DATE FILTERS --}}
+                <div class="col-md-4">
+                    <label class="form-label">Start Date</label>
+                    <input
+                        type="date"
+                        id="attendance-start-date"
+                        class="form-control"
+                        wire:model="startDate"
+                        wire:change="$dispatch('filter-updated')"
+                    />
+                </div>
+
+                <div class="col-md-4">
+                    <label class="form-label">End Date</label>
+                    <input
+                        type="date"
+                        id="attendance-end-date"
+                        class="form-control"
+                        wire:model="endDate"
+                        wire:change="$dispatch('filter-updated')"
+                    />
+                </div>
+
+
+                <div class="col-md-4">
+                    <label class="form-label">Attendance Status</label>
+                    <select
+                        class="form-control"
+                        wire:model="filterStatus"
+                        wire:change="$dispatch('filter-updated')">
+                        <option value="">All</option>
+                        <option value="clocked_in">Clocked In</option>
+                        <option value="clocked_out">Clocked Out</option>
+                        <option value="absent">Absent</option>
+                        <option value="on_leave">On Leave</option>
+                        <option value="off_shift">Off Shift</option>
+                        <option value="sick_off">Sick Off</option>
+                    </select>
                 </div>
 
             </div>

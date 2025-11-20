@@ -24,6 +24,7 @@ new class extends Component {
     public $availableTimezones = [];
     public $startDate;
     public $endDate;
+    public $filterStatus;
 
     public function mount()
     {
@@ -42,11 +43,11 @@ new class extends Component {
     }
 
 
-    #[On('date-changed')]
+    #[On('filter-updated')]
     public function dateChaged()
     {
         // Emit event to other Livewire components
-        $this->dispatch('date-range-updated', startDate: $this->startDate, endDate: $this->endDate);
+        $this->dispatch('date-range-updated', startDate: $this->startDate, endDate: $this->endDate, status: $this->filterStatus);
     }
 
 
@@ -270,7 +271,6 @@ new class extends Component {
         }
 
 
-
     </style>
 
 @endpush
@@ -428,6 +428,23 @@ new class extends Component {
                                                     wire:change="$dispatch('date-changed')"
                                                 />
                                             </div>
+
+                                            <div class="col-md-4">
+                                                <label class="form-label">Attendance Status</label>
+                                                <select
+                                                    class="form-control"
+                                                    wire:model="filterStatus"
+                                                    wire:change="$dispatch('filter-updated')">
+                                                    <option value="">All</option>
+                                                    <option value="clocked_in">Clocked In</option>
+                                                    <option value="clocked_out">Clocked Out</option>
+                                                    <option value="absent">Absent</option>
+                                                    <option value="on_leave">On Leave</option>
+                                                    <option value="off_shift">Off Shift</option>
+                                                    <option value="sick_off">Sick Off</option>
+                                                </select>
+                                            </div>
+
                                         </div>
 
 

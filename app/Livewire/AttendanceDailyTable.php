@@ -41,10 +41,11 @@ class AttendanceDailyTable extends DataTableComponent
 
 
     #[On('date-range-updated')]
-    public function updateDateRange($startDate, $endDate)
+    public function updateDateRange($startDate, $endDate, $status)
     {
         $this->startDate = $startDate;
         $this->endDate = $endDate;
+        $this->status = $status;
         $this->dispatch('refreshDatatable');
     }
 
@@ -59,7 +60,7 @@ class AttendanceDailyTable extends DataTableComponent
         $orgId = auth()->user()->employee->organization_id ?? null;
 
         $startDate = $this->startDate ?: now()->toDateString();
-        $endDate = $this->endDate ?: now()->toDateString();
+        $endDate = $this->endDate ?: $startDate;
 
         $status = $this->status;
         $search = $this->search;
@@ -142,7 +143,6 @@ class AttendanceDailyTable extends DataTableComponent
                 ->format(function ($value, $row) {
                     $label = '';
 
-                    // Show last known check-in for absentees
                     if (in_array($row->status, ['absent', 'unchecked_in'])) {
                         $last = $this->getLastAttendance($row->employee_id);
                         $value = $last?->check_in_time;
@@ -156,12 +156,14 @@ class AttendanceDailyTable extends DataTableComponent
                 })
                 ->html(),
 
-
+            // Clock Out
             // Clock Out
             Column::make("Clock Out", "check_out_time")
                 ->format(function ($value, $row) {
                     $label = '';
+                    $badge = '';
 
+                    // Use last clock-out for absentees or unchecked_in
                     if (in_array($row->status, ['absent', 'unchecked_in'])) {
                         $last = $this->getLastAttendance($row->employee_id);
                         $value = $last?->check_out_time;
@@ -170,11 +172,13 @@ class AttendanceDailyTable extends DataTableComponent
                         }
                     }
 
-                    $formatted = $value ? Carbon::parse($value)->format('M d, Y g:i A') : '-';
-
-                    $badge = '';
+                    // Show 'Still In' badge if clocked_in
                     if ($row->status === 'clocked_in' && $row->check_in_time && !$row->check_out_time) {
                         $badge = "<span style='background-color:green; color:#fff; padding:4px 12px; border-radius:4px; font-size:0.75rem; margin-left:6px;'>Still In</span>";
+                        // If still in, we don't want to show '-'
+                        $formatted = $row->check_out_time ? Carbon::parse($row->check_out_time)->format('M d, Y g:i A') : '';
+                    } else {
+                        $formatted = $value ? Carbon::parse($value)->format('M d, Y g:i A') : '-';
                     }
 
                     return "<div>
@@ -185,10 +189,10 @@ class AttendanceDailyTable extends DataTableComponent
                 ->html(),
 
 
-            Column::make("Overtime (hours)", "overtime_hours")
-                ->sortable()
-                ->format(fn($value) => $value ?? '-')
-                ->html(),
+            // Worked Hours
+            Column::make("Work Summary")
+                ->label(fn($row) => view('livewire.admin.attendance.hours', ['attendance' => $row])),
+
         ];
     }
 
