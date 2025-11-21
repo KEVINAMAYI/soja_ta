@@ -740,8 +740,8 @@ new class extends Component {
                     Back
                 </button>
                 <button wire:click="confirmLeave" class="btn btn-primary btn-md">
-                    Confirm
                     <iconify-icon icon="mdi:check-circle-outline" class="fs-5 align-middle ms-1"></iconify-icon>
+                    Confirm
                 </button>
             </div>
         @endif
