@@ -175,7 +175,6 @@ class AttendanceDailyTable extends DataTableComponent
                     // Show 'Still In' badge if clocked_in
                     if ($row->status === 'clocked_in' && $row->check_in_time && !$row->check_out_time) {
                         $badge = "<span style='background-color:green; color:#fff; padding:4px 12px; border-radius:4px; font-size:0.75rem; margin-left:6px;'>Still In</span>";
-                        // If still in, we don't want to show '-'
                         $formatted = $row->check_out_time ? Carbon::parse($row->check_out_time)->format('M d, Y g:i A') : '';
                     } else {
                         $formatted = $value ? Carbon::parse($value)->format('M d, Y g:i A') : '-';

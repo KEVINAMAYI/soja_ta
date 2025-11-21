@@ -223,6 +223,20 @@ new class extends Component {
                 $count = count($employeeIdsToUpdate);
                 $message = "Shift status for {$count} employees updated to 'Off Shift'.";
 
+                // Commit changes
+                DB::commit();
+
+                // Show success alert and trigger redirect after the toast
+                LivewireAlert::title('Awesome!')
+                    ->text($message)
+                    ->success()
+                    ->toast()
+                    ->position('top-end')
+                    ->show();
+
+                // Trigger redirect after showing the success message
+                $this->dispatch('redirect', ['url' => route('attendance.status.index', ['status' => 'off_shift'])]);
+
             } elseif ($this->leaveType === 'sick') {
 
                 $employeeIdsToUpdate = $employeesToProcess->pluck('id')->toArray();
@@ -234,7 +248,21 @@ new class extends Component {
                 ]);
 
                 $count = count($employeeIdsToUpdate);
-                $message = "Shift status for {$count} employees updated to 'Off Shift'.";
+                $message = "Shift status for {$count} employees updated to 'Sick Off'.";
+
+                // Commit changes
+                DB::commit();
+
+                // Show success alert and trigger redirect after the toast
+                LivewireAlert::title('Awesome!')
+                    ->text($message)
+                    ->success()
+                    ->toast()
+                    ->position('top-end')
+                    ->show();
+
+                // Trigger redirect after showing the success message
+                $this->dispatch('redirect', ['url' => route('attendance.status.index', ['status' => 'sick_off'])]);
 
             } else {
 
@@ -261,23 +289,21 @@ new class extends Component {
                 }
 
                 $message = "Leave successfully assigned to {$count} employees. All requests are pending review.";
+
+                // Commit changes
+                DB::commit();
+
+                // Show success alert and trigger redirect after the toast
+                LivewireAlert::title('Awesome!')
+                    ->text($message)
+                    ->success()
+                    ->toast()
+                    ->position('top-end')
+                    ->show();
+
+                // Trigger redirect after showing the success message
+                $this->dispatch('redirect', ['url' => route('leaves.index')]);
             }
-
-            DB::commit();
-
-            if ($conflictingCount > 0) {
-                $message .= " (Note: {$conflictingCount} employees were skipped due to existing leave conflicts.)";
-            }
-
-            $this->reset(['step', 'selectedEmployees', 'leaveType', 'startDate', 'endDate', 'numberOfDays']);
-            $this->step = 1;
-
-            LivewireAlert::title('Awesome!')
-                ->text($message)
-                ->success()
-                ->toast()
-                ->position('top-end')
-                ->show();
 
         } catch (\Illuminate\Validation\ValidationException $e) {
             DB::rollBack();
@@ -695,18 +721,18 @@ new class extends Component {
                 @endforeach
             </div>
 
-{{--            <div class="form-check mb-2">--}}
-{{--                <input class="form-check-input" type="checkbox" wire:model="sendNotifications" id="sendNotifications">--}}
-{{--                <label class="form-check-label" for="sendNotifications">--}}
-{{--                    Send notification to affected employees--}}
-{{--                </label>--}}
-{{--            </div>--}}
-{{--            <div class="form-check mb-4">--}}
-{{--                <input class="form-check-input" type="checkbox" wire:model="notifyManagers" id="notifyManagers">--}}
-{{--                <label class="form-check-label" for="notifyManagers">--}}
-{{--                    Notify department managers--}}
-{{--                </label>--}}
-{{--            </div>--}}
+            {{--            <div class="form-check mb-2">--}}
+            {{--                <input class="form-check-input" type="checkbox" wire:model="sendNotifications" id="sendNotifications">--}}
+            {{--                <label class="form-check-label" for="sendNotifications">--}}
+            {{--                    Send notification to affected employees--}}
+            {{--                </label>--}}
+            {{--            </div>--}}
+            {{--            <div class="form-check mb-4">--}}
+            {{--                <input class="form-check-input" type="checkbox" wire:model="notifyManagers" id="notifyManagers">--}}
+            {{--                <label class="form-check-label" for="notifyManagers">--}}
+            {{--                    Notify department managers--}}
+            {{--                </label>--}}
+            {{--            </div>--}}
 
             <div class="d-flex justify-content-between mt-4">
                 <button wire:click="$set('step',2)" class="btn btn-outline-primary btn-md">
@@ -714,10 +740,27 @@ new class extends Component {
                     Back
                 </button>
                 <button wire:click="confirmLeave" class="btn btn-primary btn-md">
-                    Confirm & Apply
+                    Confirm
                     <iconify-icon icon="mdi:check-circle-outline" class="fs-5 align-middle ms-1"></iconify-icon>
                 </button>
             </div>
         @endif
     </div>
 </div>
+
+@push('scripts')
+    <script>
+        window.addEventListener('redirect', event => {
+            console.log(event);  // This will show the event object
+            const url = event.detail[0].url;  // Access the first element of the detail array
+
+            // Redirect the user to the URL
+            if (url) {
+                window.location.href = url;
+            } else {
+                console.error('URL not provided in the event detail');
+            }
+        });
+    </script>
+@endpush
+

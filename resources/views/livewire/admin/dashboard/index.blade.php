@@ -11,6 +11,8 @@ new class extends Component {
 
     public $totalEmployees = 0;
     public $presentToday = 0;
+    public $sickOffToday = 0;
+    public $inactiveEmployees = 0;
     public $absentToday = 0;
     public $leaveToday = 0;
     public $OffShiftToday = 0;
@@ -61,6 +63,18 @@ new class extends Component {
             ->pluck('employee_id')
             ->unique()
             ->count();
+
+
+        // sick_off
+        $this->sickOffToday = $attendancesToday
+            ->whereIn('status', ['sick_off'])
+            ->pluck('employee_id')
+            ->unique()
+            ->count();;
+
+
+        // Get count of inactive employees (active = 0)
+        $this->inactiveEmployees = Employee::where('organization_id', $orgId)->where('active', 0)->count();
 
         //Off Shift
         $this->OffShiftToday = $attendancesToday
@@ -397,7 +411,8 @@ new class extends Component {
 
     <div class="row g-3">
 
-        <div class="col-lg-3 col-6">
+        <!-- First Column (Important Data) - Full Width on Large Screens -->
+        <div class="col-lg-6 col-12">
             <div class="card shadow-sm h-100">
                 <div class="stat-card p-3">
                     <div class="stat-text">
@@ -415,7 +430,8 @@ new class extends Component {
             </div>
         </div>
 
-        <div class="col-lg-3 col-6">
+        <!-- Second Column (Important Data) - Full Width on Large Screens -->
+        <div class="col-lg-6 col-12">
             <div class="card shadow-sm h-100">
                 <div class="stat-card p-3">
                     <div class="stat-text">
@@ -431,7 +447,29 @@ new class extends Component {
                 </div>
             </div>
         </div>
+    </div>
 
+    <!-- Second Row for Less Important Stats (Two Equal Columns) -->
+    <div style="margin-top:-3px;" class="row g-3">
+        <!-- Third Column (Sick Off Today) -->
+        <div class="col-lg-3 col-6">
+            <div class="card shadow-sm h-100">
+                <div class="stat-card p-3">
+                    <div class="stat-text">
+                        <h6 class="text-muted mb-1">Sick Off Today</h6>
+                        <h3 class="fw-bold text-info">{{ $sickOffToday }}</h3>
+                        <small class="text-muted">
+                            Out of {{ $totalEmployees }} Total
+                        </small>
+                    </div>
+                    <div class="stat-icon icon-info fs-3">
+                        <span class="iconify" data-icon="mdi:medical-bag" width="30"></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Fourth Column (On Leave Today) -->
         <div class="col-lg-3 col-6">
             <div class="card shadow-sm h-100">
                 <div class="stat-card p-3">
@@ -449,6 +487,7 @@ new class extends Component {
             </div>
         </div>
 
+        <!-- Fifth Column (Off Shift Today) -->
         <div class="col-lg-3 col-6">
             <div class="card shadow-sm h-100">
                 <div class="stat-card p-3">
@@ -465,7 +504,26 @@ new class extends Component {
                 </div>
             </div>
         </div>
+
+        <!-- Sixth Column (Inactive Employees) -->
+        <div class="col-lg-3 col-6">
+            <div class="card shadow-sm h-100">
+                <div class="stat-card p-3">
+                    <div class="stat-text">
+                        <h6 class="text-muted mb-1">Inactive Employees</h6>
+                        <h3 class="fw-bold text-muted">{{ $inactiveEmployees }}</h3>
+                        <small class="text-muted">
+                            Out of {{ $totalEmployees }} Total
+                        </small>
+                    </div>
+                    <div class="stat-icon icon-gray fs-3">
+                        <span class="iconify" data-icon="mdi:account-off" width="30"></span>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
+
 
     <!-- Live Map + Quick Actions -->
     <div class="col-lg-8">

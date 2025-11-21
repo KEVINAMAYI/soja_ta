@@ -16,7 +16,7 @@ new class extends Component {
     public $employee_id, $leave_type, $start_date, $end_date, $reason, $contact_during_leave, $emergency_contact, $handover_to;
     public $editId = null;
     public $search = '';
-    public $status = 'approved';
+    public $status = '';
 
     #[Reactive]
     public $isReporting = null; // Default value can be null
