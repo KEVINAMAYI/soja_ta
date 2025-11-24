@@ -29,11 +29,29 @@ new class extends Component {
         $attendances = Attendance::whereHas('employee', fn($q) => $q->where('organization_id', $orgId))
             ->whereDate('date', $today)->get();
 
-        // Use Laravel Collections to filter statuses
-        $this->present = $attendances->whereIn('status', ['clocked_in', 'clocked_out'])->count();
-        $this->absent = $attendances->whereIn('status', ['absent', 'unchecked_in'])->count();
-        $this->onLeave = $attendances->where('status', 'on_leave')->count();
-        $this->offShift = $attendances->where('status', 'off_shift')->count();
+        // Present (clocked in/out) — unique employees
+        $this->present = $attendances
+            ->whereIn('status', ['clocked_in', 'clocked_out'])
+            ->unique('employee_id')
+            ->count();
+
+        // Absent — unique employees
+        $this->absent = $attendances
+            ->whereIn('status', ['absent', 'unchecked_in'])
+            ->unique('employee_id')
+            ->count();
+
+        // On Leave — unique employees
+        $this->onLeave = $attendances
+            ->where('status', 'on_leave')
+            ->unique('employee_id')
+            ->count();
+
+        // Off Shift — unique employees
+        $this->offShift = $attendances
+            ->where('status', 'off_shift')
+            ->unique('employee_id')
+            ->count();
 
         // Fetch Sick Off count (You need to define how "Sick Off" is identified in your data)
         $this->sickOff = $attendances->where('status', 'sick_off')->count();
