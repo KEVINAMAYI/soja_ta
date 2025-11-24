@@ -78,7 +78,6 @@ class AttendanceController extends Controller
 
 
             if ($loggedInEmployee->active == 0) {
-                Auth::logout();
                 return response()->json([
                     'code' => 1003,
                     'message' => 'Your account is inactive. Kindly Contact admin.',
