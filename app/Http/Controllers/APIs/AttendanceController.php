@@ -96,7 +96,6 @@ class AttendanceController extends Controller
                 $employee = Employee::where('qr_code', $incomingQr)->first();
 
                 if ($employee && $employee->active == 0) {
-                    Auth::logout();
                     return response()->json([
                         'code' => 1003,
                         'message' => 'Employee account is inactive. Kindly Contact admin.',
@@ -182,7 +181,6 @@ class AttendanceController extends Controller
                 $employee = Employee::where($column, $value)->firstOrFail();
 
                 if ($employee && $employee->active == 0) {
-                    Auth::logout();
                     return response()->json([
                         'code' => 1003,
                         'message' => 'Employee account is inactive. Kindly Contact admin.',
