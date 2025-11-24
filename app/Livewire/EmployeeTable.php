@@ -55,8 +55,7 @@ class EmployeeTable extends DataTableComponent
 
             // 🕓 Shift
             Column::make("Shift", "shift_id")
-                ->format(fn($value, $row) =>
-                $row->shift?->name
+                ->format(fn($value, $row) => $row->shift?->name
                     ? "<span class='fw-semibold text-primary'>{$row->shift->name}</span>"
                     : "<span class='text-muted'>—</span>"
                 )
@@ -98,8 +97,7 @@ class EmployeeTable extends DataTableComponent
 
             // 🏢 Department
             Column::make("Department", "department_id")
-                ->format(fn($value, $row) =>
-                $row->department?->name
+                ->format(fn($value, $row) => $row->department?->name
                     ? "<span class='badge bg-light text-dark border px-3 py-2'>{$row->department->name}</span>"
                     : "<span class='text-muted'>—</span>"
                 )
@@ -123,14 +121,19 @@ class EmployeeTable extends DataTableComponent
     }
 
 
-
     public function filters(): array
     {
-        $roleOptions = ['all' => 'All Roles'] + Role::where('name', '!=', 'super-admin')
+        $orgId = auth()->user()->employee->organization_id ?? null;
+
+        $roleOptions = ['' => 'All Roles'] +
+            Role::where('organization_id', $orgId)
+                ->where('name', '!=', 'super-admin')
                 ->pluck('name', 'id')
                 ->toArray();
 
         return [
+
+            // ✅ Active Filter (correct handling of "", 1, 0)
             'active' => SelectFilter::make('Active')
                 ->options([
                     '' => 'All',
@@ -138,26 +141,28 @@ class EmployeeTable extends DataTableComponent
                     '0' => 'Inactive',
                 ])
                 ->filter(function ($builder, $value) {
-                    $builder->where('active', $value);
+                    if ($value === '' || $value === null) {
+                        return; // DO NOT apply filter
+                    }
+                    $builder->where('active', (int)$value);
                 }),
 
+            // ✅ Role Filter (organization-based + correct All behavior)
             'role' => SelectFilter::make('Role')
                 ->options($roleOptions)
                 ->filter(function ($builder, $value) {
-                    if ($value === 'all' || empty($value)) {
-                        // All roles EXCEPT super-admin
-                        $builder->whereHas('user.roles', function ($q) {
-                            $q->where('name', '!=', 'super-admin');
-                        });
-                    } else {
-                        // Specific role
-                        $builder->whereHas('user.roles', function ($q) use ($value) {
-                            $q->where('id', $value);
-                        });
+                    if ($value === '' || $value === null) {
+                        return; // All roles → do not filter
                     }
+
+                    // Filter employees that have selected role
+                    $builder->whereHas('user.roles', function ($q) use ($value) {
+                        $q->where('id', $value);
+                    });
                 }),
         ];
     }
+
 
     public function bulkActions(): array
     {
