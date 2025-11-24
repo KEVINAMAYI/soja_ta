@@ -46,7 +46,6 @@ new class extends Component {
     #[On('filter-updated')]
     public function dateChaged()
     {
-        // Emit event to other Livewire components
         $this->dispatch('date-range-updated', startDate: $this->startDate, endDate: $this->endDate, status: $this->filterStatus);
     }
 
@@ -414,7 +413,7 @@ new class extends Component {
                                                     id="attendance-start-date"
                                                     class="form-control"
                                                     wire:model="startDate"
-                                                    wire:change="$dispatch('date-changed')"
+                                                    wire:change="$dispatch('filter-updated')"
                                                 />
                                             </div>
 
@@ -425,7 +424,7 @@ new class extends Component {
                                                     id="attendance-end-date"
                                                     class="form-control"
                                                     wire:model="endDate"
-                                                    wire:change="$dispatch('date-changed')"
+                                                    wire:change="$dispatch('filter-updated')"
                                                 />
                                             </div>
 
