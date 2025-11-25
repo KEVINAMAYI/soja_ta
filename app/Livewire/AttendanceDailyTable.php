@@ -152,11 +152,18 @@ class AttendanceDailyTable extends DataTableComponent
                     }
 
                     $formatted = $value ? Carbon::parse($value)->format('M d, Y g:i A') : '-';
-                    return "<span class='fw-semibold text-success'>{$formatted}</span>{$label}";
+
+                    if (empty($value)) {
+                        $formatted = "<span class='fw-semibold text-primary'>Never Clocked In</span>";
+                    } else {
+                        $formatted = "<span class='fw-semibold text-success'>{$formatted}</span>";
+                    }
+
+                    return "{$formatted}{$label}";
+
                 })
                 ->html(),
 
-            // Clock Out
             // Clock Out
             Column::make("Clock Out", "check_out_time")
                 ->format(function ($value, $row) {
@@ -180,10 +187,15 @@ class AttendanceDailyTable extends DataTableComponent
                         $formatted = $value ? Carbon::parse($value)->format('M d, Y g:i A') : '-';
                     }
 
-                    return "<div>
-            <span class='fw-semibold' style='color:#dc3545;'>{$formatted}</span>
-            {$badge}{$label}
-        </div>";
+
+                    if (empty($value)) {
+                        $formatted = "<span class='fw-semibold text-primary'>Never Clocked Out</span>";
+                    } else {
+                        $formatted = "<span class='fw-semibold text-success'>{$formatted}</span>";
+                    }
+
+                    return "{$formatted}{$label}";
+
                 })
                 ->html(),
 
