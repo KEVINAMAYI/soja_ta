@@ -185,6 +185,7 @@ class AttendanceDailyTable extends DataTableComponent
                     } else {
 
                         $formatted = $row->check_out_time ? Carbon::parse($row->check_out_time)->format('M d, Y g:i A') : '';
+
                         if (empty($formatted)) {
                             if (empty($value)) {
                                 $formatted = "<span class='fw-semibold text-primary'>Never Clocked Out</span>";
@@ -196,6 +197,11 @@ class AttendanceDailyTable extends DataTableComponent
                             }
                         }
 
+                    }
+
+
+                    if ($row->status === 'clocked_out') {
+                        $formatted = "<span class='fw-semibold text-success'>{$formatted}</span>";
                     }
 
                     return "{$formatted}{$label}";
