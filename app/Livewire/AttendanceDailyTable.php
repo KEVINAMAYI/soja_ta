@@ -181,16 +181,16 @@ class AttendanceDailyTable extends DataTableComponent
 
                     // Show 'Still In' badge if clocked_in
                     if ($row->status === 'clocked_in' && $row->check_in_time && !$row->check_out_time) {
-                        $badge = "<span style='background-color:green; color:#fff; padding:4px 12px; border-radius:4px; font-size:0.75rem; margin-left:6px;'>Still In</span>";
-                        $formatted = $row->check_out_time ? Carbon::parse($row->check_out_time)->format('M d, Y g:i A') : '';
+                        $formatted = "<span style='background-color:green; color:#fff; padding:4px 12px; border-radius:4px; font-size:0.75rem; margin-left:6px;'>Still In</span>";
                     } else {
 
-                        $formatted = $value ? Carbon::parse($value)->format('M d, Y g:i A') : '-';
-
-                        if (empty($value)) {
-                            $formatted = "<span class='fw-semibold text-primary'>Never Clocked Out</span>";
-                        } else {
-                            $formatted = "<span class='fw-semibold text-success'>{$formatted}</span>";
+                        $formatted = $row->check_out_time ? Carbon::parse($row->check_out_time)->format('M d, Y g:i A') : '';
+                        if (empty($formatted)) {
+                            if (empty($value)) {
+                                $formatted = "<span class='fw-semibold text-primary'>Never Clocked Out</span>";
+                            } else {
+                                $formatted = "<span class='fw-semibold text-success'>{$value}</span>";
+                            }
                         }
 
                     }
