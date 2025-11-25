@@ -184,21 +184,21 @@ class AttendanceDailyTable extends DataTableComponent
                         $badge = "<span style='background-color:green; color:#fff; padding:4px 12px; border-radius:4px; font-size:0.75rem; margin-left:6px;'>Still In</span>";
                         $formatted = $row->check_out_time ? Carbon::parse($row->check_out_time)->format('M d, Y g:i A') : '';
                     } else {
+
                         $formatted = $value ? Carbon::parse($value)->format('M d, Y g:i A') : '-';
-                    }
 
+                        if (empty($value)) {
+                            $formatted = "<span class='fw-semibold text-primary'>Never Clocked Out</span>";
+                        } else {
+                            $formatted = "<span class='fw-semibold text-success'>{$formatted}</span>";
+                        }
 
-                    if (empty($value)) {
-                        $formatted = "<span class='fw-semibold text-primary'>Never Clocked Out</span>";
-                    } else {
-                        $formatted = "<span class='fw-semibold text-success'>{$formatted}</span>";
                     }
 
                     return "{$formatted}{$label}";
 
                 })
                 ->html(),
-
 
             // Worked Hours
             Column::make("Work Summary")
