@@ -20,22 +20,32 @@ class AttendanceExportController extends Controller
 
     public function exportAttendanceDailyPdf(Request $request)
     {
-        $ids = $request->input('ids', []);
-        $orgId = auth()->user()->employee->organization_id ?? null;
+        $ids       = $request->input('ids', []);
+        $startDate = $request->input('start_date');
+        $endDate   = $request->input('end_date');
+        $status    = $request->input('status');
+        $orgId     = auth()->user()->employee->organization_id ?? null;
 
-        $attendances = $this->reportService->getDaily($orgId, $ids);
+        $attendances = $this->reportService->getDaily(
+            orgId: $orgId,
+            ids: $ids,
+            startDate: $startDate,
+            endDate: $endDate,
+            status: $status,
+        );
 
         if ($attendances->isEmpty()) {
             return back()->with('error', 'No attendance records found to export.');
         }
 
+        // build PDF
         $pdf = $this->reportGenerator->generate(
             'exports.attendance.daily',
             [
                 'attendances' => $attendances,
-                'title' => 'Attendance Report',
-                'date' => now()->format('d M Y, H:i'),
-                'isExcel' => false,
+                'title'       => 'Attendance Report',
+                'date'        => now()->format('d M Y, H:i'),
+                'isExcel'     => false,
             ],
             'attendance-report',
         );

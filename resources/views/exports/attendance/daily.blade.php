@@ -136,6 +136,7 @@ if ($organization) {
         <th>Shift</th>
         <th>Clock In</th>
         <th>Clock Out</th>
+        <th>Worked (hours)</th>
         <th>Overtime (hours)</th>
         <th>Status</th>
     </tr>
@@ -162,6 +163,10 @@ if ($organization) {
                          : '-' }}
                  </span>
                 @endif
+            </td>
+
+            <td>
+                {{ number_format($attendance->worked_hours ?? 0, 2) }}
             </td>
 
             <td>

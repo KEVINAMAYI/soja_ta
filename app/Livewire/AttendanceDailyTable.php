@@ -29,6 +29,9 @@ class AttendanceDailyTable extends DataTableComponent
     {
         $this->status = $status;
         $this->seeder = $seeder;
+        $this->startDate = now()->toDateString();
+        $this->endDate = now()->toDateString();
+
         $orgId = auth()->user()->employee->organization_id ?? null;
 
         if ($status == 'unchecked_in' || $status == 'absent') {
@@ -222,7 +225,15 @@ class AttendanceDailyTable extends DataTableComponent
     #[On('export-daily-excel')]
     public function exportExcel()
     {
-        return Excel::download(new AttendanceDailyExcelExport($this->getSelected()), 'attendance.xlsx');
+        return Excel::download(
+            new AttendanceDailyExcelExport(
+                selectedIds: $this->getSelected(),
+                startDate: $this->startDate,
+                endDate: $this->endDate,
+                status: $this->status
+            ),
+            'attendance.xlsx'
+        );
     }
 
 
@@ -231,7 +242,12 @@ class AttendanceDailyTable extends DataTableComponent
     {
         $ids = $this->getSelected();
 
-        $url = route('attendance-daily.export.pdf', ['ids' => $ids]);
+        $url = route('attendance-daily.export.pdf', [
+            'ids' => $this->getSelected(),
+            'start_date' => $this->startDate,
+            'end_date' => $this->endDate,
+            'status' => $this->status,
+        ]);
 
         return redirect()->to($url);
     }

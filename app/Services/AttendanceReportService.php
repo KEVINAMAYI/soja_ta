@@ -7,13 +7,40 @@ use Illuminate\Support\Facades\DB;
 
 class AttendanceReportService
 {
-    public function getDaily(int $orgId, array $ids = [])
+    public function getDaily(
+        int     $orgId,
+        array   $ids = [],
+        ?string $startDate = null,
+        ?string $endDate = null,
+        ?string $status = null,
+    )
     {
-        return Attendance::with(['employee.shift'])
-            ->whereHas('employee', fn($q) => $q->where('organization_id', $orgId))
-            ->when($ids, fn($q) => $q->whereIn('id', $ids))
-            ->get();
+        // 🔹 Set default dates to today if not provided
+        $startDate = $startDate ?? now()->toDateString();
+        $endDate = $endDate ?? $startDate;
+
+        $query = Attendance::with(['employee.shift'])
+            ->whereHas('employee', fn($q) => $q->where('organization_id', $orgId));
+
+        if (!empty($ids)) {
+            $query->whereIn('id', $ids);
+        }
+
+        // 🔹 Filter by date range
+        $query->whereBetween('date', [$startDate, $endDate]);
+
+        // 🔹 Filter by status
+        if ($status) {
+            if ($status === 'absent') {
+                $query->whereIn('status', ['absent', 'unchecked_in']);
+            } else {
+                $query->where('status', $status);
+            }
+        }
+
+        return $query->get();
     }
+
 
     public function getMonthly(int $orgId, array $ids = [], ?string $month = null)
     {

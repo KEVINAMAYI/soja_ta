@@ -18,24 +18,49 @@ class AttendanceDailyExcelExport implements FromView, ShouldAutoSize, WithTitle,
 {
     protected array $selectedIds;
 
-    public function __construct(array $selectedIds = [])
+    public function __construct(
+        array   $selectedIds = [],
+        ?string $startDate = null,
+        ?string $endDate = null,
+        ?string $status = null
+    )
     {
         $this->selectedIds = $selectedIds;
+        $this->startDate = $startDate;
+        $this->endDate = $endDate;
+        $this->status = $status;
     }
 
     public function view(): View
     {
         $orgId = auth()->user()->employee->organization_id ?? null;
-        $today = now()->toDateString();
 
         $query = Attendance::query()
             ->with(['employee.user', 'employee.department', 'employee.shift'])
-            ->whereDate('date', $today)
-            ->whereHas('employee', fn($q) => $q->where('organization_id', $orgId));
+            ->whereHas('employee', fn($q) => $q->where('organization_id', $orgId)
+            );
 
+        // 🔹 Filter by selected employees (if any)
         if (!empty($this->selectedIds)) {
             $query->whereIn('employee_id', $this->selectedIds);
         }
+
+        // 🔹 Filter by date range (only if BOTH dates are provided)
+        if ($this->startDate && $this->endDate) {
+            $query->whereBetween('date', [$this->startDate, $this->endDate]);
+        }
+
+        // 🔹 Filter by status (if provided)
+        if ($this->status) {
+            if ($this->status === 'absent') {
+                $query->whereIn('status', ['absent', 'unchecked_in']);
+            } elseif ($this->status === 'unchecked_in') {
+                $query->where('status', 'unchecked_in');
+            } else {
+                $query->where('status', $this->status);
+            }
+        }
+
 
         $attendances = $query->get();
 
@@ -50,7 +75,7 @@ class AttendanceDailyExcelExport implements FromView, ShouldAutoSize, WithTitle,
 
     public function title(): string
     {
-        return 'Employee Report';
+        return 'Attendance Report';
     }
 
     public function styles(Worksheet $sheet)
