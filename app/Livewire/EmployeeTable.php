@@ -79,6 +79,10 @@ class EmployeeTable extends DataTableComponent
                         ? "<small class='text-muted d-block'><i class='ti ti-id me-1 text-success'></i>ID: {$row->id_number}</small>"
                         : '';
 
+                    $department = $row->department
+                        ? "<small class='text-muted d-block'><i class='ti ti-building me-1'></i>Department: {$row->department->name}</small>"
+                        : '';
+
                     return "
             <div class='d-flex align-items-start'>
                 {$icon}
@@ -87,6 +91,7 @@ class EmployeeTable extends DataTableComponent
                     {$title}
                     {$email}
                     {$idNumber}
+                    {$department}
                 </div>
             </div>
         ";
@@ -95,18 +100,8 @@ class EmployeeTable extends DataTableComponent
                 ->sortable(),
 
 
-            // 🏢 Department
-            Column::make("Department", "department_id")
-                ->format(fn($value, $row) => $row->department?->name
-                    ? "<span class='badge bg-light text-dark border px-3 py-2'>{$row->department->name}</span>"
-                    : "<span class='text-muted'>—</span>"
-                )
-                ->html()
-                ->sortable(),
-
-
             // 📍 Assigned Locations
-            Column::make("Locations", "name")
+            Column::make("Work Locations", "name")
                 ->format(function ($value, $row) {
 
                     $locations = $row->assignments
