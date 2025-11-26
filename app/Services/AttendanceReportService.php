@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Attendance;
+use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 
 class AttendanceReportService
@@ -18,6 +19,10 @@ class AttendanceReportService
         // 🔹 Set default dates to today if not provided
         $startDate = $startDate ?? now()->toDateString();
         $endDate = $endDate ?? $startDate;
+
+        // 💡 FIX: Normalize the dates to YYYY-MM-DD format using Carbon
+        $startDate = Carbon::parse($startDate)->toDateString();
+        $endDate = Carbon::parse($endDate)->toDateString();
 
         $query = Attendance::with(['employee.shift'])
             ->whereHas('employee', fn($q) => $q->where('organization_id', $orgId));

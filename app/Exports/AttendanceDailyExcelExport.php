@@ -4,6 +4,7 @@ namespace App\Exports;
 
 use App\Models\Attendance;
 use App\Models\Employee;
+use Carbon\Carbon;
 use Illuminate\Contracts\View\View;
 use Maatwebsite\Excel\Concerns\FromCollection;
 use Maatwebsite\Excel\Concerns\FromView;
@@ -47,6 +48,9 @@ class AttendanceDailyExcelExport implements FromView, ShouldAutoSize, WithTitle,
 
         // 🔹 Filter by date range (only if BOTH dates are provided)
         if ($this->startDate && $this->endDate) {
+
+            $this->startDate = Carbon::parse($this->startDate)->toDateString();
+            $this->endDate = Carbon::parse($this->endDate)->toDateString();
             $query->whereBetween('date', [$this->startDate, $this->endDate]);
         }
 

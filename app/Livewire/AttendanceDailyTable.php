@@ -102,16 +102,15 @@ class AttendanceDailyTable extends DataTableComponent
     /**
      * Get the last known attendance record for an employee before today.
      */
-    protected function getLastAttendance($employeeId)
+    protected function getLastAttendance($employeeId, $targetDate)
     {
         if (!$employeeId) {
             return null;
         }
 
-        $today = now()->toDateString();
-
+        // Use $targetDate instead of hardcoding now()->toDateString()
         return Attendance::where('employee_id', $employeeId)
-            ->where('date', '<', $today)
+            ->where('date', '<', $targetDate)
             ->where(function ($q) {
                 $q->whereNotNull('check_in_time')
                     ->orWhereNotNull('check_out_time');
@@ -120,10 +119,11 @@ class AttendanceDailyTable extends DataTableComponent
             ->first();
     }
 
-
     public function columns(): array
     {
         $threshold = $this->min_ot_threshold;
+
+        $targetDate = $this->startDate ?: now()->toDateString();
 
         return [
 
@@ -145,11 +145,11 @@ class AttendanceDailyTable extends DataTableComponent
 
             // Clock In
             Column::make("Clock In", "check_in_time")
-                ->format(function ($value, $row) {
+                ->format(function ($value, $row) use ($targetDate) {
                     $label = '';
 
                     if (in_array($row->status, ['absent', 'unchecked_in'])) {
-                        $last = $this->getLastAttendance($row->employee_id);
+                        $last = $this->getLastAttendance($row->employee_id, $targetDate);
                         $value = $last?->check_in_time;
                         if ($value) {
                             $label = "<br><small class='text-muted'>(Last Clock-In)</small>";
@@ -171,13 +171,13 @@ class AttendanceDailyTable extends DataTableComponent
 
             // Clock Out
             Column::make("Clock Out", "check_out_time")
-                ->format(function ($value, $row) {
+                ->format(function ($value, $row) use ($targetDate) {
                     $label = '';
                     $badge = '';
 
                     // Use last clock-out for absentees or unchecked_in
                     if (in_array($row->status, ['absent', 'unchecked_in'])) {
-                        $last = $this->getLastAttendance($row->employee_id);
+                        $last = $this->getLastAttendance($row->employee_id, $targetDate);
                         $value = $last?->check_out_time;
                         if ($value) {
                             $label = "<br><small class='text-muted'>(Last Clock-Out)</small>";

@@ -134,6 +134,7 @@ if ($organization) {
         <th>Email</th>
         <th>Phone</th>
         <th>Shift</th>
+        <th>Date</th>
         <th>Clock In</th>
         <th>Clock Out</th>
         <th>Worked (hours)</th>
@@ -148,6 +149,9 @@ if ($organization) {
             <td>{{ $attendance->employee->user->email ?? '-' }}</td>
             <td>{{ $attendance->employee->phone ?? '-' }}</td>
             <td>{{ optional($attendance->employee->shift)->name ?? '-' }}</td>
+            <td>
+                {{ \Carbon\Carbon::parse($attendance->date)->format('M d, Y') }}
+            </td>
             <td style="color: green;">
                 {{ $attendance->check_in_time
                     ? \Carbon\Carbon::parse($attendance->check_in_time)->format('M d, Y g:i A')
