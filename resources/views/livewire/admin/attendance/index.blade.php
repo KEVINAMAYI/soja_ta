@@ -1,30 +1,37 @@
 <?php
 
+use Illuminate\Support\Facades\Route;
 use Livewire\Attributes\On;
+use Livewire\Attributes\Url;
 use Livewire\Volt\Component;
 
 new class extends Component {
 
 
     public $status;
+
+    #[Url]
     public $filterStatus;
+
     public $startDate;
     public $endDate;
 
-    public function mount($status = null)
+    public function mount()
     {
-        $this->status = $status;
-        $this->filterStatus = $status;
-        $this->startDate = now()->toDateString();
-        $this->endDate = now()->toDateString();
+        $this->status = $this->filterStatus;
+        $today = now()->toDateString();
+        $this->startDate = $today;
+        $this->endDate = $today;
 
     }
+
 
     #[On('filter-updated')]
     public function dateChaged()
     {
         // Emit event to other Livewire components
         $this->dispatch('date-range-updated', startDate: $this->startDate, endDate: $this->endDate, status: $this->filterStatus);
+
     }
 
 
@@ -118,44 +125,28 @@ new class extends Component {
     <div class="col-12">
 
         @php
-            $statusLabel = $status
-            ? match(strtolower($status)) {
-               'clock_in' => 'Clocked In',
-               'clock_out' => 'Clocked Out',
-               'absent' => 'Absent',
-               'unchecked_in' => 'Unchecked In',
-               default => ucwords(str_replace('_', ' ', $status)),
-           }
-           : 'All Attendance';
 
-               $breadcrumbItems = array_filter([
-                   [
-                       'label' => 'Dashboard',
-                       'url' => route('dashboard'),
-                       'icon' => '<iconify-icon icon="solar:home-2-line-duotone" class="fs-5"></iconify-icon>',
-                   ],
-                   [
-                       'label' => 'Attendance',
-                       'url' => route('attendance.index'),
-                       'icon' => '<iconify-icon icon="mdi:clipboard-text-check-outline" class="fs-5"></iconify-icon>',
-                   ],
-                   $status ? [
-                       'label' => match(strtolower($status)) {
-                           'clock_in' => 'Clocked In',
-                           'clock_out' => 'Clocked Out',
-                           'absent' => 'Absent',
-                           'unchecked_in' => 'Unchecked In',
-                           default => ucfirst($status)
-                       },
-                       'icon' => match(strtolower($status)) {
-                           'clock_in' => '<iconify-icon icon="mdi:clock-in" class="fs-5 text-success"></iconify-icon>',
-                           'clock_out' => '<iconify-icon icon="mdi:clock-out" class="fs-5 text-info"></iconify-icon>',
-                           'absent' => '<iconify-icon icon="mdi:close-circle-outline" class="fs-5 text-danger"></iconify-icon>',
-                           'unchecked_in' => '<iconify-icon icon="mdi:account-question" class="fs-5 text-warning"></iconify-icon>',
-                           default => '<iconify-icon icon="mdi:alert-circle-outline" class="fs-5 text-secondary"></iconify-icon>',
-                       }
-                   ] : null
-               ]);
+            $statusLabel = Route::currentRouteName() === 'attendance.index'
+                ? 'Attendance'
+                : 'Timesheets';
+
+
+            $breadcrumbItems = [
+                [
+                    'label' => 'Dashboard',
+                    'url' => route('dashboard'),
+                    'icon' => '<iconify-icon icon="solar:home-2-line-duotone" class="fs-5"></iconify-icon>',
+                ],
+                [
+                    'label' => $statusLabel,
+                    'url' => Route::currentRouteName() === 'timesheets.index'
+                        ? route('timesheets.index')
+                        : route('attendance.index'),
+                    'icon' => Route::currentRouteName() === 'timesheets.index'
+                        ? '<iconify-icon icon="mdi:calendar-clock" class="fs-5 text-primary"></iconify-icon>'
+                        : '<iconify-icon icon="mdi:clipboard-text-check-outline" class="fs-5"></iconify-icon>',
+                ],
+            ];
         @endphp
 
         <livewire:admin.system-settings.bread-crumb
@@ -171,25 +162,20 @@ new class extends Component {
 
                 {{-- BUTTON ON THE RIGHT --}}
                 <div class="col-md-4 text-end">
-                    @php
-                        $currentRoute = request()->path(); // get actual URL path
-                    @endphp
-
-                    @if (str_contains($currentRoute, 'attendance/status/sick_off'))
+                    @if (str_contains($filterStatus, 'sick_off'))
                         <a href="{{ route('leaves.create') }}" class="btn btn-primary">
                             + Create Sick Off
                         </a>
-                    @elseif (str_contains($currentRoute, 'attendance/status/off_shift'))
+                    @elseif (str_contains($filterStatus, 'off_shift'))
                         <a href="{{ route('leaves.create') }}" class="btn btn-primary">
                             + Create Off Shifts
                         </a>
-                    @elseif (str_contains($currentRoute, 'attendance/status/on_leave'))
+                    @elseif (str_contains($filterStatus, 'on_leave'))
                         <a href="{{ route('leaves.create') }}" class="btn btn-primary">
                             + Create Leave Request
                         </a>
                     @endif
                 </div>
-
             </div>
 
             <div class="row align-items-end mb-4">
@@ -242,7 +228,13 @@ new class extends Component {
 
     </div>
 </div>
-
+@push('scripts')
+    <script>
+        window.addEventListener('replace-url', event => {
+            window.history.replaceState({}, '', event.detail.url);
+        });
+    </script>
+@endpush
 
 
 

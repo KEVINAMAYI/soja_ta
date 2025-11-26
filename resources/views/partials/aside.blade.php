@@ -87,8 +87,8 @@
 
                                 <!-- All Timesheets -->
                                 <li class="sidebar-item">
-                                    <a class="sidebar-link {{ request()->routeIs('attendance.index') ? 'active' : '' }}"
-                                       href="{{ route('attendance.index') }}">
+                                    <a class="sidebar-link {{ request()->routeIs('timesheets.index') ? 'active' : '' }}"
+                                       href="{{ route('timesheets.index') }}">
                                         <span class="icon-small"></span>
                                         Timesheets
                                     </a>
@@ -96,8 +96,8 @@
 
                                 <!-- Clocked In -->
                                 <li class="sidebar-item">
-                                    <a class="sidebar-link {{ request()->routeIs('attendance.status.index') && request()->status === 'clocked_in' ? 'active' : '' }}"
-                                       href="{{ route('attendance.status.index', ['status' => 'clocked_in']) }}">
+                                    <a class="sidebar-link {{ request()->routeIs('attendance.index')  ? 'active' : '' }}"
+                                       href="{{ route('attendance.index') }}">
                                         <span class="icon-small"></span> Attendance
                                     </a>
                                 </li>

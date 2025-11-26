@@ -33,7 +33,7 @@ class EmployeeTable extends DataTableComponent
 
         $query = Employee::query()
             ->select('employees.*')
-            ->with(['organization', 'shift', 'user'])
+            ->with(['organization', 'shift', 'user', 'assignments'])
             ->where('organization_id', $orgId);
 
 
@@ -103,6 +103,34 @@ class EmployeeTable extends DataTableComponent
                 )
                 ->html()
                 ->sortable(),
+
+
+            // 📍 Assigned Locations
+            Column::make("Locations", "name")
+                ->format(function ($value, $row) {
+
+                    $locations = $row->assignments
+                        ->load('location')
+                        ->pluck('location.name')
+                        ->filter()
+                        ->unique();
+
+                    if ($locations->isEmpty()) {
+                        return "<span class='text-muted'>—</span>";
+                    }
+
+                    $badges = $locations->map(function ($loc) {
+                        return "
+                <span class='badge bg-primary-subtle text-primary border px-2 py-1 me-1 mb-1'>
+                    <i class='ti ti-map-pin me-1'></i>{$loc}
+                </span>
+            ";
+                    })->implode('');
+
+                    return "<div class='d-flex flex-wrap'>{$badges}</div>";
+                })
+                ->html()
+                ->collapseOnMobile(),
 
             // 🧩 Roles
             Column::make("Roles")

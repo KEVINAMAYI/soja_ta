@@ -234,8 +234,8 @@ new class extends Component {
                     ->position('top-end')
                     ->show();
 
-                // Trigger redirect after showing the success message
-                $this->dispatch('redirect', ['url' => route('attendance.status.index', ['status' => 'off_shift'])]);
+                // Emit event to other Livewire components
+                $this->dispatch('redirect', ['url' => route('attendance.index', ['filterStatus' => 'off_shift'])]);
 
             } elseif ($this->leaveType === 'sick') {
 
@@ -262,7 +262,7 @@ new class extends Component {
                     ->show();
 
                 // Trigger redirect after showing the success message
-                $this->dispatch('redirect', ['url' => route('attendance.status.index', ['status' => 'sick_off'])]);
+                $this->dispatch('redirect', ['url' => route('attendance.index', ['filterStatus' => 'sick_off'])]);
 
             } else {
 

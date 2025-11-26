@@ -434,7 +434,7 @@ new class extends Component {
 
     <!-- Profile Header -->
     <div class="header-gradient mb-4">
-        <a href="#" class="btn btn-light btn-sm mb-3">← Back to Employees List</a>
+        <a href="{{ route('employees.index') }}" class="btn btn-light btn-sm mb-3">← Back to Employees List</a>
         <h2 style="color:#e14326;">{{ $employee->name }}</h2>
         <p class="mb-0">Comprehensive activity and location tracking</p>
     </div>

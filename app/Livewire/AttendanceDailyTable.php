@@ -37,6 +37,8 @@ class AttendanceDailyTable extends DataTableComponent
 
         $this->min_ot_threshold = auth()->user()->employee->organization()->first()->getSetting('min_ot_threshold', 0);
 
+        $this->dispatch('table-mounted');
+
     }
 
 
