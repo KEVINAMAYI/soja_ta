@@ -3,8 +3,6 @@
 namespace App\Livewire;
 
 use App\Exports\AttendanceDailyExcelExport;
-use App\Exports\EmployeesExcelExport;
-use App\Models\Employee;
 use Carbon\Carbon;
 use Livewire\Attributes\On;
 use Maatwebsite\Excel\Facades\Excel;
@@ -17,7 +15,6 @@ use Illuminate\Support\Facades\DB;
 class AttendanceDailyTable extends DataTableComponent
 {
     protected $model = Attendance::class;
-    public $min_ot_threshold = 0;
     public $status;
     public $startDate;
     public $endDate;
@@ -25,22 +22,11 @@ class AttendanceDailyTable extends DataTableComponent
     protected AttendanceSeeder $seeder;
 
 
-    public function mount(AttendanceSeeder $seeder, $status = null)
+    public function mount($status = null)
     {
         $this->status = $status;
-        $this->seeder = $seeder;
         $this->startDate = now()->toDateString();
         $this->endDate = now()->toDateString();
-
-        $orgId = auth()->user()->employee->organization_id ?? null;
-
-        if ($status == 'unchecked_in' || $status == 'absent') {
-            $this->seeder->seedMissingAttendanceRecords($orgId);
-        }
-
-        $this->min_ot_threshold = auth()->user()->employee->organization()->first()->getSetting('min_ot_threshold', 0);
-
-        $this->dispatch('table-mounted');
 
     }
 
@@ -51,6 +37,13 @@ class AttendanceDailyTable extends DataTableComponent
         $this->startDate = $startDate;
         $this->endDate = $endDate;
         $this->status = $status;
+
+        $orgId = auth()->user()->employee->organization_id ?? null;
+
+        if (in_array($this->status, ['unchecked_in', 'absent'])) {
+            app(AttendanceSeeder::class)->seedMissingAttendanceRecords($orgId);
+        }
+
         $this->dispatch('refreshDatatable');
     }
 
@@ -121,9 +114,31 @@ class AttendanceDailyTable extends DataTableComponent
             ->first();
     }
 
+
+    public function formatMinutes($minutes)
+    {
+        // Prevent negative values
+        if ($minutes < 0) {
+            $minutes = 0;
+        }
+
+        if ($minutes < 60) {
+            return $minutes . "m";
+        }
+
+        $hours = floor($minutes / 60);
+        $mins = $minutes % 60;
+
+        if ($mins === 0) {
+            return $hours . "h";
+        }
+
+        return "{$hours}h {$mins}m";
+    }
+
+
     public function columns(): array
     {
-        $threshold = $this->min_ot_threshold;
 
         $targetDate = $this->startDate ?: now()->toDateString();
 
@@ -149,6 +164,7 @@ class AttendanceDailyTable extends DataTableComponent
             Column::make("Clock In", "check_in_time")
                 ->format(function ($value, $row) use ($targetDate) {
                     $label = '';
+                    $badge = '';
 
                     if (in_array($row->status, ['absent', 'unchecked_in'])) {
                         $last = $this->getLastAttendance($row->employee_id, $targetDate);
@@ -164,9 +180,24 @@ class AttendanceDailyTable extends DataTableComponent
                         $formatted = "<span class='fw-semibold text-primary'>Never Clocked In</span>";
                     } else {
                         $formatted = "<span class='fw-semibold text-success'>{$formatted}</span>";
+
+                        // ✅ Add Late Check-In Badge
+                        if ($row->is_late_checkin && $row->employee->shift->track_late_checkin) {
+                            if ($row->within_grace_period) {
+                                // Within grace period - warning/yellow badge
+                                $badge = "<span style='background-color:#ffc107; color:#000; padding:2px 8px; border-radius:12px; font-size:0.7rem; margin-left:6px; font-weight:500;'>⏰ {$this->formatMinutes($row->minutes_late)} Late (Grace)</span>";
+                            } else {
+                                // Actually late - red badge
+                                $badge = "<span style='background-color:#dc3545; color:#fff; padding:2px 8px; border-radius:12px; font-size:0.7rem; margin-left:6px; font-weight:500;'>🔴 {$this->formatMinutes($row->minutes_late)} Late</span>";
+                            }
+                        } elseif ($row->within_grace_period && $row->minutes_late > 0) {
+                            // Within grace period but not marked late
+                            $badge = "<span style='background-color:#17a2b8; color:#fff; padding:2px 8px; border-radius:12px; font-size:0.7rem; margin-left:6px; font-weight:500;'>✓ On time</span>";
+                        }
+
                     }
 
-                    return "{$formatted}{$label}";
+                    return "{$formatted}{$badge}{$label}";
 
                 })
                 ->html(),
@@ -200,18 +231,28 @@ class AttendanceDailyTable extends DataTableComponent
 
                                 $formatted = $value ? Carbon::parse($value)->format('M d, Y g:i A') : '-';
                                 $formatted = "<span class='fw-semibold text-success'>{$formatted}</span>";
+                            }
+                        } else {
 
+                            $formatted = "<span class='fw-semibold text-success'>{$formatted}</span>";
+
+                            // ✅ Add Early Checkout Badge
+                            if ($row->is_early_checkout && $row->employee->shift->track_early_checkout) {
+                                $badge = "<span style='background-color:#ff6b6b; color:#fff; padding:2px 8px; border-radius:12px; font-size:0.7rem; margin-left:6px; font-weight:500;'>⚠️ {$this->formatMinutes($row->minutes_early)} Early</span>";
                             }
                         }
 
                     }
 
 
-                    if ($row->status === 'clocked_out') {
-                        $formatted = "<span class='fw-semibold text-success'>{$formatted}</span>";
+                    if ($row->status === 'clocked_out' && !$badge) {
+                        // Only wrap in success span if not already wrapped
+                        if (strpos($formatted, 'fw-semibold') === false) {
+                            $formatted = "<span class='fw-semibold text-success'>{$formatted}</span>";
+                        }
                     }
 
-                    return "{$formatted}{$label}";
+                    return "{$formatted}{$badge}{$label}";
 
                 })
                 ->html(),
@@ -242,7 +283,6 @@ class AttendanceDailyTable extends DataTableComponent
     #[On('export-daily-pdf')]
     public function exportPdf()
     {
-        $ids = $this->getSelected();
 
         $url = route('attendance-daily.export.pdf', [
             'ids' => $this->getSelected(),

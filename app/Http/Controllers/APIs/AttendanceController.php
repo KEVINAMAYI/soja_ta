@@ -76,14 +76,12 @@ class AttendanceController extends Controller
                 ], 404);
             }
 
-
             if ($loggedInEmployee->active == 0) {
                 return response()->json([
                     'code' => 1003,
                     'message' => 'Your account is inactive. Kindly Contact admin.',
                 ], 403);
             }
-
 
             /**
              * ✅ Case 1: Check-in via QR Code (JWT or Legacy)
@@ -186,7 +184,6 @@ class AttendanceController extends Controller
                         'message' => 'Employee account is inactive. Kindly Contact admin.',
                     ], 403);
                 }
-
             }
 
             /**
@@ -209,6 +206,75 @@ class AttendanceController extends Controller
                     ], 403);
                 }
             }
+
+            /**
+             * ========================================
+             * ✅ NEW: SHIFT PATTERN VALIDATION
+             * ========================================
+             */
+            $shift = $employee->shift;
+
+            if (!$shift) {
+                return response()->json([
+                    'code' => 1003,
+                    'message' => 'No shift assigned. Please contact your manager.'
+                ], 403);
+            }
+
+            // Check if employee is scheduled to work today based on shift pattern
+            if (!$this->isEmployeeScheduledToday($shift, now())) {
+                $patternName = $this->getPatternName($shift->pattern_type);
+                return response()->json([
+                    'code' => 1003,
+                    'message' => "You are not scheduled to work today. Your shift pattern is: {$patternName}.",
+                    'shift_pattern' => $shift->pattern_type,
+                    'scheduled_days' => $shift->pattern_days ?? [],
+                ], 403);
+            }
+
+            // Check if employee is in off_shift or sick_off status
+            if (in_array($employee->shift_status, ['off_shift', 'sick_off', 'on_leave'])) {
+                $statusLabel = match ($employee->shift_status) {
+                    'off_shift' => 'temporarily off shift',
+                    'sick_off' => 'on sick leave',
+                    'on_leave' => 'on leave',
+                    default => $employee->shift_status,
+                };
+
+                return response()->json([
+                    'code' => 1003,
+                    'message' => "You cannot check in. You are currently {$statusLabel}.",
+                    'shift_status' => $employee->shift_status,
+                    'end_date' => $employee->end_off_shift_date,
+                ], 403);
+            }
+
+
+            // Get expected times from shift
+            $expectedCheckInTime = Carbon::parse($shift->start_time);
+            $gracePeriodEndTime = $shift->getGracePeriodEndTime();
+            $expectedCheckOutTime = Carbon::parse($shift->end_time);
+            $earlyCheckoutThresholdTime = $shift->getEarlyCheckoutThreshold();
+
+
+            // Initialize late tracking variables
+            $isLateCheckin = false;
+            $minutesLate = 0;
+            $withinGracePeriod = false;
+
+            // Use Shift model methods for late calculation
+            if ($shift->track_late_checkin) {
+
+                // Check if within grace period (after start but before grace end)
+                $withinGracePeriod = $shift->isWithinGracePeriod(Carbon::parse($checkInTime));
+
+                // Check if actually late (after grace period)
+                $isLateCheckin = $shift->isLateCheckIn(Carbon::parse($checkInTime));
+
+                // Get minutes late from shift start time
+                $minutesLate = $shift->getMinutesLate(Carbon::parse($checkInTime));
+            }
+
 
             /**
              * ✅ 1. Fetch assigned work location (geofence check)
@@ -270,6 +336,23 @@ class AttendanceController extends Controller
             $attendance->longitude = $longitude;
             $attendance->device_id = $deviceId;
             $attendance->work_location_id = $work_location_id;
+
+            // Late check-in tracking
+            $attendance->is_late_checkin = $isLateCheckin;
+            $attendance->minutes_late = $minutesLate;
+            $attendance->within_grace_period = $withinGracePeriod;
+
+            // Early checkout tracking (set initial values)
+            $attendance->is_early_checkout = false;
+            $attendance->minutes_early = 0;
+
+            // Store expected shift times
+            $attendance->expected_check_in_time = $expectedCheckInTime->format('H:i:s');
+            $attendance->grace_period_end_time = $gracePeriodEndTime->format('H:i:s');
+            $attendance->expected_check_out_time = $expectedCheckOutTime->format('H:i:s');
+            $attendance->early_checkout_threshold_time = $earlyCheckoutThresholdTime->format('H:i:s');
+
+
             $attendance->save();
 
             DB::commit();
@@ -286,13 +369,54 @@ class AttendanceController extends Controller
         }
     }
 
+    /**
+     * ========================================
+     * HELPER METHODS - Add to your controller
+     * ========================================
+     */
+
+    /**
+     * Check if employee is scheduled to work today based on shift pattern
+     */
+    private function isEmployeeScheduledToday($shift, $date): bool
+    {
+        $patternType = $shift->pattern_type ?? 'weekdays';
+        $patternDays = $shift->pattern_days ?? ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
+
+        // Get current day abbreviation (Mon, Tue, etc.)
+        $currentDay = $date->format('D');
+
+        // Check based on pattern type
+        return match ($patternType) {
+            'weekdays' => in_array($currentDay, ['Mon', 'Tue', 'Wed', 'Thu', 'Fri']),
+            'weekends' => in_array($currentDay, ['Sat', 'Sun']),
+            'daily' => true,
+            'custom', 'rotating' => in_array($currentDay, $patternDays),
+            default => in_array($currentDay, $patternDays),
+        };
+    }
+
+    /**
+     * Get human-readable pattern name
+     */
+    private function getPatternName(string $patternType): string
+    {
+        return match ($patternType) {
+            'weekdays' => 'Weekdays Only (Monday - Friday)',
+            'weekends' => 'Weekends Only (Saturday - Sunday)',
+            'daily' => 'Daily (All 7 days)',
+            'rotating' => 'Rotating Schedule',
+            'custom' => 'Custom Days',
+            default => ucfirst($patternType),
+        };
+    }
+
 
     /**
      * Handle check-out logic
      */
-    private function processCheckOut(string $value, string $column, string $checkOutTime)
+    private function processCheckOut(string $value, string $column, string $checkOutTimeInput)
     {
-
         DB::beginTransaction();
         try {
 
@@ -309,11 +433,9 @@ class AttendanceController extends Controller
                 ], 404);
             }
 
-
             $isSelf = $employee->id === $loggedInEmployee->id;
 
             if (!$isSelf) {
-
                 if ($employee->organization_id !== $loggedInEmployee->organization_id) {
                     return response()->json([
                         'code' => 1003,
@@ -328,7 +450,6 @@ class AttendanceController extends Controller
                     ], 403);
                 }
             }
-
 
             $today = today()->toDateString();
 
@@ -345,35 +466,85 @@ class AttendanceController extends Controller
                 ], 409);
             }
 
-            $org = $employee->organization;
-            $standardHours = $employee->shift->duration;
-            $otThreshold = (float)$org->getSetting('min_ot_threshold', 0);
+            // ================================
+            // SHIFT SETTINGS
+            // ================================
+            $shift = $employee->shift;
 
+            $shiftStart = Carbon::parse($shift->start_time);
+            $shiftEnd = Carbon::parse($shift->end_time);
+            if ($shiftEnd->lt($shiftStart)) {
+                $shiftEnd->addDay();
+            }
+
+            $durationHours = (float)$shift->duration_hours;
+            $maxOvertimeHours = (float)$shift->max_overtime_hours;
+
+            // ================================
+            // TIMES
+            // ================================
             $checkInTime = Carbon::parse($attendance->check_in_time);
-            $checkOutTime = $checkOutTime ? Carbon::parse($checkOutTime) : now();
-            $workedHours = $checkInTime->diffInMinutes($checkOutTime) / 60;
-            $overtimeHours = max(0, $checkInTime->copy()->addHours($standardHours)->diffInMinutes($checkOutTime) / 60);
+            $checkOutTime = $checkOutTimeInput ? Carbon::parse($checkOutTimeInput) : now();
 
-            if ($overtimeHours < $otThreshold) {
+            // Total worked time
+            $totalWorked = $checkInTime->diffInMinutes($checkOutTime) / 60;
+
+            // ================================
+            // EARLY CHECKOUT LOGIC
+            // ================================
+            $isEarlyCheckout = $shift->isEarlyCheckOut($checkOutTime);
+
+            $minutesEarly = $isEarlyCheckout ? $shift->getMinutesEarly($checkOutTime) : 0;
+
+
+            // ================================
+            // MATCH AUTO-CLOCKOUT CALCULATIONS
+            // ================================
+            if ($shift->overtime_enabled) {
+
+                // Regular hours capped at duration_hours
+                $regularHours = min($totalWorked, $durationHours);
+
+                // Overtime = worked - duration hours
+                $overtimeHours = max(0, $totalWorked - $durationHours);
+
+                // Enforce max overtime cap
+                if ($maxOvertimeHours > 0) {
+                    $overtimeHours = min($overtimeHours, $maxOvertimeHours);
+                }
+
+            } else {
+
+                // If OT disabled → no overtime
+                $regularHours = min($totalWorked, $durationHours);
                 $overtimeHours = 0;
             }
 
+            // ================================
+            // SAVE ATTENDANCE
+            // ================================
             $attendance->update([
                 'status' => 'clocked_out',
                 'check_out_time' => $checkOutTime,
-                'worked_hours' => round($workedHours, 2),
+                'worked_hours' => round($regularHours + $overtimeHours, 2),
                 'overtime_hours' => round($overtimeHours, 2),
+                'is_early_checkout' => $isEarlyCheckout,
+                'minutes_early' => $minutesEarly,
             ]);
 
-            if ($overtimeHours >= $otThreshold) {
+            // ================================
+            // CREATE OVERTIME RECORD
+            // (AutoClockOut does NOT create this, but manual checkout SHOULD)
+            // ================================
+            if ($overtimeHours > 0) {
                 Overtime::create([
                     'employee_id' => $employee->id,
                     'attendance_id' => $attendance->id,
                     'date' => $checkOutTime->toDateString(),
-                    'start_time' => $checkInTime->copy()->addHours($standardHours),
+                    'start_time' => $checkInTime->copy()->addHours($durationHours),
                     'end_time' => $checkOutTime,
                     'hours' => round($overtimeHours, 2),
-                    'reason' => 'Auto-generated on checkout',
+                    'reason' => 'Auto-calculated on checkout',
                 ]);
             }
 

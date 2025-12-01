@@ -66,7 +66,7 @@ new class extends Component {
         $timeline = collect();
 
         foreach ($todayAttendances as $attendance) {
-            $locationName = $attendance->location?->name ?? 'Unknown'; // use attendance location
+            $locationName = $attendance->location?->name ?? 'Not Scheduled'; // use attendance location
 
             if ($attendance->check_in_time) {
                 $timeline->push([
@@ -488,7 +488,8 @@ new class extends Component {
                                              'clocked_out' => 'Clocked Out',
                                              'on_leave' => 'On Leave',
                                              'off_shift' => 'Off Shift',
-                                             default => 'Unknown',
+                                             'not_scheduled' => 'Not Scheduled',
+                                             default => 'Not Scheduled',
                                             };
 
                         $badgeClass = match ($displayStatus) {
@@ -497,6 +498,7 @@ new class extends Component {
                                                 'Absent' => 'bg-danger',
                                                 'On Leave' => 'bg-info',
                                                 'Off Shift' => 'bg-dark',
+                                                'Not Scheduled' => 'bg-danger',
                                                 default => 'bg-secondary',
                                             };
 
@@ -706,6 +708,8 @@ new class extends Component {
                                         'absent'      => 'absent',
                                         'on_leave'    => 'on-leave',
                                         'off_shift'    => 'off-shift',
+                                        'not_scheduled'    => 'not-scheduled',
+                                        'unchecked_in' => 'absent',
                                         default       => 'absent'
                                     };
                                     $statusLabel = match($sheet->status) {
@@ -714,6 +718,7 @@ new class extends Component {
                                         'absent'       => 'Absent',
                                         'on_leave'     => 'On Leave',
                                         'off_shift'    => 'Off Shift',
+                                        'not_scheduled'    => 'Not Scheduled',
                                         'unchecked_in' => 'Absent'
                                     };
                                 @endphp
