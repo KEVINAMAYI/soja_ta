@@ -302,7 +302,7 @@ new class extends Component {
     <div class="col-12">
 
         <livewire:admin.system-settings.bread-crumb
-            title="Employee Reports"
+            title="All Reports"
             :items="[
         [
             'label' => 'Dashboard',
@@ -314,7 +314,7 @@ new class extends Component {
             'icon' => '<iconify-icon icon=\'mdi:file-chart-outline\' class=\'fs-5\'></iconify-icon>',
         ],
         [
-            'label' => 'Employees',
+            'label' => 'All',
             'icon' => '<iconify-icon icon=\'tabler:users\' class=\'fs-5\'></iconify-icon>',
         ]
       ]"
@@ -353,7 +353,6 @@ new class extends Component {
                 </li>
 
                 <!-- Leave -->
-                <!-- Monthly -->
                 <li class="nav-item" role="presentation">
                     <button
                         type="button"
@@ -366,6 +365,21 @@ new class extends Component {
                         <span class="d-none d-md-block">Leave Report</span>
                     </button>
                 </li>
+
+                <!-- Leave -->
+                <li class="nav-item" role="presentation">
+                    <button
+                        type="button"
+                        class="nav-link position-relative rounded-0 d-flex align-items-center justify-content-center bg-transparent fs-3 py-3
+                   {{ $report_type === 'department' ? 'active' : '' }}"
+                        onclick="Livewire.dispatch('setReportType', { type: 'department' })"
+                        role="tab"
+                        aria-selected="{{ $report_type === 'department' ? 'true' : 'false' }}">
+                        <i class="ti ti-building-skyscraper mx-2 fs-6"></i>
+                        <span class="d-none d-md-block">Department Report</span>
+                    </button>
+                </li>
+
 
             </ul>
 
@@ -592,6 +606,17 @@ new class extends Component {
                          tabindex="0">
 
                         <livewire:admin.leaves.index :isReporting="true"/>
+
+                    </div>
+
+
+                    <div class="tab-pane fade show {{ $report_type === 'department' ? 'show active' : '' }}"
+                         id="tab-daily-attendance"
+                         role="tabpanel"
+                         aria-labelledby="tab-daily-attendance-tab"
+                         tabindex="0">
+
+                        <livewire:admin.reports.departments/>
 
                     </div>
 
