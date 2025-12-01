@@ -73,6 +73,18 @@
                         </li>
                     @endcan
 
+                    @can('view-employees')
+                        <li class="sidebar-item">
+                            <a class="sidebar-link {{ request()->routeIs('shifts.create') ? 'active' : '' }}"
+                               href="{{ route('shifts.create') }}"
+                               id="get-url"
+                               aria-expanded="false">
+                                <iconify-icon icon="mdi:account-clock-outline" class="fs-5"></iconify-icon>
+                                <span class="hide-menu">Shifts</span>
+                            </a>
+                        </li>
+                    @endcan
+
                     @can('view-all-attendance')
                         <li class="sidebar-item">
                             <a class="sidebar-link {{ request()->routeIs('attendance.*') ? 'active' : '' }}"

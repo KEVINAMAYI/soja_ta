@@ -18,13 +18,43 @@ class Attendance extends Model
         'overtime_hours',
         'status',
         'latitude',
-        'longitude'
+        'longitude',
+        'device_id',
+        'work_location_id',
+        'is_late_checkin',
+        'minutes_late',
+        'is_early_checkout',
+        'minutes_early',
+        'within_grace_period',
+        'expected_check_in_time',
+        'grace_period_end_time',
+        'expected_check_out_time',
+        'early_checkout_threshold_time',
     ];
 
     protected $casts = [
         'date' => 'date',
-        'check_in_time' => 'datetime:H:i',
-        'check_out_time' => 'datetime:H:i',
+        'check_in_time' => 'datetime',
+        'check_out_time' => 'datetime',
+
+        // Fix incorrect cast name
+        'worked_hours' => 'decimal:2',
+        'overtime_hours' => 'decimal:2',
+
+        // Flags
+        'is_late_checkin' => 'boolean',
+        'is_early_checkout' => 'boolean',
+        'within_grace_period' => 'boolean',
+
+        // Time-only fields (cast as strings)
+        'expected_check_in_time' => 'string',
+        'expected_check_out_time' => 'string',
+        'grace_period_end_time' => 'string',
+        'early_checkout_threshold_time' => 'string',
+
+        // Integer minute fields
+        'minutes_late' => 'integer',
+        'minutes_early' => 'integer',
     ];
 
     public function employee()
@@ -41,6 +71,4 @@ class Attendance extends Model
     {
         return $this->belongsTo(WorkLocation::class, 'work_location_id');
     }
-
 }
-
