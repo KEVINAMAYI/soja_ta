@@ -30,9 +30,8 @@ Route::middleware(['auth'])->prefix('admin')->group(function () {
     Volt::route('employee-types', 'admin.employee-types.index')->name('employee-types.index');
 
     //Routes to manage Attendance
-    Volt::route('timesheets', 'admin.attendance.index')->name('timesheets.index');
+    Volt::route('timesheets', 'admin.attendance.timesheets')->name('timesheets.index');
     Volt::route('attendance', 'admin.attendance.index')->name('attendance.index');
-
 
     //Routes to manage Overtime
     Volt::route('overtime', 'admin.overtime.index')->name('overtime.index');

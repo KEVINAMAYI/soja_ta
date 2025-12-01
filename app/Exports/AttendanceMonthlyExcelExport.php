@@ -17,53 +17,132 @@ use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 
 class AttendanceMonthlyExcelExport implements FromView, ShouldAutoSize, WithTitle, WithStyles
 {
-    protected array $selectedIds;
+    protected array $selected;
+    protected $department_id;
+    protected $startDate;
+    protected $endDate;
 
-    public function __construct(array $selectedIds = [])
+    public function __construct($selected = [], $department_id = null, $startDate = null, $endDate = null)
     {
-        $this->selectedIds = $selectedIds;
+        $this->selected = $selected;
+        $this->department_id = $department_id;
+        $this->startDate = $startDate;
+        $this->endDate = $endDate;
     }
 
-    public function view(): View
+    public function baseQuery()
     {
         $orgId = auth()->user()->employee->organization_id ?? null;
-        $today = now()->toDateString();
 
         $query = Attendance::query()
             ->join('employees', 'attendances.employee_id', '=', 'employees.id')
-            ->where('employees.organization_id', $orgId)
-            ->with('employee')
+            ->where('employees.organization_id', $orgId);
+
+        // Filter by department
+        if ($this->department_id && $this->department_id !== 'all') {
+            $query->where('employees.department_id', $this->department_id);
+        }
+
+        // Date filtering
+        if ($this->startDate) {
+            $query->where('attendances.date', '>=', $this->startDate);
+        }
+
+        if ($this->endDate) {
+            $query->where('attendances.date', '<=', $this->endDate);
+        }
+
+        return $query;
+    }
+
+
+    public function view(): View
+    {
+        $query = $this->baseQuery()
+            ->with([
+                'employee',
+                'employee.department',
+                'employee.shift',
+            ])
             ->select(
                 'attendances.employee_id',
-                DB::raw("DATE_FORMAT(attendances.date, '%Y-%m') as attendance_month"),
-                // Only check for NOT NULL for DATETIME column
-                DB::raw("SUM(CASE WHEN attendances.check_in_time IS NOT NULL THEN 1 ELSE 0 END) as present_days"),
-                DB::raw("SUM(CASE WHEN attendances.status = 'absent' THEN 1 ELSE 0 END) as absent_days"),
-                DB::raw("SUM(CASE WHEN attendances.status = 'leave' THEN 1 ELSE 0 END) as leave_days"),
+
+                // Present
+                DB::raw("
+                SUM(
+                    CASE
+                        WHEN attendances.status IN ('clocked_in','clocked_out')
+                        OR attendances.check_in_time IS NOT NULL
+                        THEN 1 ELSE 0
+                    END
+                ) as present_days
+            "),
+
+                // Absent
+                DB::raw("
+                SUM(
+                    CASE
+                        WHEN attendances.status IN ('absent','unchecked_in')
+                        THEN 1 ELSE 0
+                    END
+                ) as absent_days
+            "),
+
+                // Leave
+                DB::raw("
+                SUM(
+                    CASE
+                        WHEN attendances.status = 'on_leave' THEN 1 ELSE 0
+                    END
+                ) as leave_days
+            "),
+
+                // Sick leave
+                DB::raw("
+                SUM(
+                    CASE
+                        WHEN attendances.status IN ('sick_leave','sick_off')
+                        THEN 1 ELSE 0
+                    END
+                ) as sick_days
+            "),
+
+                // Off shift days
+                DB::raw("
+                SUM(
+                    CASE
+                        WHEN attendances.status = 'off_shift'
+                        THEN 1 ELSE 0
+                    END
+                ) as off_shift_days
+            "),
+
+                // Totals
                 DB::raw("COUNT(*) as total_days"),
                 DB::raw("SUM(attendances.worked_hours) as total_worked_hours"),
                 DB::raw("SUM(attendances.overtime_hours) as total_ot_hours")
             )
-            ->groupBy('attendances.employee_id', DB::raw("DATE_FORMAT(attendances.date, '%Y-%m')"));
+            ->groupBy('attendances.employee_id');
 
-        if (!empty($this->selectedIds)) {
-            $query->whereIn('employee_id', $this->selectedIds);
+        // Filter selected employees
+        if (!empty($this->selected)) {
+            $query->whereIn('attendances.employee_id', $this->selected);
         }
 
-        $attendances = $query->get();
-
         return view('exports.attendance.monthly', [
-            'attendances' => $attendances,
-            'title' => 'Monthly Attendance Report',
+            'attendances' => $query->get(),
+            'title' => 'TimeSheets Report',
             'date' => now()->format('d M Y, H:i'),
-            'isExcel' => true
+            'startDate' => $this->startDate,
+            'endDate' => $this->endDate,
+            'isExcel' => true,
         ]);
     }
 
 
     public function title(): string
     {
-        return 'Employee Report';
+        return 'Timesheets Report';
     }
 
     public function styles(Worksheet $sheet)

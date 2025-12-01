@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\Department;
 use App\Models\Employee;
 use App\Models\Organization;
 use App\Models\ReportSetting;
@@ -26,6 +27,11 @@ new class extends Component {
     public $endDate;
     public $filterStatus;
 
+    public $timeSheetsStartDate;
+    public $timeSheetsEndDate;
+    public $departments = [];
+    public $department_id;
+
     public function mount()
     {
         $orgId = auth()->user()->employee->organization_id ?? null;
@@ -40,6 +46,19 @@ new class extends Component {
         $this->startDate = now()->toDateString();
         $this->endDate = now()->toDateString();
 
+        $today = now()->toDateString();
+        $this->timeSheetsStartDate = $today;
+        $this->timeSheetsEndDate = $today;
+        $this->department_id = 'all';
+
+        // Load departments for the current organization
+        $orgId = auth()->user()->employee->organization_id ?? null;
+        if ($orgId) {
+            $this->departments = Department::where('organization_id', $orgId)
+                ->orderBy('name')
+                ->get();
+        }
+
     }
 
 
@@ -47,6 +66,12 @@ new class extends Component {
     public function dateChaged()
     {
         $this->dispatch('date-range-updated', startDate: $this->startDate, endDate: $this->endDate, status: $this->filterStatus);
+    }
+
+    #[On('timesheets-filter-updated')]
+    public function filterChnaged()
+    {
+        $this->dispatch('timesheet-range-updated', startDate: $this->timeSheetsStartDate, endDate: $this->timeSheetsEndDate, department_id: $this->department_id);
     }
 
 
@@ -309,7 +334,7 @@ new class extends Component {
                         role="tab"
                         aria-selected="{{ $report_type === 'daily_attendance' ? 'true' : 'false' }}">
                         <i class="ti ti-user-circle mx-2 fs-6"></i>
-                        <span class="d-none d-md-block">Daily Attendance</span>
+                        <span class="d-none d-md-block">Attendance</span>
                     </button>
                 </li>
 
@@ -323,7 +348,7 @@ new class extends Component {
                         role="tab"
                         aria-selected="{{ $report_type === 'monthly_attendance' ? 'true' : 'false' }}">
                         <i class="ti ti-calendar mx-2 fs-6"></i>
-                        <span class="d-none d-md-block">Monthly Attendance</span>
+                        <span class="d-none d-md-block">Timesheets</span>
                     </button>
                 </li>
 
@@ -447,7 +472,6 @@ new class extends Component {
 
                                         </div>
 
-
                                         <!-- Livewire Component -->
                                         <livewire:attendance-daily-table theme="bootstrap-4"/>
                                     </div>
@@ -511,6 +535,47 @@ new class extends Component {
                                                 <span>Email Reports</span>
                                             </button>
                                         </div>
+
+                                        <div class="row align-items-end mb-4">
+
+                                            {{-- START DATE --}}
+                                            <div class="col-md-4">
+                                                <label class="form-label fw-semibold">Start Date</label>
+                                                <input
+                                                    type="date"
+                                                    class="form-control"
+                                                    wire:model="timeSheetsStartDate"
+                                                    wire:change="$dispatch('timesheets-filter-updated')"
+                                                />
+                                            </div>
+
+                                            {{-- END DATE --}}
+                                            <div class="col-md-4">
+                                                <label class="form-label fw-semibold">End Date</label>
+                                                <input
+                                                    type="date"
+                                                    class="form-control"
+                                                    wire:model="timeSheetsEndDate"
+                                                    wire:change="$dispatch('timesheets-filter-updated')"
+                                                />
+                                            </div>
+
+                                            {{-- DEPARTMENT FILTER --}}
+                                            <div class="col-md-4">
+                                                <label class="form-label fw-semibold">Department</label>
+                                                <select
+                                                    class="form-control"
+                                                    wire:model="department_id"
+                                                    wire:change="$dispatch('timesheets-filter-updated')">
+                                                    <option value="all">All Departments</option>
+                                                    @foreach($departments as $department)
+                                                        <option
+                                                            value="{{ $department->id }}">{{ $department->name }}</option>
+                                                    @endforeach
+                                                </select>
+                                            </div>
+                                        </div>
+
 
                                         <livewire:attendance-monthly-table theme="bootstrap-4"/>
                                     </div>

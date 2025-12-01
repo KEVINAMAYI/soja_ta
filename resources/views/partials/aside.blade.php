@@ -87,34 +87,24 @@
 
                     @can('view-all-attendance')
                         <li class="sidebar-item">
-                            <a class="sidebar-link {{ request()->routeIs('attendance.*') ? 'active' : '' }}"
-                               href="#timesheetsMenu"
-                               data-bs-toggle="collapse"
-                               aria-expanded="{{ request()->routeIs('attendance.*') ? 'true' : 'false' }}">
+                            <a class="sidebar-link {{ request()->routeIs('attendance.index') ? 'active' : '' }}"
+                               href="{{ route('attendance.index') }}"
+                               id="get-url"
+                               aria-expanded="false">
                                 <iconify-icon icon="mdi:clock-time-eight-outline"></iconify-icon>
+                                <span class="hide-menu">Attendance</span>
+                            </a>
+                        </li>
+                    @endcan
+
+                    @can('view-all-attendance')
+                        <li class="sidebar-item">
+                            <a class="sidebar-link {{ request()->routeIs('timesheet.index') ? 'active' : '' }}"
+                               href="{{ route('timesheets.index') }}"
+                               aria-expanded="false">
+                                <iconify-icon icon="mdi:clipboard-clock-outline"></iconify-icon>
                                 <span class="hide-menu">Timesheets</span>
                             </a>
-                            <ul class="collapse first-level {{ request()->routeIs('attendance.*') ? 'show' : '' }}"
-                                id="timesheetsMenu">
-
-                                <!-- All Timesheets -->
-                                <li class="sidebar-item">
-                                    <a class="sidebar-link {{ request()->routeIs('timesheets.index') ? 'active' : '' }}"
-                                       href="{{ route('timesheets.index') }}">
-                                        <span class="icon-small"></span>
-                                        Timesheets
-                                    </a>
-                                </li>
-
-                                <!-- Clocked In -->
-                                <li class="sidebar-item">
-                                    <a class="sidebar-link {{ request()->routeIs('attendance.index')  ? 'active' : '' }}"
-                                       href="{{ route('attendance.index') }}">
-                                        <span class="icon-small"></span> Attendance
-                                    </a>
-                                </li>
-
-                            </ul>
                         </li>
                     @endcan
 
