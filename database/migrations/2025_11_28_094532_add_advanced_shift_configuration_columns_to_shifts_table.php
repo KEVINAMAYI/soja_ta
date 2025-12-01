@@ -4,7 +4,8 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
-return new class extends Migration {
+return new class extends Migration
+{
     /**
      * Run the migrations.
      */
@@ -26,7 +27,7 @@ return new class extends Migration {
             $table->string('pattern_type')->default('weekdays')->after('warning_time_minutes');
 
             // Pattern days stored as JSON: ["Mon", "Tue", "Wed", "Thu", "Fri"]
-            $table->text('pattern_days')->nullable()->after('pattern_type');
+            $table->json('pattern_days')->nullable()->after('pattern_type');
 
             // Notification settings
             $table->boolean('notify_managers_overtime')->default(false)->after('pattern_days');
