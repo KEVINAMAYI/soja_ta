@@ -122,35 +122,13 @@
 
                     @can('view-all-reports')
                         <li class="sidebar-item">
-                            <a class="sidebar-link {{ request()->routeIs('reports.*') ? 'active' : '' }}"
-                               href="#reportsMenu"
-                               data-bs-toggle="collapse"
-                               aria-expanded="{{ request()->routeIs('reports.*') ? 'true' : 'false' }}"
-                               aria-controls="reportsMenu">
+                            <a class="sidebar-link {{ request()->routeIs('reports.employees') ? 'active' : '' }}"
+                               href="{{ route('reports.employees') }}"
+                               id="get-url"
+                               aria-expanded="false">
                                 <iconify-icon icon="mdi:file-chart-outline"></iconify-icon>
-                                <span class="hide-menu">Reports</span>
+                                <span class="hide-menu">All Reports</span>
                             </a>
-
-                            <ul class="collapse first-level {{ request()->routeIs('reports.*') ? 'show' : '' }}"
-                                id="reportsMenu">
-
-                                <li class="sidebar-item">
-                                    <a class="sidebar-link {{ request()->routeIs('reports.employees') ? 'active' : '' }}"
-                                       href="{{ route('reports.employees') }}">
-                                        <span class="icon-small"></span>
-                                        Employee Reports
-                                    </a>
-                                </li>
-
-                                <li class="sidebar-item">
-                                    <a class="sidebar-link {{ request()->routeIs('reports.departments') ? 'active' : '' }}"
-                                       href="{{ route('reports.departments') }}">
-                                        <span class="icon-small"></span>
-                                        Department Reports
-                                    </a>
-                                </li>
-
-                            </ul>
                         </li>
                     @endcan
 
