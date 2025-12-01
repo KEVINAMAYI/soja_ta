@@ -32,7 +32,7 @@ class AttendanceDailyTable extends DataTableComponent
 
 
     #[On('date-range-updated')]
-    public function updateDateRange($startDate, $endDate, $status)
+    public function filterByDateRange($startDate, $endDate, $status)
     {
         $this->startDate = $startDate;
         $this->endDate = $endDate;

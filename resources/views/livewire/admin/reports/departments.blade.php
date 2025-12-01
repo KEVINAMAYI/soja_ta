@@ -35,13 +35,23 @@ new class extends Component {
     ];
 
 
+    public $startDate;
+    public $endDate;
+
     public function mount()
     {
         $this->availableEmails = $this->getOrgEmails();
         $this->availableTimezones = timezone_identifiers_list();
-
+        $this->startDate = now()->toDateString();
+        $this->endDate = now()->toDateString();
         // Initialize frequency from current report_type
         $this->frequency = $this->reportTypeToFrequency[$this->report_type] ?? 'daily';
+    }
+
+    #[On('filter-updated')]
+    public function departmentDateChaged()
+    {
+        $this->dispatch('dept-date-range-updated', startDate: $this->startDate, endDate: $this->endDate);
     }
 
     public function setReportType($type)
@@ -273,6 +283,34 @@ new class extends Component {
                     <span>Email Report</span>
                 </button>
             </div>
+
+
+            <div class="row">
+                {{-- DATE FILTER --}}
+                <div class="col-4 mb-4">
+                    <label class="form-label">Start Date</label>
+                    <input
+                        type="date"
+                        id="attendance-start-date"
+                        class="form-control"
+                        wire:model="startDate"
+                        wire:change="$dispatch('filter-updated')"
+                    />
+                </div>
+
+                <div class="col-4 mb-4">
+                    <label class="form-label">End Date</label>
+                    <input
+                        type="date"
+                        id="attendance-end-date"
+                        class="form-control"
+                        wire:model="endDate"
+                        wire:change="$dispatch('filter-updated')"
+                    />
+                </div>
+
+            </div>
+
 
             {{-- Livewire Table --}}
             <livewire:departmental-attendance-table theme="bootstrap-4"/>

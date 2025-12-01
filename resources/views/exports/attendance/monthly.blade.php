@@ -32,8 +32,8 @@ if ($organization) {
             flex-direction: column;
             align-items: center;
             border-bottom: 2px solid #2c3e50;
-            padding-bottom: 25px;
-            margin-bottom: 25px;
+            padding-bottom: 20px;
+            margin-bottom: 20px;
             text-align: center;
         }
 
@@ -79,10 +79,16 @@ if ($organization) {
         }
 
         th {
-            background: #2c3e50;
+            background: #2c3e50 !important;
             color: #fff;
             text-align: left;
         }
+
+
+        table tbody tr:nth-child(-n+3) {
+            background-color: #f9f9f9 !important;
+        }
+
 
         tr:nth-child(even) {
             background: #f9f9f9;
@@ -123,18 +129,37 @@ if ($organization) {
 
     <div class="header-content">
         <h1>{{ $title }}</h1>
-        <div class="meta">Generated on {{ now()->format('d M Y, H:i') }}</div>
+        <div class="meta">
+            Generated on {{ now()->format('d M Y, H:i') }}
+            @if(!empty($startDate) && !empty($endDate))
+                Period: {{ \Carbon\Carbon::parse($startDate)->format('d M Y') }}
+                - {{ \Carbon\Carbon::parse($endDate)->format('d M Y') }}
+            @endif
+        </div>
     </div>
 </div>
 
 <table>
     <thead>
+    @if(!empty($isExcel))
+        <tr>
+            <td colspan="9">
+                Generated on {{ now()->format('d M Y, H:i') }}
+                @if(!empty($startDate) && !empty($endDate))
+                    | Period: {{ \Carbon\Carbon::parse($startDate)->format('d M Y') }}
+                    - {{ \Carbon\Carbon::parse($endDate)->format('d M Y') }}
+                @endif
+            </td>
+        </tr>
+    @endif
+    {{-- End of Excel-specific meta rows --}}
     <tr>
-        <th>Month</th>
         <th>Employee</th>
         <th>Present</th>
         <th>Absent</th>
         <th>Leave</th>
+        <th>Sick</th>
+        <th>Off Shift</th>
         <th>Total Days</th>
         <th>Working Hours</th>
         <th>OT Hours</th>
@@ -143,11 +168,12 @@ if ($organization) {
     <tbody>
     @foreach($attendances as $attendance)
         <tr>
-            <td>{{ \Carbon\Carbon::createFromFormat('Y-m', $attendance->attendance_month)->format('F Y') }}</td>
             <td>{{ $attendance->employee->name ?? 'N/A' }}</td>
             <td><span class="badge bg-success">{{ $attendance->present_days }}</span></td>
             <td><span class="badge bg-danger">{{ $attendance->absent_days }}</span></td>
             <td><span class="badge bg-warning">{{ $attendance->leave_days }}</span></td>
+            <td><span class="badge bg-warning">{{ $attendance->sick_days }}</span></td>
+            <td><span class="badge bg-warning">{{ $attendance->off_shift_days }}</span></td>
             <td>{{ $attendance->total_days }}</td>
             <td>{{ number_format($attendance->total_worked_hours, 2) }}</td>
             <td>{{ number_format($attendance->total_ot_hours, 2) }}</td>

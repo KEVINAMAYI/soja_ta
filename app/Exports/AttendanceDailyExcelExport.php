@@ -72,7 +72,7 @@ class AttendanceDailyExcelExport implements FromView, ShouldAutoSize, WithTitle,
 
         return view('exports.attendance.daily', [
             'attendances' => $attendances,
-            'title' => 'Daily Attendance Report',
+            'title' => 'Attendance Report',
             'date' => now()->format('d M Y, H:i'),
             'isExcel' => true
         ]);

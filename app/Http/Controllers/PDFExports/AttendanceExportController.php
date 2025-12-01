@@ -20,11 +20,11 @@ class AttendanceExportController extends Controller
 
     public function exportAttendanceDailyPdf(Request $request)
     {
-        $ids       = $request->input('ids', []);
+        $ids = $request->input('ids', []);
         $startDate = $request->input('start_date');
-        $endDate   = $request->input('end_date');
-        $status    = $request->input('status');
-        $orgId     = auth()->user()->employee->organization_id ?? null;
+        $endDate = $request->input('end_date');
+        $status = $request->input('status');
+        $orgId = auth()->user()->employee->organization_id ?? null;
 
         $attendances = $this->reportService->getDaily(
             orgId: $orgId,
@@ -43,9 +43,9 @@ class AttendanceExportController extends Controller
             'exports.attendance.daily',
             [
                 'attendances' => $attendances,
-                'title'       => 'Attendance Report',
-                'date'        => now()->format('d M Y, H:i'),
-                'isExcel'     => false,
+                'title' => 'Attendance Report',
+                'date' => now()->format('d M Y, H:i'),
+                'isExcel' => false,
             ],
             'attendance-report',
         );
@@ -56,9 +56,12 @@ class AttendanceExportController extends Controller
     public function exportAttendanceMonthlyPdf(Request $request)
     {
         $ids = $request->input('ids', []);
+        $start_date = $request->input('start_date');
+        $end_date = $request->input('end_date');
+        $department_id = $request->input('department_id');
         $orgId = auth()->user()->employee->organization_id ?? null;
 
-        $attendances = $this->reportService->getMonthly($orgId, $ids);
+        $attendances = $this->reportService->getMonthly($orgId, $ids, $start_date, $end_date, $department_id);
 
         if ($attendances->isEmpty()) {
             return back()->with('error', 'No attendance records found to export.');
@@ -71,11 +74,13 @@ class AttendanceExportController extends Controller
                 'title' => 'Attendance Report',
                 'date' => now()->format('d M Y, H:i'),
                 'isExcel' => false,
+                'startDate' => $start_date,
+                'endDate' => $end_date,
             ],
             'attendance-report',
         );
 
-        return $pdf->download('monthly-attendance-report.pdf');
+        return $pdf->download('timesheets-report.pdf');
     }
 
     public function exportAttendanceDepartmentPdf(Request $request)

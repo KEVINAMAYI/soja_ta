@@ -49,32 +49,101 @@ class AttendanceReportService
     }
 
 
-    public function getMonthly(int $orgId, array $ids = [], ?string $month = null)
+    public function baseQuery($orgId, $ids, $start_date, $end_date, $department_id)
     {
-        $monthFilter = $month ?? now()->format('Y-m'); // use provided month or default to current
-
         $query = Attendance::query()
             ->join('employees', 'attendances.employee_id', '=', 'employees.id')
-            ->where('employees.organization_id', $orgId)
-            ->with('employee')
+            ->where('employees.organization_id', $orgId);
+
+        // Filter by department
+        if ($department_id && $department_id !== 'all') {
+            $query->where('employees.department_id', $department_id);
+        }
+
+        // Date filtering
+        if ($start_date) {
+            $query->where('attendances.date', '>=', $start_date);
+        }
+
+        if ($end_date) {
+            $query->where('attendances.date', '<=', $end_date);
+        }
+
+        if (!empty($ids)) {
+            $query->whereIn('attendances.employee_id', $ids);
+        }
+
+        return $query;
+    }
+
+
+    public function getMonthly($orgId, $ids, $start_date, $end_date, $department_id)
+    {
+        return $this->baseQuery($orgId, $ids, $start_date, $end_date, $department_id)
+            ->with([
+                'employee',
+                'employee.department',
+                'employee.shift',
+            ])
             ->select(
                 'attendances.employee_id',
-                DB::raw("DATE_FORMAT(attendances.date, '%Y-%m') as attendance_month"),
-                DB::raw("SUM(CASE WHEN attendances.check_in_time IS NOT NULL THEN 1 ELSE 0 END) as present_days"),
-                DB::raw("SUM(CASE WHEN attendances.status = 'absent' THEN 1 ELSE 0 END) as absent_days"),
-                DB::raw("SUM(CASE WHEN attendances.status = 'leave' THEN 1 ELSE 0 END) as leave_days"),
+
+                // Present
+                DB::raw("
+                SUM(
+                    CASE
+                        WHEN attendances.status IN ('clocked_in','clocked_out')
+                        OR attendances.check_in_time IS NOT NULL
+                        THEN 1 ELSE 0
+                    END
+                ) as present_days
+            "),
+
+                // Absent
+                DB::raw("
+                SUM(
+                    CASE
+                        WHEN attendances.status IN ('absent','unchecked_in')
+                        THEN 1 ELSE 0
+                    END
+                ) as absent_days
+            "),
+
+                // Leave
+                DB::raw("
+                SUM(
+                    CASE
+                        WHEN attendances.status = 'on_leave' THEN 1 ELSE 0
+                    END
+                ) as leave_days
+            "),
+
+                // Sick leave
+                DB::raw("
+                SUM(
+                    CASE
+                        WHEN attendances.status IN ('sick_leave','sick_off')
+                        THEN 1 ELSE 0
+                    END
+                ) as sick_days
+            "),
+
+                // Off shift days
+                DB::raw("
+                SUM(
+                    CASE
+                        WHEN attendances.status = 'off_shift'
+                        THEN 1 ELSE 0
+                    END
+                ) as off_shift_days
+            "),
+
+                // Totals
                 DB::raw("COUNT(*) as total_days"),
                 DB::raw("SUM(attendances.worked_hours) as total_worked_hours"),
                 DB::raw("SUM(attendances.overtime_hours) as total_ot_hours")
             )
-            ->whereRaw("DATE_FORMAT(attendances.date, '%Y-%m') = ?", [$monthFilter])
-            ->groupBy('attendances.employee_id', DB::raw("DATE_FORMAT(attendances.date, '%Y-%m')"));
-
-        if (!empty($ids)) {
-            $query->whereIn('employee_id', $ids);
-        }
-
-        return $query->get();
+            ->groupBy('attendances.employee_id')->get();
     }
 
 
