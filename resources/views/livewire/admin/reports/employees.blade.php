@@ -435,6 +435,7 @@ new class extends Component {
                                                     wire:model="filterStatus"
                                                     wire:change="$dispatch('filter-updated')">
                                                     <option value="">All</option>
+                                                    <option value="present">Present [Clocked In + Clocked Out]</option>
                                                     <option value="clocked_in">Clocked In</option>
                                                     <option value="clocked_out">Clocked Out</option>
                                                     <option value="absent">Absent</option>
