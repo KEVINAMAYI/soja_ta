@@ -3,6 +3,7 @@
 use App\Http\Controllers\APIs\AttendanceController;
 use App\Http\Controllers\APIs\AuthController;
 use App\Http\Controllers\APIs\DeviceController;
+use App\Http\Controllers\APIs\LeaveController;
 use App\Http\Controllers\APIs\OrganizationController;
 use Illuminate\Support\Facades\Route;
 
@@ -38,6 +39,14 @@ Route::middleware(['auth:sanctum'])->group(function () {
         Route::post('/assign-qr-code', [AuthController::class, 'assignToken']);
         Route::post('/assign-face-id', [AuthController::class, 'assignFaceId']);
         Route::get('/roles', [OrganizationController::class, 'getAllRoles']);
+    });
+
+    Route::prefix('leaves')->group(function () {
+        Route::post('/apply', [LeaveController::class, 'apply']);
+        Route::get('/my-leaves', [LeaveController::class, 'myLeaves']);
+        Route::get('/types', [LeaveController::class, 'leaveTypes']);
+        Route::get('/{id}/cancel', [LeaveController::class, 'cancel']);
+        Route::get('/{id}', [LeaveController::class, 'show']);
     });
 
     Route::post('/devices/verify', [DeviceController::class, 'verify']);
