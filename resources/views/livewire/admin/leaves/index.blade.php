@@ -262,6 +262,7 @@ new class extends Component {
                     <option value="approved">Approved</option>
                     <option value="pending">Pending</option>
                     <option value="rejected">Rejected</option>
+                    <option value="cancelled">Cancelled</option>
                 </select>
             </div>
 
@@ -349,8 +350,10 @@ new class extends Component {
                             <span class="badge bg-success">Approved</span>
                         @elseif($leave->status == 'pending')
                             <span class="badge bg-warning text-dark">Pending</span>
-                        @else
+                        @elseif($leave->status == 'rejected')
                             <span class="badge bg-danger">Rejected</span>
+                        @else
+                            <span class="badge bg-primary">Cancelled</span>
                         @endif
                     </td>
                     <td>{{ $leave->expected_resumption?->format('d/m/Y') ?? '-' }}</td>
@@ -490,6 +493,7 @@ new class extends Component {
                                             <option value="pending">Pending</option>
                                             <option value="approved">Approved</option>
                                             <option value="rejected">Rejected</option>
+                                            <option value="cancelled">Cancelled</option>
                                         </select>
                                     </div>
                                 @endif
