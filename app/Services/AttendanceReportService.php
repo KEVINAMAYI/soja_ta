@@ -38,6 +38,8 @@ class AttendanceReportService
         if ($status) {
             if ($status === 'absent') {
                 $query->whereIn('status', ['absent', 'unchecked_in']);
+            } else if ($status === 'present') {
+                $query->whereIn('status', ['clocked_in', 'clocked_out']);
             } else {
                 $query->where('status', $status);
             }

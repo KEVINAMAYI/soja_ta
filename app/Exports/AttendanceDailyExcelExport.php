@@ -58,6 +58,8 @@ class AttendanceDailyExcelExport implements FromView, ShouldAutoSize, WithTitle,
         if ($this->status) {
             if ($this->status === 'absent') {
                 $query->whereIn('status', ['absent', 'unchecked_in']);
+            }  else if ($this->status === 'present') {
+                $query->whereIn('status', ['clocked_in', 'clocked_out']);
             } elseif ($this->status === 'unchecked_in') {
                 $query->where('status', 'unchecked_in');
             } else {
