@@ -147,7 +147,7 @@ if ($organization) {
         <tr>
             <td>{{ $attendance->employee->name ?? '-' }}</td>
             <td>{{ $attendance->employee->user->email ?? '-' }}</td>
-            <td>{{ $attendance->employee->phone ?? '-' }}</td>
+            <td>{{ "'" . ($attendance->employee->phone ?? '-') }}</td>
             <td>{{ optional($attendance->employee->shift)->name ?? '-' }}</td>
             <td>
                 {{ \Carbon\Carbon::parse($attendance->date)->format('M d, Y') }}
@@ -163,7 +163,7 @@ if ($organization) {
                 @else
                     <span style="color: red;">
                    {{ $attendance->check_out_time
-                         ? \Carbon\Carbon::parse($attendance->check_out)->format('M d, Y g:i A')
+                         ? \Carbon\Carbon::parse($attendance->check_out_time)->format('M d, Y g:i A')
                          : '-' }}
                  </span>
                 @endif
