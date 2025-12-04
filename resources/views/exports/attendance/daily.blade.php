@@ -147,7 +147,7 @@ if ($organization) {
         <tr>
             <td>{{ $attendance->employee->name ?? '-' }}</td>
             <td>{{ $attendance->employee->user->email ?? '-' }}</td>
-            <td>{{ "'" . ($attendance->employee->phone ?? '-') }}</td>
+            <td>{{ number_format($attendance->employee->phone ?? 0, 0, '', '') }}</td>
             <td>{{ optional($attendance->employee->shift)->name ?? '-' }}</td>
             <td>
                 {{ \Carbon\Carbon::parse($attendance->date)->format('M d, Y') }}
