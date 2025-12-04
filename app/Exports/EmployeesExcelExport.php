@@ -39,9 +39,12 @@ class EmployeesExcelExport implements FromView, ShouldAutoSize, WithTitle, WithS
 
         $employees = $query->get();
 
+        $organizationName = auth()->user()->employee->organization->name ?? 'Organization';
+        $title = "{$organizationName} - Employees Report";
+
         return view('exports.employees.index', [
             'employees' => $employees,
-            'title' => 'Employee Report',
+            'title' => $title,
             'date' => now()->format('d M Y, H:i'),
             'isExcel' => true
         ]);

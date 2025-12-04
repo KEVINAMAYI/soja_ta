@@ -76,25 +76,25 @@ class DepartmentalAttendanceTable extends DataTableComponent
             // Count unique employees in department
             DB::raw("COUNT(DISTINCT employees.id) as employee_count"),
 
-            // Present Days (clocked_in/clocked_out)
-            DB::raw("SUM(CASE WHEN attendances.status IN ('clocked_in', 'clocked_out') THEN 1 ELSE 0 END) as present_days"),
+            // Total unique days across all employees
+            DB::raw("COUNT(DISTINCT CONCAT(employees.id, '-', attendances.date)) as total_days"),
+
+            // Present Days (count unique employee-date combinations)
+            DB::raw("COUNT(DISTINCT CASE WHEN attendances.status IN ('clocked_in', 'clocked_out') THEN CONCAT(employees.id, '-', attendances.date) END) as present_days"),
 
             // Absent Days
-            DB::raw("SUM(CASE WHEN attendances.status IN ('absent', 'unchecked_in') THEN 1 ELSE 0 END) as absent_days"),
+            DB::raw("COUNT(DISTINCT CASE WHEN attendances.status IN ('absent', 'unchecked_in') THEN CONCAT(employees.id, '-', attendances.date) END) as absent_days"),
 
             // Leave Days
-            DB::raw("SUM(CASE WHEN attendances.status = 'on_leave' THEN 1 ELSE 0 END) as leave_days"),
+            DB::raw("COUNT(DISTINCT CASE WHEN attendances.status = 'on_leave' THEN CONCAT(employees.id, '-', attendances.date) END) as leave_days"),
 
-            // Sick Off Days
-            DB::raw("SUM(CASE WHEN attendances.status = 'sick_leave' THEN 1 ELSE 0 END) as sick_days"),
+            // Sick Days
+            DB::raw("COUNT(DISTINCT CASE WHEN attendances.status = 'sick_leave' THEN CONCAT(employees.id, '-', attendances.date) END) as sick_days"),
 
             // Off Shift Days
-            DB::raw("SUM(CASE WHEN attendances.status = 'off_shift' THEN 1 ELSE 0 END) as off_shift_days"),
+            DB::raw("COUNT(DISTINCT CASE WHEN attendances.status = 'off_shift' THEN CONCAT(employees.id, '-', attendances.date) END) as off_shift_days"),
 
-            // Total days
-            DB::raw("COUNT(*) as total_days"),
-
-            // Hours
+            // Hours (sum remains the same)
             DB::raw("SUM(attendances.worked_hours) as total_worked_hours"),
             DB::raw("SUM(attendances.overtime_hours) as total_ot_hours")
         )

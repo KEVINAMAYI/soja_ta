@@ -999,7 +999,7 @@ new class extends Component {
                                                            wire:click="deleteReportSettings({{ json_encode($setting['ids']) }})"
                                                            onclick="confirm('Delete all {{ count($setting['recipients']) }} recipient(s) for this schedule?') || event.stopImmediatePropagation()">
                                                             <i class="ti ti-trash fs-5"></i>
-                                                            <span>Delete All</span>
+                                                            <span>Delete</span>
                                                         </a>
                                                     </li>
                                                 </ul>
@@ -1198,6 +1198,29 @@ new class extends Component {
                 // CRITICAL FIX: Manually remove the backdrop element after the hide call.
                 // We use a slight delay (100ms) to ensure Bootstrap finishes its internal transition.
                 setTimeout(removeLingeringBackdrop, 100);
+            });
+
+
+            document.querySelectorAll(".collapse-toggle").forEach((toggle) => {
+                const targetId = toggle.getAttribute("href").replace("#", "");
+                const target = document.getElementById(targetId);
+
+                const label = toggle.querySelector("small");
+                const labelShow = toggle.dataset.labelShow;
+                const labelHide = toggle.dataset.labelHide;
+
+                // Set initial label state
+                label.textContent = labelShow;
+
+                // When opened → show "Hide"
+                target.addEventListener("show.bs.collapse", () => {
+                    label.textContent = labelHide;
+                });
+
+                // When closed → show "View all"
+                target.addEventListener("hide.bs.collapse", () => {
+                    label.textContent = labelShow;
+                });
             });
 
         });

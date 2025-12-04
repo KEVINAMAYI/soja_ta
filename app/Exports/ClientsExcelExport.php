@@ -34,9 +34,12 @@ class ClientsExcelExport implements FromView, ShouldAutoSize, WithTitle, WithSty
 
         $organizations = $query->get();
 
+        $organizationName = auth()->user()->employee->organization->name ?? 'Organization';
+        $title = "{$organizationName} - Clients Report";
+
         return view('exports.clients.index', [
             'organizations' => $organizations,
-            'title' => 'Clients Report',
+            'title' => $title,
             'date' => now()->format('d M Y, H:i'),
             'isExcel' => true,
         ]);

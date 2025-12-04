@@ -66,59 +66,12 @@ class AttendanceMonthlyExcelExport implements FromView, ShouldAutoSize, WithTitl
             ])
             ->select(
                 'attendances.employee_id',
-
-                // Present
-                DB::raw("
-                SUM(
-                    CASE
-                        WHEN attendances.status IN ('clocked_in','clocked_out')
-                        OR attendances.check_in_time IS NOT NULL
-                        THEN 1 ELSE 0
-                    END
-                ) as present_days
-            "),
-
-                // Absent
-                DB::raw("
-                SUM(
-                    CASE
-                        WHEN attendances.status IN ('absent','unchecked_in')
-                        THEN 1 ELSE 0
-                    END
-                ) as absent_days
-            "),
-
-                // Leave
-                DB::raw("
-                SUM(
-                    CASE
-                        WHEN attendances.status = 'on_leave' THEN 1 ELSE 0
-                    END
-                ) as leave_days
-            "),
-
-                // Sick leave
-                DB::raw("
-                SUM(
-                    CASE
-                        WHEN attendances.status IN ('sick_leave','sick_off')
-                        THEN 1 ELSE 0
-                    END
-                ) as sick_days
-            "),
-
-                // Off shift days
-                DB::raw("
-                SUM(
-                    CASE
-                        WHEN attendances.status = 'off_shift'
-                        THEN 1 ELSE 0
-                    END
-                ) as off_shift_days
-            "),
-
-                // Totals
-                DB::raw("COUNT(*) as total_days"),
+                DB::raw("COUNT(DISTINCT attendances.date) as total_days"),
+                DB::raw("COUNT(DISTINCT CASE WHEN attendances.status IN ('clocked_in','clocked_out') OR attendances.check_in_time IS NOT NULL THEN attendances.date END) as present_days"),
+                DB::raw("COUNT(DISTINCT CASE WHEN attendances.status IN ('absent','unchecked_in') THEN attendances.date END) as absent_days"),
+                DB::raw("COUNT(DISTINCT CASE WHEN attendances.status = 'on_leave' THEN attendances.date END) as leave_days"),
+                DB::raw("COUNT(DISTINCT CASE WHEN attendances.status IN ('sick_leave','sick_off') THEN attendances.date END) as sick_days"),
+                DB::raw("COUNT(DISTINCT CASE WHEN attendances.status = 'off_shift' THEN attendances.date END) as off_shift_days"),
                 DB::raw("SUM(attendances.worked_hours) as total_worked_hours"),
                 DB::raw("SUM(attendances.overtime_hours) as total_ot_hours")
             )
@@ -129,9 +82,12 @@ class AttendanceMonthlyExcelExport implements FromView, ShouldAutoSize, WithTitl
             $query->whereIn('attendances.employee_id', $this->selected);
         }
 
+        $organizationName = auth()->user()->employee->organization->name ?? 'Organization';
+        $title = "{$organizationName} - Timesheets Report";
+
         return view('exports.attendance.monthly', [
             'attendances' => $query->get(),
-            'title' => 'TimeSheets Report',
+            'title' => $title,
             'date' => now()->format('d M Y, H:i'),
             'startDate' => $this->startDate,
             'endDate' => $this->endDate,

@@ -87,45 +87,30 @@ class AttendanceReportService
         $query = $this->baseQuery($orgId, $ids, $start_date, $end_date, $department_id)
             ->with(['employee', 'employee.department', 'employee.shift']);
 
-        // One record per employee per day
         $query->select(
             'attendances.employee_id',
-            'attendances.date',
-            DB::raw("
-            MAX(CASE WHEN attendances.status IN ('clocked_in','clocked_out')
-                OR attendances.check_in_time IS NOT NULL THEN 1 ELSE 0 END) as present_day
-        "),
-            DB::raw("
-            MAX(CASE WHEN attendances.status IN ('absent','unchecked_in') THEN 1 ELSE 0 END) as absent_day
-        "),
-            DB::raw("
-            MAX(CASE WHEN attendances.status = 'on_leave' THEN 1 ELSE 0 END) as leave_day
-        "),
-            DB::raw("
-            MAX(CASE WHEN attendances.status IN ('sick_leave','sick_off') THEN 1 ELSE 0 END) as sick_day
-        "),
-            DB::raw("
-            MAX(CASE WHEN attendances.status = 'off_shift' THEN 1 ELSE 0 END) as off_shift_day
-        "),
-            DB::raw("SUM(attendances.worked_hours) as worked_hours_day"),
-            DB::raw("SUM(attendances.overtime_hours) as ot_hours_day")
-        )->groupBy('attendances.employee_id', 'attendances.date');
+            DB::raw("COUNT(DISTINCT attendances.date) as total_days"),
+            DB::raw("COUNT(DISTINCT CASE WHEN attendances.status IN ('clocked_in','clocked_out') OR attendances.check_in_time IS NOT NULL THEN attendances.date END) as present_days"),
+            DB::raw("COUNT(DISTINCT CASE WHEN attendances.status IN ('absent','unchecked_in') THEN attendances.date END) as absent_days"),
+            DB::raw("COUNT(DISTINCT CASE WHEN attendances.status = 'on_leave' THEN attendances.date END) as leave_days"),
+            DB::raw("COUNT(DISTINCT CASE WHEN attendances.status IN ('sick_leave','sick_off') THEN attendances.date END) as sick_days"),
+            DB::raw("COUNT(DISTINCT CASE WHEN attendances.status = 'off_shift' THEN attendances.date END) as off_shift_days"),
+            DB::raw("SUM(attendances.worked_hours) as total_worked_hours"),
+            DB::raw("SUM(attendances.overtime_hours) as total_ot_hours")
+        )->groupBy('attendances.employee_id');
 
-        $dailyRecords = $query->get();
-
-        // Aggregate per employee for the date range
-        return $dailyRecords->groupBy('employee_id')->map(function ($days, $employeeId) {
+        return $query->get()->map(function ($record) {
             return (object)[
-                'employee_id' => $employeeId,
-                'present_days' => $days->sum('present_day'),
-                'absent_days' => $days->sum('absent_day'),
-                'leave_days' => $days->sum('leave_day'),
-                'sick_days' => $days->sum('sick_day'),
-                'off_shift_days' => $days->sum('off_shift_day'),
-                'total_days' => $days->count(),
-                'total_worked_hours' => $days->sum('worked_hours_day'),
-                'total_ot_hours' => $days->sum('ot_hours_day'),
-                'employee' => $days->first()?->employee,
+                'employee_id' => $record->employee_id,
+                'present_days' => $record->present_days,
+                'absent_days' => $record->absent_days,
+                'leave_days' => $record->leave_days,
+                'sick_days' => $record->sick_days,
+                'off_shift_days' => $record->off_shift_days,
+                'total_days' => $record->total_days,
+                'total_worked_hours' => $record->total_worked_hours,
+                'total_ot_hours' => $record->total_ot_hours,
+                'employee' => $record->employee,
             ];
         })->values();
     }
@@ -136,50 +121,60 @@ class AttendanceReportService
         $orgId = auth()->user()->employee->organization_id ?? $orgId;
         $ids = $ids ?? [];
 
-        // Step 1: get daily attendance per employee
-        $dailyQuery = Attendance::query()
+        $query = Attendance::query()
             ->join('employees', 'attendances.employee_id', '=', 'employees.id')
             ->join('departments', 'employees.department_id', '=', 'departments.id')
             ->where('employees.organization_id', $orgId);
 
-        if ($start_date) $dailyQuery->where('attendances.date', '>=', $start_date);
-        if ($end_date) $dailyQuery->where('attendances.date', '<=', $end_date);
-        if (!empty($ids)) $dailyQuery->whereIn('employees.id', $ids);
+        if ($start_date) $query->where('attendances.date', '>=', $start_date);
+        if ($end_date) $query->where('attendances.date', '<=', $end_date);
+        if (!empty($ids)) $query->whereIn('employees.id', $ids);
 
-        // Aggregate per employee per day
-        $dailyQuery->select(
+        $query->select(
             'employees.department_id',
             'departments.name as department_name',
-            'attendances.employee_id',
-            DB::raw("MAX(CASE WHEN attendances.status IN ('clocked_in','clocked_out') THEN 1 ELSE 0 END) as present_day"),
-            DB::raw("MAX(CASE WHEN attendances.status IN ('absent','unchecked_in') THEN 1 ELSE 0 END) as absent_day"),
-            DB::raw("MAX(CASE WHEN attendances.status = 'on_leave' THEN 1 ELSE 0 END) as leave_day"),
-            DB::raw("MAX(CASE WHEN attendances.status IN ('sick_leave','sick_off') THEN 1 ELSE 0 END) as sick_day"),
-            DB::raw("MAX(CASE WHEN attendances.status = 'off_shift' THEN 1 ELSE 0 END) as off_shift_day"),
-            DB::raw("SUM(attendances.worked_hours) as worked_hours_day"),
-            DB::raw("SUM(attendances.overtime_hours) as ot_hours_day")
+
+            // Count unique employees in department
+            DB::raw("COUNT(DISTINCT employees.id) as employee_count"),
+
+            // Total unique employee-day combinations
+            DB::raw("COUNT(DISTINCT CONCAT(employees.id, '-', attendances.date)) as total_days"),
+
+            // Present Days
+            DB::raw("COUNT(DISTINCT CASE WHEN attendances.status IN ('clocked_in','clocked_out') THEN CONCAT(employees.id, '-', attendances.date) END) as present_days"),
+
+            // Absent Days
+            DB::raw("COUNT(DISTINCT CASE WHEN attendances.status IN ('absent','unchecked_in') THEN CONCAT(employees.id, '-', attendances.date) END) as absent_days"),
+
+            // Leave Days
+            DB::raw("COUNT(DISTINCT CASE WHEN attendances.status = 'on_leave' THEN CONCAT(employees.id, '-', attendances.date) END) as leave_days"),
+
+            // Sick Days
+            DB::raw("COUNT(DISTINCT CASE WHEN attendances.status IN ('sick_leave','sick_off') THEN CONCAT(employees.id, '-', attendances.date) END) as sick_days"),
+
+            // Off Shift Days
+            DB::raw("COUNT(DISTINCT CASE WHEN attendances.status = 'off_shift' THEN CONCAT(employees.id, '-', attendances.date) END) as off_shift_days"),
+
+            // Hours
+            DB::raw("SUM(attendances.worked_hours) as total_worked_hours"),
+            DB::raw("SUM(attendances.overtime_hours) as total_ot_hours")
         )
-            ->groupBy('attendances.employee_id', 'attendances.date', 'employees.department_id', 'departments.name');
+            ->groupBy('employees.department_id', 'departments.name');
 
-        $dailyRecords = $dailyQuery->get();
-
-        // Step 2: Aggregate per department
-        return $dailyRecords->groupBy('department_id')->map(function ($records, $departmentId) {
-            $first = $records->first();
-            return [
-                'department_id' => $departmentId,
-                'department_name' => $first->department_name,
-                'employee_count' => $records->groupBy('employee_id')->count(),
-                'present_days' => $records->sum('present_day'),
-                'absent_days' => $records->sum('absent_day'),
-                'leave_days' => $records->sum('leave_day'),
-                'sick_days' => $records->sum('sick_day'),
-                'off_shift_days' => $records->sum('off_shift_day'),
-                'total_days' => $records->count(),
-                'total_worked_hours' => $records->sum('worked_hours_day'),
-                'total_ot_hours' => $records->sum('ot_hours_day'),
+        return $query->get()->map(function ($record) {
+            return (object)[
+                'department_id' => $record->department_id,
+                'department_name' => $record->department_name,
+                'employee_count' => $record->employee_count,
+                'present_days' => $record->present_days,
+                'absent_days' => $record->absent_days,
+                'leave_days' => $record->leave_days,
+                'sick_days' => $record->sick_days,
+                'off_shift_days' => $record->off_shift_days,
+                'total_days' => $record->total_days,
+                'total_worked_hours' => $record->total_worked_hours,
+                'total_ot_hours' => $record->total_ot_hours,
             ];
         })->values();
     }
-
 }

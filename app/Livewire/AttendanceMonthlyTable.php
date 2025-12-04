@@ -69,7 +69,6 @@ class AttendanceMonthlyTable extends DataTableComponent
         return $query;
     }
 
-
     public function builder(): EloquentBuilder
     {
         return $this->baseQuery()
@@ -80,12 +79,12 @@ class AttendanceMonthlyTable extends DataTableComponent
             ])
             ->select(
                 'attendances.employee_id',
-                DB::raw("SUM(CASE WHEN attendances.status IN ('clocked_in','clocked_out') THEN 1 ELSE 0 END) as present_days"),
-                DB::raw("SUM(CASE WHEN attendances.status IN ('absent','unchecked_in') THEN 1 ELSE 0 END) as absent_days"),
-                DB::raw("SUM(CASE WHEN attendances.status = 'on_leave' THEN 1 ELSE 0 END) as leave_days"),
-                DB::raw("SUM(CASE WHEN attendances.status = 'sick_leave' THEN 1 ELSE 0 END) as sick_days"),
-                DB::raw("SUM(CASE WHEN attendances.status = 'off_shift' THEN 1 ELSE 0 END) as off_shift_days"),
-                DB::raw("COUNT(*) as total_days"),
+                DB::raw("COUNT(DISTINCT attendances.date) as total_days"),
+                DB::raw("COUNT(DISTINCT CASE WHEN attendances.status IN ('clocked_in','clocked_out') THEN attendances.date END) as present_days"),
+                DB::raw("COUNT(DISTINCT CASE WHEN attendances.status IN ('absent','unchecked_in') THEN attendances.date END) as absent_days"),
+                DB::raw("COUNT(DISTINCT CASE WHEN attendances.status = 'on_leave' THEN attendances.date END) as leave_days"),
+                DB::raw("COUNT(DISTINCT CASE WHEN attendances.status = 'sick_leave' THEN attendances.date END) as sick_days"),
+                DB::raw("COUNT(DISTINCT CASE WHEN attendances.status = 'off_shift' THEN attendances.date END) as off_shift_days"),
                 DB::raw("SUM(attendances.worked_hours) as total_worked_hours"),
                 DB::raw("SUM(attendances.overtime_hours) as total_ot_hours")
             )

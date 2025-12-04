@@ -61,7 +61,7 @@ class AttendanceDailyExcelExport implements FromView, ShouldAutoSize, WithTitle,
         if ($this->status) {
             if ($this->status === 'absent') {
                 $query->whereIn('status', ['absent', 'unchecked_in']);
-            }  else if ($this->status === 'present') {
+            } else if ($this->status === 'present') {
                 $query->whereIn('status', ['clocked_in', 'clocked_out']);
             } elseif ($this->status === 'unchecked_in') {
                 $query->where('status', 'unchecked_in');
@@ -72,10 +72,12 @@ class AttendanceDailyExcelExport implements FromView, ShouldAutoSize, WithTitle,
 
 
         $attendances = $query->get();
+        $organizationName = auth()->user()->employee->organization->name ?? 'Organization';
+        $title = "{$organizationName} - Attendance Report";
 
         return view('exports.attendance.daily', [
             'attendances' => $attendances,
-            'title' => 'Attendance Report',
+            'title' => $title,
             'date' => now()->format('d M Y, H:i'),
             'startDate' => $this->startDate,
             'endDate' => $this->endDate,
