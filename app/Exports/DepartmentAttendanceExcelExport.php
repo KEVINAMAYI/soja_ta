@@ -16,11 +16,15 @@ use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 
 class DepartmentAttendanceExcelExport implements FromView, ShouldAutoSize, WithTitle, WithStyles
 {
-    protected array $selectedIds;
+    protected array $selectedIds = [];
+    protected $start_date;
+    protected $end_date;
 
-    public function __construct(array $selectedIds = [])
+    public function __construct($selectedIds, $start_date, $end_date)
     {
-        $this->selectedIds = $selectedIds;
+        $this->selectedIds = $selectedIds ?? [];
+        $this->start_date = $start_date;
+        $this->end_date = $end_date;
     }
 
     public function view(): View
@@ -30,19 +34,46 @@ class DepartmentAttendanceExcelExport implements FromView, ShouldAutoSize, WithT
         $query = Attendance::query()
             ->join('employees', 'attendances.employee_id', '=', 'employees.id')
             ->join('departments', 'employees.department_id', '=', 'departments.id')
-            ->where('employees.organization_id', $orgId)
-            ->select(
-                'employees.department_id',
-                'departments.name as department_name',
-                DB::raw("DATE_FORMAT(attendances.date, '%Y-%m') as attendance_month"),
-                DB::raw("SUM(CASE WHEN attendances.status = 'Present' THEN 1 ELSE 0 END) as present_days"),
-                DB::raw("SUM(CASE WHEN attendances.status = 'Absent' THEN 1 ELSE 0 END) as absent_days"),
-                DB::raw("SUM(CASE WHEN attendances.status = 'Leave' THEN 1 ELSE 0 END) as leave_days"),
-                DB::raw("COUNT(*) as total_days"),
-                DB::raw("SUM(attendances.worked_hours) as total_worked_hours"),
-                DB::raw("SUM(attendances.overtime_hours) as total_ot_hours")
-            )
-            ->groupBy('employees.department_id', 'departments.name', DB::raw("DATE_FORMAT(attendances.date, '%Y-%m')"));
+            ->where('employees.organization_id', $orgId);
+
+        // Filter by date range
+        if ($this->start_date) {
+            $query->where('attendances.date', '>=', $this->start_date);
+        }
+
+        if ($this->end_date) {
+            $query->where('attendances.date', '<=', $this->end_date);
+        }
+
+        $query->select(
+            'employees.department_id',
+            'departments.name as department_name',
+
+            // Count unique employees in department
+            DB::raw("COUNT(DISTINCT employees.id) as employee_count"),
+
+            // Present Days (clocked_in/clocked_out)
+            DB::raw("SUM(CASE WHEN attendances.status IN ('clocked_in', 'clocked_out') THEN 1 ELSE 0 END) as present_days"),
+
+            // Absent Days
+            DB::raw("SUM(CASE WHEN attendances.status IN ('absent', 'unchecked_in') THEN 1 ELSE 0 END) as absent_days"),
+
+            // Leave Days
+            DB::raw("SUM(CASE WHEN attendances.status = 'on_leave' THEN 1 ELSE 0 END) as leave_days"),
+
+            // Sick Off Days
+            DB::raw("SUM(CASE WHEN attendances.status = 'sick_leave' THEN 1 ELSE 0 END) as sick_days"),
+
+            // Off Shift Days
+            DB::raw("SUM(CASE WHEN attendances.status = 'off_shift' THEN 1 ELSE 0 END) as off_shift_days"),
+
+            // Total days
+            DB::raw("COUNT(*) as total_days"),
+
+            // Hours
+            DB::raw("SUM(attendances.worked_hours) as total_worked_hours"),
+            DB::raw("SUM(attendances.overtime_hours) as total_ot_hours")
+        )->groupBy('employees.department_id', 'departments.name');
 
         if (!empty($this->selectedIds)) {
             $query->whereIn('department_id', $this->selectedIds);
@@ -54,6 +85,8 @@ class DepartmentAttendanceExcelExport implements FromView, ShouldAutoSize, WithT
             'attendances' => $attendances,
             'title' => 'Department Attendance Report',
             'date' => now()->format('d M Y, H:i'),
+            'startDate' => $this->start_date,
+            'endDate' => $this->end_date,
             'isExcel' => true
         ]);
     }

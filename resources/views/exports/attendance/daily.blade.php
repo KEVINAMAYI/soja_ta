@@ -124,11 +124,27 @@ if ($organization) {
 
     <div class="header-content">
         <h1>{{ $title }}</h1>
-        <div class="meta">Generated on {{ now()->format('d M Y, H:i') }}</div>
+        <div class="meta">Generated on {{ now()->format('d M Y, H:i') }}
+            @if(!empty($startDate) && !empty($endDate))
+                | Period: {{ \Carbon\Carbon::parse($startDate)->format('d M Y') }}
+                - {{ \Carbon\Carbon::parse($endDate)->format('d M Y') }}
+            @endif
+        </div>
     </div>
 </div>
 <table>
     <thead>
+    @if(!empty($isExcel))
+        <tr>
+            <td colspan="9">
+                Generated on {{ now()->format('d M Y, H:i') }}
+                @if(!empty($startDate) && !empty($endDate))
+                    | Period: {{ \Carbon\Carbon::parse($startDate)->format('d M Y') }}
+                    - {{ \Carbon\Carbon::parse($endDate)->format('d M Y') }}
+                @endif
+            </td>
+        </tr>
+    @endif
     <tr>
         <th>Employee</th>
         <th>Email</th>

@@ -86,9 +86,12 @@ class AttendanceExportController extends Controller
     public function exportAttendanceDepartmentPdf(Request $request)
     {
         $ids = $request->input('ids', []);
+        $start_date = $request->input('start_date');
+        $end_date = $request->input('end_date');
+
         $orgId = auth()->user()->employee->organization_id ?? null;
 
-        $attendances = $this->reportService->getByDepartment($orgId, $ids);
+        $attendances = $this->reportService->getByDepartment($orgId, $ids, $start_date, $end_date);
 
         if ($attendances->isEmpty()) {
             return back()->with('error', 'No attendance records found to export.');
@@ -101,6 +104,8 @@ class AttendanceExportController extends Controller
                 'title' => 'Attendance Report',
                 'date' => now()->format('d M Y, H:i'),
                 'isExcel' => false,
+                'startDate' => $start_date,
+                'endDate' => $end_date,
             ],
             'attendance-report',
         );

@@ -124,17 +124,35 @@ if ($organization) {
 
     <div class="header-content">
         <h1>{{ $title }}</h1>
-        <div class="meta">Generated on {{ now()->format('d M Y, H:i') }}</div>
+        <div class="meta">Generated on {{ now()->format('d M Y, H:i') }}
+            @if(!empty($startDate) && !empty($endDate))
+                | Period: {{ \Carbon\Carbon::parse($startDate)->format('d M Y') }}
+                - {{ \Carbon\Carbon::parse($endDate)->format('d M Y') }}
+            @endif
+        </div>
     </div>
 </div>
 <table>
     <thead>
+    @if(!empty($isExcel))
+        <tr>
+            <td colspan="9">
+                Generated on {{ now()->format('d M Y, H:i') }}
+                @if(!empty($startDate) && !empty($endDate))
+                    | Period: {{ \Carbon\Carbon::parse($startDate)->format('d M Y') }}
+                    - {{ \Carbon\Carbon::parse($endDate)->format('d M Y') }}
+                @endif
+            </td>
+        </tr>
+    @endif
     <tr>
         <th>Department</th>
-        <th>Month</th>
+        <th>Employee Count</th>
         <th>Present</th>
         <th>Absent</th>
         <th>Leave</th>
+        <th>Sick</th>
+        <th>Off Shift</th>
         <th>Total Days</th>
         <th>Worked Hours</th>
         <th>Overtime Hours</th>
@@ -144,10 +162,12 @@ if ($organization) {
     @foreach ($attendances as $attendance)
         <tr>
             <td>{{ $attendance->department_name }}</td>
-            <td>{{ $attendance->attendance_month }}</td>
+            <td>{{ $attendance->employee_count }}</td>
             <td>{{ $attendance->present_days }}</td>
             <td>{{ $attendance->absent_days }}</td>
             <td>{{ $attendance->leave_days }}</td>
+            <td>{{ $attendance->sick_days }}</td>
+            <td>{{ $attendance->off_shift_days }}</td>
             <td>{{ $attendance->total_days }}</td>
             <td>{{ $attendance->total_worked_hours }}</td>
             <td>{{ $attendance->total_ot_hours }}</td>

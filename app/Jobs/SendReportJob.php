@@ -5,6 +5,7 @@ namespace App\Jobs;
 use App\Mail\ReportMail;
 use App\Models\ReportSetting;
 use App\Services\ReportGeneratorService;
+use Carbon\Carbon;
 use Illuminate\Bus\Queueable;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -50,7 +51,7 @@ class SendReportJob implements ShouldQueue
                 'organization_id' => $this->organizationId,
             ]);
 
-            $reportFile = $this->generateReport($setting->report_type);
+            $reportFile = $this->generateReport($setting);
 
             if (!$reportFile) {
                 Log::warning('Report generation returned null', [
@@ -65,6 +66,13 @@ class SendReportJob implements ShouldQueue
 
             Mail::to($setting->email)->send(new ReportMail($setting, $reportFile['path']));
 
+            // Update last_run_at and next_run_at
+            $now = Carbon::now();
+            $setting->update([
+                'last_run_at' => $now,
+                'next_run_at' => $this->calculateNextRun($setting, $now),
+            ]);
+
         } catch (\Throwable $e) {
             Log::error('Report sending failed', [
                 'setting_id' => $this->settingId,
@@ -77,51 +85,105 @@ class SendReportJob implements ShouldQueue
         }
     }
 
-    private function generateReport(string $type, array $ids = []): ?array
+    private function generateReport(ReportSetting $setting, array $ids = []): ?array
     {
         try {
-
             $reportService = app(AttendanceReportService::class);
             $reportGenerator = app(ReportGeneratorService::class);
 
+            $type = $setting->report_type;
+            $frequency = $setting->frequency;
+
+
+            // Determine date ranges based on frequency
+            switch ($frequency) {
+                case 'daily':
+                    $startDate = now()->toDateString();
+                    $endDate = now()->toDateString();
+                    break;
+
+                case 'weekly':
+                    // Get the week ending on the configured day_of_week
+                    $dayOfWeek = $setting->day_of_week ?? 'Monday';
+                    $endOfWeek = now()->previous($dayOfWeek);
+
+                    // If today is the configured day and we haven't passed the report time yet,
+                    // use last occurrence of that day
+                    if (now()->isSameDay($endOfWeek)) {
+                        $endOfWeek = now();
+                    }
+
+                    $startDate = $endOfWeek->copy()->subDays(6)->toDateString();
+                    $endDate = $endOfWeek->toDateString();
+                    break;
+
+                case 'monthly':
+                    // If day_of_week is set, calculate based on last occurrence in previous month
+                    if ($setting->day_of_week) {
+                        $dayOfWeek = $setting->day_of_week;
+
+                        // Get last occurrence of the specified day in the previous month
+                        $lastMonth = now()->subMonth();
+                        $lastOccurrence = $lastMonth->endOfMonth()->previous($dayOfWeek);
+
+                        // If that day is actually in the month before, get the last one in our target month
+                        if ($lastOccurrence->month !== $lastMonth->month) {
+                            $lastOccurrence = $lastMonth->endOfMonth();
+                        }
+
+                        $startDate = $lastOccurrence->copy()->subDays(29)->toDateString(); // ~30 days
+                        $endDate = $lastOccurrence->toDateString();
+                    } else {
+                        // Default: Previous full month
+                        $startDate = now()->subMonth()->startOfMonth()->toDateString();
+                        $endDate = now()->subMonth()->endOfMonth()->toDateString();
+                    }
+                    break;
+
+                default:
+                    $startDate = now()->toDateString();
+                    $endDate = now()->toDateString();
+            }
+
+            // Generate report based on type
             switch ($type) {
-                case 'daily_attendance':
-                    $attendances = $reportService->getDaily($this->organizationId, $ids);
+                case 'attendance':
+                    // Always use getDaily for attendance reports
+                    $attendances = $reportService->getDaily(
+                        $this->organizationId,
+                        $ids,
+                        $startDate,
+                        $endDate,
+                        null // status
+                    );
                     $view = 'exports.attendance.daily';
+                    $reportName = 'attendance';
                     break;
 
-                case 'monthly_attendance':
-                    $lastMonth = now()->subMonth()->format('Y-m'); // always last month
-                    $attendances = $reportService->getMonthly($this->organizationId, $ids, $lastMonth);
+                case 'timesheets':
+                    // Always use getMonthly for timesheet reports
+                    // Note: getMonthly signature needs all parameters
+                    $attendances = $reportService->getMonthly(
+                        $this->organizationId,
+                        $ids,
+                        $startDate,
+                        $endDate,
+                        null // department_id
+                    );
                     $view = 'exports.attendance.monthly';
+                    $reportName = 'timesheets';
                     break;
 
-                case 'daily_department_attendance':
-                    $filters = [
-                        'date' => $specificDate ?? now()->toDateString()
-                    ];
-                    $attendances = $reportService->getByDepartment($this->organizationId, $ids, $filters);
+                case 'department':
+                    // Always use getByDepartment for department reports
+                    $attendances = $reportService->getByDepartment(
+                        $this->organizationId,
+                        $ids,
+                        $startDate,
+                        $endDate
+                    );
                     $view = 'exports.attendance.department';
-                    break;
-
-                case 'weekly_department_attendance':
-                    $weekStart = $startOfWeek ?? now()->startOfWeek()->toDateString();
-                    $weekEnd = $endOfWeek ?? now()->endOfWeek()->toDateString();
-                    $filters = [
-                        'week_start' => $weekStart,
-                        'week_end' => $weekEnd
-                    ];
-                    $attendances = $reportService->getByDepartment($this->organizationId, $ids, $filters);
-                    $view = 'exports.attendance.department';
-                    break;
-
-                case 'monthly_department_attendance':
-                    $month = now()->subMonth()->format('Y-m') ?? now()->format('Y-m');
-                    $filters = [
-                        'month' => $month
-                    ];
-                    $attendances = $reportService->getByDepartment($this->organizationId, $ids, $filters);
-                    $view = 'exports.attendance.department';
+                    $reportName = 'department';
                     break;
 
                 default:
@@ -133,19 +195,26 @@ class SendReportJob implements ShouldQueue
                 Log::warning('No attendance records found', [
                     'organization_id' => $this->organizationId,
                     'type' => $type,
+                    'frequency' => $frequency,
+                    'start_date' => $startDate,
+                    'end_date' => $endDate,
                 ]);
                 return null;
             }
 
+            $reportTitle = ucfirst($reportName) . ' Report - ' . ucfirst($frequency);
+
             return $reportGenerator->generate(
                 $view,
                 [
-                    'title' => 'Attendance Report',
+                    'title' => $reportTitle,
                     'date' => now()->format('d M Y, H:i'),
+                    'startDate' => $startDate,
+                    'endDate' => $endDate,
                     'isExcel' => false,
                     'attendances' => $attendances,
                 ],
-                "{$type}-report",
+                "{$reportName}-{$frequency}-report-" . now()->format('Y-m-d'),
                 saveToDisk: true
             );
 
@@ -153,10 +222,43 @@ class SendReportJob implements ShouldQueue
             Log::error('Report generation failed', [
                 'error' => $e->getMessage(),
                 'stack' => $e->getTraceAsString(),
-                'type' => $type,
+                'type' => $setting->report_type,
+                'frequency' => $setting->frequency,
                 'organization_id' => $this->organizationId,
             ]);
             return null;
+        }
+    }
+
+
+    /**
+     * Calculate next run datetime for this report.
+     */
+    private function calculateNextRun(ReportSetting $setting, Carbon $from): ?Carbon
+    {
+        $tzNow = $from->copy()->setTimezone($setting->timezone ?? config('app.timezone'));
+
+        switch ($setting->frequency) {
+            case 'daily':
+                return $tzNow->addDay()->setTimeFromTimeString($setting->time);
+
+            case 'weekly':
+                $dayOfWeek = $setting->day_of_week ?? 'Monday';
+                return $tzNow->copy()->next($dayOfWeek)->setTimeFromTimeString($setting->time);
+
+            case 'monthly':
+                if ($setting->day_of_week) {
+                    $endOfMonth = $tzNow->copy()->endOfMonth();
+                    $nextOccurrence = $endOfMonth->next($setting->day_of_week)->setTimeFromTimeString($setting->time);
+                    if ($nextOccurrence->month !== $tzNow->month) {
+                        $nextOccurrence = $endOfMonth->copy()->addMonth()->endOfMonth()->setTimeFromTimeString($setting->time);
+                    }
+                    return $nextOccurrence;
+                }
+                return $tzNow->copy()->addMonth()->endOfMonth()->setTimeFromTimeString($setting->time);
+
+            default:
+                return null;
         }
     }
 }

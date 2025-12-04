@@ -254,15 +254,38 @@ new class extends Component {
 
             <!-- Top-right button inside card -->
             <div class="d-flex justify-content-end mb-5">
-                <button class="btn d-flex align-items-center gap-2 px-3 py-2"
-                        style="background-color: #EDE9FE; color: #DC2626; border-radius: 8px;"
-                        data-bs-toggle="modal"
-                        data-bs-target="#reportModal">
-                    <iconify-icon icon="mdi:email-newsletter" width="20" height="20"></iconify-icon>
-                    <span>Email Report</span>
-                </button>
-            </div>
 
+                <div style="margin-right:10px;" class="dropdown">
+                    <button class="btn btn-primary dropdown-toggle" type="button"
+                            id="exportDailyDropdown" data-bs-toggle="dropdown"
+                            aria-expanded="false">
+                        <iconify-icon icon="mdi:file-export-outline" width="18" height="18"
+                                      style="margin-right:6px; vertical-align:middle;"></iconify-icon>
+                        Export
+                    </button>
+                    <ul class="dropdown-menu" aria-labelledby="exportDailyDropdown">
+                        <li>
+                            <a href="#"
+                               wire:click.prevent="dispatch('export-dept-excel')"
+                               class="dropdown-item">
+                                <iconify-icon icon="mdi:file-excel" width="16" height="16"
+                                              style="margin-right:6px; vertical-align:middle;"></iconify-icon>
+                                Excel
+                            </a>
+                        </li>
+                        <li>
+                            <a href="#"
+                               wire:click.prevent="dispatch('export-dept-pdf')"
+                               class="dropdown-item">
+                                <iconify-icon icon="mdi:file-pdf-box" width="16" height="16"
+                                              style="margin-right:6px; vertical-align:middle;"></iconify-icon>
+                                PDF
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+
+            </div>
 
             <div class="row">
                 {{-- DATE FILTER --}}

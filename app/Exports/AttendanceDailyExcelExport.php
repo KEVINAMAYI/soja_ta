@@ -18,6 +18,9 @@ use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 class AttendanceDailyExcelExport implements FromView, ShouldAutoSize, WithTitle, WithStyles
 {
     protected array $selectedIds;
+    protected $startDate;
+    protected $endDate;
+    protected $status;
 
     public function __construct(
         array   $selectedIds = [],
@@ -74,6 +77,8 @@ class AttendanceDailyExcelExport implements FromView, ShouldAutoSize, WithTitle,
             'attendances' => $attendances,
             'title' => 'Attendance Report',
             'date' => now()->format('d M Y, H:i'),
+            'startDate' => $this->startDate,
+            'endDate' => $this->endDate,
             'isExcel' => true
         ]);
     }

@@ -1,9 +1,11 @@
 <?php
 
+use App\Jobs\SendReportJob;
 use App\Models\Department;
 use App\Models\Employee;
 use App\Models\Organization;
 use App\Models\ReportSetting;
+use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Jantinnerezo\LivewireAlert\Facades\LivewireAlert;
 use Livewire\Attributes\On;
@@ -11,16 +13,18 @@ use Livewire\Volt\Component;
 
 new class extends Component {
 
-    public $emails = [];
+    public $emails = '';
     public $frequency = 'weekly';
     public $time = '09:00';
     public $day_of_week = null;
     public $timezone = 'Africa/Nairobi';
     public $report_type = 'daily_attendance';
+    public $export_report_type = 'daily_attendance';
 
     // dynamic dropdown data
     public $availableEmails = [];
     public $availableFrequencies = ['daily', 'weekly', 'monthly'];
+    public $reportTypes = ['attendance', 'timesheets', 'department'];
     public $availableDays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
     public $availableTimezones = [];
     public $startDate;
@@ -31,15 +35,22 @@ new class extends Component {
     public $timeSheetsEndDate;
     public $departments = [];
     public $department_id;
+    public $reportSettings;
+
+    protected function rules()
+    {
+        return [
+            'emails' => 'required|string',
+            'export_report_type' => 'required|string',
+            'frequency' => 'required|in:daily,weekly,monthly',
+            'time' => 'required',
+            'day_of_week' => 'nullable|in:Monday,Tuesday,Wednesday,Thursday,Friday,Saturday,Sunday',
+            'timezone' => 'required|string',
+        ];
+    }
 
     public function mount()
     {
-        $orgId = auth()->user()->employee->organization_id ?? null;
-
-        $this->availableEmails = Employee::where('organization_id', $orgId)
-            ->pluck('email')
-            ->filter()
-            ->toArray();
 
         // 👇 preload supported PHP timezones
         $this->availableTimezones = \DateTimeZone::listIdentifiers();
@@ -59,6 +70,46 @@ new class extends Component {
                 ->get();
         }
 
+        $this->loadReportSettings();
+
+    }
+
+
+    public function loadReportSettings()
+    {
+
+        // Simplified - just get raw data first
+        $settings = ReportSetting::where('organization_id', auth()->user()->employee->organization_id)
+            ->orderBy('report_type')
+            ->orderBy('frequency')
+            ->get();
+
+        $this->reportSettings = $settings
+            ->groupBy(function ($item) {
+                // Group by report configuration (excluding recipients)
+                return $item->report_type . '|' .
+                    $item->frequency . '|' .
+                    $item->time . '|' .
+                    ($item->day_of_week ?? 'none');
+            })
+            ->map(function ($group) {
+                $first = $group->first();
+                return [
+                    'report_type' => $first->report_type,
+                    'frequency' => $first->frequency,
+                    'time' => $first->time,
+                    'day_of_week' => $first->day_of_week,
+                    'timezone' => $first->timezone,
+                    'active' => $group->contains(fn($r) => $r->active == true),
+                    'recipients' => $group->pluck('email')->filter()->unique()->values()->toArray(),
+                    'ids' => $group->pluck('id')->toArray(),
+                    'recipient_count' => $group->count(),
+                    'last_run_at' => $first->last_run_at ? Carbon::parse($first->last_run_at) : null,
+                    'next_run_at' => $first->next_run_at ? Carbon::parse($first->next_run_at) : null,
+                ];
+            })
+            ->values()
+            ->toArray();
     }
 
 
@@ -77,17 +128,37 @@ new class extends Component {
 
     public function saveReportSetting()
     {
+        $this->validate();
+
         $orgId = auth()->user()->employee->organization_id ?? null;
+
+        if (!$orgId) {
+            $this->alert('error', 'Organization not found');
+            return;
+        }
 
         try {
             DB::beginTransaction();
 
-            foreach ($this->emails as $email) {
+            // Parse comma-separated emails
+            $emailArray = array_map('trim', explode(',', $this->emails));
+
+            // Filter out empty values and validate emails
+            $emailArray = array_filter($emailArray, function ($email) {
+                return filter_var($email, FILTER_VALIDATE_EMAIL);
+            });
+
+            if (empty($emailArray)) {
+                throw new Exception('Please provide at least one valid email address');
+            }
+
+            // Save settings for each email
+            foreach ($emailArray as $email) {
                 ReportSetting::updateOrCreate(
                     [
                         'organization_id' => $orgId,
                         'email' => $email,
-                        'report_type' => $this->report_type,
+                        'report_type' => $this->export_report_type,
                     ],
                     [
                         'frequency' => $this->frequency,
@@ -101,10 +172,10 @@ new class extends Component {
 
             DB::commit();
 
-            $this->dispatch('hide-report-settings-modal');
+            $this->dispatch('hide-report-modal');
 
             LivewireAlert::title('Awesome!')
-                ->text('Reports settings updated successfully.')
+                ->text('Report settings saved successfully for ' . count($emailArray) . ' recipient(s)')
                 ->success()
                 ->toast()
                 ->position('top-end')
@@ -115,37 +186,234 @@ new class extends Component {
         } catch (Exception $e) {
             DB::rollBack();
 
-            // Log the error for debugging
             logger()->error('Report settings save failed', [
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString()
             ]);
 
-            LivewireAlert::title('Error')
+
+            LivewireAlert::title('Error!')
                 ->text('Something went wrong while saving report settings.')
                 ->error()
                 ->toast()
                 ->position('top-end')
                 ->show();
+
         }
     }
 
 
-    #[On('setEmails')]
-    public function setEmails($emails)
+    public function toggleReportStatus($ids)
     {
-        $this->emails = $emails ?? [];
+
+        try {
+
+            // Normalize input
+            $ids = is_string($ids) ? json_decode($ids, true) : $ids;
+
+            if (empty($ids)) {
+                LivewireAlert::title('Error!')
+                    ->text('Invalid report settings selected.')
+                    ->error()
+                    ->toast()
+                    ->position('top-end')
+                    ->show();
+                return;
+            }
+
+            // Fetch all targeted settings
+            $settings = ReportSetting::whereIn('id', $ids)->get();
+
+            if ($settings->isEmpty()) {
+                LivewireAlert::title('Error!')
+                    ->text('No report settings found.')
+                    ->error()
+                    ->toast()
+                    ->position('top-end')
+                    ->show();
+                return;
+            }
+
+            // Determine new state:
+            // If ALL are active → disable all
+            // If ANY are inactive → enable all
+            $shouldEnable = $settings->contains(fn($s) => !$s->active);
+
+            // Update all
+            ReportSetting::whereIn('id', $ids)->update([
+                'active' => $shouldEnable,
+            ]);
+
+            // Refresh UI (if your component uses it)
+            $this->loadReportSettings();
+
+            // SUCCESS ALERT
+            LivewireAlert::title('Awesome!')
+                ->text(($shouldEnable ? 'Enabled' : 'Disabled') . ' ' . count($ids) . ' report(s) successfully.')
+                ->success()
+                ->toast()
+                ->position('top-end')
+                ->show();
+
+        } catch (\Exception $e) {
+
+            LivewireAlert::title('Error!')
+                ->text('Something went wrong while updating report settings.')
+                ->error()
+                ->toast()
+                ->position('top-end')
+                ->show();
+
+            \Log::error('toggleReportStatus error', [
+                'ids' => $ids,
+                'error' => $e->getMessage(),
+            ]);
+        }
     }
+
+    public function deleteReportSettings($ids)
+    {
+        try {
+            // Normalize input
+            $ids = is_string($ids) ? json_decode($ids, true) : $ids;
+
+            if (empty($ids)) {
+                LivewireAlert::title('Error!')
+                    ->text('Invalid report settings selected for deletion.')
+                    ->error()
+                    ->toast()
+                    ->position('top-end')
+                    ->show();
+                return;
+            }
+
+            // Fetch records before deletion for safety/logging
+            $settings = ReportSetting::whereIn('id', $ids)->get();
+
+            if ($settings->isEmpty()) {
+                LivewireAlert::title('Error!')
+                    ->text('No report settings found to delete.')
+                    ->error()
+                    ->toast()
+                    ->position('top-end')
+                    ->show();
+                return;
+            }
+
+            // Perform delete
+            ReportSetting::whereIn('id', $ids)->delete();
+
+            // Refresh component if applicable
+            $this->loadReportSettings();
+
+            // SUCCESS TOAST
+            LivewireAlert::title('Awesome!')
+                ->text('Deleted ' . count($ids) . ' report setting(s) successfully.')
+                ->success()
+                ->toast()
+                ->position('top-end')
+                ->show();
+
+        } catch (\Exception $e) {
+
+            // ERROR TOAST
+            LivewireAlert::title('Error!')
+                ->text('Something went wrong while deleting report settings.')
+                ->error()
+                ->toast()
+                ->position('top-end')
+                ->show();
+
+            // Log error for debugging
+            \Log::error('deleteGroup error', [
+                'ids' => $ids,
+                'error' => $e->getMessage(),
+            ]);
+        }
+    }
+
+
+    public function runReport($ids)
+    {
+        try {
+            // Normalize the payload
+            $ids = is_string($ids) ? json_decode($ids, true) : $ids;
+
+            if (empty($ids)) {
+                LivewireAlert::title('Error!')
+                    ->text('Invalid report group selection.')
+                    ->error()
+                    ->toast()
+                    ->position('top-end')
+                    ->show();
+                return;
+            }
+
+            // Fetch all settings
+            $settings = ReportSetting::whereIn('id', $ids)->get();
+
+            if ($settings->isEmpty()) {
+                LivewireAlert::title('Error!')
+                    ->text('No report settings found.')
+                    ->error()
+                    ->toast()
+                    ->position('top-end')
+                    ->show();
+                return;
+            }
+
+            // Filter only active ones
+            $activeSettings = $settings->filter(fn($s) => $s->active);
+
+            if ($activeSettings->isEmpty()) {
+                LivewireAlert::title('Error!')
+                    ->text('This report is disabled. Enable it first before running.')
+                    ->error()
+                    ->toast()
+                    ->position('top-end')
+                    ->show();
+                return;
+            }
+
+            // Dispatch jobs immediately (skip schedule rules)
+            foreach ($activeSettings as $setting) {
+                dispatch(new SendReportJob($setting->id, $setting->organization_id));
+            }
+
+            LivewireAlert::title('Awesome!')
+                ->text('Report queued for ' . count($activeSettings) . ' active recipient(s).')
+                ->success()
+                ->toast()
+                ->position('top-end')
+                ->show();
+
+        } catch (\Exception $e) {
+
+            LivewireAlert::title('Error!')
+                ->text('Could not run the report right now.')
+                ->error()
+                ->toast()
+                ->position('top-end')
+                ->show();
+
+            \Log::error('runReport error', [
+                'ids' => $ids,
+                'error' => $e->getMessage(),
+            ]);
+        }
+    }
+
 
     public function resetForm()
     {
-        $this->reset([
-            'emails',
-            'frequency',
-            'time',
-            'day_of_week',
-            'timezone'
-        ]);
+        $this->reset(['emails', 'frequency', 'time', 'day_of_week']);
+        $this->timezone = 'Africa/Nairobi';
+    }
+
+
+    public function closeModal()
+    {
+        $this->dispatch('hide-report-modal');
     }
 
 
@@ -153,44 +421,8 @@ new class extends Component {
     public function setReportType($type)
     {
         $this->report_type = $type;
-
-        // 🔄 Reset to clean defaults
-        $this->emails = [];
-        $this->frequency = 'weekly';
-        $this->time = '09:00';
-        $this->day_of_week = null;
-        $this->timezone = 'Africa/Nairobi';
-
-        // 🎯 Enforce type-specific defaults
-        if ($this->report_type === 'daily_attendance') {
-            $this->frequency = 'daily';
-            $this->day_of_week = null; // irrelevant for daily
-        }
-
-        if ($this->report_type === 'monthly_attendance') {
-            $this->frequency = 'monthly';
-            $this->day_of_week = null; // monthly doesn’t need weekly day
-        }
-
-        // 🏢 Load saved settings for this org + report type (if any)
-        $orgId = auth()->user()->employee->organization_id ?? null;
-
-        $existing = ReportSetting::where('organization_id', $orgId)
-            ->where('report_type', $this->report_type)
-            ->get();
-
-        if ($existing->isNotEmpty()) {
-
-            $first = $existing->first();
-
-            $this->emails = $existing->pluck('email')->toArray();
-            $this->frequency = $first->frequency ?? $this->frequency;
-            $this->time = $first->time ? date('H:i', strtotime($first->time)) : $this->time;
-            $this->day_of_week = $first->day_of_week ?? $this->day_of_week;
-            $this->timezone = $first->timezone ?? $this->timezone;
-        }
-        $this->dispatch('modify-bulk-action');
-
+        $this->startDate = now()->toDateString();
+        $this->endDate = now()->toDateString();
     }
 
 }; ?>
@@ -381,6 +613,21 @@ new class extends Component {
                 </li>
 
 
+                <!-- Leave -->
+                <li class="nav-item" role="presentation">
+                    <button
+                        type="button"
+                        class="nav-link position-relative rounded-0 d-flex align-items-center justify-content-center bg-transparent fs-3 py-3
+                   {{ $report_type === 'scheduled' ? 'active' : '' }}"
+                        onclick="Livewire.dispatch('setReportType', { type: 'scheduled' })"
+                        role="tab"
+                        aria-selected="{{ $report_type === 'scheduled' ? 'true' : 'false' }}">
+                        <i class="ti ti-timeline-event mx-2 fs-6"></i>
+                        <span class="d-none d-md-block">Report Schedules</span>
+                    </button>
+                </li>
+
+
             </ul>
 
             <div class="card-body">
@@ -431,16 +678,6 @@ new class extends Component {
                                                 </ul>
                                             </div>
 
-
-                                            <button class="btn d-flex align-items-center gap-2 px-3 py-2"
-                                                    style="background-color: #EDE9FE; color: #DC2626; border-radius: 8px;"
-                                                    data-bs-toggle="modal"
-                                                    data-bs-target="#reportModal"
-                                                    onclick="Livewire.dispatch('setReportType', { type: 'daily_attendance' })">
-                                                <iconify-icon icon="mdi:email-newsletter" width="20"
-                                                              height="20"></iconify-icon>
-                                                <span>Email Reports</span>
-                                            </button>
                                         </div>
 
                                         <div class="row">
@@ -539,15 +776,6 @@ new class extends Component {
                                                 </ul>
                                             </div>
 
-                                            <button class="btn d-flex align-items-center gap-2 px-3 py-2"
-                                                    style="background-color: #EDE9FE; color: #DC2626; border-radius: 8px;"
-                                                    data-bs-toggle="modal"
-                                                    data-bs-target="#reportModal"
-                                                    onclick="Livewire.dispatch('setReportType', { type: 'monthly_attendance' })">
-                                                <iconify-icon icon="mdi:email-newsletter" width="20"
-                                                              height="20"></iconify-icon>
-                                                <span>Email Reports</span>
-                                            </button>
                                         </div>
 
                                         <div class="row align-items-end mb-4">
@@ -617,7 +845,202 @@ new class extends Component {
                          tabindex="0">
 
                         <livewire:admin.reports.departments/>
+                    </div>
 
+                    <div class="tab-pane fade show {{ $report_type === 'scheduled' ? 'show active' : '' }}"
+                         id="tab-daily-attendance"
+                         role="tabpanel"
+                         aria-labelledby="tab-daily-attendance-tab"
+                         tabindex="0">
+                        <div class="col-12">
+                            <!-- Top-right button inside card -->
+                            <div class="d-flex justify-content-end mb-4">
+                                <button class="btn btn-primary" type="button"
+                                        wire:click="$dispatch('show-report-modal')">
+                                    <i class="ti ti-mail-forward fs-6 me-1"></i>
+                                    Schedule Email Report
+                                </button>
+                            </div>
+                            <table class="table align-middle">
+                                <thead class="table-light">
+                                <tr>
+                                    <th>Report</th>
+                                    <th>Frequency</th>
+                                    <th>Recipients</th>
+                                    <th>Format</th>
+                                    <th>Last Run</th>
+                                    <th>Next Run</th>
+                                    <th>Status</th>
+                                    <th class="text-center">Actions</th>
+                                </tr>
+                                </thead>
+                                <tbody>
+                                @forelse($reportSettings as $setting)
+                                    <tr>
+                                        <!-- Report -->
+                                        <td>
+                                            <strong>{{ ucfirst(str_replace('_', ' ', $setting['report_type'])) }}</strong>
+                                        </td>
+
+                                        <!-- Frequency -->
+                                        <td>
+                                            @if($setting['frequency'] === 'daily')
+                                                <span class="badge bg-info">Daily</span>
+                                                <br>
+                                                <small
+                                                    class="text-muted">{{ date('g:i A', strtotime($setting['time'])) }}</small>
+                                            @elseif($setting['frequency'] === 'weekly')
+                                                <span class="badge bg-primary">Weekly</span>
+                                                <br>
+                                                <small class="text-muted">{{ ucfirst($setting['day_of_week']) }}
+                                                    at {{ date('g:i A', strtotime($setting['time'])) }}</small>
+                                            @elseif($setting['frequency'] === 'monthly')
+                                                <span class="badge bg-warning">Monthly</span>
+                                                <br>
+                                                <small
+                                                    class="text-muted">{{ date('g:i A', strtotime($setting['time'])) }}</small>
+                                            @else
+                                                <span
+                                                    class="badge bg-secondary">{{ ucfirst($setting['frequency']) }}</span>
+                                                <br>
+                                                <small
+                                                    class="text-muted">{{ date('g:i A', strtotime($setting['time'])) }}</small>
+                                            @endif
+                                        </td>
+
+                                        <!-- Recipients - Beautiful Display -->
+                                        <td>
+                                            <div>
+                                                <!-- Count Badge -->
+                                                <span class="badge rounded-pill bg-primary mb-2">
+            {{ count($setting['recipients']) }} recipient{{ count($setting['recipients']) !== 1 ? 's' : '' }}
+        </span>
+
+                                                <!-- Collapsible Recipients List -->
+                                                <div class="collapse" id="recipients-{{ $loop->index }}">
+                                                    <div class="mt-2 p-2 bg-light rounded">
+                                                        @foreach($setting['recipients'] as $email)
+                                                            <div class="d-flex align-items-center gap-2 py-1">
+                                                                <i class="ti ti-mail fs-5 text-primary"></i>
+                                                                <small>{{ $email }}</small>
+                                                            </div>
+                                                        @endforeach
+                                                    </div>
+                                                </div>
+
+                                                <!-- Toggle Button -->
+                                                @if(count($setting['recipients']) > 0)
+                                                    <a
+                                                        class="btn btn-sm btn-link p-0 text-decoration-none collapse-toggle"
+                                                        data-bs-toggle="collapse"
+                                                        href="#recipients-{{ $loop->index }}"
+                                                        data-label-show="View all"
+                                                        data-label-hide="Hide"
+                                                        role="button"
+                                                    >
+                                                        <small>View all</small>
+                                                    </a>
+                                                @endif
+                                            </div>
+                                        </td>
+
+
+                                        <!-- Format -->
+                                        <td><span class="badge bg-light text-dark"><i class="ti ti-file-type-pdf"></i>PDF</span>
+                                        </td>
+
+                                        <!-- Last Run -->
+                                        <td>{{ $setting['last_run_at']?->format('d M Y H:i') ?? 'Never' }}</td>
+                                        <td>{{ $setting['next_run_at']?->format('d M Y H:i') ?? 'Not scheduled' }}</td>
+
+                                        <!-- Status -->
+                                        <td>
+                <span class="badge {{ $setting['active'] ? 'bg-success' : 'bg-secondary' }}">
+                    {{ $setting['active'] ? 'Active' : 'Inactive' }}
+                </span>
+                                        </td>
+
+                                        <!-- Actions -->
+                                        <td class="text-center">
+                                            <div class="dropdown dropstart">
+                                                <a href="#" data-bs-toggle="dropdown" class="text-dark">
+                                                    <i class="ti ti-dots-vertical fs-5"></i>
+                                                </a>
+
+                                                <ul class="dropdown-menu">
+                                                    <!-- Toggle All -->
+                                                    <li>
+                                                        <a style="cursor:pointer;"
+                                                           class="dropdown-item d-flex align-items-center gap-2"
+                                                           wire:click="toggleReportStatus({{ json_encode($setting['ids']) }})">
+                                                            <i class="ti ti-toggle-{{ $setting['active'] ? 'left' : 'right' }} fs-5 text-primary"></i>
+                                                            <span>{{ $setting['active'] ? 'Disable' : 'Enable' }}</span>
+                                                        </a>
+                                                    </li>
+
+                                                    <!-- Run Now -->
+                                                    <li>
+                                                        <a style="cursor:pointer;"
+                                                           class="dropdown-item d-flex align-items-center gap-2"
+                                                           wire:click="runReport({{ json_encode($setting['ids']) }})">
+                                                            <i class="ti ti-player-play fs-5 text-success"></i>
+                                                            <span>Run Now</span>
+                                                        </a>
+                                                    </li>
+
+                                                    <li>
+                                                        <hr class="dropdown-divider">
+                                                    </li>
+
+                                                    <!-- Delete -->
+                                                    <li>
+                                                        <a style="cursor:pointer;"
+                                                           class="dropdown-item d-flex align-items-center gap-2 text-danger"
+                                                           wire:click="deleteReportSettings({{ json_encode($setting['ids']) }})"
+                                                           onclick="confirm('Delete all {{ count($setting['recipients']) }} recipient(s) for this schedule?') || event.stopImmediatePropagation()">
+                                                            <i class="ti ti-trash fs-5"></i>
+                                                            <span>Delete All</span>
+                                                        </a>
+                                                    </li>
+                                                </ul>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                @empty
+                                    <tr>
+                                        <td colspan="8" class="text-center text-muted py-5">
+                                            <i class="ti ti-file-report fs-1 d-block mb-2"></i>
+                                            <p class="mb-0">No scheduled reports found.</p>
+                                            <small>Create your first scheduled report to get started.</small>
+                                        </td>
+                                    </tr>
+                                @endforelse
+                                </tbody>
+                            </table>
+
+                            <!-- Initialize Bootstrap Popovers -->
+                            @push('scripts')
+                                <script>
+                                    document.addEventListener('DOMContentLoaded', function () {
+                                        // Initialize all popovers
+                                        var popoverTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="popover"]'));
+                                        var popoverList = popoverTriggerList.map(function (popoverTriggerEl) {
+                                            return new bootstrap.Popover(popoverTriggerEl);
+                                        });
+                                    });
+
+                                    // Re-initialize after Livewire updates
+                                    document.addEventListener('livewire:load', function () {
+                                        Livewire.hook('message.processed', (message, component) => {
+                                            var popoverTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="popover"]'));
+                                            var popoverList = popoverTriggerList.map(function (popoverTriggerEl) {
+                                                return new bootstrap.Popover(popoverTriggerEl);
+                                            });
+                                        });
+                                    });
+                                </script>
+                            @endpush
+                        </div>
                     </div>
 
                 </div>
@@ -625,73 +1048,82 @@ new class extends Component {
         </div>
     </div>
 
-
-    <div class="modal fade" id="reportModal" tabindex="-1"
-         aria-labelledby="reportModalLabel"
-         aria-hidden="true"
-         wire:ignore.self>
+    <div class="modal fade"
+         id="reportModal"
+         tabindex="-1"
+         wire:ignore.self
+         x-data="{ modal: null }"
+         x-on:show-report-modal.window="
+        modal = modal ?? new bootstrap.Modal($el);
+        modal.show(); "
+         x-on:hide-report-modal.window="
+        modal?.hide(); ">
 
         <div class="modal-dialog modal-xl modal-dialog-centered">
             <div class="modal-content rounded-3">
                 <form wire:submit.prevent="saveReportSetting">
                     <div class="modal-header">
                         <h5 class="modal-title fw-semibold" id="reportModalLabel">
-                            <span class="me-2">&#9881;</span>
-                            {{ $report_type === 'daily_attendance' ? 'Daily Report Email Settings' : 'Monthly Report Email Settings' }}
+                            <i class="ti ti-mail-forward me-2 text-primary"></i>
+                            Schedule Email Report
                         </h5>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                     </div>
+
                     <div class="modal-body px-4">
                         <div class="row">
-                            <!-- Emails (dynamic from organizations) -->
-                            <div class="mb-3 col-12" wire:ignore>
-                                <select class="form-control select2" required multiple
-                                        data-placeholder="Select recipients"
-                                        wire:model="emails">
-                                    @foreach($availableEmails as $email)
-                                        <option value="{{ $email }}">{{ $email }}</option>
+                            <!-- Recipients - Changed to textarea for comma-separated emails -->
+                            <div class="mb-3 col-12">
+                                <label class="form-label fw-semibold">Recipients</label>
+                                <textarea
+                                    class="form-control"
+                                    rows="2"
+                                    required
+                                    wire:model="emails"></textarea>
+                                <small class="text-muted">Separate multiple email addresses with commas</small>
+                                @error('emails')<small class="text-danger d-block">{{ $message }}</small>@enderror
+                            </div>
+
+                            <div class="mb-3 col-md-12">
+                                <label class="form-label fw-semibold">Report Type</label>
+                                <select wire:model="export_report_type" class="form-select">
+                                    <option value="">-- None --</option>
+                                    @foreach($reportTypes as $type)
+                                        <option value="{{ $type }}">{{ ucfirst($type) }}</option>
                                     @endforeach
                                 </select>
-                                @error('emails') <small class="text-danger">{{ $message }}</small> @enderror
+                                @error('export_report_type')<small class="text-danger">{{ $message }}</small>@enderror
                             </div>
 
                             <!-- Frequency -->
                             <div class="mb-3 col-md-6">
                                 <label class="form-label fw-semibold">Frequency</label>
-
-                                @if($report_type === 'daily_attendance')
-                                    <input type="text" class="form-control" value="Daily" readonly>
-                                    <input type="hidden" wire:model="frequency">
-                                @elseif($report_type === 'monthly_attendance')
-                                    <input type="text" class="form-control" value="Monthly" readonly>
-                                    <input type="hidden" wire:model="frequency">
-                                @else
-                                    <select wire:model="frequency" required class="form-select">
-                                        @foreach($availableFrequencies as $freq)
-                                            <option value="{{ $freq }}">{{ ucfirst($freq) }}</option>
-                                        @endforeach
-                                    </select>
-                                @endif
+                                <select wire:model="frequency" required class="form-select">
+                                    <option value="">-- Select --</option>
+                                    @foreach($availableFrequencies as $freq)
+                                        <option value="{{ $freq }}">{{ ucfirst($freq) }}</option>
+                                    @endforeach
+                                </select>
+                                @error('frequency')<small class="text-danger">{{ $message }}</small>@enderror
                             </div>
 
                             <!-- Time -->
                             <div class="mb-3 col-md-6">
                                 <label class="form-label fw-semibold">Time</label>
                                 <input type="time" wire:model="time" required class="form-control">
+                                @error('time')<small class="text-danger">{{ $message }}</small>@enderror
                             </div>
 
                             <!-- Day of Week -->
-                            @if($report_type === 'monthly_attendance')
-                                <div class="mb-3 col-md-6">
-                                    <label class="form-label fw-semibold">Day of Week</label>
-                                    <select wire:model="day_of_week" required class="form-select">
-                                        <option value="">-- Select --</option>
-                                        @foreach($availableDays as $day)
-                                            <option value="{{ $day }}">{{ $day }}</option>
-                                        @endforeach
-                                    </select>
-                                </div>
-                            @endif
+                            <div class="mb-3 col-md-6">
+                                <label class="form-label fw-semibold">Day of Week (optional)</label>
+                                <select wire:model="day_of_week" class="form-select">
+                                    <option value="">-- None --</option>
+                                    @foreach($availableDays as $day)
+                                        <option value="{{ $day }}">{{ $day }}</option>
+                                    @endforeach
+                                </select>
+                                @error('day_of_week')<small class="text-danger">{{ $message }}</small>@enderror
+                            </div>
 
                             <!-- Timezone -->
                             <div class="mb-3 col-md-6">
@@ -701,25 +1133,24 @@ new class extends Component {
                                         <option value="{{ $tz }}">{{ $tz }}</option>
                                     @endforeach
                                 </select>
+                                @error('timezone')<small class="text-danger">{{ $message }}</small>@enderror
                             </div>
-
-                            <!-- Active Emails (Gradient Spans) -->
-                            <div class="mt-4">
-                                <h6 class="fw-semibold">Active Users</h6>
-                                <div class="d-flex flex-wrap gap-2">
-                                    @foreach($emails as $email)
-                                        <span class="email-badge">{{ $email }}</span>
-                                    @endforeach
-                                </div>
-                            </div>
-
                         </div>
                     </div>
 
                     <div class="modal-footer px-4 py-3">
-                        <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+                        <button type="button"
+                                class="btn btn-light"
+                                wire:click="closeModal">
+                            Cancel
+                        </button>
+
                         <button type="submit" class="btn btn-success">
-                            Save Settings
+                            <span wire:loading.remove wire:target="saveReportSetting">Save Settings</span>
+                            <span wire:loading wire:target="saveReportSetting">
+                            <span class="spinner-border spinner-border-sm me-1" role="status"></span>
+                            Saving...
+                        </span>
                         </button>
                     </div>
                 </form>
@@ -731,47 +1162,49 @@ new class extends Component {
 </div>
 
 @push('scripts')
-    <script src="assets/libs/select2/dist/js/select2.full.min.js"></script>
-
     <script>
-        function initializeMultiSelect(context = document) {
-            $(context).find('select.select2[multiple]').each(function () {
-                const $el = $(this);
-                const parentModal = $el.closest('.modal');
+        document.addEventListener('DOMContentLoaded', () => {
+            const modalEl = document.getElementById('reportModal');
 
-                $el.select2({
-                    width: '100%',
-                    dropdownParent: parentModal.length ? parentModal : $(document.body),
-                    placeholder: $el.data('placeholder') || 'Select options',
-                    allowClear: $el.data('allow-clear') === "true",
-                    minimumResultsForSearch: 0 // always show search box
-                });
-
-                // 🔑 Sync values to Livewire on change
-                $el.on('change', function () {
-                    let selected = $(this).val();
-                    Livewire.dispatch('setEmails', {emails: selected});
-                });
+            // Initialize modal with static backdrop (prevents outside click from closing)
+            const noBackdropModal = new bootstrap.Modal(modalEl, {
+                backdrop: false, // Setting to false removes the backdrop entirely
+                keyboard: false
             });
-        }
 
-        document.addEventListener('DOMContentLoaded', function () {
-            initializeMultiSelect();
+            // Helper function to clean up lingering backdrop elements
+            const removeLingeringBackdrop = () => {
+                // Find all backdrop elements created by Bootstrap and remove them
+                const backdrops = document.querySelectorAll('.modal-backdrop');
+                backdrops.forEach(backdrop => {
+                    backdrop.remove();
+                });
+                // Also ensure the body class is clean (Bootstrap handles this, but good practice)
+                document.body.classList.remove('modal-open');
+                document.body.style.overflow = '';
+                document.body.style.paddingRight = '';
+            };
+
+
+            // Show modal via Livewire
+            window.addEventListener('show-report-modal', () => {
+                modalInstance.show();
+            });
+
+            // Hide modal via Livewire (THE FIX IS HERE)
+            window.addEventListener('hide-report-modal', () => {
+                modalInstance.hide();
+
+                // CRITICAL FIX: Manually remove the backdrop element after the hide call.
+                // We use a slight delay (100ms) to ensure Bootstrap finishes its internal transition.
+                setTimeout(removeLingeringBackdrop, 100);
+            });
+
         });
-
-        // Re-initialize inside modals
-        $(document).on('shown.bs.modal', function (e) {
-            initializeMultiSelect(e.target);
-        });
-
-        window.addEventListener('hide-report-settings-modal', () => {
-            bootstrap.Modal.getInstance(document.getElementById('reportModal'))?.hide();
-        });
-
-
     </script>
-
 @endpush
+
+
 
 
 

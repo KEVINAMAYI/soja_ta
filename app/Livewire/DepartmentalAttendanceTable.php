@@ -186,23 +186,23 @@ class DepartmentalAttendanceTable extends DataTableComponent
         ];
     }
 
-    public function bulkActions(): array
-    {
-        return [
-            'exportExcel' => 'Export Excel',
-            'exportPdf' => 'Export PDF'
-        ];
-    }
-
+    #[On('export-dept-excel')]
     public function exportExcel()
     {
-        return Excel::download(new DepartmentAttendanceExcelExport($this->getSelected()), 'department-attendance.xlsx');
+        return Excel::download(new DepartmentAttendanceExcelExport($this->getSelected(), $this->startDate, $this->endDate), 'department-attendance.xlsx');
     }
 
+    #[On('export-dept-pdf')]
     public function exportPdf()
     {
         $ids = $this->getSelected();
-        $url = route('department-attendance.export.pdf', ['ids' => $ids]);
+
+        $url = route('department-attendance.export.pdf', [
+            'ids' => $this->getSelected(),
+            'start_date' => $this->startDate,
+            'end_date' => $this->endDate,
+        ]);
+
         return redirect()->to($url);
     }
 }
