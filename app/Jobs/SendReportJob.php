@@ -68,10 +68,14 @@ class SendReportJob implements ShouldQueue
 
             // Update last_run_at and next_run_at
             $now = Carbon::now();
-            $setting->update([
+            $nextRun = $this->calculateNextRun($setting, $now);
+
+            $updated = $setting->update([
                 'last_run_at' => $now,
-                'next_run_at' => $this->calculateNextRun($setting, $now),
+                'next_run_at' => $nextRun,
             ]);
+
+
 
         } catch (\Throwable $e) {
             Log::error('Report sending failed', [

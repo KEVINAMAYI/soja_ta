@@ -868,8 +868,8 @@ new class extends Component {
                                     <th>Frequency</th>
                                     <th>Recipients</th>
                                     <th>Format</th>
-                                    <th>Last Run</th>
-                                    <th>Next Run</th>
+{{--                                    <th>Last Run</th>--}}
+{{--                                    <th>Next Run</th>--}}
                                     <th>Status</th>
                                     <th class="text-center">Actions</th>
                                 </tr>
@@ -950,8 +950,8 @@ new class extends Component {
                                         </td>
 
                                         <!-- Last Run -->
-                                        <td>{{ $setting['last_run_at']?->format('d M Y H:i') ?? 'Never' }}</td>
-                                        <td>{{ $setting['next_run_at']?->format('d M Y H:i') ?? 'Not scheduled' }}</td>
+{{--                                        <td>{{ $setting['last_run_at']?->format('d M Y H:i') ?? 'Never' }}</td>--}}
+{{--                                        <td>{{ $setting['next_run_at']?->format('d M Y H:i') ?? 'Not scheduled' }}</td>--}}
 
                                         <!-- Status -->
                                         <td>

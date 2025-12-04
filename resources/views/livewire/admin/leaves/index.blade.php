@@ -302,7 +302,6 @@ new class extends Component {
             <thead class="table-light">
             <tr>
                 <th>Employee</th>
-                <th>Department</th>
                 <th>Leave Type</th>
                 <th>Start</th>
                 <th>End</th>
@@ -338,10 +337,15 @@ new class extends Component {
                                         <i class="ti ti-id me-1 text-success"></i>ID: {{ $employee->id_number }}
                                     </small>
                                 @endif
+
+                                @if($employee->department->name)
+                                    <small class="text-muted d-block">
+                                        <i class="ti ti-building me-1 text-success"></i>DEPT: {{ $employee->department->name }}
+                                    </small>
+                                @endif
                             </div>
                         </div>
                     </td>
-                    <td>{{ $leave->department->name ?? '-' }}</td>
                     <td>{{ $leave->leave_type }}</td>
                     <td>{{ $leave->start_date->format('d/m/Y') }}</td>
                     <td>{{ $leave->end_date->format('d/m/Y') }}</td>
