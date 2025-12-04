@@ -20,6 +20,8 @@ class ReportSetting extends Model
         'day_of_week',
         'timezone',
         'active',
+        'last_run_at',
+        'next_run_at',
     ];
 
     protected $casts = [
