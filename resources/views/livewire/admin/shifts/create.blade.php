@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\Employee;
 use Carbon\Carbon;
 use Jantinnerezo\LivewireAlert\Facades\LivewireAlert;
 use Livewire\Attributes\On;
@@ -8,10 +9,19 @@ use App\Models\Shift;
 
 new class extends Component {
 
+
     public $shifts = [];
     public $selectedShift = [];
     public $showPatternModal = false;
     public $showAddShift = false;
+    public string $activeTab = 'shift_settings';
+    public string $tabTitle;
+    public string $tabIcon;
+    public $assignedStaffIds = [];
+    public $availableStaff = [];
+    public $assignedStaff = [];
+    public $assigningShift;
+    public $searchTerm = '';
 
     public $shiftPatterns = [
         ['id' => 'weekdays', 'name' => 'Weekdays Only', 'description' => 'Monday to Friday'],
@@ -21,12 +31,35 @@ new class extends Component {
         ['id' => 'custom', 'name' => 'Custom Days', 'description' => 'Select specific days']
     ];
 
+
+    public function rules()
+    {
+        return [
+            'assignedStaffIds' => 'array',
+            'assignedStaffIds.*' => 'exists:employees,id',
+        ];
+    }
+
     public $dayAbbreviations = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
     public $dayNames = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
     public function mount()
     {
         $this->loadShifts();
+
+
+        // After saving — now reload truth from DB
+        $this->assignedStaffIds = Employee::where('shift_id', $this->selectedShift['id'])
+            ->pluck('id')
+            ->toArray();
+
+        $this->assigningShift = Shift::findOrFail($this->selectedShift['id']);
+
+        $this->assignedStaff = Employee::whereIn('id', $this->assignedStaffIds)
+            ->with('shift')
+            ->get();
+
+        $this->searchEmployees();
     }
 
     public function loadShifts()
@@ -78,6 +111,128 @@ new class extends Component {
         if ($key !== false) {
             $this->selectedShift = $this->shifts[$key];
         }
+
+        $this->assignedStaffIds = Employee::where('shift_id', $shiftId)
+            ->pluck('id')
+            ->toArray();
+
+        $this->assigningShift = Shift::findOrFail($shiftId);
+
+        $this->assignedStaff = Employee::whereIn('id', $this->assignedStaffIds)
+            ->with('shift')
+            ->get();
+
+        $this->searchEmployees();
+
+    }
+
+
+// Alternative: If you want to add more flexibility
+    #[On('searchStaff')]
+    public function searchEmployees()
+    {
+        $organizationId = auth()->user()->employee->organization_id;
+
+        $query = Employee::query()
+            ->where('organization_id', $organizationId);
+
+        // Apply search only if searchTerm exists and is not empty
+        if (!empty($this->searchTerm)) {
+            $query->where(function ($q) {
+                $q->where('name', 'like', '%' . $this->searchTerm . '%')
+                    ->orWhereHas('shift', function ($sq) {
+                        $sq->where('name', 'like', '%' . $this->searchTerm . '%');
+                    })
+                    ->orWhereHas('department', function ($sq) {
+                        $sq->where('name', 'like', '%' . $this->searchTerm . '%');
+                    });
+            });
+        }
+
+        $this->availableStaff = $query->with('shift')->get();
+    }
+
+    public function getAssignedStaff()
+    {
+
+        $this->shiftId = $this->selectedShift['id'];
+        $this->assigningShift = Shift::findOrFail($this->shiftId);
+
+        $this->assignedStaff = Employee::whereIn('id', $this->assignedStaffIds)
+            ->with('shift')
+            ->get();
+
+    }
+
+
+    public function assignStaff($staffId)
+    {
+        if (!in_array($staffId, $this->assignedStaffIds)) {
+            $this->assignedStaffIds[] = $staffId;
+        }
+
+        $this->getAssignedStaff();
+
+    }
+
+    public function removeStaff($staffId)
+    {
+        $this->assignedStaffIds = array_values(
+            array_filter($this->assignedStaffIds, fn($id) => $id != $staffId)
+        );
+
+        $this->getAssignedStaff();
+
+    }
+
+    public function saveAssignment()
+    {
+
+        $this->validate();
+
+        try {
+
+            // Get organization_id
+            $organizationId = auth()->user()->employee->organization_id;
+
+            Employee::where('organization_id', $organizationId)
+                ->where('shift_id', $this->selectedShift['id'])
+                ->whereNotIn('id', $this->assignedStaffIds)
+                ->update(['shift_id' => null]);
+
+            Employee::where('organization_id', $organizationId)
+                ->whereIn('id', $this->assignedStaffIds)
+                ->update(['shift_id' => $this->selectedShift['id']]);
+
+            $this->getAssignedStaff();
+            $this->searchEmployees();
+
+            LivewireAlert::title('Awesome!')
+                ->text('Staff assignment saved successfully!')
+                ->success()
+                ->toast()
+                ->position('top-end')
+                ->show();
+
+
+        } catch (\Exception $e) {
+
+            LivewireAlert::title('Error!')
+                ->text('Failed to save assignment!')
+                ->error()
+                ->toast()
+                ->position('top-end')
+                ->show();
+        }
+    }
+
+    public function getInitials($name)
+    {
+        $words = explode(' ', $name);
+        if (count($words) >= 2) {
+            return strtoupper(substr($words[0], 0, 1) . substr($words[1], 0, 1));
+        }
+        return strtoupper(substr($name, 0, 2));
     }
 
     public function updateShiftField($field, $value)
@@ -308,6 +463,38 @@ new class extends Component {
     }
 
 
+    #[On('tabChanged')]
+    public function tabChanged($tabId)
+    {
+
+        $this->activeTab = $tabId;
+        $this->changeBreadcrumb();
+
+    }
+
+    public function changeBreadcrumb()
+    {
+        switch ($this->activeTab) {
+
+            case 'shift_settings':
+                $this->tabTitle = 'Shift Settings';
+                $this->tabIcon = '<iconify-icon icon="mdi:calendar-clock-outline" class="fs-5"></iconify-icon>';
+                break;
+
+            case 'assign_employee':
+                $this->tabTitle = 'Assign Employee';
+                $this->tabIcon = '<iconify-icon icon="mdi:account-multiple-check-outline" class="fs-5"></iconify-icon>';
+                $this->getAssignedStaff();
+                break;
+
+            default:
+                $this->tabTitle = 'shift_settings';
+                $this->tabIcon = '<iconify-icon icon="mdi:cog-outline" class="fs-5"></iconify-icon>';
+                break;
+        }
+
+    }
+
 }; ?>
 
 @push('styles')
@@ -528,6 +715,296 @@ new class extends Component {
             color: #dc3545;
         }
 
+        .staff-assignment-card {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            padding: 1.5rem;
+        }
+
+        .section-header {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .section-header svg {
+            width: 24px;
+            height: 24px;
+            color: #dc3545;
+        }
+
+        .section-header h2 {
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: #212529;
+            margin: 0;
+        }
+
+        .alert-success {
+            margin-bottom: 1rem;
+            padding: 1rem;
+            background-color: #d1e7dd;
+            border: 1px solid #badbcc;
+            border-radius: 8px;
+            color: #0f5132;
+        }
+
+        .alert-error {
+            margin-bottom: 1rem;
+            padding: 1rem;
+            background-color: #f8d7da;
+            border: 1px solid #f5c2c7;
+            border-radius: 8px;
+            color: #842029;
+        }
+
+        .section-title {
+            font-size: 0.875rem;
+            font-weight: 500;
+            color: #6c757d;
+            margin-bottom: 1rem;
+        }
+
+        .search-wrapper {
+            position: relative;
+            margin-bottom: 1rem;
+        }
+
+        .search-icon {
+            position: absolute;
+            left: 12px;
+            top: 12px;
+            width: 20px;
+            height: 20px;
+            color: #6c757d;
+        }
+
+        .search-input {
+            width: 100%;
+            padding: 0.75rem 1rem 0.75rem 2.5rem;
+            border: 1px solid #ced4da;
+            border-radius: 8px;
+            font-size: 1rem;
+            transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+        }
+
+        .search-input:focus {
+            outline: none;
+            border-color: #0d6efd;
+            box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+        }
+
+        .staff-list {
+            max-height: 400px;
+            overflow-y: auto;
+            margin-bottom: 2rem;
+        }
+
+        .staff-list::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .staff-list::-webkit-scrollbar-track {
+            background: #f8f9fa;
+            border-radius: 4px;
+        }
+
+        .staff-list::-webkit-scrollbar-thumb {
+            background: #dee2e6;
+            border-radius: 4px;
+        }
+
+        .staff-list::-webkit-scrollbar-thumb:hover {
+            background: #adb5bd;
+        }
+
+        .staff-item {
+            padding: 1rem;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            margin-bottom: 0.5rem;
+            transition: all 0.2s ease;
+        }
+
+        .staff-item.clickable {
+            cursor: pointer;
+        }
+
+        .staff-item.clickable:hover {
+            border-color: #0d6efd;
+            background-color: #e7f1ff;
+        }
+
+        .staff-item.disabled {
+            background-color: #f8f9fa;
+            opacity: 0.6;
+            border-color: #dee2e6;
+            cursor: not-allowed;
+        }
+
+        .staff-item.assigned-item {
+            background-color: #d1e7dd;
+            border-color: #badbcc;
+        }
+
+        .staff-item-content {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .staff-avatar {
+            width: 40px;
+            height: 40px;
+            background: linear-gradient(135deg, #0d6efd 0%, #6610f2 100%);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: 600;
+            font-size: 0.875rem;
+            flex-shrink: 0;
+        }
+
+        .staff-avatar.assigned {
+            background: linear-gradient(135deg, #198754 0%, #20c997 100%);
+        }
+
+        .staff-info {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .staff-name {
+            font-weight: 500;
+            color: #212529;
+            margin: 0 0 0.25rem 0;
+        }
+
+        .staff-details {
+            font-size: 0.875rem;
+            color: #6c757d;
+            margin: 0;
+        }
+
+        .assigned-badge {
+            color: #198754;
+            font-size: 0.875rem;
+            font-weight: 500;
+            flex-shrink: 0;
+        }
+
+        .remove-button {
+            padding: 0.5rem;
+            background: transparent;
+            border: none;
+            color: #dc3545;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background-color 0.2s ease;
+            flex-shrink: 0;
+        }
+
+        .remove-button:hover {
+            background-color: #f8d7da;
+        }
+
+        .remove-button svg {
+            width: 20px;
+            height: 20px;
+            display: block;
+        }
+
+        .empty-state {
+            border: 2px dashed #dee2e6;
+            border-radius: 8px;
+            padding: 3rem 2rem;
+            text-align: center;
+        }
+
+        .empty-state svg {
+            width: 48px;
+            height: 48px;
+            color: #adb5bd;
+            margin: 0 auto 0.75rem;
+            display: block;
+        }
+
+        .empty-state-text {
+            color: #6c757d;
+            margin: 0 0 0.25rem 0;
+            font-size: 1rem;
+        }
+
+        .empty-state-subtext {
+            color: #adb5bd;
+            margin: 0;
+            font-size: 0.875rem;
+        }
+
+        .assigned-section {
+            border-top: 2px solid #dee2e6;
+            padding-top: 1.5rem;
+            margin-top: 1.5rem;
+        }
+
+        .assigned-list {
+            max-height: 300px;
+            overflow-y: auto;
+            margin-bottom: 1rem;
+        }
+
+        .summary-box {
+            background-color: #cfe2ff;
+            border: 1px solid #b6d4fe;
+            border-radius: 8px;
+            padding: 1rem;
+            margin-top: 1rem;
+        }
+
+        .summary-content {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .summary-label {
+            font-size: 0.875rem;
+            font-weight: 500;
+            color: #084298;
+            margin: 0 0 0.25rem 0;
+        }
+
+        .summary-value {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: #0a58ca;
+            margin: 0;
+        }
+
+        .save-button {
+            padding: 0.5rem 1rem;
+            background-color: #0d6efd;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background-color 0.2s ease;
+        }
+
+        .save-button:hover:not(:disabled) {
+            background-color: #0b5ed7;
+        }
+
+        .save-button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
     </style>
 @endpush
 
@@ -545,17 +1022,18 @@ new class extends Component {
                     <p class="text-muted small mb-0">Manage automated clock-out and overtime settings</p>
                 </div>
             </div>
-            <button wire:click="saveShift" class="btn btn-primary">
-                <svg width="16" height="16" class="me-2" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z" fill="none"
-                          stroke="currentColor" stroke-width="2"/>
-                    <polyline points="17 21 17 13 7 13 7 21" stroke="currentColor" stroke-width="2"/>
-                    <polyline points="7 3 7 8 15 8" stroke="currentColor" stroke-width="2"/>
-                </svg>
-                Save Changes
-            </button>
+            @if($activeTab === 'shift_settings')
+                <button wire:click="saveShift" class="btn btn-primary">
+                    <svg width="16" height="16" class="me-2" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z" fill="none"
+                              stroke="currentColor" stroke-width="2"/>
+                        <polyline points="17 21 17 13 7 13 7 21" stroke="currentColor" stroke-width="2"/>
+                        <polyline points="7 3 7 8 15 8" stroke="currentColor" stroke-width="2"/>
+                    </svg>
+                    Save Changes
+                </button>
+            @endif
         </div>
-
     </div>
 
     <div class="d-flex">
@@ -653,504 +1131,710 @@ new class extends Component {
         <!-- Main Content -->
         <div class="shift-content">
             <div style="max-width: 1000px;">
-                <!-- Shift Details -->
-                <div class="config-section">
-                    <div class="section-header">
-                        <div class="d-flex justify-content-between align-items-center">
-                            <div>
-                                <input type="text"
-                                       wire:model.defer="selectedShift.name"
-                                       class="form-control form-control-lg border-0 p-0 h4 mb-1">
-                                <p class="text-muted small mb-0">Configure automated time tracking rules</p>
-                            </div>
-                            <button class="btn btn-link text-danger">
-                                <svg width="20" height="20" fill="currentColor" viewBox="0 0 24 24">
-                                    <polyline points="3 6 5 6 21 6"/>
-                                    <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
-                                </svg>
-                            </button>
-                        </div>
-                    </div>
 
-                    <div class="section-body">
-                        <h5 class="mb-3">
-                            <svg width="20" height="20" class="text-primary me-2" fill="currentColor"
-                                 viewBox="0 0 24 24">
-                                <rect x="3" y="4" width="18" height="18" rx="2" ry="2" fill="none" stroke="currentColor"
-                                      stroke-width="2"/>
-                                <line x1="16" y1="2" x2="16" y2="6" stroke="currentColor" stroke-width="2"/>
-                                <line x1="8" y1="2" x2="8" y2="6" stroke="currentColor" stroke-width="2"/>
-                                <line x1="3" y1="10" x2="21" y2="10" stroke="currentColor" stroke-width="2"/>
-                            </svg>
-                            Basic Schedule
-                        </h5>
+                <ul class="nav nav-pills user-profile-tab" id="pills-tab" role="tablist">
+                    <!-- Company Information -->
+                    <li class="nav-item" role="presentation">
+                        <button
+                            class="nav-link position-relative rounded-0 {{ $activeTab === 'shift_settings' ? 'active' : '' }} d-flex align-items-center justify-content-center bg-transparent fs-3 py-3"
+                            id="tab-shift-settings-tab"
+                            data-bs-toggle="pill"
+                            data-bs-target="#tab-company-information"
+                            type="button"
+                            role="tab"
+                            aria-controls="tab-shift-settings"
+                            aria-selected="true">
+                            <i class="ti ti-clock mx-1 fs-6"></i>
+                            <span class="d-none d-md-block">Shift Settings</span>
+                        </button>
+                    </li>
 
-                        <div class="row g-3">
-                            <div class="col-md-4">
-                                <label class="form-label">Start Time</label>
-                                <input type="time"
-                                       wire:input="$dispatch('time-selected')"
-                                       wire:model="selectedShift.startTime"
-                                       class="form-control">
-                            </div>
-                            <div class="col-md-4">
-                                <label class="form-label">End Time</label>
-                                <input type="time"
-                                       wire:input="$dispatch('time-selected')"
-                                       wire:model="selectedShift.endTime"
-                                       class="form-control">
-                            </div>
-                            <div class="col-md-4">
-                                <label class="form-label">Shift Duration (hours)</label>
-                                <input type="number"
-                                       wire:model="selectedShift.duration"
-                                       class="form-control"
-                                       min="1" max="24" step="0.5">
-                            </div>
-                        </div>
-                    </div>
-                </div>
+                    <!-- Roles & Permissions -->
+                    <li class="nav-item" role="presentation">
+                        <button
+                            class="nav-link position-relative rounded-0 {{ $activeTab === 'assign_employee' ? 'active' : '' }} d-flex align-items-center justify-content-center bg-transparent fs-3 py-3"
+                            id="tab-assign-employee-tab"
+                            data-bs-toggle="pill"
+                            data-bs-target="#tab-roles-permissions"
+                            type="button"
+                            role="tab"
+                            aria-controls="tab-roles-permissions"
+                            aria-selected="false">
+                            <i class="ti ti-user-circle mx-1 fs-6"></i>
+                            <span class="d-none d-md-block">Assign Employee</span>
+                        </button>
+                    </li>
 
-                <!-- Shift Pattern -->
-                <div class="config-section">
-                    <div class="section-header">
-                        <div class="d-flex justify-content-between align-items-center">
-                            <h5 class="mb-0">
-                                <svg width="20" height="20" class="text-primary me-2" fill="currentColor"
-                                     viewBox="0 0 24 24">
-                                    <polyline points="23 4 23 10 17 10" fill="none" stroke="currentColor"
-                                              stroke-width="2"/>
-                                    <path d="M20.49 15a9 9 0 11-2.12-9.36L23 10" fill="none" stroke="currentColor"
-                                          stroke-width="2"/>
-                                </svg>
-                                Shift Pattern
-                            </h5>
-                            <button wire:click="$set('showPatternModal', true)" class="btn btn-sm btn-primary">
-                                Configure Pattern
-                            </button>
-                        </div>
-                    </div>
+                </ul>
 
-                    <div class="section-body">
-                        <div class="row g-4">
-                            <div class="col-md-6">
-                                <label class="form-label fw-bold">Pattern Type</label>
-                                @foreach($shiftPatterns as $pattern)
-                                    <div class="form-check mb-2">
-                                        <input class="form-check-input"
-                                               type="radio"
-                                               name="shiftPattern_{{ $selectedShift['id'] ?? 'new' }}"
-                                               id="pattern_{{ $pattern['id'] }}_{{ $selectedShift['id'] ?? 'new' }}"
-                                               value="{{ $pattern['id'] }}"
-                                               wire:model.live="selectedShift.pattern"
-                                               wire:change="handlePatternChange('{{ $pattern['id'] }}')">
-                                        <label class="form-check-label"
-                                               for="pattern_{{ $pattern['id'] }}_{{ $selectedShift['id'] ?? 'new' }}">
-                                            <strong>{{ $pattern['name'] }}</strong>
-                                            <div class="small text-muted">{{ $pattern['description'] }}</div>
-                                        </label>
+
+                <!-- Inner Tab Content -->
+                <div class="tab-content" id="innerRolesTabContent">
+
+                    <!-- Overtime Policy Tab -->
+                    <div class="mt-3 tab-pane fade {{ $activeTab === 'shift_settings' ? 'show active' : '' }}"
+                         id="tab-shift-settings">
+
+                        <!-- Shift Details -->
+                        <div class="config-section">
+                            <div class="section-header">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <input type="text"
+                                               wire:model.defer="selectedShift.name"
+                                               class="form-control form-control-lg border-0 p-0 h4 mb-1">
+                                        <p class="text-muted small mb-0">Configure automated time tracking rules</p>
                                     </div>
-                                @endforeach
-                            </div>
-                            <div class="col-md-6">
-                                <label class="form-label fw-bold">Active Days</label>
-                                <div class="row g-2 mb-3">
-                                    @foreach($dayAbbreviations as $day)
-                                        <div class="col-3">
-                                            <button type="button"
-                                                    wire:click="togglePatternDay('{{ $day }}')"
-                                                    class="day-btn w-100 {{ in_array($day, $selectedShift['patternDays']) ? 'active' : '' }}"
-                                                {{ !in_array($selectedShift['pattern'], ['custom', 'rotating']) ? 'disabled' : '' }}>
-                                                {{ $day }}
-                                            </button>
-                                        </div>
-                                    @endforeach
-                                </div>
-
-                                <div class="alert alert-light border">
-                                    <div class="d-flex align-items-center mb-2">
-                                        <svg width="16" height="16" class="text-success me-2" fill="currentColor"
-                                             viewBox="0 0 24 24">
-                                            <path d="M22 11.08V12a10 10 0 11-5.93-9.14"/>
-                                            <polyline points="22 4 12 14.01 9 11.01" fill="none" stroke="currentColor"
-                                                      stroke-width="2"/>
+                                    <button class="btn btn-link text-danger">
+                                        <svg width="20" height="20" fill="currentColor" viewBox="0 0 24 24">
+                                            <polyline points="3 6 5 6 21 6"/>
+                                            <path
+                                                d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
                                         </svg>
-                                        <strong>Current Pattern:</strong>
-                                    </div>
-                                    <p class="mb-1">{{ $this->getPatternDisplay($selectedShift['pattern'], $selectedShift['patternDays']) }}</p>
-                                    @if(count($selectedShift['patternDays']) > 0)
-                                        <small class="text-muted">
-                                            {{ count($selectedShift['patternDays']) }} {{ count($selectedShift['patternDays']) == 1 ? 'day' : 'days' }}
-                                            per week
-                                        </small>
-                                    @endif
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Overtime & Auto Clock-Out -->
-                <div class="config-section">
-                    <div class="section-header">
-                        <h5 class="mb-0">
-                            <svg width="20" height="20" class="text-warning me-2" fill="currentColor"
-                                 viewBox="0 0 24 24">
-                                <circle cx="12" cy="12" r="3"/>
-                                <path
-                                    d="M12 1v6m0 6v6M4.22 4.22l4.24 4.24m5.08 5.08l4.24 4.24M1 12h6m6 0h6M4.22 19.78l4.24-4.24m5.08-5.08l4.24-4.24"/>
-                            </svg>
-                            Overtime & Auto Clock-Out
-                        </h5>
-                    </div>
-
-                    <div class="section-body">
-                        <!-- Enable Overtime Toggle -->
-                        <div class="d-flex justify-content-between align-items-center pb-3 mb-3 border-bottom">
-                            <div>
-                                <h6 class="mb-1">Enable Overtime</h6>
-                                <p class="text-muted small mb-0">Allow employees to work beyond their scheduled shift
-                                    hours</p>
-                            </div>
-                            <label class="toggle-switch">
-                                <input type="checkbox"
-                                       wire:click="toggleOvertime"
-                                    {{ $selectedShift['overtimeEnabled'] ? 'checked' : '' }}>
-                                <span class="toggle-slider"></span>
-                            </label>
-                        </div>
-
-                        <!-- Auto Clock-Out Toggle -->
-                        <div class="d-flex justify-content-between align-items-center mb-3">
-                            <div>
-                                <h6 class="mb-1">Automatic Clock-Out</h6>
-                                <p class="text-muted small mb-0">
-                                    @if($selectedShift['overtimeEnabled'])
-                                        Automatically clock out employees after maximum allowed hours
-                                    @else
-                                        Automatically clock out employees at scheduled shift end
-                                    @endif
-                                </p>
-                            </div>
-                            <label class="toggle-switch">
-                                <input type="checkbox"
-                                       wire:click="toggleAutoClockOut"
-                                    {{ $selectedShift['autoClockOut'] ? 'checked' : '' }}>
-                                <span class="toggle-slider"></span>
-                            </label>
-                        </div>
-
-                        @if($selectedShift['overtimeEnabled'] && $selectedShift['autoClockOut'])
-                            <!-- Overtime Settings -->
-                            <div class="row g-3 mb-3">
-                                <div class="col-md-6">
-                                    <label class="form-label">Maximum Overtime Hours</label>
-                                    <div class="input-group">
-                                        <input type="number"
-                                               wire:model.defer="selectedShift.maxOvertime"
-                                               class="form-control"
-                                               min="0" max="8" step="0.5">
-                                        <span class="input-group-text">hours</span>
-                                    </div>
-                                    <small class="text-muted">
-                                        Auto clock-out at: {{ $selectedShift['endTime'] }}
-                                        + {{ $selectedShift['maxOvertime'] }}h
-                                    </small>
-                                </div>
-
-                                <div class="col-md-6">
-                                    <label class="form-label">Warning Time Before Auto Clock-Out</label>
-                                    <div class="input-group">
-                                        <input type="number"
-                                               wire:model.defer="selectedShift.warningTime"
-                                               class="form-control"
-                                               min="5" max="60" step="5">
-                                        <span class="input-group-text">minutes</span>
-                                    </div>
+                                    </button>
                                 </div>
                             </div>
 
-                            <!-- Warning Preview -->
-                            <div class="alert-warning-custom">
-                                <div class="d-flex">
-                                    <svg width="20" height="20" class="me-2 flex-shrink-0" style="color: #664d03;"
-                                         fill="currentColor" viewBox="0 0 24 24">
-                                        <path
-                                            d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"
-                                            fill="none" stroke="currentColor" stroke-width="2"/>
-                                        <line x1="12" y1="9" x2="12" y2="13" stroke="currentColor" stroke-width="2"/>
-                                        <line x1="12" y1="17" x2="12.01" y2="17" stroke="currentColor"
+                            <div class="section-body">
+                                <h5 class="mb-3">
+                                    <svg width="20" height="20" class="text-primary me-2" fill="currentColor"
+                                         viewBox="0 0 24 24">
+                                        <rect x="3" y="4" width="18" height="18" rx="2" ry="2" fill="none"
+                                              stroke="currentColor"
                                               stroke-width="2"/>
+                                        <line x1="16" y1="2" x2="16" y2="6" stroke="currentColor" stroke-width="2"/>
+                                        <line x1="8" y1="2" x2="8" y2="6" stroke="currentColor" stroke-width="2"/>
+                                        <line x1="3" y1="10" x2="21" y2="10" stroke="currentColor" stroke-width="2"/>
                                     </svg>
-                                    <div>
-                                        <h6 class="mb-1">Auto Clock-Out Preview</h6>
-                                        <p class="mb-0 small">
-                                            Employees will receive a warning at
-                                            <strong>{{ $selectedShift['endTime'] }}
-                                                + {{ max(0, $selectedShift['maxOvertime'] - $selectedShift['warningTime']/60) }}
-                                                h</strong>
-                                            and be automatically clocked out at
-                                            <strong>{{ $selectedShift['endTime'] }}
-                                                + {{ $selectedShift['maxOvertime'] }}h</strong>
-                                        </p>
+                                    Basic Schedule
+                                </h5>
+
+                                <div class="row g-3">
+                                    <div class="col-md-4">
+                                        <label class="form-label">Start Time</label>
+                                        <input type="time"
+                                               wire:input="$dispatch('time-selected')"
+                                               wire:model="selectedShift.startTime"
+                                               class="form-control">
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="form-label">End Time</label>
+                                        <input type="time"
+                                               wire:input="$dispatch('time-selected')"
+                                               wire:model="selectedShift.endTime"
+                                               class="form-control">
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="form-label">Shift Duration (hours)</label>
+                                        <input type="number"
+                                               wire:model="selectedShift.duration"
+                                               class="form-control"
+                                               min="1" max="24" step="0.5">
                                     </div>
                                 </div>
                             </div>
-                        @elseif(!$selectedShift['overtimeEnabled'])
-                            <!-- No Overtime Warning -->
-                            <div class="alert-danger-custom">
-                                <div class="d-flex">
-                                    <svg width="20" height="20" class="me-2 flex-shrink-0" style="color: #842029;"
-                                         fill="currentColor" viewBox="0 0 24 24">
+                        </div>
+
+                        <!-- Shift Pattern -->
+                        <div class="config-section">
+                            <div class="section-header">
+                                <div class="d-flex justify-content-between w-100">
+                                    <h5 class="mb-0">
+                                        <svg width="20" height="20" class="text-primary me-2" fill="currentColor"
+                                             viewBox="0 0 24 24">
+                                            <polyline points="23 4 23 10 17 10" fill="none" stroke="currentColor"
+                                                      stroke-width="2"/>
+                                            <path d="M20.49 15a9 9 0 11-2.12-9.36L23 10" fill="none"
+                                                  stroke="currentColor"
+                                                  stroke-width="2"/>
+                                        </svg>
+                                        Shift Pattern
+                                    </h5>
+                                    <button wire:click="$set('showPatternModal', true)" class="btn btn-sm btn-primary">
+                                        Configure Pattern
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div class="section-body">
+                                <div class="row g-4">
+                                    <div class="col-md-6">
+                                        <label class="form-label fw-bold">Pattern Type</label>
+                                        @foreach($shiftPatterns as $pattern)
+                                            <div class="form-check mb-2">
+                                                <input class="form-check-input"
+                                                       type="radio"
+                                                       name="shiftPattern_{{ $selectedShift['id'] ?? 'new' }}"
+                                                       id="pattern_{{ $pattern['id'] }}_{{ $selectedShift['id'] ?? 'new' }}"
+                                                       value="{{ $pattern['id'] }}"
+                                                       wire:model.live="selectedShift.pattern"
+                                                       wire:change="handlePatternChange('{{ $pattern['id'] }}')">
+                                                <label class="form-check-label"
+                                                       for="pattern_{{ $pattern['id'] }}_{{ $selectedShift['id'] ?? 'new' }}">
+                                                    <strong>{{ $pattern['name'] }}</strong>
+                                                    <div class="small text-muted">{{ $pattern['description'] }}</div>
+                                                </label>
+                                            </div>
+                                        @endforeach
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label fw-bold">Active Days</label>
+                                        <div class="row g-2 mb-3">
+                                            @foreach($dayAbbreviations as $day)
+                                                <div class="col-3">
+                                                    <button type="button"
+                                                            wire:click="togglePatternDay('{{ $day }}')"
+                                                            class="day-btn w-100 {{ in_array($day, $selectedShift['patternDays']) ? 'active' : '' }}"
+                                                        {{ !in_array($selectedShift['pattern'], ['custom', 'rotating']) ? 'disabled' : '' }}>
+                                                        {{ $day }}
+                                                    </button>
+                                                </div>
+                                            @endforeach
+                                        </div>
+
+                                        <div class="alert alert-light border">
+                                            <div class="d-flex align-items-center mb-2">
+                                                <svg width="16" height="16" class="text-success me-2"
+                                                     fill="currentColor"
+                                                     viewBox="0 0 24 24">
+                                                    <path d="M22 11.08V12a10 10 0 11-5.93-9.14"/>
+                                                    <polyline points="22 4 12 14.01 9 11.01" fill="none"
+                                                              stroke="currentColor"
+                                                              stroke-width="2"/>
+                                                </svg>
+                                                <strong>Current Pattern:</strong>
+                                            </div>
+                                            <p class="mb-1">{{ $this->getPatternDisplay($selectedShift['pattern'], $selectedShift['patternDays']) }}</p>
+                                            @if(count($selectedShift['patternDays']) > 0)
+                                                <small class="text-muted">
+                                                    {{ count($selectedShift['patternDays']) }} {{ count($selectedShift['patternDays']) == 1 ? 'day' : 'days' }}
+                                                    per week
+                                                </small>
+                                            @endif
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Overtime & Auto Clock-Out -->
+                        <div class="config-section">
+                            <div class="section-header">
+                                <h5 class="mb-0">
+                                    <svg width="20" height="20" class="text-warning me-2" fill="currentColor"
+                                         viewBox="0 0 24 24">
+                                        <circle cx="12" cy="12" r="3"/>
                                         <path
-                                            d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"
-                                            fill="none" stroke="currentColor" stroke-width="2"/>
-                                        <line x1="12" y1="9" x2="12" y2="13" stroke="currentColor" stroke-width="2"/>
-                                        <line x1="12" y1="17" x2="12.01" y2="17" stroke="currentColor"
-                                              stroke-width="2"/>
+                                            d="M12 1v6m0 6v6M4.22 4.22l4.24 4.24m5.08 5.08l4.24 4.24M1 12h6m6 0h6M4.22 19.78l4.24-4.24m5.08-5.08l4.24-4.24"/>
                                     </svg>
+                                    Overtime & Auto Clock-Out
+                                </h5>
+                            </div>
+
+                            <div class="section-body">
+                                <!-- Enable Overtime Toggle -->
+                                <div class="d-flex justify-content-between align-items-center pb-3 mb-3 border-bottom">
                                     <div>
-                                        <h6 class="mb-1">Overtime Disabled</h6>
-                                        <p class="mb-0 small">
-                                            Employees
-                                            will {{ $selectedShift['autoClockOut'] ? 'be automatically clocked out' : 'need to manually clock out' }}
-                                            at their scheduled shift end time ({{ $selectedShift['endTime'] }}).
-                                            @if(!$selectedShift['autoClockOut'])
-                                                They cannot work beyond this time without manager override.
+                                        <h6 class="mb-1">Enable Overtime</h6>
+                                        <p class="text-muted small mb-0">Allow employees to work beyond their scheduled
+                                            shift
+                                            hours</p>
+                                    </div>
+                                    <label class="toggle-switch">
+                                        <input type="checkbox"
+                                               wire:click="toggleOvertime"
+                                            {{ $selectedShift['overtimeEnabled'] ? 'checked' : '' }}>
+                                        <span class="toggle-slider"></span>
+                                    </label>
+                                </div>
+
+                                <!-- Auto Clock-Out Toggle -->
+                                <div class="d-flex justify-content-between align-items-center mb-3">
+                                    <div>
+                                        <h6 class="mb-1">Automatic Clock-Out</h6>
+                                        <p class="text-muted small mb-0">
+                                            @if($selectedShift['overtimeEnabled'])
+                                                Automatically clock out employees after maximum allowed hours
+                                            @else
+                                                Automatically clock out employees at scheduled shift end
                                             @endif
                                         </p>
                                     </div>
+                                    <label class="toggle-switch">
+                                        <input type="checkbox"
+                                               wire:click="toggleAutoClockOut"
+                                            {{ $selectedShift['autoClockOut'] ? 'checked' : '' }}>
+                                        <span class="toggle-slider"></span>
+                                    </label>
                                 </div>
-                            </div>
-                        @endif
-                    </div>
-                </div>
 
-                <!-- Grace Period & Late Check-in Tracking -->
-                <div class="config-section">
-                    <div class="section-header">
-                        <h5 class="mb-0">
-                            <svg width="20" height="20" class="text-info me-2" fill="currentColor" viewBox="0 0 24 24">
-                                <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="2"/>
-                                <polyline points="12 6 12 12 16 14" stroke="currentColor" stroke-width="2"
-                                          stroke-linecap="round"/>
-                            </svg>
-                            Grace Period & Attendance Tracking
-                        </h5>
-                    </div>
+                                @if($selectedShift['overtimeEnabled'] && $selectedShift['autoClockOut'])
+                                    <!-- Overtime Settings -->
+                                    <div class="row g-3 mb-3">
+                                        <div class="col-md-6">
+                                            <label class="form-label">Maximum Overtime Hours</label>
+                                            <div class="input-group">
+                                                <input type="number"
+                                                       wire:model.defer="selectedShift.maxOvertime"
+                                                       class="form-control"
+                                                       min="0" max="8" step="0.5">
+                                                <span class="input-group-text">hours</span>
+                                            </div>
+                                            <small class="text-muted">
+                                                Auto clock-out at: {{ $selectedShift['endTime'] }}
+                                                + {{ $selectedShift['maxOvertime'] }}h
+                                            </small>
+                                        </div>
 
-                    <div class="section-body">
-                        <!-- Grace Period Toggle -->
-                        <div class="d-flex justify-content-between align-items-center pb-3 mb-3 border-bottom">
-                            <div>
-                                <h6 class="mb-1">Enable Grace Period</h6>
-                                <p class="text-muted small mb-0">Allow employees a grace period for late check-ins
-                                    without marking them as late</p>
+                                        <div class="col-md-6">
+                                            <label class="form-label">Warning Time Before Auto Clock-Out</label>
+                                            <div class="input-group">
+                                                <input type="number"
+                                                       wire:model.defer="selectedShift.warningTime"
+                                                       class="form-control"
+                                                       min="5" max="60" step="5">
+                                                <span class="input-group-text">minutes</span>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Warning Preview -->
+                                    <div class="alert-warning-custom">
+                                        <div class="d-flex">
+                                            <svg width="20" height="20" class="me-2 flex-shrink-0"
+                                                 style="color: #664d03;"
+                                                 fill="currentColor" viewBox="0 0 24 24">
+                                                <path
+                                                    d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"
+                                                    fill="none" stroke="currentColor" stroke-width="2"/>
+                                                <line x1="12" y1="9" x2="12" y2="13" stroke="currentColor"
+                                                      stroke-width="2"/>
+                                                <line x1="12" y1="17" x2="12.01" y2="17" stroke="currentColor"
+                                                      stroke-width="2"/>
+                                            </svg>
+                                            <div>
+                                                <h6 class="mb-1">Auto Clock-Out Preview</h6>
+                                                <p class="mb-0 small">
+                                                    Employees will receive a warning at
+                                                    <strong>{{ $selectedShift['endTime'] }}
+                                                        + {{ max(0, $selectedShift['maxOvertime'] - $selectedShift['warningTime']/60) }}
+                                                        h</strong>
+                                                    and be automatically clocked out at
+                                                    <strong>{{ $selectedShift['endTime'] }}
+                                                        + {{ $selectedShift['maxOvertime'] }}h</strong>
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                @elseif(!$selectedShift['overtimeEnabled'])
+                                    <!-- No Overtime Warning -->
+                                    <div class="alert-danger-custom">
+                                        <div class="d-flex">
+                                            <svg width="20" height="20" class="me-2 flex-shrink-0"
+                                                 style="color: #842029;"
+                                                 fill="currentColor" viewBox="0 0 24 24">
+                                                <path
+                                                    d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"
+                                                    fill="none" stroke="currentColor" stroke-width="2"/>
+                                                <line x1="12" y1="9" x2="12" y2="13" stroke="currentColor"
+                                                      stroke-width="2"/>
+                                                <line x1="12" y1="17" x2="12.01" y2="17" stroke="currentColor"
+                                                      stroke-width="2"/>
+                                            </svg>
+                                            <div>
+                                                <h6 class="mb-1">Overtime Disabled</h6>
+                                                <p class="mb-0 small">
+                                                    Employees
+                                                    will {{ $selectedShift['autoClockOut'] ? 'be automatically clocked out' : 'need to manually clock out' }}
+                                                    at their scheduled shift end time ({{ $selectedShift['endTime'] }}).
+                                                    @if(!$selectedShift['autoClockOut'])
+                                                        They cannot work beyond this time without manager override.
+                                                    @endif
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                @endif
                             </div>
-                            <label class="toggle-switch">
-                                <input type="checkbox"
-                                       wire:click="toggleGracePeriod"
-                                    {{ $selectedShift['gracePeriodEnabled'] ? 'checked' : '' }}>
-                                <span class="toggle-slider"></span>
-                            </label>
                         </div>
 
-                        @if($selectedShift['gracePeriodEnabled'])
-                            <!-- Grace Period Settings -->
-                            <div class="row g-3 mb-3">
-                                <div class="col-md-6">
-                                    <label class="form-label">Grace Period Duration</label>
-                                    <div class="input-group">
-                                        <input type="number"
-                                               wire:model.defer="selectedShift.gracePeriodMinutes"
-                                               class="form-control"
-                                               min="0" max="60" step="5">
-                                        <span class="input-group-text">minutes</span>
-                                    </div>
-                                    <small class="text-muted">
-                                        Employees can check in up to {{ $selectedShift['gracePeriodMinutes'] }} minutes
-                                        late
-                                    </small>
-                                </div>
-
-                                <div class="col-md-6">
-                                    <label class="form-label">Late Check-in Window</label>
-                                    <div class="input-group">
-                                        <input type="text"
-                                               class="form-control"
-                                               value="{{ $selectedShift['startTime'] }} - {{ \Carbon\Carbon::parse($selectedShift['startTime'])->addMinutes($selectedShift['gracePeriodMinutes'])->format('H:i') }}"
-                                               disabled>
-                                    </div>
-                                    <small class="text-muted">
-                                        Grace period ends
-                                        at {{ \Carbon\Carbon::parse($selectedShift['startTime'])->addMinutes($selectedShift['gracePeriodMinutes'])->format('H:i') }}
-                                    </small>
-                                </div>
-                            </div>
-
-                            <!-- Grace Period Preview -->
-                            <div class="alert alert-light border border-primary mb-3">
-                                <div class="d-flex">
-                                    <svg width="20" height="20" class="me-2 flex-shrink-0 text-primary"
-                                         fill="currentColor" viewBox="0 0 24 24">
+                        <!-- Grace Period & Late Check-in Tracking -->
+                        <div class="config-section">
+                            <div class="section-header">
+                                <h5 class="mb-0">
+                                    <svg width="20" height="20" class="text-info me-2" fill="currentColor"
+                                         viewBox="0 0 24 24">
                                         <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor"
                                                 stroke-width="2"/>
-                                        <path d="M12 16v-4m0-4h.01" stroke="currentColor" stroke-width="2"
-                                              stroke-linecap="round"/>
+                                        <polyline points="12 6 12 12 16 14" stroke="currentColor" stroke-width="2"
+                                                  stroke-linecap="round"/>
                                     </svg>
+                                    Grace Period & Attendance Tracking
+                                </h5>
+                            </div>
+
+                            <div class="section-body">
+                                <!-- Grace Period Toggle -->
+                                <div class="d-flex justify-content-between align-items-center pb-3 mb-3 border-bottom">
                                     <div>
-                                        <h6 class="mb-1 text-primary">Grace Period Summary</h6>
-                                        <p style="backgound:transparent;" class="mb-0 small">
-                                            <strong class="text-primary">Shift
-                                                Start: {{ $selectedShift['startTime'] }}</strong> <br>
-                                            <strong class="text-primary">Grace Period
-                                                Ends: {{ \Carbon\Carbon::parse($selectedShift['startTime'])->addMinutes($selectedShift['gracePeriodMinutes'])->format('H:i') }}</strong>
-                                            <br>
-                                            <strong class="text-primary">Status: Check-ins
-                                                before {{ \Carbon\Carbon::parse($selectedShift['startTime'])->addMinutes($selectedShift['gracePeriodMinutes'])->format('H:i') }}
-                                                are "On Time", after are "Late"</strong>
-                                        </p>
+                                        <h6 class="mb-1">Enable Grace Period</h6>
+                                        <p class="text-muted small mb-0">Allow employees a grace period for late
+                                            check-ins
+                                            without marking them as late</p>
                                     </div>
+                                    <label class="toggle-switch">
+                                        <input type="checkbox"
+                                               wire:click="toggleGracePeriod"
+                                            {{ $selectedShift['gracePeriodEnabled'] ? 'checked' : '' }}>
+                                        <span class="toggle-slider"></span>
+                                    </label>
                                 </div>
-                            </div>
-                        @endif
 
-                        <!-- Track Late Check-in Toggle -->
-                        <div class="d-flex justify-content-between align-items-center pb-3 mb-3 border-bottom">
-                            <div>
-                                <h6 class="mb-1">Track Late Check-ins</h6>
-                                <p class="text-muted small mb-0">Record and report when employees check in late</p>
-                            </div>
-                            <label class="toggle-switch">
-                                <input type="checkbox"
-                                       wire:click="toggleTrackLateCheckin"
-                                    {{ $selectedShift['trackLateCheckin'] ? 'checked' : '' }}>
-                                <span class="toggle-slider"></span>
-                            </label>
-                        </div>
+                                @if($selectedShift['gracePeriodEnabled'])
+                                    <!-- Grace Period Settings -->
+                                    <div class="row g-3 mb-3">
+                                        <div class="col-md-6">
+                                            <label class="form-label">Grace Period Duration</label>
+                                            <div class="input-group">
+                                                <input type="number"
+                                                       wire:model.defer="selectedShift.gracePeriodMinutes"
+                                                       class="form-control"
+                                                       min="0" max="60" step="5">
+                                                <span class="input-group-text">minutes</span>
+                                            </div>
+                                            <small class="text-muted">
+                                                Employees can check in up to {{ $selectedShift['gracePeriodMinutes'] }}
+                                                minutes
+                                                late
+                                            </small>
+                                        </div>
 
-                        <!-- Notify on Late Check-in -->
-                        @if($selectedShift['trackLateCheckin'])
-                            <div class="d-flex justify-content-between align-items-start mb-3">
-                                <div>
-                                    <h6 class="mb-1">Notify Managers on Late Check-in</h6>
-                                    <p class="text-muted small mb-0">Send immediate alerts when employees check in
-                                        late</p>
-                                </div>
-                                <input type="checkbox"
-                                       class="form-check-input"
-                                       style="width: 20px; height: 20px;"
-                                       wire:model="selectedShift.notifyOnLateCheckin">
-                            </div>
-                        @endif
-
-                        <!-- Track Early Check-out Toggle -->
-                        <div class="d-flex justify-content-between align-items-center mb-3">
-                            <div>
-                                <h6 class="mb-1">Track Early Check-outs</h6>
-                                <p class="text-muted small mb-0">Record when employees check out before shift end</p>
-                            </div>
-                            <label class="toggle-switch">
-                                <input type="checkbox"
-                                       wire:click="toggleTrackEarlyCheckout"
-                                    {{ $selectedShift['trackEarlyCheckout'] ? 'checked' : '' }}>
-                                <span class="toggle-slider"></span>
-                            </label>
-                        </div>
-
-                        @if($selectedShift['trackEarlyCheckout'])
-                            <!-- Early Checkout Threshold -->
-                            <div class="row g-3">
-                                <div class="col-md-6">
-                                    <label class="form-label">Early Check-out Threshold</label>
-                                    <div class="input-group">
-                                        <input type="number"
-                                               wire:model.defer="selectedShift.earlyCheckoutThreshold"
-                                               class="form-control"
-                                               min="0" max="60" step="5">
-                                        <span class="input-group-text">minutes</span>
+                                        <div class="col-md-6">
+                                            <label class="form-label">Late Check-in Window</label>
+                                            <div class="input-group">
+                                                <input type="text"
+                                                       class="form-control"
+                                                       value="{{ $selectedShift['startTime'] }} - {{ \Carbon\Carbon::parse($selectedShift['startTime'])->addMinutes($selectedShift['gracePeriodMinutes'])->format('H:i') }}"
+                                                       disabled>
+                                            </div>
+                                            <small class="text-muted">
+                                                Grace period ends
+                                                at {{ \Carbon\Carbon::parse($selectedShift['startTime'])->addMinutes($selectedShift['gracePeriodMinutes'])->format('H:i') }}
+                                            </small>
+                                        </div>
                                     </div>
-                                    <small class="text-muted">
-                                        Mark as early if checking out more
-                                        than {{ $selectedShift['earlyCheckoutThreshold'] }} minutes before shift end
-                                    </small>
+
+                                    <!-- Grace Period Preview -->
+                                    <div class="alert alert-light border border-primary mb-3">
+                                        <div class="d-flex">
+                                            <svg width="20" height="20" class="me-2 flex-shrink-0 text-primary"
+                                                 fill="currentColor" viewBox="0 0 24 24">
+                                                <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor"
+                                                        stroke-width="2"/>
+                                                <path d="M12 16v-4m0-4h.01" stroke="currentColor" stroke-width="2"
+                                                      stroke-linecap="round"/>
+                                            </svg>
+                                            <div>
+                                                <h6 class="mb-1 text-primary">Grace Period Summary</h6>
+                                                <p style="backgound:transparent;" class="mb-0 small">
+                                                    <strong class="text-primary">Shift
+                                                        Start: {{ $selectedShift['startTime'] }}</strong> <br>
+                                                    <strong class="text-primary">Grace Period
+                                                        Ends: {{ \Carbon\Carbon::parse($selectedShift['startTime'])->addMinutes($selectedShift['gracePeriodMinutes'])->format('H:i') }}</strong>
+                                                    <br>
+                                                    <strong class="text-primary">Status: Check-ins
+                                                        before {{ \Carbon\Carbon::parse($selectedShift['startTime'])->addMinutes($selectedShift['gracePeriodMinutes'])->format('H:i') }}
+                                                        are "On Time", after are "Late"</strong>
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                @endif
+
+                                <!-- Track Late Check-in Toggle -->
+                                <div class="d-flex justify-content-between align-items-center pb-3 mb-3 border-bottom">
+                                    <div>
+                                        <h6 class="mb-1">Track Late Check-ins</h6>
+                                        <p class="text-muted small mb-0">Record and report when employees check in
+                                            late</p>
+                                    </div>
+                                    <label class="toggle-switch">
+                                        <input type="checkbox"
+                                               wire:click="toggleTrackLateCheckin"
+                                            {{ $selectedShift['trackLateCheckin'] ? 'checked' : '' }}>
+                                        <span class="toggle-slider"></span>
+                                    </label>
+                                </div>
+
+                                <!-- Notify on Late Check-in -->
+                                @if($selectedShift['trackLateCheckin'])
+                                    <div class="d-flex justify-content-between align-items-start mb-3">
+                                        <div>
+                                            <h6 class="mb-1">Notify Managers on Late Check-in</h6>
+                                            <p class="text-muted small mb-0">Send immediate alerts when employees check
+                                                in
+                                                late</p>
+                                        </div>
+                                        <input type="checkbox"
+                                               class="form-check-input"
+                                               style="width: 20px; height: 20px;"
+                                               wire:model="selectedShift.notifyOnLateCheckin">
+                                    </div>
+                                @endif
+
+                                <!-- Track Early Check-out Toggle -->
+                                <div class="d-flex justify-content-between align-items-center mb-3">
+                                    <div>
+                                        <h6 class="mb-1">Track Early Check-outs</h6>
+                                        <p class="text-muted small mb-0">Record when employees check out before shift
+                                            end</p>
+                                    </div>
+                                    <label class="toggle-switch">
+                                        <input type="checkbox"
+                                               wire:click="toggleTrackEarlyCheckout"
+                                            {{ $selectedShift['trackEarlyCheckout'] ? 'checked' : '' }}>
+                                        <span class="toggle-slider"></span>
+                                    </label>
+                                </div>
+
+                                @if($selectedShift['trackEarlyCheckout'])
+                                    <!-- Early Checkout Threshold -->
+                                    <div class="row g-3">
+                                        <div class="col-md-6">
+                                            <label class="form-label">Early Check-out Threshold</label>
+                                            <div class="input-group">
+                                                <input type="number"
+                                                       wire:model.defer="selectedShift.earlyCheckoutThreshold"
+                                                       class="form-control"
+                                                       min="0" max="60" step="5">
+                                                <span class="input-group-text">minutes</span>
+                                            </div>
+                                            <small class="text-muted">
+                                                Mark as early if checking out more
+                                                than {{ $selectedShift['earlyCheckoutThreshold'] }} minutes before shift
+                                                end
+                                            </small>
+                                        </div>
+                                    </div>
+                                @endif
+                            </div>
+                        </div>
+
+                        <!-- Notifications -->
+                        <div class="config-section">
+                            <div class="section-header">
+                                <h5 class="mb-0">
+                                    <svg width="20" height="20" class="text-success me-2" fill="currentColor"
+                                         viewBox="0 0 24 24">
+                                        <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+                                        <path d="M13.73 21a2 2 0 01-3.46 0"/>
+                                    </svg>
+                                    Notifications
+                                </h5>
+                            </div>
+
+                            <div class="section-body">
+
+                                <!-- Notify Managers -->
+                                <div class="d-flex justify-content-between align-items-start mb-3">
+                                    <div class="d-flex align-items-start">
+                                        <svg width="18" height="18" class="text-primary me-2 mt-1" fill="none"
+                                             stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                            <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/>
+                                            <circle cx="9" cy="7" r="4"/>
+                                            <path d="M23 21v-2a4 4 0 00-3-3.87"/>
+                                            <path d="M17 7a4 4 0 010 7.87"/>
+                                        </svg>
+                                        <div>
+                                            <h6 class="mb-1">Notify Managers on Overtime</h6>
+                                            <p class="text-muted small mb-0">Send alerts when employees exceed standard
+                                                hours</p>
+                                        </div>
+                                    </div>
+                                    <input type="checkbox" class="form-check-input" style="width: 20px; height: 20px;"
+                                           wire:model="selectedShift.notifyManagers">
+                                </div>
+
+                                <!-- Mobile Notifications -->
+                                <div class="d-flex justify-content-between align-items-start mb-3">
+                                    <div class="d-flex align-items-start">
+                                        <svg width="18" height="18" class="text-info me-2 mt-1" fill="none"
+                                             stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                            <rect x="7" y="2" width="10" height="20" rx="2" ry="2"/>
+                                            <line x1="12" y1="18" x2="12" y2="18"/>
+                                        </svg>
+                                        <div>
+                                            <h6 class="mb-1">Employee Mobile Notifications</h6>
+                                            <p class="text-muted small mb-0">Push notifications for overtime
+                                                warnings</p>
+                                        </div>
+                                    </div>
+                                    <input type="checkbox" class="form-check-input" style="width: 20px; height: 20px;"
+                                           wire:model="selectedShift.mobileNotifications">
+                                </div>
+
+                                <!-- Email Summaries -->
+                                <div class="d-flex justify-content-between align-items-start">
+                                    <div class="d-flex align-items-start">
+                                        <svg width="18" height="18" class="text-warning me-2 mt-1" fill="none"
+                                             stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                            <path d="M4 4h16v16H4z"/>
+                                            <polyline points="22,6 12,13 2,6"/>
+                                        </svg>
+                                        <div>
+                                            <h6 class="mb-1">Email Summaries</h6>
+                                            <p class="text-muted small mb-0">Daily overtime reports to management</p>
+                                        </div>
+                                    </div>
+                                    <input type="checkbox" class="form-check-input" style="width: 20px; height: 20px;"
+                                           wire:model="selectedShift.emailSummaries">
                                 </div>
                             </div>
-                        @endif
+                        </div>
+
                     </div>
+
+                    <!-- Overtime Policy Tab -->
+                    <div class="mt-3 tab-pane fade {{ $activeTab === 'assign_employee' ? 'show active' : '' }}"
+                         id="tab-assign-employee">
+                        <div class="staff-assignment-card">
+                            <div class="section-header">
+                                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                          d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"></path>
+                                </svg>
+                                <h2>Assign Staff to {{ $assigningShift->name }}</h2>
+                            </div>
+
+                            @if (session()->has('success'))
+                                <div class="alert-success">
+                                    {{ session('success') }}
+                                </div>
+                            @endif
+
+                            @if (session()->has('error'))
+                                <div class="alert-error">
+                                    {{ session('error') }}
+                                </div>
+                            @endif
+
+                            <!-- Search -->
+                            <h3 class="section-title">All Staff</h3>
+                            <div class="search-wrapper">
+                                <svg class="search-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                          d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                                </svg>
+                                <input
+                                    type="text"
+                                    wire:model="searchTerm"
+                                    wire:keyup="$dispatch('searchStaff')"
+                                    placeholder="Search by name, role, or department..."
+                                    class="search-input"
+                                />
+                            </div>
+
+                            <!-- All Staff List -->
+                            <div class="staff-list">
+                                @forelse($availableStaff as $staff)
+                                    <div wire:click="assignStaff({{ $staff->id }})"
+                                         class="staff-item {{ in_array($staff->id, $assignedStaffIds) ? 'disabled' : 'clickable' }}">
+                                        <div class="staff-item-content">
+                                            <div class="staff-avatar">
+                                                {{ $this->getInitials($staff->name) }}
+                                            </div>
+                                            <div class="staff-info">
+                                                <div class="staff-name">{{ $staff->name }}</div>
+                                                <div class="staff-details">
+                                                    {{ $staff->shift?->name ?? 'No Shift' }}
+                                                    • {{ $staff->department->name }}
+                                                </div>
+                                            </div>
+                                            @if(in_array($staff->id, $assignedStaffIds))
+                                                <div class="assigned-badge">Assigned</div>
+                                            @endif
+                                        </div>
+                                    </div>
+                                @empty
+                                    <div class="empty-state">
+                                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round"
+                                                  stroke-width="2"
+                                                  d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"></path>
+                                        </svg>
+                                        <p class="empty-state-text">No staff found</p>
+                                        <p class="empty-state-subtext">Try adjusting your search</p>
+                                    </div>
+                                @endforelse
+                            </div>
+
+                            <!-- Assigned Staff Section -->
+                            <div class="assigned-section">
+                                <h3 class="section-title">
+                                    Assigned Staff ({{ count($assignedStaffIds) }})
+                                </h3>
+
+                                @if(count($assignedStaffIds) === 0)
+                                    <div class="empty-state">
+                                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                  d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"></path>
+                                        </svg>
+                                        <p class="empty-state-text">No staff assigned yet</p>
+                                        <p class="empty-state-subtext">Click on staff from above to assign them</p>
+                                    </div>
+                                @else
+                                    <div class="assigned-list">
+                                        @foreach($assignedStaff as $staff)
+                                            <div class="staff-item assigned-item">
+                                                <div class="staff-item-content">
+                                                    <div class="staff-avatar assigned">
+                                                        {{ $this->getInitials($staff->name) }}
+                                                    </div>
+                                                    <div class="staff-info">
+                                                        <div class="staff-name">{{ $staff->name }}</div>
+                                                        <div class="staff-details">
+                                                            {{ $staff->shift?->name ?? 'No Shift' }}
+                                                            • {{ $staff->department->name }}
+                                                        </div>
+                                                    </div>
+                                                    <button
+                                                        wire:click="removeStaff({{ $staff->id }})"
+                                                        class="remove-button"
+                                                    >
+                                                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path stroke-linecap="round" stroke-linejoin="round"
+                                                                  stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                                                        </svg>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        @endforeach
+                                    </div>
+
+                                    <div class="summary-box">
+                                        <div class="summary-content">
+                                            <div>
+                                                <div class="summary-label">Total Staff</div>
+                                                <div class="summary-value">{{ count($assignedStaffIds) }}</div>
+                                            </div>
+                                            <button
+                                                wire:click="saveAssignment"
+                                                wire:loading.attr="disabled"
+                                                class="save-button"
+                                            >
+                                                <span wire:loading.remove
+                                                      wire:target="saveAssignment">Save Assignment</span>
+                                                <span wire:loading wire:target="saveAssignment">Saving...</span>
+                                            </button>
+                                        </div>
+                                    </div>
+                                @endif
+                            </div>
+                        </div>
+                    </div>
+
                 </div>
-
-                <!-- Notifications -->
-                <div class="config-section">
-                    <div class="section-header">
-                        <h5 class="mb-0">
-                            <svg width="20" height="20" class="text-success me-2" fill="currentColor"
-                                 viewBox="0 0 24 24">
-                                <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/>
-                                <path d="M13.73 21a2 2 0 01-3.46 0"/>
-                            </svg>
-                            Notifications
-                        </h5>
-                    </div>
-
-                    <div class="section-body">
-
-                        <!-- Notify Managers -->
-                        <div class="d-flex justify-content-between align-items-start mb-3">
-                            <div class="d-flex align-items-start">
-                                <svg width="18" height="18" class="text-primary me-2 mt-1" fill="none"
-                                     stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                                    <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/>
-                                    <circle cx="9" cy="7" r="4"/>
-                                    <path d="M23 21v-2a4 4 0 00-3-3.87"/>
-                                    <path d="M17 7a4 4 0 010 7.87"/>
-                                </svg>
-                                <div>
-                                    <h6 class="mb-1">Notify Managers on Overtime</h6>
-                                    <p class="text-muted small mb-0">Send alerts when employees exceed standard
-                                        hours</p>
-                                </div>
-                            </div>
-                            <input type="checkbox" class="form-check-input" style="width: 20px; height: 20px;"
-                                   wire:model="selectedShift.notifyManagers">
-                        </div>
-
-                        <!-- Mobile Notifications -->
-                        <div class="d-flex justify-content-between align-items-start mb-3">
-                            <div class="d-flex align-items-start">
-                                <svg width="18" height="18" class="text-info me-2 mt-1" fill="none"
-                                     stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                                    <rect x="7" y="2" width="10" height="20" rx="2" ry="2"/>
-                                    <line x1="12" y1="18" x2="12" y2="18"/>
-                                </svg>
-                                <div>
-                                    <h6 class="mb-1">Employee Mobile Notifications</h6>
-                                    <p class="text-muted small mb-0">Push notifications for overtime warnings</p>
-                                </div>
-                            </div>
-                            <input type="checkbox" class="form-check-input" style="width: 20px; height: 20px;"
-                                   wire:model="selectedShift.mobileNotifications">
-                        </div>
-
-                        <!-- Email Summaries -->
-                        <div class="d-flex justify-content-between align-items-start">
-                            <div class="d-flex align-items-start">
-                                <svg width="18" height="18" class="text-warning me-2 mt-1" fill="none"
-                                     stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                                    <path d="M4 4h16v16H4z"/>
-                                    <polyline points="22,6 12,13 2,6"/>
-                                </svg>
-                                <div>
-                                    <h6 class="mb-1">Email Summaries</h6>
-                                    <p class="text-muted small mb-0">Daily overtime reports to management</p>
-                                </div>
-                            </div>
-                            <input type="checkbox" class="form-check-input" style="width: 20px; height: 20px;"
-                                   wire:model="selectedShift.emailSummaries">
-                        </div>
-                    </div>
-                </div>
-
             </div>
         </div>
     </div>
@@ -1263,6 +1947,34 @@ new class extends Component {
             </div>
         </div>
     @endif
-
-
 </div>
+
+@push('scripts')
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const tabs = document.querySelectorAll('button[data-bs-toggle="pill"]');
+
+            tabs.forEach(tab => {
+                tab.addEventListener('shown.bs.tab', function (event) {
+                    const tabId = event.target.id;
+
+                    // Map Bootstrap tab IDs to your internal tab names
+                    let mappedTab;
+                    switch (tabId) {
+                        case 'tab-shift-settings-tab':
+                            mappedTab = 'shift_settings';
+                            break;
+                        case 'tab-assign-employee-tab':
+                            mappedTab = 'assign_employee';
+                            break;
+                        default:
+                            mappedTab = 'shift_settings';
+                    }
+
+                    Livewire.dispatch('tabChanged', {tabId: mappedTab});
+
+                });
+            });
+        });
+    </script>
+@endpush
