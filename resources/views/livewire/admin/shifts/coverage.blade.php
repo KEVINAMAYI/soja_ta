@@ -170,7 +170,7 @@ new class extends Component {
                         'dept' => $shift->name,
                         'required' => $totalEmployees,
                         'assigned' => 0,
-                        'staff' => $employees->pluck('name')->toArray(),
+                        'staff' => $employees->map(fn($e) => ['id' => $e->id, 'name' => $e->name])->toArray(),
                         'status' => 'scheduled',
                     ];
                     continue;
@@ -216,7 +216,7 @@ new class extends Component {
                     'dept' => $shift->name,
                     'required' => $totalEmployees,
                     'assigned' => $presentCount,
-                    'staff' => $employees->pluck('name')->toArray(),
+                    'staff' => $employees->map(fn($e) => ['id' => $e->id, 'name' => $e->name])->toArray(),
                     'status' => $status,
                 ];
             }
@@ -225,6 +225,46 @@ new class extends Component {
         }
 
         return $allShifts;
+    }
+
+
+    public function removeStaffFromShift($employeeId)
+    {
+        try {
+            $employee = Employee::findOrFail($employeeId);
+
+            // 1. Reset the shift and status
+            $employee->update([
+                'shift_id' => null,
+                'shift_status' => 'off_shift'
+            ]);
+
+            // 2. Refresh the UI data
+            $this->loadShifts();
+
+            // 3. Update the currently viewed selectedShift
+            if ($this->selectedShift) {
+                $shifts = $this->getShifts();
+                $this->selectedShift = collect($shifts)->firstWhere('id', $this->selectedShift['id']);
+            }
+
+            LivewireAlert::title('Awesome!')
+                ->text("{$employee->name} has been removed from the shift.")
+                ->success()
+                ->toast()
+                ->position('top-end')
+                ->show();
+
+        } catch (\Exception $e) {
+
+            LivewireAlert::title('Error!')
+                ->text('Failed to remove staff.')
+                ->error()
+                ->toast()
+                ->position('top-end')
+                ->show();
+
+        }
     }
 
     private function getAvailableStaff()
@@ -597,12 +637,15 @@ new class extends Component {
                             </span>
                                             </div>
                                             <div class="d-flex">
-                                                @foreach(array_slice($shift['staff'], 0, 3) as $index => $staff)
-                                                    <div class="staff-avatar">{{ chr(65 + $index) }}</div>
+                                                @foreach(array_slice($shift['staff'], 0, 3) as $staffMember)
+                                                    <div class="staff-avatar" title="{{ $staffMember['name'] }}">
+                                                        {{ substr($staffMember['name'], 0, 1) }}
+                                                    </div>
                                                 @endforeach
                                                 @if(count($shift['staff']) > 3)
                                                     <div class="staff-avatar" style="background-color: #6c757d;">
-                                                        +{{ count($shift['staff']) - 3 }}</div>
+                                                        +{{ count($shift['staff']) - 3 }}
+                                                    </div>
                                                 @endif
                                             </div>
                                         </div>
@@ -816,12 +859,17 @@ new class extends Component {
                         <div class="mb-4">
                             <label class="small text-muted mb-2 d-block">Assigned Staff</label>
                             <div class="d-flex flex-column gap-2">
+
                                 @forelse($selectedShift['staff'] as $staff)
                                     <div
                                         class="d-flex justify-content-between align-items-center p-2 bg-light rounded staff-list-item">
-                                        <span class="small">{{ $staff }}</span>
-                                        <button class="btn btn-sm btn-link text-danger p-0"
-                                                style="font-size: 12px;">Remove
+                                        <span class="small">{{ $staff['name'] }}</span>
+                                        <button
+                                            wire:click="removeStaffFromShift({{ $staff['id'] }})"
+                                            wire:confirm="Are you sure you want to remove this staff member?"
+                                            class="btn btn-sm btn-link text-danger p-0"
+                                            style="font-size: 12px; text-decoration: none;">
+                                            Remove
                                         </button>
                                     </div>
                                 @empty
