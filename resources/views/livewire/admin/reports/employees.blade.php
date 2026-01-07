@@ -534,7 +534,7 @@ new class extends Component {
     <div class="col-12">
 
         <livewire:admin.system-settings.bread-crumb
-            title="All Reports"
+            title="Detailed Reports"
             :items="[
         [
             'label' => 'Dashboard',
@@ -542,8 +542,8 @@ new class extends Component {
             'icon' => '<iconify-icon icon=\'solar:home-2-line-duotone\' class=\'fs-5\'></iconify-icon>',
         ],
         [
-            'label' => 'Reports',
-            'icon' => '<iconify-icon icon=\'mdi:file-chart-outline\' class=\'fs-5\'></iconify-icon>',
+            'label' => 'Detailed Reports',
+            'icon'  => '<iconify-icon icon=\'mdi:file-document-outline\' class=\'fs-6\'></iconify-icon>',
         ],
         [
             'label' => 'All',
@@ -614,18 +614,18 @@ new class extends Component {
 
 
                 <!-- Leave -->
-                <li class="nav-item" role="presentation">
-                    <button
-                        type="button"
-                        class="nav-link position-relative rounded-0 d-flex align-items-center justify-content-center bg-transparent fs-3 py-3
-                   {{ $report_type === 'scheduled' ? 'active' : '' }}"
-                        onclick="Livewire.dispatch('setReportType', { type: 'scheduled' })"
-                        role="tab"
-                        aria-selected="{{ $report_type === 'scheduled' ? 'true' : 'false' }}">
-                        <i class="ti ti-timeline-event mx-2 fs-6"></i>
-                        <span class="d-none d-md-block">Report Schedules</span>
-                    </button>
-                </li>
+                {{--                <li class="nav-item" role="presentation">--}}
+                {{--                    <button--}}
+                {{--                        type="button"--}}
+                {{--                        class="nav-link position-relative rounded-0 d-flex align-items-center justify-content-center bg-transparent fs-3 py-3--}}
+                {{--                   {{ $report_type === 'scheduled' ? 'active' : '' }}"--}}
+                {{--                        onclick="Livewire.dispatch('setReportType', { type: 'scheduled' })"--}}
+                {{--                        role="tab"--}}
+                {{--                        aria-selected="{{ $report_type === 'scheduled' ? 'true' : 'false' }}">--}}
+                {{--                        <i class="ti ti-timeline-event mx-2 fs-6"></i>--}}
+                {{--                        <span class="d-none d-md-block">Report Schedules</span>--}}
+                {{--                    </button>--}}
+                {{--                </li>--}}
 
 
             </ul>
@@ -868,8 +868,8 @@ new class extends Component {
                                     <th>Frequency</th>
                                     <th>Recipients</th>
                                     <th>Format</th>
-{{--                                    <th>Last Run</th>--}}
-{{--                                    <th>Next Run</th>--}}
+                                    {{--                                    <th>Last Run</th>--}}
+                                    {{--                                    <th>Next Run</th>--}}
                                     <th>Status</th>
                                     <th class="text-center">Actions</th>
                                 </tr>
@@ -950,8 +950,8 @@ new class extends Component {
                                         </td>
 
                                         <!-- Last Run -->
-{{--                                        <td>{{ $setting['last_run_at']?->format('d M Y H:i') ?? 'Never' }}</td>--}}
-{{--                                        <td>{{ $setting['next_run_at']?->format('d M Y H:i') ?? 'Not scheduled' }}</td>--}}
+                                        {{--                                        <td>{{ $setting['last_run_at']?->format('d M Y H:i') ?? 'Never' }}</td>--}}
+                                        {{--                                        <td>{{ $setting['next_run_at']?->format('d M Y H:i') ?? 'Not scheduled' }}</td>--}}
 
                                         <!-- Status -->
                                         <td>

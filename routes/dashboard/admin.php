@@ -37,8 +37,9 @@ Route::middleware(['auth'])->prefix('admin')->group(function () {
     Volt::route('overtime', 'admin.overtime.index')->name('overtime.index');
 
     //Routes to manage Reports
-    Volt::route('reports/employees', 'admin.reports.employees')->name('reports.employees');
-    Volt::route('reports/departments', 'admin.reports.departments')->name('reports.departments');
+    Volt::route('reports/detailed', 'admin.reports.employees')->name('reports.detailed');
+    Volt::route('reports/summary', 'admin.reports.summary')->name('reports.summary');
+    Volt::route('reports/scheduled', 'admin.reports.schedule')->name('reports.scheduled');
     Volt::route('reports/organization', 'admin.reports.organization')->name('analytics');
 
     //Work Locations
@@ -50,6 +51,7 @@ Route::middleware(['auth'])->prefix('admin')->group(function () {
 
     //shifts
     Volt::route('shifts/create', 'admin.shifts.create')->name('shifts.create');
+    Volt::route('shifts/coverage', 'admin.shifts.coverage')->name('shifts.coverage');
 
 
 });

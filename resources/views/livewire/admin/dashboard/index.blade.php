@@ -25,6 +25,8 @@ new class extends Component {
     public $googleMapsApiKey;
     public $workLocations = [];
     public $statusData = [];
+    public $shiftStats = [];
+
 
     public function mount()
     {
@@ -175,6 +177,85 @@ new class extends Component {
 
         $this->dailyAttendancePercentage();
 
+        $this->shiftStats = $this->getShiftStats(); // Add this line
+
+
+    }
+
+
+    /**
+     * Get today's shift coverage statistics
+     */
+    private function getShiftStats()
+    {
+        $organizationId = auth()->user()->employee->organization_id;
+        $today = Carbon::today();
+        $todayString = $today->toDateString();
+        $dayOfWeek = $today->format('D'); // Mon, Tue, Wed, etc.
+
+        // Get all active shifts
+        $shifts = DB::table('shifts')
+            ->where('status', 'active')
+            ->where('organization_id', $organizationId)
+            ->get();
+
+        $allShifts = [];
+
+        foreach ($shifts as $shift) {
+            // Decode pattern_days from JSON
+            $patternDays = json_decode($shift->pattern_days, true) ?? [];
+
+            // Skip this shift if it doesn't run today
+            if (!in_array($dayOfWeek, $patternDays)) {
+                continue;
+            }
+
+            // Get employees assigned to this shift
+            $employees = DB::table('employees')
+                ->where('shift_id', $shift->id)
+                ->where('organization_id', $organizationId)
+                ->get(['id']);
+
+            $totalEmployees = $employees->count();
+
+            // If no employees assigned, mark as critical
+            if ($totalEmployees === 0) {
+                $allShifts[] = ['status' => 'critical'];
+                continue;
+            }
+
+            // Get attendance for today
+            $presentEmployeeIds = DB::table('attendances')
+                ->whereDate('date', $todayString)
+                ->whereIn('employee_id', $employees->pluck('id'))
+                ->whereIn('status', ['clocked_in', 'clocked_out'])
+                ->pluck('employee_id')
+                ->unique();
+
+            $presentCount = $presentEmployeeIds->count();
+
+            // Determine status
+            if ($presentCount === $totalEmployees) {
+                $status = 'full';
+            } elseif ($presentCount > ($totalEmployees / 2)) {
+                $status = 'partial';
+            } else {
+                $status = 'critical';
+            }
+
+            $allShifts[] = ['status' => $status];
+        }
+
+        // Calculate statistics
+        $shiftsCollection = collect($allShifts);
+
+        return [
+            'total' => $shiftsCollection->count(),
+            'full' => $shiftsCollection->where('status', 'full')->count(),
+            'partial' => $shiftsCollection->where('status', 'partial')->count(),
+            'critical' => $shiftsCollection->where('status', 'critical')->count(),
+            'scheduled' => 0, // For future dates
+        ];
     }
 
 
@@ -570,18 +651,73 @@ new class extends Component {
     </div>
 
     <div class="col-lg-4 d-flex">
-        <div class="card shadow-sm">
-            <div class="card-header quick-actions-title">
+        <div class="card shadow-sm flex-fill">
+            <div class="card-header quick-actions-title fw-semibold">
                 Quick Actions
             </div>
             <div class="card-body">
                 <div class="row g-3">
 
+                    <!-- 🆕 SHIFT COVERAGE CARD (NEW) -->
+                    <div class="col-12">
+                        <a href="{{ route('shifts.coverage') }}"
+                           class="card shadow-sm text-decoration-none shift-coverage-card">
+                            <div class="card-body">
+                                <div class="d-flex align-items-center justify-content-between mb-3">
+                                    <h6 class="mb-0 fw-semibold text-dark">Shift Monitoring</h6>
+                                    <i class="bi bi-calendar-check text-primary" style="font-size: 24px;"></i>
+                                </div>
+
+                                <div class="row g-2">
+                                    <!-- Total Shifts -->
+                                    <div class="col-6">
+                                        <div class="text-center p-2 rounded" style="background-color: #f8f9fa;">
+                                            <div class="text-muted" style="font-size: 0.75rem;">Total Shifts</div>
+                                            <div class="h4 mb-0 fw-bold text-dark">
+                                                {{ $shiftStats['total'] }}
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Fully Staffed -->
+                                    <div class="col-6">
+                                        <div class="text-center p-2 rounded" style="background-color: #d1f2eb;">
+                                            <div class="text-success" style="font-size: 0.75rem;">Fully Staffed</div>
+                                            <div class="h4 mb-0 fw-bold text-success">
+                                                {{ $shiftStats['full'] }}
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Partial Coverage -->
+                                    <div class="col-6">
+                                        <div class="text-center p-2 rounded" style="background-color: #fff3cd;">
+                                            <div class="text-warning" style="font-size: 0.75rem;">Partial Coverage</div>
+                                            <div class="h4 mb-0 fw-bold text-warning">
+                                                {{ $shiftStats['partial'] }}
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Critical Gaps -->
+                                    <div class="col-6">
+                                        <div class="text-center p-2 rounded" style="background-color: #f8d7da;">
+                                            <div class="text-danger" style="font-size: 0.75rem;">Critical Gaps</div>
+                                            <div class="h4 mb-0 fw-bold text-danger">
+                                                {{ $shiftStats['critical'] }}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </a>
+                    </div>
+
                     <!-- Timesheets -->
                     <div class="col-6">
                         <a href="{{ route('attendance.index') }}" class="card-action text-center">
-                            <span class="iconify mb-2" data-icon="mdi:clipboard-text-clock-outline"
-                                  style="font-size: 28px;"></span>
+                                <span class="iconify mb-2" data-icon="mdi:clipboard-text-clock-outline"
+                                      style="font-size: 28px;"></span>
                             <span>Timesheets</span>
                         </a>
                     </div>
@@ -589,17 +725,17 @@ new class extends Component {
                     <!-- Add Employee -->
                     <div class="col-6">
                         <a href="{{ route('employees.index') }}" class="card-action text-center">
-                            <span class="iconify mb-2" data-icon="mdi:account-plus-outline"
-                                  style="font-size: 28px;"></span>
+                                <span class="iconify mb-2" data-icon="mdi:account-plus-outline"
+                                      style="font-size: 28px;"></span>
                             <span>Add Employee</span>
                         </a>
                     </div>
 
                     <!-- Export Reports -->
                     <div class="col-6">
-                        <a href="{{ route('reports.employees') }}" class="card-action text-center">
-                            <span class="iconify mb-2" data-icon="mdi:file-download-outline"
-                                  style="font-size: 28px;"></span>
+                        <a href="{{ route('reports.detailed') }}" class="card-action text-center">
+                                <span class="iconify mb-2" data-icon="mdi:file-download-outline"
+                                      style="font-size: 28px;"></span>
                             <span>Export Reports</span>
                         </a>
                     </div>
@@ -609,15 +745,6 @@ new class extends Component {
                         <a href="{{ route('system-settings.index') }}" class="card-action text-center">
                             <span class="iconify mb-2" data-icon="mdi:cog-outline" style="font-size: 28px;"></span>
                             <span>System Settings</span>
-                        </a>
-                    </div>
-
-                    <!-- Account Settings -->
-                    <div class="col-12">
-                        <a href="{{ route('account-settings.index') }}" class="card-action text-center">
-                            <span class="iconify mb-2" data-icon="mdi:account-cog-outline"
-                                  style="font-size: 28px;"></span>
-                            <span>Account Settings</span>
                         </a>
                     </div>
 

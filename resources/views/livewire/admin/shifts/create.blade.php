@@ -14,7 +14,7 @@ new class extends Component {
     public $selectedShift = [];
     public $showPatternModal = false;
     public $showAddShift = false;
-    public string $activeTab = 'shift_settings';
+    public string $activeShiftTab = 'shift_settings';
     public string $tabTitle;
     public string $tabIcon;
     public $assignedStaffIds = [];
@@ -107,23 +107,31 @@ new class extends Component {
 
     public function selectShift($shiftId)
     {
+        if (!$shiftId) return;
+
         $key = array_search($shiftId, array_column($this->shifts, 'id'));
+
         if ($key !== false) {
             $this->selectedShift = $this->shifts[$key];
+
+            // Use find() instead of findOrFail() to handle race conditions gracefully
+            $this->assigningShift = Shift::find($shiftId);
+
+            if (!$this->assigningShift) {
+                $this->loadShifts();
+                return;
+            }
+
+            $this->assignedStaffIds = Employee::where('shift_id', $shiftId)
+                ->pluck('id')
+                ->toArray();
+
+            $this->assignedStaff = Employee::whereIn('id', $this->assignedStaffIds)
+                ->with('shift')
+                ->get();
+
+            $this->searchEmployees();
         }
-
-        $this->assignedStaffIds = Employee::where('shift_id', $shiftId)
-            ->pluck('id')
-            ->toArray();
-
-        $this->assigningShift = Shift::findOrFail($shiftId);
-
-        $this->assignedStaff = Employee::whereIn('id', $this->assignedStaffIds)
-            ->with('shift')
-            ->get();
-
-        $this->searchEmployees();
-
     }
 
 
@@ -194,15 +202,22 @@ new class extends Component {
 
             // Get organization_id
             $organizationId = auth()->user()->employee->organization_id;
+            $currentShiftId = $this->selectedShift['id'];
 
             Employee::where('organization_id', $organizationId)
-                ->where('shift_id', $this->selectedShift['id'])
+                ->where('shift_id', $currentShiftId)
                 ->whereNotIn('id', $this->assignedStaffIds)
-                ->update(['shift_id' => null]);
+                ->update([
+                    'shift_id' => null,
+                    'shift_status' => 'off_shift'
+                ]);
 
             Employee::where('organization_id', $organizationId)
                 ->whereIn('id', $this->assignedStaffIds)
-                ->update(['shift_id' => $this->selectedShift['id']]);
+                ->update([
+                    'shift_id' => $currentShiftId,
+                    'shift_status' => 'on_shift'
+                ]);
 
             $this->getAssignedStaff();
             $this->searchEmployees();
@@ -404,11 +419,14 @@ new class extends Component {
                 return;
             }
 
+            $shiftId = $shift->id;
             $shift->delete();
+
+            // Reload shifts FIRST
             $this->loadShifts();
 
             if (count($this->shifts) > 0) {
-                $this->selectedShift = $this->shifts[0];
+                $this->selectShift($this->shifts[0]['id']);
             }
 
             LivewireAlert::title('Awesome!')
@@ -417,9 +435,9 @@ new class extends Component {
                 ->toast()
                 ->position('top-end')
                 ->show();
-
         }
     }
+
 
     public function getPatternDisplay($pattern, $days)
     {
@@ -463,18 +481,18 @@ new class extends Component {
     }
 
 
-    #[On('tabChanged')]
-    public function tabChanged($tabId)
+    #[On('shiftTabChanged')]
+    public function shiftTabChanged($tabId)
     {
 
-        $this->activeTab = $tabId;
-        $this->changeBreadcrumb();
+        $this->activeShiftTab = $tabId;  // ✅ CORRECT
+        $this->changeShiftBreadcrumb();
 
     }
 
-    public function changeBreadcrumb()
+    public function changeShiftBreadcrumb()
     {
-        switch ($this->activeTab) {
+        switch ($this->activeShiftTab) {
 
             case 'shift_settings':
                 $this->tabTitle = 'Shift Settings';
@@ -1022,7 +1040,7 @@ new class extends Component {
                     <p class="text-muted small mb-0">Manage automated clock-out and overtime settings</p>
                 </div>
             </div>
-            @if($activeTab === 'shift_settings')
+            @if($activeShiftTab === 'shift_settings')
                 <button wire:click="saveShift" class="btn btn-primary">
                     <svg width="16" height="16" class="me-2" fill="currentColor" viewBox="0 0 24 24">
                         <path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z" fill="none"
@@ -1132,11 +1150,11 @@ new class extends Component {
         <div class="shift-content">
             <div style="max-width: 1000px;">
 
-                <ul class="nav nav-pills user-profile-tab" id="pills-tab" role="tablist">
+                <ul class="nav nav-pills user-profile-tab" id="shift-tabs" role="tablist">
                     <!-- Company Information -->
                     <li class="nav-item" role="presentation">
                         <button
-                            class="nav-link position-relative rounded-0 {{ $activeTab === 'shift_settings' ? 'active' : '' }} d-flex align-items-center justify-content-center bg-transparent fs-3 py-3"
+                            class="nav-link position-relative rounded-0 {{ $activeShiftTab === 'shift_settings' ? 'active' : '' }} d-flex align-items-center justify-content-center bg-transparent fs-3 py-3"
                             id="tab-shift-settings-tab"
                             data-bs-toggle="pill"
                             data-bs-target="#tab-company-information"
@@ -1152,7 +1170,7 @@ new class extends Component {
                     <!-- Roles & Permissions -->
                     <li class="nav-item" role="presentation">
                         <button
-                            class="nav-link position-relative rounded-0 {{ $activeTab === 'assign_employee' ? 'active' : '' }} d-flex align-items-center justify-content-center bg-transparent fs-3 py-3"
+                            class="nav-link position-relative rounded-0 {{ $activeShiftTab === 'assign_employee' ? 'active' : '' }} d-flex align-items-center justify-content-center bg-transparent fs-3 py-3"
                             id="tab-assign-employee-tab"
                             data-bs-toggle="pill"
                             data-bs-target="#tab-roles-permissions"
@@ -1172,7 +1190,7 @@ new class extends Component {
                 <div class="tab-content" id="innerRolesTabContent">
 
                     <!-- Overtime Policy Tab -->
-                    <div class="mt-3 tab-pane fade {{ $activeTab === 'shift_settings' ? 'show active' : '' }}"
+                    <div class="mt-3 tab-pane fade {{ $activeShiftTab === 'shift_settings' ? 'show active' : '' }}"
                          id="tab-shift-settings">
 
                         <!-- Shift Details -->
@@ -1695,7 +1713,7 @@ new class extends Component {
                     </div>
 
                     <!-- Overtime Policy Tab -->
-                    <div class="mt-3 tab-pane fade {{ $activeTab === 'assign_employee' ? 'show active' : '' }}"
+                    <div class="mt-3 tab-pane fade {{ $activeShiftTab === 'assign_employee' ? 'show active' : '' }}"
                          id="tab-assign-employee">
                         <div class="staff-assignment-card">
                             <div class="section-header">
@@ -1952,13 +1970,12 @@ new class extends Component {
 @push('scripts')
     <script>
         document.addEventListener('DOMContentLoaded', function () {
-            const tabs = document.querySelectorAll('button[data-bs-toggle="pill"]');
+            const tabs = document.querySelectorAll('#shift-tabs button[data-bs-toggle="pill"]');
 
             tabs.forEach(tab => {
                 tab.addEventListener('shown.bs.tab', function (event) {
                     const tabId = event.target.id;
 
-                    // Map Bootstrap tab IDs to your internal tab names
                     let mappedTab;
                     switch (tabId) {
                         case 'tab-shift-settings-tab':
@@ -1971,8 +1988,8 @@ new class extends Component {
                             mappedTab = 'shift_settings';
                     }
 
-                    Livewire.dispatch('tabChanged', {tabId: mappedTab});
-
+                    // Changed event name from 'tabChanged' to 'shiftTabChanged'
+                    Livewire.dispatch('shiftTabChanged', {tabId: mappedTab});
                 });
             });
         });

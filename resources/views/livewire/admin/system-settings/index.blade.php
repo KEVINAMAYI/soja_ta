@@ -32,15 +32,15 @@ new class extends Component {
             : false;
 
         // ✅ Initialize breadcrumb/title/icon
-        $this->changeBreadcrumb();
+        $this->changeSystemSettingsBreadcrumb();
 
     }
 
-    #[On('tabChanged')]
-    public function tabChanged($tabId)
+    #[On('systemSettingsTabChanged')]
+    public function systemSettingsTabChanged($tabId)
     {
         $this->activeTab = $tabId;
-        $this->changeBreadcrumb();
+        $this->changeSystemSettingsBreadcrumb();
     }
 
 
@@ -87,18 +87,23 @@ new class extends Component {
     }
 
 
-    public function changeBreadcrumb()
+    public function changeSystemSettingsBreadcrumb()
     {
-        switch ($this->activeTab) {
 
+        switch ($this->activeTab) {
             case 'qr_code':
                 $this->tabTitle = 'QR Code Settings';
                 $this->tabIcon = '<iconify-icon icon="mdi:qrcode-scan" class="fs-5"></iconify-icon>';
                 break;
 
-            default: // shifts or fallback
-                $this->tabTitle = 'qr_code';
-                $this->tabIcon = '<iconify-icon icon="mdi:bell-outline" class="fs-5"></iconify-icon>';
+            case 'shift_management': // Add this
+                $this->tabTitle = 'Shift Management';
+                $this->tabIcon = '<iconify-icon icon="mdi:calendar-clock-outline" class="fs-5"></iconify-icon>';
+                break;
+
+            default:
+                $this->tabTitle = 'Settings';
+                $this->tabIcon = '<iconify-icon icon="mdi:cog-outline" class="fs-5"></iconify-icon>';
                 break;
         }
 
@@ -148,6 +153,21 @@ new class extends Component {
                 </button>
             </li>
 
+            <li class="nav-item" role="presentation">
+                <button
+                    class="nav-link position-relative rounded-0 {{ $activeTab === 'shift_management' ? 'active' : '' }} d-flex align-items-center justify-content-center bg-transparent fs-3 py-3"
+                    id="tab-shift-management-tab"
+                    data-bs-toggle="pill"
+                    data-bs-target="#tab-shift-management"
+                    type="button"
+                    role="tab"
+                    aria-controls="tab-shift-management"
+                    aria-selected="false">
+                    <i class="ti ti-calendar-time me-2 fs-6"></i>
+                    <span class="d-none d-md-block">Shift Management</span>
+                </button>
+            </li>
+
 
         </ul>
 
@@ -184,35 +204,46 @@ new class extends Component {
 
                 </div>
 
+                <!-- QR Code Settings Tab -->
+                <div class="tab-pane fade {{ $activeTab === 'shift_management' ? 'show active' : '' }}"
+                     id="tab-shift-management">
+                    <div class="row justify-content-center">
+                        <div class="col-lg-12">
+                            <livewire:admin.shifts.create/>
+                        </div>
+                    </div>
+                </div>
+
+
             </div>
         </div>
     </div>
 
 </div>
 
-
-
 @push('scripts')
     <script>
         document.addEventListener('DOMContentLoaded', function () {
-            const tabs = document.querySelectorAll('button[data-bs-toggle="pill"]');
+            // ✅ FIXED: Select tabs from #pills-tab, not #pills-tabContent
+            const tabs = document.querySelectorAll('#pills-tab button[data-bs-toggle="pill"]');
 
             tabs.forEach(tab => {
                 tab.addEventListener('shown.bs.tab', function (event) {
                     const tabId = event.target.id;
 
-                    // Map Bootstrap tab IDs to your internal tab names
                     let mappedTab;
                     switch (tabId) {
                         case 'tab-qr-code-tab':
                             mappedTab = 'qr_code';
                             break;
+                        case 'tab-shift-management-tab':
+                            mappedTab = 'shift_management';
+                            break;
                         default:
                             mappedTab = 'qr_code';
                     }
 
-                    Livewire.dispatch('tabChanged', {tabId: mappedTab});
-
+                    Livewire.dispatch('systemSettingsTabChanged', {tabId: mappedTab});
                 });
             });
         });
