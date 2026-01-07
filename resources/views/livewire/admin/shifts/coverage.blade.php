@@ -267,8 +267,15 @@ new class extends Component {
         }
     }
 
-    private function getAvailableStaff()
+    #[On('searchAvailableStaff')]
+    public function updatedSearchTerm()
     {
+        $this->availableStaff = $this->getAvailableStaff();
+    }
+
+    public function getAvailableStaff()
+    {
+
         if (!$this->selectedShift) return [];
 
         $organizationId = auth()->user()->employee->organization_id;
@@ -281,7 +288,6 @@ new class extends Component {
                 $query->where('shift_id', '!=', $currentShiftId)
                     ->orWhereNull('shift_id');
             })
-
             // 2. Search filter
             ->when($this->searchTerm, function ($query) {
                 $query->where('name', 'like', '%' . $this->searchTerm . '%');
@@ -895,7 +901,9 @@ new class extends Component {
                                         <span class="input-group-text bg-white border-end-0">
                                             <i class="bi bi-search text-muted"></i>
                                         </span>
-                                    <input type="text" wire:model.live="searchTerm" class="form-control border-start-0"
+                                    <input type="text" wire:model="searchTerm"
+                                           wire:keyup="$dispatch('searchAvailableStaff')"
+                                           class="form-control border-start-0"
                                            placeholder="Search staff...">
                                 </div>
 
