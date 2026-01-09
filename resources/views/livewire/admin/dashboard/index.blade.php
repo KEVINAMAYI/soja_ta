@@ -400,22 +400,18 @@ new class extends Component {
         }
 
         .icon-blue {
-            background: rgba(59, 130, 246, 0.1);
             color: #3b82f6;
         }
 
         .icon-green {
-            background: rgba(34, 197, 94, 0.1);
             color: #22c55e;
         }
 
         .icon-red {
-            background: rgba(239, 68, 68, 0.1);
             color: #ef4444;
         }
 
         .icon-orange {
-            background: rgba(251, 146, 60, 0.1);
             color: #fb923c;
         }
 
@@ -482,6 +478,266 @@ new class extends Component {
                 transform: scale(0.8);
                 opacity: 0.6;
             }
+        }
+        .shift-monitoring-card {
+            background: white;
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            transition: all 0.3s ease;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .shift-monitoring-card:hover {
+            transform: translateY(-8px);
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+        }
+
+        /* Header */
+        .shift-monitoring-card .card-header {
+            background: linear-gradient(135deg, #e14326 0%, #e14326 100%);
+            padding: 8px;
+            padding-left: 15px;
+            border: none;
+        }
+
+        .shift-monitoring-card .header-content {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .shift-monitoring-card .icon-wrapper {
+            width: 48px;
+            height: 48px;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            backdrop-filter: blur(10px);
+        }
+
+        .shift-monitoring-card .icon-wrapper iconify-icon {
+            font-size: 24px;
+            color: white;
+        }
+
+        .shift-monitoring-card .title {
+            color: white;
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin: 0;
+            letter-spacing: -0.5px;
+        }
+
+        /* Body */
+        .shift-monitoring-card .card-body {
+            padding: 1.5rem;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Stats Grid */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        /* Stat Box */
+        .stat-box {
+            padding: 10px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .stat-box::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: currentColor;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .stat-box:hover {
+            transform: translateY(-4px);
+        }
+
+        .stat-box:hover::before {
+            opacity: 1;
+        }
+
+        /* Stat Icons */
+        .stat-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+
+        .stat-icon iconify-icon {
+            font-size: 24px;
+        }
+
+        /* Stat Content */
+        .stat-content {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .stat-value {
+            font-size: 20px;
+            font-weight: 700;
+            line-height: 1;
+            margin-bottom: 0.25rem;
+        }
+
+        .stat-label {
+            font-size: 10px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            opacity: 0.8;
+        }
+
+        /* Total Stats - Neutral Gray */
+        .stat-total {
+            background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+            color: #334155;
+        }
+
+        .stat-total .stat-icon {
+            color: #334155;
+        }
+
+        /* Success - Green */
+        .stat-success {
+            background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%);
+            color: #065f46;
+        }
+
+        .stat-success .stat-icon {
+            color: #059669;
+        }
+
+        /* Warning - Yellow */
+        .stat-warning {
+            background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+            color: #78350f;
+        }
+
+        .stat-warning .stat-icon {
+            color: #d97706;
+        }
+
+        /* Danger - Red */
+        .stat-danger {
+            background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
+            color: #7f1d1d;
+        }
+
+        .stat-danger .stat-icon {
+            color: #dc2626;
+        }
+
+        /* View Details Link */
+        .view-details {
+            text-align: center;
+            padding-top: 1rem;
+            border-top: 1px solid #e5e7eb;
+            margin-top: auto;
+        }
+
+        .view-link {
+            color: #667eea;
+            font-weight: 600;
+            font-size: 0.9rem;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.2rem;
+            transition: all 0.3s ease;
+        }
+
+        .shift-monitoring-card:hover .view-link {
+            gap: 0.45rem;
+            color: #764ba2;
+        }
+
+        .view-link iconify-icon {
+            transition: transform 0.3s ease;
+        }
+
+        .shift-monitoring-card:hover .view-link iconify-icon {
+            transform: translateX(4px);
+        }
+
+        /* Responsive Design */
+        @media (max-width: 768px) {
+            .shift-monitoring-card .card-header {
+                padding: 1.25rem;
+            }
+
+            .shift-monitoring-card .card-body {
+                padding: 1.25rem;
+            }
+
+            .stats-grid {
+                gap: 0.75rem;
+            }
+
+            .stat-box {
+                padding: 1rem;
+                flex-direction: column;
+                text-align: center;
+            }
+
+            .stat-icon {
+                width: 36px;
+                height: 36px;
+            }
+
+            .stat-icon iconify-icon {
+                font-size: 20px;
+            }
+
+            .stat-value {
+                font-size: 1.5rem;
+            }
+
+            .stat-label {
+                font-size: 0.7rem;
+            }
+        }
+
+        /* Loading Animation (Optional) */
+        @keyframes pulse {
+            0%, 100% {
+                opacity: 1;
+            }
+            50% {
+                opacity: 0.5;
+            }
+        }
+
+        .stat-box.loading {
+            animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
         }
 
     </style>
@@ -651,110 +907,74 @@ new class extends Component {
     </div>
 
     <div class="col-lg-4 d-flex">
-        <div class="card shadow-sm flex-fill">
-            <div class="card-header quick-actions-title fw-semibold">
-                Quick Actions
-            </div>
-            <div class="card-body">
-                <div class="row g-3">
+        <a href="{{ route('shifts.coverage') }}" class="text-decoration-none">
+            <div class="shift-monitoring-card">
+                <div class="card-header">
+                    <div class="header-content">
+                        <h5 style="font-size:16px;" class="title">Shift Monitoring</h5>
+                    </div>
+                </div>
 
-                    <!-- 🆕 SHIFT COVERAGE CARD (NEW) -->
-                    <div class="col-12">
-                        <a href="{{ route('shifts.coverage') }}"
-                           class="card shadow-sm text-decoration-none shift-coverage-card">
-                            <div class="card-body">
-                                <div class="d-flex align-items-center justify-content-between mb-3">
-                                    <h6 class="mb-0 fw-semibold text-dark">Shift Monitoring</h6>
-                                    <i class="bi bi-calendar-check text-primary" style="font-size: 24px;"></i>
-                                </div>
-
-                                <div class="row g-2">
-                                    <!-- Total Shifts -->
-                                    <div class="col-6">
-                                        <div class="text-center p-2 rounded" style="background-color: #f8f9fa;">
-                                            <div class="text-muted" style="font-size: 0.75rem;">Total Shifts</div>
-                                            <div class="h4 mb-0 fw-bold text-dark">
-                                                {{ $shiftStats['total'] }}
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <!-- Fully Staffed -->
-                                    <div class="col-6">
-                                        <div class="text-center p-2 rounded" style="background-color: #d1f2eb;">
-                                            <div class="text-success" style="font-size: 0.75rem;">Fully Staffed</div>
-                                            <div class="h4 mb-0 fw-bold text-success">
-                                                {{ $shiftStats['full'] }}
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <!-- Partial Coverage -->
-                                    <div class="col-6">
-                                        <div class="text-center p-2 rounded" style="background-color: #fff3cd;">
-                                            <div class="text-warning" style="font-size: 0.75rem;">Partial Coverage</div>
-                                            <div class="h4 mb-0 fw-bold text-warning">
-                                                {{ $shiftStats['partial'] }}
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <!-- Critical Gaps -->
-                                    <div class="col-6">
-                                        <div class="text-center p-2 rounded" style="background-color: #f8d7da;">
-                                            <div class="text-danger" style="font-size: 0.75rem;">Critical Gaps</div>
-                                            <div class="h4 mb-0 fw-bold text-danger">
-                                                {{ $shiftStats['critical'] }}
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
+                <div class="card-body">
+                    <div class="stats-grid">
+                        <!-- Total Shifts -->
+                        <div class="stat-box stat-total">
+                            <div class="stat-icon">
+                                <iconify-icon icon="mdi:clock-time-eight-outline"></iconify-icon>
                             </div>
-                        </a>
+                            <div class="stat-content">
+                                <div class="stat-value">{{ $shiftStats['total'] }}</div>
+                                <div class="stat-label">Total Shifts</div>
+                            </div>
+                        </div>
+
+                        <!-- Fully Staffed -->
+                        <div class="stat-box stat-success">
+                            <div class="stat-icon">
+                                <iconify-icon icon="mdi:check-circle"></iconify-icon>
+                            </div>
+                            <div class="stat-content">
+                                <div class="stat-value">{{ $shiftStats['full'] }}</div>
+                                <div class="stat-label">Fully Staffed</div>
+                            </div>
+                        </div>
+
+                        <!-- Partial Coverage -->
+                        <div class="stat-box stat-warning">
+                            <div class="stat-icon">
+                                <iconify-icon icon="mdi:alert-circle"></iconify-icon>
+                            </div>
+                            <div class="stat-content">
+                                <div class="stat-value">{{ $shiftStats['partial'] }}</div>
+                                <div class="stat-label">Partial Coverage</div>
+                            </div>
+                        </div>
+
+                        <!-- Critical Gaps -->
+                        <div class="stat-box stat-danger">
+                            <div class="stat-icon">
+                                <iconify-icon icon="mdi:close-circle"></iconify-icon>
+                            </div>
+                            <div class="stat-content">
+                                <div class="stat-value">{{ $shiftStats['critical'] }}</div>
+                                <div class="stat-label">Critical Gaps</div>
+                            </div>
+                        </div>
                     </div>
 
-                    <!-- Timesheets -->
-                    <div class="col-6">
-                        <a href="{{ route('attendance.index') }}" class="card-action text-center">
-                                <span class="iconify mb-2" data-icon="mdi:clipboard-text-clock-outline"
-                                      style="font-size: 28px;"></span>
-                            <span>Timesheets</span>
-                        </a>
+                    <!-- View Details Link -->
+                    <div class="view-details">
+                    <span class="view-link">
+                        View Full Coverage
+                        <iconify-icon icon="mdi:arrow-right"></iconify-icon>
+                    </span>
                     </div>
-
-                    <!-- Add Employee -->
-                    <div class="col-6">
-                        <a href="{{ route('employees.index') }}" class="card-action text-center">
-                                <span class="iconify mb-2" data-icon="mdi:account-plus-outline"
-                                      style="font-size: 28px;"></span>
-                            <span>Add Employee</span>
-                        </a>
-                    </div>
-
-                    <!-- Export Reports -->
-                    <div class="col-6">
-                        <a href="{{ route('reports.detailed') }}" class="card-action text-center">
-                                <span class="iconify mb-2" data-icon="mdi:file-download-outline"
-                                      style="font-size: 28px;"></span>
-                            <span>Export Reports</span>
-                        </a>
-                    </div>
-
-                    <!-- System Settings -->
-                    <div class="col-6">
-                        <a href="{{ route('system-settings.index') }}" class="card-action text-center">
-                            <span class="iconify mb-2" data-icon="mdi:cog-outline" style="font-size: 28px;"></span>
-                            <span>System Settings</span>
-                        </a>
-                    </div>
-
                 </div>
             </div>
-        </div>
+        </a>
     </div>
 
 
-    <!-- Current Employee Status -->
     <!-- Recent Activity Entries -->
     <div class="col-12">
         <div class="card shadow-sm">

@@ -19,6 +19,7 @@ new class extends Component {
     public $stats = [];
     public $availableStaff = [];
     public $departments = [];
+    public $showAddStaffPanel = false;
 
 
     public function mount()
@@ -27,6 +28,15 @@ new class extends Component {
         $this->loadShifts();
     }
 
+
+    public function toggleAddStaffPanel()
+    {
+        $this->showAddStaffPanel = !$this->showAddStaffPanel;
+        if ($this->showAddStaffPanel) {
+            $this->showStaffPanel = false;
+            $this->availableStaff = $this->getAvailableStaff();
+        }
+    }
 
     private function loadShifts()
     {
@@ -305,35 +315,29 @@ new class extends Component {
             $employee = Employee::findOrFail($employeeId);
             $newShiftId = $this->selectedShift['id'];
 
-            // Perform the reassignment
             $employee->update([
                 'shift_id' => $newShiftId,
                 'shift_status' => 'on_shift'
             ]);
 
-            // Refresh data
             $this->loadShifts();
-
-            // Refresh the selectedShift data to show the new staff count immediately
             $shifts = $this->getShifts();
             $this->selectedShift = collect($shifts)->firstWhere('id', $newShiftId);
 
             LivewireAlert::title('Awesome!')
-                ->text("{$employee->name} has been reassigned successfully!")
+                ->text("{$employee->name} has been assigned successfully!")
                 ->success()
                 ->toast()
                 ->position('top-end')
                 ->show();
 
         } catch (\Exception $e) {
-
             LivewireAlert::title('Error!')
                 ->text('Failed to assign staff!')
                 ->error()
                 ->toast()
                 ->position('top-end')
                 ->show();
-
         }
     }
 
@@ -468,6 +472,94 @@ new class extends Component {
         .staff-list-item:hover {
             background-color: #f8f9fa;
         }
+
+        /* Modal styles */
+        .modal-backdrop-custom {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.6);
+            z-index: 1040;
+            animation: fadeIn 0.2s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        .modal-custom {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1050;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            pointer-events: none;
+            animation: fadeIn 0.2s ease;
+        }
+
+        .modal-custom .modal-dialog {
+            pointer-events: auto;
+            animation: slideDown 0.3s ease;
+        }
+
+        @keyframes slideDown {
+            from {
+                transform: translateY(-50px);
+                opacity: 0;
+            }
+            to {
+                transform: translateY(0);
+                opacity: 1;
+            }
+        }
+
+        .modal-custom .modal-content {
+            background-color: #ffffff !important;
+            border-radius: 12px;
+            overflow: hidden;
+        }
+
+        .modal-staff-item {
+            transition: all 0.2s ease;
+            background-color: #ffffff;
+        }
+
+        .modal-staff-item:hover {
+            background-color: #f8f9fa;
+            transform: translateX(2px);
+        }
+
+        .modal-header {
+            padding: 1.25rem 1.5rem;
+        }
+
+        .modal-body {
+            padding: 1rem 1.5rem;
+        }
+
+        .modal-footer {
+            padding: 1rem 1.5rem;
+        }
+
+        /* Make modal wider */
+        .modal-custom .modal-lg {
+            min-width: 700px;
+        }
+
+        /* Or if you want it even wider */
+        @media (min-width: 992px) {
+            .modal-custom .modal-lg {
+                min-width: 800px;
+            }
+        }
+
     </style>
 @endpush
 
@@ -857,86 +949,144 @@ new class extends Component {
                                     <div class="progress-bar {{ $barColor }}"
                                          style="width: {{ $percentage }}%; height: 100%;"></div>
                                 </div>
-                                <span
-                                    class="small fw-semibold">{{ $selectedShift['assigned'] }}/{{ $selectedShift['required'] }}</span>
+                                <span class="small fw-semibold">{{ $selectedShift['assigned'] }}/{{ $selectedShift['required'] }}</span>
                             </div>
                         </div>
 
+                        <!-- Updated Assigned Staff Section -->
                         <div class="mb-4">
                             <label class="small text-muted mb-2 d-block">Assigned Staff</label>
-                            <div class="d-flex flex-column gap-2">
-
-                                @forelse($selectedShift['staff'] as $staff)
-                                    <div
-                                        class="d-flex justify-content-between align-items-center p-2 bg-light rounded staff-list-item">
-                                        <span class="small">{{ $staff['name'] }}</span>
-                                        <button
-                                            wire:click="removeStaffFromShift({{ $staff['id'] }})"
-                                            wire:confirm="Are you sure you want to remove this staff member?"
-                                            class="btn btn-sm btn-link text-danger p-0"
-                                            style="font-size: 12px; text-decoration: none;">
-                                            Remove
-                                        </button>
-                                    </div>
-                                @empty
-                                    <div class="p-3 text-center bg-light rounded">
-                                        <small class="text-muted">No staff assigned yet</small>
-                                    </div>
-                                @endforelse
-
-                                @if($selectedShift['assigned'] < $selectedShift['required'])
-                                    <button wire:click="toggleStaffPanel"
-                                            class="btn btn-outline-primary btn-sm border-2 border-dashed">
-                                        + Assign Staff
-                                    </button>
-                                @endif
+                            <div class="d-flex align-items-center justify-content-between p-3 bg-light rounded">
+                                <span class="fw-medium">{{ count($selectedShift['staff']) }} Staff Members</span>
+                                <button wire:click="toggleStaffPanel" class="btn btn-sm btn-primary">
+                                    <i class="bi bi-eye"></i> View Staff ({{ count($selectedShift['staff']) }})
+                                </button>
                             </div>
-                        </div>
-
-                        @if($showStaffPanel)
-                            <div class="mt-4 border-top pt-3">
-                                <h6 class="fw-bold mb-3">Assign Available Staff</h6>
-
-                                <div class="input-group input-group-sm mb-3">
-                                        <span class="input-group-text bg-white border-end-0">
-                                            <i class="bi bi-search text-muted"></i>
-                                        </span>
-                                    <input type="text" wire:model="searchTerm"
-                                           wire:keyup="$dispatch('searchAvailableStaff')"
-                                           class="form-control border-start-0"
-                                           placeholder="Search staff...">
-                                </div>
-
-                                <div class="staff-list" style="max-height: 300px; overflow-y: auto;">
-                                    @forelse($availableStaff as $staff)
-                                        <div
-                                            class="staff-list-item p-2 border rounded mb-2 d-flex justify-content-between align-items-center">
-                                            <div>
-                                                <div class="fw-bold small">{{ $staff->name }}</div>
-                                                <div class="text-muted" style="font-size: 10px;">
-                                                    {{ $staff->shift ? 'Currently: ' . $staff->shift->name : 'Unassigned' }}
-                                                </div>
-                                            </div>
-                                            <button wire:click="assignStaffToShift({{ $staff->id }})"
-                                                    class="btn btn-sm btn-outline-primary py-0 px-2"
-                                                    style="font-size: 10px;">
-                                                Assign
-                                            </button>
-                                        </div>
-                                    @empty
-                                        <div class="text-center py-3 text-muted small">No available staff found</div>
-                                    @endforelse
-                                </div>
-                            </div>
-                        @endif
-
-                        <div class="d-flex gap-2 pt-4">
-                            <button class="btn btn-primary flex-grow-1">Save Changes</button>
                         </div>
                     </div>
                 </div>
             </div>
         @endif
+
     </div>
+
+    <!-- Assigned Staff Modal -->
+    @if($showStaffPanel && $selectedShift)
+        <div class="modal-backdrop-custom" wire:click="toggleStaffPanel"></div>
+        <div class="modal-custom">
+            <div class="modal-dialog modal-lg modal-dialog-centered">
+                <div class="modal-content border-0 shadow-lg">
+                    <div class="modal-header bg-white border-bottom">
+                        <h5 class="modal-title d-flex align-items-center gap-2 mb-0">
+                            <i class="bi bi-people-fill text-primary"></i>
+                            <span>Assigned Staff</span>
+                        </h5>
+                        <button wire:click="toggleStaffPanel" type="button" class="btn-close"></button>
+                    </div>
+                    <div class="modal-body pt-4 pb-4 bg-white" style="max-height: 500px; overflow-y: auto;">
+                        @forelse($selectedShift['staff'] as $staff)
+                            <div class="d-flex justify-content-between align-items-center p-3 mb-2 border rounded modal-staff-item bg-white">
+                                <div class="d-flex align-items-center gap-3">
+                                    <div class="staff-avatar" style="margin-left: 0;">
+                                        {{ substr($staff['name'], 0, 1) }}
+                                    </div>
+                                    <span class="fw-medium text-dark">{{ $staff['name'] }}</span>
+                                </div>
+                                <button
+                                    wire:click="removeStaffFromShift({{ $staff['id'] }})"
+                                    wire:confirm="Are you sure you want to remove this staff member?"
+                                    class="btn btn-sm btn-link text-danger"
+                                    style="font-size: 13px; text-decoration: none;">
+                                    Remove
+                                </button>
+                            </div>
+                        @empty
+                            <div class="p-5 text-center bg-light rounded">
+                                <i class="bi bi-person-x text-muted" style="font-size: 48px;"></i>
+                                <p class="text-muted mb-0 mt-3">No staff assigned yet</p>
+                            </div>
+                        @endforelse
+                    </div>
+                    <div class="modal-footer bg-white border-top">
+                        <button wire:click="toggleAddStaffPanel" type="button" class="btn btn-primary me-2 px-4">
+                            <i class="bi bi-plus-circle me-1"></i> Add Staff
+                        </button>
+                        <button wire:click="toggleStaffPanel" type="button" class="btn btn-secondary px-4">
+                            Close
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    @endif
+
+
+    <!-- Add Staff Modal -->
+    @if($showAddStaffPanel && $selectedShift)
+        <div class="modal-backdrop-custom" wire:click="toggleAddStaffPanel"></div>
+        <div class="modal-custom">
+            <div class="modal-dialog modal-lg modal-dialog-centered">
+                <div class="modal-content border-0 shadow-lg">
+                    <div class="modal-header bg-white border-bottom">
+                        <h5 class="modal-title d-flex align-items-center gap-2 mb-0">
+                            <i class="bi bi-person-plus-fill text-primary"></i>
+                            <span>Add Staff to Shift</span>
+                        </h5>
+                        <button wire:click="toggleAddStaffPanel" type="button" class="btn-close"></button>
+                    </div>
+                    <div class="modal-body pt-4 pb-4 bg-white">
+                        <!-- Search Bar -->
+                        <div class="input-group mb-4">
+                        <span class="input-group-text bg-white border-end-0">
+                            <i class="bi bi-search text-muted"></i>
+                        </span>
+                            <input type="text"
+                                   wire:model.live="searchTerm"
+                                   class="form-control border-start-0"
+                                   placeholder="Search staff by name...">
+                        </div>
+
+                        <!-- Staff List -->
+                        <div style="max-height: 400px; overflow-y: auto;">
+                            @forelse($availableStaff as $staff)
+                                <div class="d-flex justify-content-between align-items-center p-3 mb-2 border rounded modal-staff-item bg-white">
+                                    <div>
+                                        <div class="fw-bold">{{ $staff->name }}</div>
+                                        <div class="text-muted small">
+                                            {{ $staff->shift ? 'Currently: ' . $staff->shift->name : 'Unassigned' }}
+                                        </div>
+                                    </div>
+                                    <button wire:click="assignStaffToShift({{ $staff->id }})"
+                                            class="btn btn-sm btn-primary">
+                                        <i class="bi bi-plus-circle me-1"></i> Assign
+                                    </button>
+                                </div>
+                            @empty
+                                <div class="p-5 text-center bg-light rounded">
+                                    <i class="bi bi-search text-muted" style="font-size: 48px;"></i>
+                                    <p class="text-muted mb-0 mt-3">
+                                        @if($searchTerm)
+                                            No staff found matching "{{ $searchTerm }}"
+                                        @else
+                                            No available staff to assign
+                                        @endif
+                                    </p>
+                                </div>
+                            @endforelse
+                        </div>
+                    </div>
+                    <div class="modal-footer bg-white border-top">
+                        <button wire:click="toggleAddStaffPanel" type="button" class="btn btn-secondary px-4">
+                            Close
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    @endif
+
+</div>
+
+
 </div>
 

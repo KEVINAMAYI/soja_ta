@@ -56,7 +56,7 @@
 
     /* Hover and Active States - Primary Color */
     .sidebar-sublink:hover {
-        color: var(--primary-color) !important;;
+        color: var(--primary-color) !important;
         font-weight: 500;
         padding-left: 15px;
     }
