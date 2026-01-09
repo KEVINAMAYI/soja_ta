@@ -864,9 +864,246 @@ new class extends Component {
         </div>
     </div>
 
-    {{-- Rest of your modals remain unchanged --}}
-    {{-- Employee Modal, Work Location Modal, Off-Shift Modal --}}
-    <!-- ... (keeping all existing modal code) ... -->
+    {{-- Modal --}}
+    <div class="modal fade" id="employeeModal" tabindex="-1"
+         aria-labelledby="employeeModalTitle"
+         aria-hidden="true" wire:ignore.self>
+        <div class="modal-dialog modal-xl modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header d-flex align-items-center">
+                    <h5 class="modal-title">{{ $editId ? 'Edit Employee' : 'New Employee' }}</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+
+                <form wire:submit.prevent="{{ $editId ? 'updateEmployee' : 'createEmployee' }}">
+                    <div class="modal-body">
+                        <div class="row">
+                            <!-- Name -->
+                            <div class="col-md-6 mb-3">
+                                <label for="empName" class="form-label">Full Name</label>
+                                <input type="text" id="empName" wire:model="name" class="form-control"
+                                       placeholder="John Doe"/>
+                                @error('name') <small class="text-danger">{{ $message }}</small> @enderror
+                            </div>
+
+                            <!-- Email -->
+                            <div class="col-md-6 mb-3">
+                                <label for="empEmail" class="form-label">Email Address</label>
+                                <input type="email" id="empEmail" wire:model="email" class="form-control"
+                                       placeholder="john@example.com"/>
+                                @error('email') <small class="text-danger">{{ $message }}</small> @enderror
+                            </div>
+
+                            <!-- Phone -->
+                            <div class="col-md-6 mb-3">
+                                <label for="empPhone" class="form-label">Phone Number</label>
+                                <input type="text" id="empPhone" wire:model="phone" class="form-control"
+                                       placeholder="e.g. 2512345678"/>
+
+                                <!-- Error message -->
+                                @error('phone')
+                                <small class="text-danger">{{ $message }}</small>
+                                @enderror
+
+                            </div>
+
+
+                            <!-- Shift -->
+                            <div class="col-md-6 mb-3">
+                                <label for="empShift" class="form-label">Shift</label>
+                                <select id="empShift" wire:model="shift_id" class="form-control">
+                                    <option value="">Select Shift</option>
+                                    @foreach ($shifts as $shift)
+                                        <option value="{{ $shift->id }}">{{ $shift->name }}</option>
+                                    @endforeach
+                                </select>
+                                @error('shift_id') <small class="text-danger">{{ $message }}</small> @enderror
+                            </div>
+
+                            <!-- Department -->
+                            <div class="col-md-6 mb-3">
+                                <label for="empDept" class="form-label">Department</label>
+                                <select id="empDept" wire:model="department_id" class="form-control">
+                                    <option value="">Select Department</option>
+                                    @foreach ($departments as $dept)
+                                        <option value="{{ $dept->id }}">{{ $dept->name }}</option>
+                                    @endforeach
+                                </select>
+                                @error('department_id') <small class="text-danger">{{ $message }}</small> @enderror
+                            </div>
+
+                            <!-- ID Number -->
+                            <div class="col-md-6 mb-3">
+                                <label for="empIdNumber" class="form-label">ID Number</label>
+                                <input type="text" id="empIdNumber" wire:model="id_number" class="form-control"
+                                />
+                                @error('id_number') <small class="text-danger">{{ $message }}</small> @enderror
+                            </div>
+
+                            <!-- Employee Title -->
+                            <div class="col-md-6 mb-3">
+                                <label for="empTitle" class="form-label">Employee Title</label>
+                                <input type="text" id="empTitle" wire:model="employee_title" class="form-control"
+                                       placeholder="e.g. Senior Accountant, HR Assistant"/>
+                                @error('employee_title') <small class="text-danger">{{ $message }}</small> @enderror
+                            </div>
+
+                            <!-- Role -->
+                            <div class="col-md-6 mb-3">
+                                <label for="empRole" class="form-label">Role</label>
+                                <select id="empRole" wire:model="roleName" class="form-control">
+                                    <option value="">Select Role</option>
+                                    @foreach ($roles as $id => $name)
+                                        <option value="{{ $name }}">{{ ucfirst($name) }}</option>
+                                    @endforeach
+                                </select>
+                                @error('role') <small class="text-danger">{{ $message }}</small> @enderror
+                            </div>
+
+                            <!-- Active Toggle -->
+                            <div class="col-12 mb-3">
+                                <div class="form-check">
+                                    <input type="checkbox" wire:model="active" class="form-check-input"
+                                           id="activeToggle"/>
+                                    <label for="activeToggle" class="form-check-label">Active</label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Footer -->
+                    <div class="modal-footer d-flex gap-1">
+                        <button type="submit" class="btn btn-success">
+                            {{ $editId ? 'Save' : 'Add' }}
+                        </button>
+                        <button wire:click="$dispatch('discard-employee-modal')" type="button"
+                                class="btn btn-outline-danger" data-bs-dismiss="modal">Discard
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+
+    {{--Live location Model--}}
+    <div class="modal fade" id="workLocationModal" tabindex="-1"
+         aria-labelledby="workLocationModalTitle"
+         aria-hidden="true" wire:ignore.self>
+        <div class="modal-dialog modal-lg modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header d-flex align-items-center">
+                    <h5 class="modal-title">Assign Work Location</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+
+                <form wire:submit.prevent="assignWorkLocation">
+                    <div class="modal-body">
+
+                        <div class="row mb-3">
+                            <div class="col-6">
+                                <label class="form-label">Start Date</label>
+                                <input type="date" class="form-control @error('start_date') is-invalid @enderror"
+                                       wire:model="start_date">
+
+                                @error('start_date')
+                                <div class="invalid-feedback">{{ $message }}</div>
+                                @enderror
+                            </div>
+
+                            <div class="col-6">
+                                <label class="form-label">End Date (optional)</label>
+                                <input type="date" class="form-control @error('end_date') is-invalid @enderror"
+                                       wire:model="end_date">
+
+                                @error('end_date')
+                                <div class="invalid-feedback">{{ $message }}</div>
+                                @enderror
+                            </div>
+                        </div>
+
+
+                        <div class="mb-3">
+                            <label for="workLocationSearch" class="form-label">Search Work Location</label>
+                            <input type="text" id="workLocationSearch"
+                                   wire:keyup.debounce.500ms="$dispatch('search-work-location')"
+                                   wire:model="search"
+                                   class="form-control"
+                                   placeholder="Type to search locations..."/>
+
+                            {{-- Live search results --}}
+                            @if(!empty($search) && !$selectedLocation)
+                                <ul class="list-group mt-2" style="max-height: 200px; overflow-y:auto;">
+                                    @forelse($workLocations as $location)
+                                        <li class="list-group-item list-group-item-action"
+                                            wire:click="selectWorkLocation({{ $location->id }})"
+                                            style="cursor: pointer;">
+                                            <strong>{{ ucfirst(str_replace('_', ' ', $location->name)) }}</strong>
+                                            <br><small class="text-muted">{{ $location->address }}</small>
+                                        </li>
+                                    @empty
+                                        <li class="list-group-item text-muted">No locations found.</li>
+                                    @endforelse
+                                </ul>
+                            @endif
+                        </div>
+                    </div>
+
+                    <!-- Footer -->
+                    <div class="modal-footer d-flex gap-1">
+                        <button type="button" class="btn btn-outline-danger" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-success">Assign</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+
+    <!-- Off-Shift Modal -->
+    <div class="modal fade" id="offShiftModal" tabindex="-1" aria-labelledby="offShiftModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-xl">
+            <div class="modal-content shadow-lg">
+                <div class="modal-header bg-light rounded-top">
+                    <h5 class="modal-title" id="offShiftModalLabel">Set Off-Shift Dates for {{ $employeeName }}</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+
+                <div class="modal-body">
+                    <!-- Shift status display -->
+                    <div class="alert {{ $shiftStatus === 'off_shift' ? 'alert-warning' : 'alert-success' }}">
+                        Current status:
+                        <strong>
+                            {{ $shiftStatus === 'off_shift' ? 'Off Shift' : 'On Active Shift' }}
+                        </strong>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Start Off-Shift Date</label>
+                        <input type="date" wire:model="start_off_shift_date" class="form-control">
+                        @error('start_off_shift_date') <small class="text-danger">{{ $message }}</small> @enderror
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">End Off-Shift Date</label>
+                        <input type="date" wire:model="end_off_shift_date" class="form-control">
+                        @error('end_off_shift_date') <small class="text-danger">{{ $message }}</small> @enderror
+                    </div>
+                </div>
+
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-danger" data-bs-dismiss="modal">Cancel</button>
+
+                    <!-- Disable Save button if the employee is off-shift -->
+                    <button type="button" class="btn btn-success" wire:click="saveOffShiftDates">
+                        Save
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+
 
 </div>
 
