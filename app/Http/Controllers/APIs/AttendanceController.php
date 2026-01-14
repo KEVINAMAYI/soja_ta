@@ -209,7 +209,7 @@ class AttendanceController extends Controller
 
             /**
              * ========================================
-             * ✅ NEW: SHIFT PATTERN VALIDATION
+             * ✅ SHIFT PATTERN VALIDATION
              * ========================================
              */
             $shift = $employee->shift;
@@ -249,13 +249,63 @@ class AttendanceController extends Controller
                 ], 403);
             }
 
+            /**
+             * ========================================
+             * ✅ CHECK FOR UNCHECKED-OUT ATTENDANCE
+             * ========================================
+             */
+            $checkInTimeCarbon = $checkInTime ? Carbon::parse($checkInTime) : now();
 
-            // Get expected times from shift
+            // Calculate shift window for finding recent attendance
+            $shiftDurationHours = (float)$shift->duration_hours;
+            $maxOvertimeHours = (float)($shift->max_overtime_hours ?? 0);
+            $bufferHours = 4;
+            $maxShiftWindow = $shiftDurationHours + $maxOvertimeHours + $bufferHours;
+
+            // Check for any unchecked-out attendance within the shift window
+            $recentUncheckedOut = Attendance::where('employee_id', $employee->id)
+                ->whereNotNull('check_in_time')
+                ->whereNull('check_out_time')
+                ->where('check_in_time', '>=', $checkInTimeCarbon->copy()->subHours($maxShiftWindow))
+                ->latest('check_in_time')
+                ->first();
+
+            if ($recentUncheckedOut) {
+                $lastCheckIn = Carbon::parse($recentUncheckedOut->check_in_time);
+                $hoursSinceCheckIn = $lastCheckIn->diffInHours($checkInTimeCarbon);
+
+                return response()->json([
+                    'code' => 1003,
+                    'message' => "You are already checked in from {$lastCheckIn->format('Y-m-d H:i')} ({$hoursSinceCheckIn} hours ago). Please check out first before checking in again.",
+                    'last_check_in_time' => $lastCheckIn->toDateTimeString(),
+                    'hours_since_check_in' => round($hoursSinceCheckIn, 2),
+                ], 409);
+            }
+
+            // Check for very old unchecked-out attendance (beyond shift window)
+            $oldUncheckedOut = Attendance::where('employee_id', $employee->id)
+                ->whereNotNull('check_in_time')
+                ->whereNull('check_out_time')
+                ->where('check_in_time', '<', $checkInTimeCarbon->copy()->subHours($maxShiftWindow))
+                ->exists();
+
+            if ($oldUncheckedOut) {
+                return response()->json([
+                    'code' => 1003,
+                    'message' => "You have incomplete attendance records from previous shifts (older than {$maxShiftWindow} hours). Please contact your supervisor to resolve this before checking in again.",
+                    'max_shift_window_hours' => $maxShiftWindow,
+                ], 409);
+            }
+
+            /**
+             * ========================================
+             * ✅ GET EXPECTED TIMES FROM SHIFT
+             * ========================================
+             */
             $expectedCheckInTime = Carbon::parse($shift->start_time);
             $gracePeriodEndTime = $shift->getGracePeriodEndTime();
             $expectedCheckOutTime = Carbon::parse($shift->end_time);
             $earlyCheckoutThresholdTime = $shift->getEarlyCheckoutThreshold();
-
 
             // Initialize late tracking variables
             $isLateCheckin = false;
@@ -264,20 +314,18 @@ class AttendanceController extends Controller
 
             // Use Shift model methods for late calculation
             if ($shift->track_late_checkin) {
-
                 // Check if within grace period (after start but before grace end)
-                $withinGracePeriod = $shift->isWithinGracePeriod(Carbon::parse($checkInTime));
+                $withinGracePeriod = $shift->isWithinGracePeriod($checkInTimeCarbon);
 
                 // Check if actually late (after grace period)
-                $isLateCheckin = $shift->isLateCheckIn(Carbon::parse($checkInTime));
+                $isLateCheckin = $shift->isLateCheckIn($checkInTimeCarbon);
 
                 // Get minutes late from shift start time
-                $minutesLate = $shift->getMinutesLate(Carbon::parse($checkInTime));
+                $minutesLate = $shift->getMinutesLate($checkInTimeCarbon);
             }
 
-
             /**
-             * ✅ 1. Fetch assigned work location (geofence check)
+             * ✅ FETCH ASSIGNED WORK LOCATION (GEOFENCE CHECK)
              */
             $assignment = EmployeeAssignment::where('employee_id', $employee->id)
                 ->where('work_location_id', $work_location_id)
@@ -305,33 +353,17 @@ class AttendanceController extends Controller
             }
 
             /**
-             * ✅ 2. Prevent duplicate check-ins
+             * ✅ CREATE NEW ATTENDANCE RECORD
              */
             $today = today()->toDateString();
-            $existing = Attendance::where('employee_id', $employee->id)
-                ->whereDate('date', $today)
-                ->latest()
-                ->first();
 
-            if ($existing && $existing->check_in_time && is_null($existing->check_out_time)) {
-                return response()->json([
-                    'code' => 1003,
-                    'message' => 'Already checked in and not checked out.'
-                ], 409);
-            }
-
-            /**
-             * ✅ 3. Create or update attendance record
-             */
-            $attendance = $existing && !$existing->check_out_time
-                ? $existing
-                : new Attendance([
-                    'employee_id' => $employee->id,
-                    'date' => $today,
-                ]);
+            $attendance = new Attendance([
+                'employee_id' => $employee->id,
+                'date' => $today,
+            ]);
 
             $attendance->status = 'clocked_in';
-            $attendance->check_in_time = $checkInTime ? Carbon::parse($checkInTime) : now();
+            $attendance->check_in_time = $checkInTimeCarbon;
             $attendance->latitude = $latitude;
             $attendance->longitude = $longitude;
             $attendance->device_id = $deviceId;
@@ -346,12 +378,15 @@ class AttendanceController extends Controller
             $attendance->is_early_checkout = false;
             $attendance->minutes_early = 0;
 
+            // Late checkout tracking (set initial values)
+            $attendance->is_late_checkout = false;
+            $attendance->late_checkout_hours = 0;
+
             // Store expected shift times
             $attendance->expected_check_in_time = $expectedCheckInTime->format('H:i:s');
             $attendance->grace_period_end_time = $gracePeriodEndTime->format('H:i:s');
             $attendance->expected_check_out_time = $expectedCheckOutTime->format('H:i:s');
             $attendance->early_checkout_threshold_time = $earlyCheckoutThresholdTime->format('H:i:s');
-
 
             $attendance->save();
 
@@ -368,6 +403,7 @@ class AttendanceController extends Controller
             return $this->errorResponse('Check-in failed', $e);
         }
     }
+
 
     /**
      * ========================================
@@ -419,7 +455,6 @@ class AttendanceController extends Controller
     {
         DB::beginTransaction();
         try {
-
             $employee = Employee::with('organization', 'shift')
                 ->where($column, $value)
                 ->firstOrFail();
@@ -451,26 +486,80 @@ class AttendanceController extends Controller
                 }
             }
 
-            $today = today()->toDateString();
+            $shift = $employee->shift;
 
-            $attendance = Attendance::where('employee_id', $employee->id)
-                ->whereDate('date', $today)
-                ->whereNull('check_out_time')
-                ->latest()
-                ->first();
-
-            if (!$attendance || !$attendance->check_in_time) {
+            if (!$shift) {
                 return response()->json([
                     'code' => 1003,
-                    'message' => 'Not checked in or already checked out.'
-                ], 409);
+                    'message' => 'No shift assigned to employee.'
+                ], 404);
+            }
+
+            $checkOutTime = $checkOutTimeInput ? Carbon::parse($checkOutTimeInput) : now();
+
+            // ✅ Calculate maximum possible shift duration
+            // shift duration + max overtime + buffer for delays
+            $shiftDurationHours = (float)$shift->duration_hours;
+            $maxOvertimeHours = (float)($shift->max_overtime_hours ?? 0);
+            $bufferHours = 4; // Grace period for late checkouts
+
+            $maxShiftWindow = $shiftDurationHours + $maxOvertimeHours + $bufferHours;
+
+            // ✅ First try: Look for unchecked attendance within the shift's maximum duration
+            $attendance = Attendance::where('employee_id', $employee->id)
+                ->whereNotNull('check_in_time')
+                ->whereNull('check_out_time')
+                ->where('check_in_time', '>=', $checkOutTime->copy()->subHours($maxShiftWindow))
+                ->where('check_in_time', '<=', $checkOutTime)
+                ->latest('check_in_time')
+                ->first();
+
+            // ✅ If not found within window, check for ANY older unchecked attendance
+            if (!$attendance) {
+                $attendance = Attendance::where('employee_id', $employee->id)
+                    ->whereNotNull('check_in_time')
+                    ->whereNull('check_out_time')
+                    ->latest('check_in_time')
+                    ->first();
+
+                if (!$attendance) {
+                    return response()->json([
+                        'code' => 1003,
+                        'message' => 'Not checked in or already checked out.'
+                    ], 409);
+                }
+
+                // ✅ Found old attendance - allow checkout but warn/flag it
+                $checkInTime = Carbon::parse($attendance->check_in_time);
+                $minutesWorked = $checkInTime->diffInMinutes($checkOutTime, false);
+                $hoursWorked = round($minutesWorked / 60, 2);
+
+
+                // Add flag that this is a late checkout
+                $isLateCheckout = true;
+                $lateCheckoutMessage = "Warning: Checking out {$hoursWorked} hours after check-in (expected max: {$maxShiftWindow} hours).";
+
+            } else {
+                // Normal checkout within expected window
+                $checkInTime = Carbon::parse($attendance->check_in_time);
+                $minutesWorked = $checkInTime->diffInMinutes($checkOutTime, false);
+                $hoursWorked = round($minutesWorked / 60, 2);
+                $isLateCheckout = false;
+                $lateCheckoutMessage = null;
+
+            }
+
+            // ✅ Validate checkout time is not before check-in
+            if ($hoursWorked < 0) {
+                return response()->json([
+                    'code' => 1003,
+                    'message' => 'Check-out time cannot be before check-in time.'
+                ], 400);
             }
 
             // ================================
-            // SHIFT SETTINGS
+            // SHIFT SETTINGS & CALCULATIONS
             // ================================
-            $shift = $employee->shift;
-
             $shiftStart = Carbon::parse($shift->start_time);
             $shiftEnd = Carbon::parse($shift->end_time);
             if ($shiftEnd->lt($shiftStart)) {
@@ -480,43 +569,30 @@ class AttendanceController extends Controller
             $durationHours = (float)$shift->duration_hours;
             $maxOvertimeHours = (float)$shift->max_overtime_hours;
 
-            // ================================
-            // TIMES
-            // ================================
-            $checkInTime = Carbon::parse($attendance->check_in_time);
-            $checkOutTime = $checkOutTimeInput ? Carbon::parse($checkOutTimeInput) : now();
-
-            // Total worked time
-            $totalWorked = $checkInTime->diffInMinutes($checkOutTime) / 60;
 
             // ================================
             // EARLY CHECKOUT LOGIC
             // ================================
             $isEarlyCheckout = $shift->isEarlyCheckOut($checkOutTime);
-
             $minutesEarly = $isEarlyCheckout ? $shift->getMinutesEarly($checkOutTime) : 0;
 
-
             // ================================
-            // MATCH AUTO-CLOCKOUT CALCULATIONS
+            // CALCULATE HOURS (MATCH AUTO-CLOCKOUT)
             // ================================
             if ($shift->overtime_enabled) {
-
                 // Regular hours capped at duration_hours
-                $regularHours = min($totalWorked, $durationHours);
+                $regularHours = min($hoursWorked, $durationHours);
 
                 // Overtime = worked - duration hours
-                $overtimeHours = max(0, $totalWorked - $durationHours);
+                $overtimeHours = max(0, $hoursWorked - $durationHours);
 
                 // Enforce max overtime cap
                 if ($maxOvertimeHours > 0) {
                     $overtimeHours = min($overtimeHours, $maxOvertimeHours);
                 }
-
             } else {
-
                 // If OT disabled → no overtime
-                $regularHours = min($totalWorked, $durationHours);
+                $regularHours = min($hoursWorked, $durationHours);
                 $overtimeHours = 0;
             }
 
@@ -530,11 +606,12 @@ class AttendanceController extends Controller
                 'overtime_hours' => round($overtimeHours, 2),
                 'is_early_checkout' => $isEarlyCheckout,
                 'minutes_early' => $minutesEarly,
+                'is_late_checkout' => $isLateCheckout ?? false,
+                'late_checkout_hours' => $isLateCheckout ? round($hoursWorked - $maxShiftWindow, 2) : 0,
             ]);
 
             // ================================
             // CREATE OVERTIME RECORD
-            // (AutoClockOut does NOT create this, but manual checkout SHOULD)
             // ================================
             if ($overtimeHours > 0) {
                 Overtime::create([
@@ -550,10 +627,19 @@ class AttendanceController extends Controller
 
             DB::commit();
 
-            return response()->json([
+            $responseData = [
                 'message' => 'Check-out successful',
                 'data' => new AttendanceResource($attendance)
-            ], 200);
+            ];
+
+            // Add warning message if it's a late checkout
+            if ($isLateCheckout && $lateCheckoutMessage) {
+                $responseData['warning'] = $lateCheckoutMessage;
+                $responseData['hours_since_checkin'] = round($hoursWorked, 2);
+                $responseData['expected_max_hours'] = $maxShiftWindow;
+            }
+
+            return response()->json($responseData, 200);
 
         } catch (\Exception $e) {
             DB::rollBack();
