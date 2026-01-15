@@ -299,7 +299,7 @@ new class extends Component {
 @push('styles')
     <style>
 
-        .department-overview-title {
+        .department-overview-title, .shift-monitoring-title {
             font-size: 18px;
             font-weight: bold;
             color: #000;
@@ -740,6 +740,92 @@ new class extends Component {
             animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
         }
 
+        /* Quick Action Box - Matching Your Image Style */
+        .quick-action-box {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background: #fff;
+            border: 2px dotted #333;
+            border-radius: 8px;
+            padding: 15px 10px;
+            transition: all 0.2s ease-in-out;
+            height: 100%;
+        }
+
+        .quick-action-box:hover {
+            background: #f5f5f5;
+            transform: scale(1.05);
+            cursor: pointer;
+        }
+
+        .quick-action-icon {
+            font-size: 32px;
+            color: #333;
+        }
+
+        .quick-action-icon iconify-icon {
+            display: block;
+        }
+
+        .quick-action-value {
+            font-size: 1.75rem;
+            font-weight: 700;
+            line-height: 1;
+            margin-bottom: 0.25rem;
+            color: #333;
+        }
+
+        .quick-action-label {
+            font-size: 0.875rem;
+            font-weight: 500;
+            color: #333;
+            margin: 0;
+        }
+
+        /* Color variants - only on icons and values */
+        .text-success {
+            color: #22c55e !important;
+        }
+
+        .text-warning {
+            color: #f59e0b !important;
+        }
+
+        .text-danger {
+            color: #ef4444 !important;
+        }
+
+        /* Link styling for View Full Coverage */
+        a.quick-action-box {
+            color: #333;
+        }
+
+        a.quick-action-box:hover {
+            color: #333;
+        }
+
+        /* Responsive adjustments */
+        @media (max-width: 768px) {
+            .quick-action-box {
+                min-height: 90px;
+                padding: 12px 8px;
+            }
+
+            .quick-action-icon {
+                font-size: 28px;
+            }
+
+            .quick-action-value {
+                font-size: 1.5rem;
+            }
+
+            .quick-action-label {
+                font-size: 0.75rem;
+            }
+        }
+
     </style>
 @endpush
 
@@ -881,98 +967,94 @@ new class extends Component {
         </div>
     </div>
 
-    <!-- Department Overview -->
-    <div class="col-lg-8 d-flex">
-        <div class="card shadow-sm flex-fill">
-            <div class="card-header department-overview-title fw-semibold">
-                Department Overview
-            </div>
-            <div class="card-body">
-                @foreach ($departmentStats as $dept)
-                    @php
-                        $perc = $dept['total'] ? round(($dept['clocked_in'] / $dept['total']) * 100) : 0;
-                    @endphp
-                    <div class="mb-3">
-                        <div class="d-flex justify-content-between small fw-semibold">
-                            <span>{{ $dept['name'] }}</span>
-                            <span>{{ $dept['clocked_in'] }}/{{ $dept['total'] }} ({{ $perc }}%)</span>
+        <!-- Department Overview -->
+        <div style="margin-top:5px;" class="col-lg-8">
+            <div class="card shadow-sm h-100">
+                <div class="card-header department-overview-title fw-semibold">
+                    Department Overview
+                </div>
+                <div class="card-body">
+                    @foreach ($departmentStats as $dept)
+                        @php
+                            $perc = $dept['total'] ? round(($dept['clocked_in'] / $dept['total']) * 100) : 0;
+                        @endphp
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between small fw-semibold">
+                                <span>{{ $dept['name'] }}</span>
+                                <span>{{ $dept['clocked_in'] }}/{{ $dept['total'] }} ({{ $perc }}%)</span>
+                            </div>
+                            <div class="progress" style="height:6px;">
+                                <div class="progress-bar bg-primary" style="width: {{ $perc }}%"></div>
+                            </div>
                         </div>
-                        <div class="progress" style="height:6px;">
-                            <div class="progress-bar bg-primary" style="width: {{ $perc }}%"></div>
-                        </div>
-                    </div>
-                @endforeach
+                    @endforeach
+                </div>
             </div>
         </div>
-    </div>
 
-    <div class="col-lg-4 d-flex">
-        <a href="{{ route('shifts.coverage') }}" class="text-decoration-none">
-            <div class="shift-monitoring-card">
-                <div class="card-header">
-                    <div class="header-content">
-                        <h5 style="font-size:16px;" class="title">Shift Monitoring</h5>
-                    </div>
+        <!-- Shift Monitoring -->
+        <div style="margin-top:5px;" class="col-lg-4">
+            <div class="card shadow-sm h-100">
+                <div class="card-header shift-monitoring-title fw-semibold">
+                    Shift Monitoring
                 </div>
-
                 <div class="card-body">
-                    <div class="stats-grid">
+                    <div class="row g-3">
                         <!-- Total Shifts -->
-                        <div class="stat-box stat-total">
-                            <div class="stat-icon">
-                                <iconify-icon icon="mdi:clock-time-eight-outline"></iconify-icon>
-                            </div>
-                            <div class="stat-content">
-                                <div class="stat-value">{{ $shiftStats['total'] }}</div>
-                                <div class="stat-label">Total Shifts</div>
+                        <div class="col-6">
+                            <div class="quick-action-box text-center">
+                                <div class="quick-action-icon mb-2">
+                                    <iconify-icon icon="mdi:clock-time-eight-outline"></iconify-icon>
+                                </div>
+                                <div class="quick-action-value">{{ $shiftStats['total'] }}</div>
+                                <div class="quick-action-label">Total Shifts</div>
                             </div>
                         </div>
 
                         <!-- Fully Staffed -->
-                        <div class="stat-box stat-success">
-                            <div class="stat-icon">
-                                <iconify-icon icon="mdi:check-circle"></iconify-icon>
-                            </div>
-                            <div class="stat-content">
-                                <div class="stat-value">{{ $shiftStats['full'] }}</div>
-                                <div class="stat-label">Fully Staffed</div>
+                        <div class="col-6">
+                            <div class="quick-action-box text-center">
+                                <div class="quick-action-icon mb-2 text-success">
+                                    <iconify-icon icon="mdi:check-circle"></iconify-icon>
+                                </div>
+                                <div class="quick-action-value text-success">{{ $shiftStats['full'] }}</div>
+                                <div class="quick-action-label">Fully Staffed</div>
                             </div>
                         </div>
 
                         <!-- Partial Coverage -->
-                        <div class="stat-box stat-warning">
-                            <div class="stat-icon">
-                                <iconify-icon icon="mdi:alert-circle"></iconify-icon>
-                            </div>
-                            <div class="stat-content">
-                                <div class="stat-value">{{ $shiftStats['partial'] }}</div>
-                                <div class="stat-label">Partial Coverage</div>
+                        <div class="col-6">
+                            <div class="quick-action-box text-center">
+                                <div class="quick-action-icon mb-2 text-warning">
+                                    <iconify-icon icon="mdi:alert-circle"></iconify-icon>
+                                </div>
+                                <div class="quick-action-value text-warning">{{ $shiftStats['partial'] }}</div>
+                                <div class="quick-action-label">Partial Coverage</div>
                             </div>
                         </div>
 
                         <!-- Critical Gaps -->
-                        <div class="stat-box stat-danger">
-                            <div class="stat-icon">
-                                <iconify-icon icon="mdi:close-circle"></iconify-icon>
-                            </div>
-                            <div class="stat-content">
-                                <div class="stat-value">{{ $shiftStats['critical'] }}</div>
-                                <div class="stat-label">Critical Gaps</div>
+                        <div class="col-6">
+                            <div class="quick-action-box text-center">
+                                <div class="quick-action-icon mb-2 text-danger">
+                                    <iconify-icon icon="mdi:close-circle"></iconify-icon>
+                                </div>
+                                <div class="quick-action-value text-danger">{{ $shiftStats['critical'] }}</div>
+                                <div class="quick-action-label">Critical Gaps</div>
                             </div>
                         </div>
-                    </div>
 
-                    <!-- View Details Link -->
-                    <div class="view-details">
-                    <span class="view-link">
-                        View Full Coverage
-                        <iconify-icon icon="mdi:arrow-right"></iconify-icon>
-                    </span>
+                        <!-- View Full Coverage -->
+                        <div class="col-12">
+                            <a href="{{ route('shifts.coverage') }}" class="quick-action-box text-center text-decoration-none d-block">
+                                <span class="me-2">View Full Coverage</span>
+                                <iconify-icon icon="mdi:arrow-right"></iconify-icon>
+                            </a>
+                        </div>
                     </div>
                 </div>
             </div>
-        </a>
-    </div>
+        </div>
 
 
     <!-- Recent Activity Entries -->
