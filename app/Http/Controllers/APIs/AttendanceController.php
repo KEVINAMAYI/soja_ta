@@ -282,20 +282,6 @@ class AttendanceController extends Controller
                 ], 409);
             }
 
-            // Check for very old unchecked-out attendance (beyond shift window)
-            $oldUncheckedOut = Attendance::where('employee_id', $employee->id)
-                ->whereNotNull('check_in_time')
-                ->whereNull('check_out_time')
-                ->where('check_in_time', '<', $checkInTimeCarbon->copy()->subHours($maxShiftWindow))
-                ->exists();
-
-            if ($oldUncheckedOut) {
-                return response()->json([
-                    'code' => 1003,
-                    'message' => "You have incomplete attendance records from previous shifts (older than {$maxShiftWindow} hours). Please contact your supervisor to resolve this before checking in again.",
-                    'max_shift_window_hours' => $maxShiftWindow,
-                ], 409);
-            }
 
             /**
              * ========================================
