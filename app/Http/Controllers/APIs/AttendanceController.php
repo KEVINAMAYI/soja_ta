@@ -282,7 +282,6 @@ class AttendanceController extends Controller
                 ], 409);
             }
 
-
             /**
              * ========================================
              * ✅ GET EXPECTED TIMES FROM SHIFT
