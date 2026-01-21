@@ -247,7 +247,7 @@ new class extends Component {
             </div>
 
             <!-- Sick Off Today -->
-            <div class="col-lg-6 col-md-6 col-12">
+            <div class="col-lg-3 col-md-6 col-12">
                 <div class="summary-card">
                     <div class="summary-card-icon icon-info">
                         <iconify-icon icon="mdi:medical-bag"></iconify-icon>
@@ -261,7 +261,7 @@ new class extends Component {
             </div>
 
             <!-- On Leave Today -->
-            <div class="col-lg-6 col-md-6 col-12">
+            <div class="col-lg-3 col-md-6 col-12">
                 <div class="summary-card">
                     <div class="summary-card-icon icon-warning">
                         <iconify-icon icon="mdi:airplane-takeoff"></iconify-icon>
@@ -275,7 +275,7 @@ new class extends Component {
             </div>
 
             <!-- Off Shift Today -->
-            <div class="col-lg-6 col-md-6 col-12">
+            <div class="col-lg-3 col-md-6 col-12">
                 <div class="summary-card">
                     <div class="summary-card-icon icon-cyan">
                         <iconify-icon icon="mdi:clock-remove-outline"></iconify-icon>
@@ -289,7 +289,7 @@ new class extends Component {
             </div>
 
             <!-- Inactive Employees -->
-            <div class="col-lg-6 col-md-6 col-12">
+            <div class="col-lg-3 col-md-6 col-12">
                 <div class="summary-card">
                     <div class="summary-card-icon icon-secondary">
                         <iconify-icon icon="mdi:account-off"></iconify-icon>

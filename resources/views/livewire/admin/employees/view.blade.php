@@ -668,7 +668,7 @@ new class extends Component {
                     </div>
 
                     <p class="qr-info-text">
-                        Encoded ID: {{ $employee->id_number }}
+                        Encoded ID: {{ $employee->qr_code }}
                     </p>
                 </div>
             </div>
@@ -837,7 +837,7 @@ new class extends Component {
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <script>
         // 1. Initialize and Generate QR Code
-        const qrData = "{{ $employee->id_number }}"; // Data to encode
+        const qrData = "{{ $employee->qr_code }}"; // Data to encode
         const qrContainer = document.getElementById("qrcode-canvas");
 
         const qrcode = new QRCode(qrContainer, {
