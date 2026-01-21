@@ -53,7 +53,7 @@ new class extends Component {
             ->unique('employee_id')
             ->count();
 
-        // Fetch Sick Off count (You need to define how "Sick Off" is identified in your data)
+        // Fetch Sick Off count
         $this->sickOff = $attendances->where('status', 'sick_off')->count();
 
         // Fetch Inactive Employees count
@@ -62,68 +62,182 @@ new class extends Component {
 
 }; ?>
 
+@push('styles')
+    <style>
+        .stat-card {
+            background: #ffffff;
+            border: none;
+            border-radius: 8px;
+            padding: 1.25rem;
+            height: 100%;
+            transition: all 0.3s ease;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
+        }
+
+        .stat-card-icon {
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 6px;
+            color: white;
+            font-size: 20px;
+            margin-bottom: 0.75rem;
+        }
+
+        .icon-success {
+            background-color: #10b981;
+        }
+
+        .icon-danger {
+            background-color: #ef4444;
+        }
+
+        .icon-info {
+            background-color: #3b82f6;
+        }
+
+        .icon-warning {
+            background-color: #f59e0b;
+        }
+
+        .icon-cyan {
+            background-color: #06b6d4;
+        }
+
+        .icon-secondary {
+            background-color: #6b7280;
+        }
+
+        .stat-card-title {
+            margin: 0 0 0.5rem 0;
+            font-size: 0.75rem;
+            font-weight: 500;
+            color: #6b7280;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .stat-card-value {
+            font-size: 1.75rem;
+            font-weight: 700;
+            color: #1f2937;
+            line-height: 1;
+            margin-bottom: 0.35rem;
+        }
+
+        .stat-card-total {
+            font-size: 1.25rem;
+            color: #9ca3af;
+            font-weight: 400;
+        }
+
+        .stat-card-subtitle {
+            margin: 0;
+            font-size: 0.875rem;
+            color: #6b7280;
+            font-weight: 400;
+        }
+    </style>
+@endpush
+
+
 <div>
-
-
-    <!-- Second Row: Additional Stats (Off Shift, Sick Off, Inactive Employees) -->
-    <div class="row g-3 mt-2 mb-2">
-
-        @php
-            $additionalCards = [
-                ['title'=>'Present', 'count'=>$present, 'icon'=>'mdi:account-check-outline', 'bg'=>'success-gradient'],
-                ['title'=>'Absent', 'count'=>$absent, 'icon'=>'mdi:account-cancel-outline', 'bg'=>'danger-gradient'],
-            ];
-        @endphp
-
-            <!-- Additional Stats Cards -->
-        @foreach($additionalCards as $card)
-            <div class="col-lg-6 col-6">
-                <div class="card {{ $card['bg'] }}">
-                    <div class="card-body text-center px-5 py-3">
-                        <div
-                            class="d-flex align-items-center justify-content-center round-48 rounded text-bg-primary flex-shrink-0 mb-3 mx-auto">
-                            <iconify-icon icon="{{ $card['icon'] }}" class="fs-6 text-white"></iconify-icon>
-                        </div>
-                        <h6 class="fw-normal fs-6 mb-1">{{ $card['title'] }}</h6>
-                        <h4 class="mb-2 d-flex align-items-center justify-content-center gap-1">{{ $card['count'] }}</h4>
-                        <a href="javascript:void(0)" class="btn btn-white btn-sm fs-2 fw-semibold">View Details</a>
-                    </div>
-                </div>
-            </div>
-        @endforeach
-    </div>
-
+    <!-- Attendance Statistics Cards -->
     <div class="row g-3">
-
-        @php
-            $cards = [
-                ['title'=>'On Leave', 'count'=>$onLeave, 'icon'=>'mdi:beach', 'bg'=>'warning-gradient'],
-                ['title'=>'Off Shift', 'count'=>$offShift, 'icon'=>'mdi:briefcase-off-outline', 'bg'=>'danger-gradient'],
-                ['title'=>'Sick Off', 'count'=>$sickOff, 'icon'=>'mdi:medical-bag', 'bg'=>'danger-gradient'],
-                ['title'=>'Inactive', 'count'=>$inactiveEmployees, 'icon'=>'mdi:account-off', 'bg'=>'danger-gradient'],
-
-            ];
-        @endphp
-
-            <!-- First Row: Important Stats -->
-        @foreach($cards as $card)
-            <div class="col-lg-3 col-6">
-                <div class="card {{ $card['bg'] }}">
-                    <div class="card-body text-center px-5 py-3">
-                        <div
-                            class="d-flex align-items-center justify-content-center round-48 rounded text-bg-primary flex-shrink-0 mb-3 mx-auto">
-                            <iconify-icon icon="{{ $card['icon'] }}" class="fs-6 text-white"></iconify-icon>
-                        </div>
-                        <h6 class="fw-normal fs-6 mb-1">{{ $card['title'] }}</h6>
-                        <h4 class="mb-2 d-flex align-items-center justify-content-center gap-1">{{ $card['count'] }}</h4>
-                        <a href="javascript:void(0)" class="btn btn-white btn-sm fs-2 fw-semibold">View Details</a>
-                    </div>
+        <!-- Present Today -->
+        <div class="col-lg-6 col-md-6 col-12">
+            <div class="stat-card">
+                <div class="stat-card-icon icon-success">
+                    <iconify-icon icon="mdi:account-check"></iconify-icon>
                 </div>
+                <h6 class="stat-card-title">Present Today</h6>
+                <div class="stat-card-value">{{ $present }} <span class="stat-card-total">/ {{ $totalEmployees }}</span>
+                </div>
+                <p class="stat-card-subtitle">
+                    {{ $totalEmployees > 0 ? number_format(($present / $totalEmployees) * 100, 1) : 0 }}%
+                </p>
             </div>
-        @endforeach
+        </div>
+
+        <!-- Absent Today -->
+        <div class="col-lg-6 col-md-6 col-12">
+            <div class="stat-card">
+                <div class="stat-card-icon icon-danger">
+                    <iconify-icon icon="mdi:account-remove"></iconify-icon>
+                </div>
+                <h6 class="stat-card-title">Absent Today</h6>
+                <div class="stat-card-value">{{ $absent }} <span class="stat-card-total">/ {{ $totalEmployees }}</span>
+                </div>
+                <p class="stat-card-subtitle">
+                    {{ $totalEmployees > 0 ? number_format(($absent / $totalEmployees) * 100, 1) : 0 }}%
+                </p>
+            </div>
+        </div>
+
+        <!-- Sick Off Today -->
+        <div class="col-lg-6 col-md-6 col-12">
+            <div class="stat-card">
+                <div class="stat-card-icon icon-info">
+                    <iconify-icon icon="mdi:medical-bag"></iconify-icon>
+                </div>
+                <h6 class="stat-card-title">Sick Off Today</h6>
+                <div class="stat-card-value">{{ $sickOff }} <span class="stat-card-total">/ {{ $totalEmployees }}</span>
+                </div>
+                <p class="stat-card-subtitle">
+                    Out of {{ $totalEmployees }} Total
+                </p>
+            </div>
+        </div>
+
+        <!-- On Leave Today -->
+        <div class="col-lg-6 col-md-6 col-12">
+            <div class="stat-card">
+                <div class="stat-card-icon icon-warning">
+                    <iconify-icon icon="mdi:airplane-takeoff"></iconify-icon>
+                </div>
+                <h6 class="stat-card-title">On Leave Today</h6>
+                <div class="stat-card-value">{{ $onLeave }} <span class="stat-card-total">/ {{ $totalEmployees }}</span>
+                </div>
+                <p class="stat-card-subtitle">
+                    Out of {{ $totalEmployees }} Total
+                </p>
+            </div>
+        </div>
+
+        <!-- Off Shift Today -->
+        <div class="col-lg-6 col-md-6 col-12">
+            <div class="stat-card">
+                <div class="stat-card-icon icon-cyan">
+                    <iconify-icon icon="mdi:clock-remove-outline"></iconify-icon>
+                </div>
+                <h6 class="stat-card-title">Off Shift Today</h6>
+                <div class="stat-card-value">{{ $offShift }} <span
+                        class="stat-card-total">/ {{ $totalEmployees }}</span></div>
+                <p class="stat-card-subtitle">
+                    Out of {{ $totalEmployees }} Total
+                </p>
+            </div>
+        </div>
+
+        <!-- Inactive Employees -->
+        <div class="col-lg-6 col-md-6 col-12">
+            <div class="stat-card">
+                <div class="stat-card-icon icon-secondary">
+                    <iconify-icon icon="mdi:account-off"></iconify-icon>
+                </div>
+                <h6 class="stat-card-title">Inactive Employees</h6>
+                <div class="stat-card-value">{{ $inactiveEmployees }} <span
+                        class="stat-card-total">/ {{ $totalEmployees }}</span></div>
+                <p class="stat-card-subtitle">
+                    Out of {{ $totalEmployees }} Total
+                </p>
+            </div>
+        </div>
     </div>
-
 </div>
-
-
-

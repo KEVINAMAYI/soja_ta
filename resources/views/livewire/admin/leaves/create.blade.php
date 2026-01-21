@@ -3,6 +3,7 @@
 use App\Models\Leave;
 use App\Models\Employee;
 use App\Models\Department;
+use App\Services\AttendanceSeeder;
 use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
 use Livewire\Attributes\On;
@@ -234,8 +235,12 @@ new class extends Component {
                     ->position('top-end')
                     ->show();
 
+                $orgId = auth()->user()->employee->organization_id ?? null;
+                app(AttendanceSeeder::class)->seedMissingAttendanceRecords($orgId);
+
                 // Emit event to other Livewire components
                 $this->dispatch('redirect', ['url' => route('attendance.index', ['filterStatus' => 'off_shift'])]);
+
 
             } elseif ($this->leaveType === 'sick') {
 
@@ -261,8 +266,12 @@ new class extends Component {
                     ->position('top-end')
                     ->show();
 
+                $orgId = auth()->user()->employee->organization_id ?? null;
+                app(AttendanceSeeder::class)->seedMissingAttendanceRecords($orgId);
+
                 // Trigger redirect after showing the success message
                 $this->dispatch('redirect', ['url' => route('attendance.index', ['filterStatus' => 'sick_off'])]);
+
 
             } else {
 
@@ -628,10 +637,7 @@ new class extends Component {
                     @endif
                 </div>
             </div>
-
-            <hr class="my-4">
-
-            <h3 class="h6 font-weight-bold mb-3">Additional Details</h3>
+            <h3 class="h6 font-weight-bold mb-3">Additional Details (Optional)</h3>
             <div class="row g-3">
                 <div class="col-12">
                     <label for="reason" class="form-label font-weight-bold">Reason / Notes</label>
@@ -640,20 +646,20 @@ new class extends Component {
                     @error('reason') <small class="text-primary">{{ $message }}</small>@enderror
                 </div>
 
-                {{--                <div class="col-md-4">--}}
-                {{--                    <label for="contact_during_leave" class="form-label">Contact During Leave</label>--}}
-                {{--                    <input type="text" id="contact_during_leave" wire:model="contact_during_leave" class="form-control">--}}
-                {{--                </div>--}}
+                <div class="col-md-4">
+                    <label for="contact_during_leave" class="form-label">Contact During Leave</label>
+                    <input type="text" id="contact_during_leave" wire:model="contact_during_leave" class="form-control">
+                </div>
 
-                {{--                <div class="col-md-4">--}}
-                {{--                    <label for="emergency_contact" class="form-label">Emergency Contact</label>--}}
-                {{--                    <input type="text" id="emergency_contact" wire:model="emergency_contact" class="form-control">--}}
-                {{--                </div>--}}
+                <div class="col-md-4">
+                    <label for="emergency_contact" class="form-label">Emergency Contact</label>
+                    <input type="text" id="emergency_contact" wire:model="emergency_contact" class="form-control">
+                </div>
 
-                {{--                <div class="col-md-4">--}}
-                {{--                    <label for="handover_to" class="form-label">Handover To (Colleague Name)</label>--}}
-                {{--                    <input type="text" id="handover_to" wire:model="handover_to" class="form-control">--}}
-                {{--                </div>--}}
+                <div class="col-md-4">
+                    <label for="handover_to" class="form-label">Handover To (Colleague Name)</label>
+                    <input type="text" id="handover_to" wire:model="handover_to" class="form-control">
+                </div>
             </div>
 
             <div class="d-flex justify-content-between mt-4">

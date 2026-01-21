@@ -182,14 +182,10 @@ new class extends Component {
         />
 
 
-        <div class="card">
-            <div class="card-body p-4 pb-0" data-simplebar>
-                <livewire:admin.summaries.employee-statuses/>
-            </div>
-        </div>
+        <livewire:admin.summaries.employee-statuses/>
     </div>
 
-    <div class="col-lg-12">
+    <div class="col-lg-12 mt-4">
         <div class="card">
             <div class="card-body">
                 <h4 class="card-title">Monthly Attendance Timeline</h4>

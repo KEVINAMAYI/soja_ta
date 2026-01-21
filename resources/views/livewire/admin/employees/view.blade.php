@@ -427,6 +427,69 @@ new class extends Component {
             background-color: #c9381f;
         }
 
+        /* QR Code Section Styles */
+        .qr-code-container {
+            text-align: center;
+            padding: 2rem;
+            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+            border-radius: 12px;
+            border: 2px dashed #dee2e6;
+        }
+
+        .qr-code-wrapper {
+            background: white;
+            padding: 1.5rem;
+            border-radius: 10px;
+            display: inline-block;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            margin-bottom: 1rem;
+        }
+
+        .qr-code-wrapper img,
+        .qr-code-wrapper svg {
+            display: block;
+            max-width: 200px;
+            width: 200px;
+            height: auto;
+            margin: 0 auto;
+        }
+
+        #employee-qr-code {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        #employee-qr-code svg {
+            width: 200px !important;
+            height: 200px !important;
+        }
+
+        .btn-download-qr {
+            background-color: #e14326;
+            color: white;
+            border: none;
+            padding: 0.6rem 1.5rem;
+            border-radius: 8px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .btn-download-qr:hover {
+            background-color: #c9381f;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(225, 67, 38, 0.3);
+        }
+
+        .qr-info-text {
+            color: #6c757d;
+            font-size: 0.9rem;
+            margin-top: 1rem;
+        }
+
     </style>
 @endpush
 
@@ -461,7 +524,7 @@ new class extends Component {
 
     <div class="row g-4 align-items-stretch">
         <!-- Employee Info -->
-        <div class="col-md-6 d-flex">
+        <div class="col-md-4 d-flex">
             <div class="card-section bg-white w-100 d-flex flex-column">
                 <div class="section-title mb-3">
                     <iconify-icon icon="mdi:account-badge" class="me-2" style="color: #2563eb;" width="20"
@@ -488,6 +551,7 @@ new class extends Component {
                                              'clocked_out' => 'Clocked Out',
                                              'on_leave' => 'On Leave',
                                              'off_shift' => 'Off Shift',
+                                             'sick_off' => 'Sick Off',
                                              'not_scheduled' => 'Not Scheduled',
                                              default => 'Not Scheduled',
                                             };
@@ -497,6 +561,7 @@ new class extends Component {
                                                 'Clocked Out' => 'bg-warning',
                                                 'Absent' => 'bg-danger',
                                                 'On Leave' => 'bg-info',
+                                                'Sick Off' => 'bg-info',
                                                 'Off Shift' => 'bg-dark',
                                                 'Not Scheduled' => 'bg-danger',
                                                 default => 'bg-secondary',
@@ -524,7 +589,7 @@ new class extends Component {
         </div>
 
         <!-- Current Location -->
-        <div class="col-md-6 d-flex">
+        <div class="col-md-4 d-flex">
             <div class="card-section bg-white w-100 d-flex flex-column p-4 rounded shadow-sm">
                 <div class="section-title mb-3 d-flex align-items-center">
                     <iconify-icon icon="mdi:map-marker" class="me-2" style="color: #22c55e;" width="20"
@@ -582,6 +647,32 @@ new class extends Component {
             </div>
         </div>
 
+        <!-- QR Code Section -->
+        <div class="col-md-4 d-flex">
+            <div class="card-section bg-white w-100 d-flex flex-column">
+                <div class="section-title mb-3">
+                    <iconify-icon icon="mdi:qrcode" class="me-2" style="color: #e14326;" width="20" height="20"></iconify-icon>
+                    Employee QR Code
+                </div>
+
+                <div class="qr-code-container">
+                    <div class="qr-code-wrapper">
+                        <div id="qrcode-canvas" class="d-flex justify-content-center"></div>
+                    </div>
+
+                    <div class="mt-3">
+                        <button class="btn btn-download-qr" onclick="downloadQR()">
+                            <iconify-icon icon="mdi:download" width="18" height="18"></iconify-icon>
+                            Download PNG
+                        </button>
+                    </div>
+
+                    <p class="qr-info-text">
+                        Encoded ID: {{ $employee->id_number }}
+                    </p>
+                </div>
+            </div>
+        </div>
 
     </div>
 
@@ -656,6 +747,7 @@ new class extends Component {
                             <option value="absent">Absent</option>
                             <option value="on_leave">On Leave</option>
                             <option value="off_shift">OffShift</option>
+                            <option value="sick_off">Sick Off</option>
                         </select>
 
                         <select wire:model="week"
@@ -667,7 +759,6 @@ new class extends Component {
                     </div>
                 </div>
 
-                <!-- Table -->
                 <!-- Table -->
                 <table class="table table-hover table-bordered align-middle">
                     <thead class="table-light">
@@ -710,6 +801,7 @@ new class extends Component {
                                         'off_shift'    => 'off-shift',
                                         'not_scheduled'    => 'not-scheduled',
                                         'unchecked_in' => 'absent',
+                                        'sick_off' => 'sick-off',
                                         default       => 'absent'
                                     };
                                     $statusLabel = match($sheet->status) {
@@ -719,6 +811,7 @@ new class extends Component {
                                         'on_leave'     => 'On Leave',
                                         'off_shift'    => 'Off Shift',
                                         'not_scheduled'    => 'Not Scheduled',
+                                        'sick_off'    => 'Sick Off',
                                         'unchecked_in' => 'Absent'
                                     };
                                 @endphp
@@ -741,5 +834,46 @@ new class extends Component {
 
 @push('scripts')
     <script src="https://code.iconify.design/iconify-icon/1.0.7/iconify-icon.min.js"></script>
-    <script src="../assets/js/apex-chart/apex.line.init.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <script>
+        // 1. Initialize and Generate QR Code
+        const qrData = "{{ $employee->id_number }}"; // Data to encode
+        const qrContainer = document.getElementById("qrcode-canvas");
+
+        const qrcode = new QRCode(qrContainer, {
+            text: qrData,
+            width: 200,
+            height: 200,
+            colorDark : "#000000",
+            colorLight : "#ffffff",
+            correctLevel : QRCode.CorrectLevel.H
+        });
+
+        // 2. Download Function
+        function downloadQR() {
+            // The library creates an <img> or <canvas> inside our div
+            const img = qrContainer.querySelector('img');
+            const canvas = qrContainer.querySelector('canvas');
+
+            let imageSrc;
+
+            if (img && img.src) {
+                imageSrc = img.src;
+            } else if (canvas) {
+                imageSrc = canvas.toDataURL("image/png");
+            }
+
+            if (imageSrc) {
+                const link = document.createElement('a');
+                link.href = imageSrc;
+                link.download = `QR_Code_{{ str_replace(' ', '_', $employee->name) }}.png`;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            } else {
+                alert("QR Code not ready for download yet.");
+            }
+        }
+    </script>
 @endpush
+

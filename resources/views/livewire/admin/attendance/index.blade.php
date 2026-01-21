@@ -102,126 +102,88 @@ new class extends Component {
 
 @push('styles')
     <style>
-        /* Summary Cards */
+        .summary-stats-row {
+            margin-bottom: 2rem;
+        }
+
         .summary-card {
-            background: white;
-            border-radius: 16px;
-            padding: 24px;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-            transition: all 0.3s ease;
+            background: #ffffff;
+            border: none;
+            border-radius: 8px;
+            padding: 1.25rem;
             height: 100%;
-            border: 1px solid rgba(0, 0, 0, 0.05);
+            transition: all 0.3s ease;
         }
 
         .summary-card:hover {
             transform: translateY(-4px);
-            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.12);
-        }
-
-        .summary-card-header {
-            display: flex;
-            align-items: flex-start;
-            justify-content: space-between;
-            margin-bottom: 16px;
-        }
-
-        .summary-card-title {
-            font-size: 13px;
-            color: #64748b;
-            font-weight: 600;
-            margin: 0;
-            line-height: 1.4;
-            letter-spacing: 0.3px;
+            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
         }
 
         .summary-card-icon {
-            width: 48px;
-            height: 48px;
-            border-radius: 12px;
+            width: 40px;
+            height: 40px;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 24px;
-            flex-shrink: 0;
+            border-radius: 6px;
+            color: white;
+            font-size: 20px;
+            margin-bottom: 0.75rem;
+        }
+
+        .icon-success {
+            background-color: #10b981;
+        }
+
+        .icon-danger {
+            background-color: #ef4444;
+        }
+
+        .icon-info {
+            background-color: #3b82f6;
+        }
+
+        .icon-warning {
+            background-color: #f59e0b;
+        }
+
+        .icon-cyan {
+            background-color: #06b6d4;
+        }
+
+        .icon-secondary {
+            background-color: #6b7280;
+        }
+
+        .summary-card-title {
+            margin: 0 0 0.5rem 0;
+            font-size: 0.75rem;
+            font-weight: 500;
+            color: #6b7280;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
         }
 
         .summary-card-value {
-            font-size: 2.5rem;
+            font-size: 1.75rem;
             font-weight: 700;
+            color: #1f2937;
             line-height: 1;
-            margin-bottom: 12px;
-            letter-spacing: -0.5px;
+            margin-bottom: 0.35rem;
+        }
+
+        .summary-card-total {
+            font-size: 1.25rem;
+            color: #9ca3af;
+            font-weight: 400;
         }
 
         .summary-card-subtitle {
-            font-size: 12px;
-            color: #94a3b8;
             margin: 0;
-            font-weight: 500;
-            line-height: 1.5;
-        }
-
-        /* Color variants */
-        .summary-card-success .summary-card-value {
-            color: #22c55e;
-        }
-        .summary-card-success .summary-card-icon {
-            background: linear-gradient(135deg, rgba(34, 197, 94, 0.15) 0%, rgba(34, 197, 94, 0.08) 100%);
-            color: #22c55e;
-        }
-
-        .summary-card-danger .summary-card-value {
-            color: #ef4444;
-        }
-        .summary-card-danger .summary-card-icon {
-            background: linear-gradient(135deg, rgba(239, 68, 68, 0.15) 0%, rgba(239, 68, 68, 0.08) 100%);
-            color: #ef4444;
-        }
-
-        .summary-card-info .summary-card-value {
-            color: #3b82f6;
-        }
-        .summary-card-info .summary-card-icon {
-            background: linear-gradient(135deg, rgba(59, 130, 246, 0.15) 0%, rgba(59, 130, 246, 0.08) 100%);
-            color: #3b82f6;
-        }
-
-        .summary-card-warning .summary-card-value {
-            color: #f59e0b;
-        }
-        .summary-card-warning .summary-card-icon {
-            background: linear-gradient(135deg, rgba(245, 158, 11, 0.15) 0%, rgba(245, 158, 11, 0.08) 100%);
-            color: #f59e0b;
-        }
-
-        .summary-card-secondary .summary-card-value {
-            color: #64748b;
-        }
-        .summary-card-secondary .summary-card-icon {
-            background: linear-gradient(135deg, rgba(100, 116, 139, 0.15) 0%, rgba(100, 116, 139, 0.08) 100%);
-            color: #64748b;
-        }
-
-        /* Responsive adjustments */
-        @media (max-width: 768px) {
-            .summary-card {
-                padding: 20px;
-            }
-
-            .summary-card-value {
-                font-size: 2rem;
-            }
-
-            .summary-card-icon {
-                width: 40px;
-                height: 40px;
-                font-size: 20px;
-            }
-        }
-
-        /* Add spacing for the summary cards row */
-        .summary-stats-row {
-            margin-bottom: 2rem;
+            font-size: 0.875rem;
+            color: #6b7280;
+            font-weight: 400;
         }
     </style>
 @endpush
@@ -257,92 +219,90 @@ new class extends Component {
         <!-- Summary Stats -->
         <div class="row g-3 mb-4 summary-stats-row">
             <!-- Present Today -->
-            <div class="col-lg-2 col-md-4 col-6">
-                <div class="summary-card summary-card-success">
-                    <div class="summary-card-header">
-                        <h6 class="summary-card-title">Present Today</h6>
-                        <div class="summary-card-icon">
-                            <iconify-icon icon="mdi:account-check"></iconify-icon>
-                        </div>
+            <div class="col-lg-6 col-md-6 col-12">
+                <div class="summary-card">
+                    <div class="summary-card-icon icon-success">
+                        <iconify-icon icon="mdi:account-check"></iconify-icon>
                     </div>
-                    <div class="summary-card-value">{{ $presentCount }}</div>
+                    <h6 class="summary-card-title">Present Today</h6>
+                    <div class="summary-card-value">{{ $presentCount }} <span class="summary-card-total">/ {{ $totalEmployees }}</span></div>
                     <p class="summary-card-subtitle">
-                        {{ $totalEmployees > 0 ? number_format(($presentCount / $totalEmployees) * 100, 2) : 0 }}%
-                        (Total: {{ $totalEmployees }})
+                        {{ $totalEmployees > 0 ? number_format(($presentCount / $totalEmployees) * 100, 1) : 0 }}%
                     </p>
                 </div>
             </div>
 
             <!-- Absent Today -->
-            <div class="col-lg-2 col-md-4 col-6">
-                <div class="summary-card summary-card-danger">
-                    <div class="summary-card-header">
-                        <h6 class="summary-card-title">Absent Today</h6>
-                        <div class="summary-card-icon">
-                            <iconify-icon icon="mdi:account-remove"></iconify-icon>
-                        </div>
+            <div class="col-lg-6 col-md-6 col-12">
+                <div class="summary-card">
+                    <div class="summary-card-icon icon-danger">
+                        <iconify-icon icon="mdi:account-remove"></iconify-icon>
                     </div>
-                    <div class="summary-card-value">{{ $absentCount }}</div>
-                    <p class="summary-card-subtitle">Out of {{ $totalEmployees }} Total</p>
+                    <h6 class="summary-card-title">Absent Today</h6>
+                    <div class="summary-card-value">{{ $absentCount }} <span class="summary-card-total">/ {{ $totalEmployees }}</span></div>
+                    <p class="summary-card-subtitle">
+                        {{ $totalEmployees > 0 ? number_format(($absentCount / $totalEmployees) * 100, 1) : 0 }}%
+                    </p>
                 </div>
             </div>
 
             <!-- Sick Off Today -->
-            <div class="col-lg-2 col-md-4 col-6">
-                <div class="summary-card summary-card-info">
-                    <div class="summary-card-header">
-                        <h6 class="summary-card-title">Sick Off Today</h6>
-                        <div class="summary-card-icon">
-                            <iconify-icon icon="mdi:medical-bag"></iconify-icon>
-                        </div>
+            <div class="col-lg-6 col-md-6 col-12">
+                <div class="summary-card">
+                    <div class="summary-card-icon icon-info">
+                        <iconify-icon icon="mdi:medical-bag"></iconify-icon>
                     </div>
-                    <div class="summary-card-value">{{ $sickOffCount }}</div>
-                    <p class="summary-card-subtitle">Out of {{ $totalEmployees }} Total</p>
+                    <h6 class="summary-card-title">Sick Leave</h6>
+                    <div class="summary-card-value">{{ $sickOffCount }} <span class="summary-card-total">/ {{ $totalEmployees }}</span></div>
+                    <p class="summary-card-subtitle">
+                        {{ $totalEmployees > 0 ? number_format(($sickOffCount / $totalEmployees) * 100, 1) : 0 }}%
+                    </p>
                 </div>
             </div>
 
             <!-- On Leave Today -->
-            <div class="col-lg-2 col-md-4 col-6">
-                <div class="summary-card summary-card-warning">
-                    <div class="summary-card-header">
-                        <h6 class="summary-card-title">On Leave Today</h6>
-                        <div class="summary-card-icon">
-                            <iconify-icon icon="mdi:airplane-takeoff"></iconify-icon>
-                        </div>
+            <div class="col-lg-6 col-md-6 col-12">
+                <div class="summary-card">
+                    <div class="summary-card-icon icon-warning">
+                        <iconify-icon icon="mdi:airplane-takeoff"></iconify-icon>
                     </div>
-                    <div class="summary-card-value">{{ $onLeaveCount }}</div>
-                    <p class="summary-card-subtitle">Out of {{ $totalEmployees }} Total</p>
+                    <h6 class="summary-card-title">On Leave</h6>
+                    <div class="summary-card-value">{{ $onLeaveCount }} <span class="summary-card-total">/ {{ $totalEmployees }}</span></div>
+                    <p class="summary-card-subtitle">
+                        {{ $totalEmployees > 0 ? number_format(($onLeaveCount / $totalEmployees) * 100, 1) : 0 }}%
+                    </p>
                 </div>
             </div>
 
             <!-- Off Shift Today -->
-            <div class="col-lg-2 col-md-4 col-6">
-                <div class="summary-card summary-card-info">
-                    <div class="summary-card-header">
-                        <h6 class="summary-card-title">Off Shift Today</h6>
-                        <div class="summary-card-icon">
-                            <iconify-icon icon="mdi:clock-remove-outline"></iconify-icon>
-                        </div>
+            <div class="col-lg-6 col-md-6 col-12">
+                <div class="summary-card">
+                    <div class="summary-card-icon icon-cyan">
+                        <iconify-icon icon="mdi:clock-remove-outline"></iconify-icon>
                     </div>
-                    <div class="summary-card-value">{{ $offShiftCount }}</div>
-                    <p class="summary-card-subtitle">Out of {{ $totalEmployees }} Total</p>
+                    <h6 class="summary-card-title">Off Shift</h6>
+                    <div class="summary-card-value">{{ $offShiftCount }} <span class="summary-card-total">/ {{ $totalEmployees }}</span></div>
+                    <p class="summary-card-subtitle">
+                        {{ $totalEmployees > 0 ? number_format(($offShiftCount / $totalEmployees) * 100, 1) : 0 }}%
+                    </p>
                 </div>
             </div>
 
             <!-- Inactive Employees -->
-            <div class="col-lg-2 col-md-4 col-6">
-                <div class="summary-card summary-card-secondary">
-                    <div class="summary-card-header">
-                        <h6 class="summary-card-title">Inactive Employees</h6>
-                        <div class="summary-card-icon">
-                            <iconify-icon icon="mdi:account-off"></iconify-icon>
-                        </div>
+            <div class="col-lg-6 col-md-6 col-12">
+                <div class="summary-card">
+                    <div class="summary-card-icon icon-secondary">
+                        <iconify-icon icon="mdi:account-off"></iconify-icon>
                     </div>
-                    <div class="summary-card-value">{{ $inactiveCount }}</div>
-                    <p class="summary-card-subtitle">Out of {{ $totalEmployees }} Total</p>
+                    <h6 class="summary-card-title">Inactive</h6>
+                    <div class="summary-card-value">{{ $inactiveCount }} <span class="summary-card-total">/ {{ $totalEmployees }}</span></div>
+                    <p class="summary-card-subtitle">
+                        {{ $totalEmployees > 0 ? number_format(($inactiveCount / $totalEmployees) * 100, 1) : 0 }}%
+                    </p>
                 </div>
             </div>
         </div>
+
 
         <div class="card card-body">
             <div class="row align-items-end mb-4 justify-content-end">

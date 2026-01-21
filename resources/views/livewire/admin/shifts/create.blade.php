@@ -468,10 +468,8 @@ new class extends Component {
             }
 
             $minutes = $start->diffInMinutes($end);
-
-            // If your shift has a break_minutes field, subtract here:
-            // $break = $this->selectedShift['break_minutes'] ?? 0;
-            // $minutes -= $break;
+            $break = $this->selectedShift['breakDuration'] ?? 0;
+            $minutes -= $break;
 
             $this->selectedShift['duration'] = round($minutes / 60, 2);
 
@@ -1243,13 +1241,23 @@ new class extends Component {
                                                class="form-control">
                                     </div>
                                     <div class="col-md-4">
-                                        <label class="form-label">Shift Duration (hours)</label>
+                                        <label class="form-label">Break Time (minutes)</label>
                                         <input type="number"
-                                               wire:model="selectedShift.duration"
+                                               wire:input="$dispatch('time-selected')"
+                                               wire:model="selectedShift.breakDuration"
                                                class="form-control"
-                                               min="1" max="24" step="0.5">
+                                               min="0" max="120" step="5">
                                     </div>
+
                                 </div>
+                                <div class="col-md-12 mt-3">
+                                    <label class="form-label">Shift Duration (hours)</label>
+                                    <input type="number"
+                                           wire:model="selectedShift.duration"
+                                           class="form-control"
+                                           min="1" max="24" step="0.5">
+                                </div>
+
                             </div>
                         </div>
 

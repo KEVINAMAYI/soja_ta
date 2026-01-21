@@ -40,7 +40,7 @@ class AttendanceDailyTable extends DataTableComponent
 
         $orgId = auth()->user()->employee->organization_id ?? null;
 
-        if (in_array($this->status, ['unchecked_in', 'absent'])) {
+        if (in_array($this->status, ['unchecked_in', 'absent', 'on_leave', 'off_shift', 'sick_off'])) {
             app(AttendanceSeeder::class)->seedMissingAttendanceRecords($orgId);
         }
 

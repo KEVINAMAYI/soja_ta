@@ -379,42 +379,6 @@ new class extends Component {
             text-transform: lowercase;
         }
 
-        .stat-card {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 20px;
-        }
-
-        .stat-text {
-            text-align: left;
-        }
-
-        .stat-icon {
-            font-size: 36px;
-            padding: 12px;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-
-        .icon-blue {
-            color: #3b82f6;
-        }
-
-        .icon-green {
-            color: #22c55e;
-        }
-
-        .icon-red {
-            color: #ef4444;
-        }
-
-        .icon-orange {
-            color: #fb923c;
-        }
-
 
         /* Clocked In Badge */
         .badge-clocked-in {
@@ -826,123 +790,175 @@ new class extends Component {
             }
         }
 
+        .stat-card {
+            background: #ffffff;
+            border: none;
+            border-radius: 8px;
+            padding: 1.25rem;
+            height: 100%;
+            transition: all 0.3s ease;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
+        }
+
+        .stat-card-icon {
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 6px;
+            color: white;
+            font-size: 20px;
+            margin-bottom: 0.75rem;
+        }
+
+        .icon-success {
+            background-color: #10b981;
+        }
+
+        .icon-danger {
+            background-color: #ef4444;
+        }
+
+        .icon-info {
+            background-color: #3b82f6;
+        }
+
+        .icon-warning {
+            background-color: #f59e0b;
+        }
+
+        .icon-cyan {
+            background-color: #06b6d4;
+        }
+
+        .icon-secondary {
+            background-color: #6b7280;
+        }
+
+        .stat-card-title {
+            margin: 0 0 0.5rem 0;
+            font-size: 0.75rem;
+            font-weight: 500;
+            color: #6b7280;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .stat-card-value {
+            font-size: 1.75rem;
+            font-weight: 700;
+            color: #1f2937;
+            line-height: 1;
+            margin-bottom: 0.35rem;
+        }
+
+        .stat-card-total {
+            font-size: 1.25rem;
+            color: #9ca3af;
+            font-weight: 400;
+        }
+
+        .stat-card-subtitle {
+            margin: 0;
+            font-size: 0.875rem;
+            color: #6b7280;
+            font-weight: 400;
+        }
+
     </style>
 @endpush
 
 
 <div class="row g-3">
 
-    <div class="row g-3">
-
-        <!-- First Column (Important Data) - Full Width on Large Screens -->
-        <div class="col-lg-6 col-12">
-            <div class="card shadow-sm h-100">
-                <div class="stat-card p-3">
-                    <div class="stat-text">
-                        <h6 class="text-muted mb-1">Present Today</h6>
-                        <h3 class="fw-bold text-success">{{ $presentToday }}</h3>
-                        <small class="text-muted">
-                            {{ number_format(($presentToday / $totalEmployees) * 100, 2) }}%
-                            (Total: {{ $totalEmployees }})
-                        </small>
-                    </div>
-                    <div class="stat-icon icon-green fs-3">
-                        <span class="iconify" data-icon="mdi:account-check" width="30"></span>
-                    </div>
+    <!-- Dashboard Statistics Cards -->
+    <div style="padding-right:0px;" class="row g-3">
+        <!-- Present Today -->
+        <div class="col-lg-6 col-md-6 col-12">
+            <div class="stat-card">
+                <div class="stat-card-icon icon-success">
+                    <iconify-icon icon="mdi:account-check"></iconify-icon>
                 </div>
+                <h6 class="stat-card-title">Present Today</h6>
+                <div class="stat-card-value">{{ $presentToday }} <span class="stat-card-total">/ {{ $totalEmployees }}</span></div>
+                <p class="stat-card-subtitle">
+                    {{ number_format(($presentToday / $totalEmployees) * 100, 1) }}%
+                </p>
             </div>
         </div>
 
-        <!-- Second Column (Important Data) - Full Width on Large Screens -->
-        <div class="col-lg-6 col-12">
-            <div class="card shadow-sm h-100">
-                <div class="stat-card p-3">
-                    <div class="stat-text">
-                        <h6 class="text-muted mb-1">Absent Today</h6>
-                        <h3 class="fw-bold text-danger">{{ $absentToday }}</h3>
-                        <small class="text-muted">
-                            Out of {{ $totalEmployees }} Total
-                        </small>
-                    </div>
-                    <div class="stat-icon icon-red fs-3">
-                        <span class="iconify" data-icon="mdi:account-remove" width="30"></span>
-                    </div>
+        <!-- Absent Today -->
+        <div class="col-lg-6 col-md-6 col-12">
+            <div class="stat-card">
+                <div class="stat-card-icon icon-danger">
+                    <iconify-icon icon="mdi:account-remove"></iconify-icon>
                 </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Second Row for Less Important Stats (Two Equal Columns) -->
-    <div style="margin-top:-3px;" class="row g-3">
-        <!-- Third Column (Sick Off Today) -->
-        <div class="col-lg-3 col-6">
-            <div class="card shadow-sm h-100">
-                <div class="stat-card p-3">
-                    <div class="stat-text">
-                        <h6 class="text-muted mb-1">Sick Off Today</h6>
-                        <h3 class="fw-bold text-info">{{ $sickOffToday }}</h3>
-                        <small class="text-muted">
-                            Out of {{ $totalEmployees }} Total
-                        </small>
-                    </div>
-                    <div class="stat-icon icon-info fs-3">
-                        <span class="iconify" data-icon="mdi:medical-bag" width="30"></span>
-                    </div>
-                </div>
+                <h6 class="stat-card-title">Absent Today</h6>
+                <div class="stat-card-value">{{ $absentToday }} <span class="stat-card-total">/ {{ $totalEmployees }}</span></div>
+                <p class="stat-card-subtitle">
+                    Out of {{ $totalEmployees }} Total
+                </p>
             </div>
         </div>
 
-        <!-- Fourth Column (On Leave Today) -->
-        <div class="col-lg-3 col-6">
-            <div class="card shadow-sm h-100">
-                <div class="stat-card p-3">
-                    <div class="stat-text">
-                        <h6 class="text-muted mb-1">On Leave Today</h6>
-                        <h3 class="fw-bold text-warning">{{ $leaveToday }}</h3>
-                        <small class="text-muted">
-                            Out of {{ $totalEmployees }} Total
-                        </small>
-                    </div>
-                    <div class="stat-icon icon-orange fs-3">
-                        <span class="iconify" data-icon="mdi:airplane-takeoff" width="30"></span>
-                    </div>
+        <!-- Sick Off Today -->
+        <div class="col-lg-6 col-md-6 col-12">
+            <div class="stat-card">
+                <div class="stat-card-icon icon-info">
+                    <iconify-icon icon="mdi:medical-bag"></iconify-icon>
                 </div>
+                <h6 class="stat-card-title">Sick Off Today</h6>
+                <div class="stat-card-value">{{ $sickOffToday }} <span class="stat-card-total">/ {{ $totalEmployees }}</span></div>
+                <p class="stat-card-subtitle">
+                    Out of {{ $totalEmployees }} Total
+                </p>
             </div>
         </div>
 
-        <!-- Fifth Column (Off Shift Today) -->
-        <div class="col-lg-3 col-6">
-            <div class="card shadow-sm h-100">
-                <div class="stat-card p-3">
-                    <div class="stat-text">
-                        <h6 class="text-muted mb-1">Off Shift Today</h6>
-                        <h3 class="fw-bold text-secondary">{{ $OffShiftToday }}</h3>
-                        <small class="text-muted">
-                            Out of {{ $totalEmployees }} Total
-                        </small>
-                    </div>
-                    <div class="stat-icon bg-secondary fs-3">
-                        <span class="iconify text-white" data-icon="mdi:clock-remove-outline" width="30"></span>
-                    </div>
+        <!-- On Leave Today -->
+        <div class="col-lg-6 col-md-6 col-12">
+            <div class="stat-card">
+                <div class="stat-card-icon icon-warning">
+                    <iconify-icon icon="mdi:airplane-takeoff"></iconify-icon>
                 </div>
+                <h6 class="stat-card-title">On Leave Today</h6>
+                <div class="stat-card-value">{{ $leaveToday }} <span class="stat-card-total">/ {{ $totalEmployees }}</span></div>
+                <p class="stat-card-subtitle">
+                    Out of {{ $totalEmployees }} Total
+                </p>
             </div>
         </div>
 
-        <!-- Sixth Column (Inactive Employees) -->
-        <div class="col-lg-3 col-6">
-            <div class="card shadow-sm h-100">
-                <div class="stat-card p-3">
-                    <div class="stat-text">
-                        <h6 class="text-muted mb-1">Inactive Employees</h6>
-                        <h3 class="fw-bold text-muted">{{ $inactiveEmployees }}</h3>
-                        <small class="text-muted">
-                            Out of {{ $totalEmployees }} Total
-                        </small>
-                    </div>
-                    <div class="stat-icon icon-gray fs-3">
-                        <span class="iconify" data-icon="mdi:account-off" width="30"></span>
-                    </div>
+        <!-- Off Shift Today -->
+        <div class="col-lg-6 col-md-6 col-12">
+            <div class="stat-card">
+                <div class="stat-card-icon icon-cyan">
+                    <iconify-icon icon="mdi:clock-remove-outline"></iconify-icon>
                 </div>
+                <h6 class="stat-card-title">Off Shift Today</h6>
+                <div class="stat-card-value">{{ $OffShiftToday }} <span class="stat-card-total">/ {{ $totalEmployees }}</span></div>
+                <p class="stat-card-subtitle">
+                    Out of {{ $totalEmployees }} Total
+                </p>
+            </div>
+        </div>
+
+        <!-- Inactive Employees -->
+        <div class="col-lg-6 col-md-6 col-12">
+            <div class="stat-card">
+                <div class="stat-card-icon icon-secondary">
+                    <iconify-icon icon="mdi:account-off"></iconify-icon>
+                </div>
+                <h6 class="stat-card-title">Inactive Employees</h6>
+                <div class="stat-card-value">{{ $inactiveEmployees }} <span class="stat-card-total">/ {{ $totalEmployees }}</span></div>
+                <p class="stat-card-subtitle">
+                    Out of {{ $totalEmployees }} Total
+                </p>
             </div>
         </div>
     </div>
@@ -1003,9 +1019,6 @@ new class extends Component {
                         <!-- Total Shifts -->
                         <div class="col-6">
                             <div class="quick-action-box text-center">
-                                <div class="quick-action-icon mb-2">
-                                    <iconify-icon icon="mdi:clock-time-eight-outline"></iconify-icon>
-                                </div>
                                 <div class="quick-action-value">{{ $shiftStats['total'] }}</div>
                                 <div class="quick-action-label">Total Shifts</div>
                             </div>
@@ -1014,9 +1027,6 @@ new class extends Component {
                         <!-- Fully Staffed -->
                         <div class="col-6">
                             <div class="quick-action-box text-center">
-                                <div class="quick-action-icon mb-2 text-success">
-                                    <iconify-icon icon="mdi:check-circle"></iconify-icon>
-                                </div>
                                 <div class="quick-action-value text-success">{{ $shiftStats['full'] }}</div>
                                 <div class="quick-action-label">Fully Staffed</div>
                             </div>
@@ -1025,9 +1035,6 @@ new class extends Component {
                         <!-- Partial Coverage -->
                         <div class="col-6">
                             <div class="quick-action-box text-center">
-                                <div class="quick-action-icon mb-2 text-warning">
-                                    <iconify-icon icon="mdi:alert-circle"></iconify-icon>
-                                </div>
                                 <div class="quick-action-value text-warning">{{ $shiftStats['partial'] }}</div>
                                 <div class="quick-action-label">Partial Coverage</div>
                             </div>
@@ -1036,9 +1043,6 @@ new class extends Component {
                         <!-- Critical Gaps -->
                         <div class="col-6">
                             <div class="quick-action-box text-center">
-                                <div class="quick-action-icon mb-2 text-danger">
-                                    <iconify-icon icon="mdi:close-circle"></iconify-icon>
-                                </div>
                                 <div class="quick-action-value text-danger">{{ $shiftStats['critical'] }}</div>
                                 <div class="quick-action-label">Critical Gaps</div>
                             </div>
