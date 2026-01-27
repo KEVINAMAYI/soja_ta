@@ -30,6 +30,12 @@ class SendReportJob implements ShouldQueue
 
     public function handle()
     {
+
+        Log::info('🔥 JOB ENTERED HANDLE', [
+            'setting_id' => $this->settingId,
+            'organization_id' => $this->organizationId,
+        ]);
+
         try {
             $setting = ReportSetting::find($this->settingId);
 
@@ -48,14 +54,18 @@ class SendReportJob implements ShouldQueue
 
             $reportFile = $this->generateReport($setting);
 
-            Log::info('DEBUG: Report generation complete', [
-                'reportFile' => $reportFile,
-                'reportFile_type' => gettype($reportFile),
-                'is_null' => is_null($reportFile),
-                'is_array' => is_array($reportFile),
-                'setting_id' => $this->settingId,
-                'organization_id' => $this->organizationId,
+            \Log::error('🚨 SendReportJob DEBUG @ line 66', [
+                'settingId' => $this->settingId ?? 'not set',
+                'organizationId' => $this->organizationId ?? 'not set',
+
+                // dump every variable used near line 66
+                'reportFile' => $reportFile ?? 'UNDEFINED',
+                'reportFile_type' => isset($reportFile) ? gettype($reportFile) : 'UNSET',
+
+                'this_reportFile' => $this->reportFile ?? 'UNDEFINED',
+                'this_reportFile_type' => isset($this->reportFile) ? gettype($this->reportFile) : 'UNSET',
             ]);
+
 
             // FIX: Check if report generation failed and exit early
             if (!$reportFile || !isset($reportFile['path'])) {
@@ -79,6 +89,11 @@ class SendReportJob implements ShouldQueue
 
             Log::info('Report generated successfully', [
                 'file_path' => $reportFile['path'],
+            ]);
+
+            Log::info('📧 ABOUT TO SEND EMAIL', [
+                'email' => $setting->email,
+                'path' => $reportFile['path'],
             ]);
 
             // Only send email if report was generated successfully
