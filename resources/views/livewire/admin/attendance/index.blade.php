@@ -225,84 +225,102 @@ new class extends Component {
             <!-- Present Today -->
             <div class="col-lg-6 col-md-6 col-12">
                 <div class="summary-card">
-                    <div class="summary-card-icon icon-success">
-                        <iconify-icon icon="mdi:account-check"></iconify-icon>
-                    </div>
-                    <h6 class="summary-card-title">Present Today</h6>
-                    <div class="summary-card-value">{{ $presentCount }} <span class="summary-card-total">/ {{ $totalEmployees }}</span></div>
-                    <p class="summary-card-subtitle">
-                        {{ $totalEmployees > 0 ? number_format(($presentCount / $totalEmployees) * 100, 1) : 0 }}%
-                    </p>
+                    <a href="{{ route('attendance.index', ['filterStatus' => 'present']) }}" class="stat-card-link">
+                        <div class="summary-card-icon icon-success">
+                            <iconify-icon icon="mdi:account-check"></iconify-icon>
+                        </div>
+                        <h6 class="summary-card-title">Present Today</h6>
+                        <div class="summary-card-value">{{ $presentCount }} <span
+                                class="summary-card-total">/ {{ $totalEmployees }}</span></div>
+                        <p class="summary-card-subtitle">
+                            {{ $totalEmployees > 0 ? number_format(($presentCount / $totalEmployees) * 100, 1) : 0 }}%
+                        </p>
+                    </a>
                 </div>
             </div>
 
             <!-- Absent Today -->
             <div class="col-lg-6 col-md-6 col-12">
                 <div class="summary-card">
-                    <div class="summary-card-icon icon-danger">
-                        <iconify-icon icon="mdi:account-remove"></iconify-icon>
-                    </div>
-                    <h6 class="summary-card-title">Absent Today</h6>
-                    <div class="summary-card-value">{{ $absentCount }} <span class="summary-card-total">/ {{ $totalEmployees }}</span></div>
-                    <p class="summary-card-subtitle">
-                        {{ $totalEmployees > 0 ? number_format(($absentCount / $totalEmployees) * 100, 1) : 0 }}%
-                    </p>
+                    <a href="{{ route('attendance.index', ['filterStatus' => 'absent']) }}" class="stat-card-link">
+                        <div class="summary-card-icon icon-danger">
+                            <iconify-icon icon="mdi:account-remove"></iconify-icon>
+                        </div>
+                        <h6 class="summary-card-title">Absent Today</h6>
+                        <div class="summary-card-value">{{ $absentCount }} <span
+                                class="summary-card-total">/ {{ $totalEmployees }}</span></div>
+                        <p class="summary-card-subtitle">
+                            {{ $totalEmployees > 0 ? number_format(($absentCount / $totalEmployees) * 100, 1) : 0 }}%
+                        </p>
+                    </a>
                 </div>
             </div>
 
             <!-- Sick Off Today -->
             <div class="col-lg-3 col-md-6 col-12">
                 <div class="summary-card">
-                    <div class="summary-card-icon icon-info">
-                        <iconify-icon icon="mdi:medical-bag"></iconify-icon>
-                    </div>
-                    <h6 class="summary-card-title">Sick Leave</h6>
-                    <div class="summary-card-value">{{ $sickOffCount }} <span class="summary-card-total">/ {{ $totalEmployees }}</span></div>
-                    <p class="summary-card-subtitle">
-                        {{ $totalEmployees > 0 ? number_format(($sickOffCount / $totalEmployees) * 100, 1) : 0 }}%
-                    </p>
+                    <a href="{{ route('attendance.index', ['filterStatus' => 'sick_off']) }}" class="stat-card-link">
+                        <div class="summary-card-icon icon-info">
+                            <iconify-icon icon="mdi:medical-bag"></iconify-icon>
+                        </div>
+                        <h6 class="summary-card-title">Sick Off Today</h6>
+                        <div class="summary-card-value">{{ $sickOffCount }} <span
+                                class="summary-card-total">/ {{ $totalEmployees }}</span></div>
+                        <p class="summary-card-subtitle">
+                            {{ $totalEmployees > 0 ? number_format(($sickOffCount / $totalEmployees) * 100, 1) : 0 }}%
+                        </p>
+                    </a>
                 </div>
             </div>
 
             <!-- On Leave Today -->
             <div class="col-lg-3 col-md-6 col-12">
                 <div class="summary-card">
-                    <div class="summary-card-icon icon-warning">
-                        <iconify-icon icon="mdi:airplane-takeoff"></iconify-icon>
-                    </div>
-                    <h6 class="summary-card-title">On Leave</h6>
-                    <div class="summary-card-value">{{ $onLeaveCount }} <span class="summary-card-total">/ {{ $totalEmployees }}</span></div>
-                    <p class="summary-card-subtitle">
-                        {{ $totalEmployees > 0 ? number_format(($onLeaveCount / $totalEmployees) * 100, 1) : 0 }}%
-                    </p>
+                    <a href="{{ route('attendance.index', ['filterStatus' => 'on_leave']) }}" class="stat-card-link">
+                        <div class="summary-card-icon icon-warning">
+                            <iconify-icon icon="mdi:airplane-takeoff"></iconify-icon>
+                        </div>
+                        <h6 class="summary-card-title">On Leave</h6>
+                        <div class="summary-card-value">{{ $onLeaveCount }} <span
+                                class="summary-card-total">/ {{ $totalEmployees }}</span></div>
+                        <p class="summary-card-subtitle">
+                            {{ $totalEmployees > 0 ? number_format(($onLeaveCount / $totalEmployees) * 100, 1) : 0 }}%
+                        </p>
+                    </a>
                 </div>
             </div>
 
             <!-- Off Shift Today -->
             <div class="col-lg-3 col-md-6 col-12">
                 <div class="summary-card">
-                    <div class="summary-card-icon icon-cyan">
-                        <iconify-icon icon="mdi:clock-remove-outline"></iconify-icon>
-                    </div>
-                    <h6 class="summary-card-title">Off Shift</h6>
-                    <div class="summary-card-value">{{ $offShiftCount }} <span class="summary-card-total">/ {{ $totalEmployees }}</span></div>
-                    <p class="summary-card-subtitle">
-                        {{ $totalEmployees > 0 ? number_format(($offShiftCount / $totalEmployees) * 100, 1) : 0 }}%
-                    </p>
+                    <a href="{{ route('attendance.index', ['filterStatus' => 'off_shift']) }}" class="stat-card-link">
+                        <div class="summary-card-icon icon-cyan">
+                            <iconify-icon icon="mdi:clock-remove-outline"></iconify-icon>
+                        </div>
+                        <h6 class="summary-card-title">Off Shift</h6>
+                        <div class="summary-card-value">{{ $offShiftCount }} <span
+                                class="summary-card-total">/ {{ $totalEmployees }}</span></div>
+                        <p class="summary-card-subtitle">
+                            {{ $totalEmployees > 0 ? number_format(($offShiftCount / $totalEmployees) * 100, 1) : 0 }}%
+                        </p>
+                    </a>
                 </div>
             </div>
 
             <!-- Inactive Employees -->
             <div class="col-lg-3 col-md-6 col-12">
                 <div class="summary-card">
-                    <div class="summary-card-icon icon-secondary">
-                        <iconify-icon icon="mdi:account-off"></iconify-icon>
-                    </div>
-                    <h6 class="summary-card-title">Inactive</h6>
-                    <div class="summary-card-value">{{ $inactiveCount }} <span class="summary-card-total">/ {{ $totalEmployees }}</span></div>
-                    <p class="summary-card-subtitle">
-                        {{ $totalEmployees > 0 ? number_format(($inactiveCount / $totalEmployees) * 100, 1) : 0 }}%
-                    </p>
+                    <a href="{{ route('employees.index', ['active' => '0']) }}" class="stat-card-link">
+                        <div class="summary-card-icon icon-secondary">
+                            <iconify-icon icon="mdi:account-off"></iconify-icon>
+                        </div>
+                        <h6 class="summary-card-title">Inactive</h6>
+                        <div class="summary-card-value">{{ $inactiveCount }} <span
+                                class="summary-card-total">/ {{ $totalEmployees }}</span></div>
+                        <p class="summary-card-subtitle">
+                            {{ $totalEmployees > 0 ? number_format(($inactiveCount / $totalEmployees) * 100, 1) : 0 }}%
+                        </p>
+                    </a>
                 </div>
             </div>
         </div>
@@ -364,7 +382,7 @@ new class extends Component {
                         <option value="on_leave">On Leave</option>
                         <option value="off_shift">Off Shift</option>
                         <option value="sick_off">Sick Off</option>
-                        <option value="inactive">Inactive Employees</option>
+                        {{--                        <option value="inactive">Inactive Employees</option>--}}
                     </select>
                 </div>
             </div>

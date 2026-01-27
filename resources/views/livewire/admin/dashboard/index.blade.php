@@ -891,7 +891,6 @@ new class extends Component {
 <div class="row g-3">
 
     <!-- Dashboard Statistics Cards -->
-    <!-- Replace the Dashboard Statistics Cards section with this: -->
     <div style="padding-right:0px;" class="row g-3">
         <!-- Present Today -->
         <div class="col-lg-6 col-md-6 col-12">
@@ -973,9 +972,8 @@ new class extends Component {
             </a>
         </div>
 
-        <!-- Inactive Employees -->
         <div class="col-lg-3 col-md-6 col-12">
-            <a href="{{ route('attendance.index', ['filterStatus' => 'inactive']) }}" class="stat-card-link">
+            <a href="{{ route('employees.index', ['active' => '0']) }}" class="stat-card-link">
                 <div class="stat-card">
                     <div class="stat-card-icon icon-secondary">
                         <iconify-icon icon="mdi:account-off"></iconify-icon>
@@ -988,6 +986,7 @@ new class extends Component {
                 </div>
             </a>
         </div>
+
     </div>
 
 

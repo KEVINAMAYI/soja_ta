@@ -153,90 +153,106 @@ new class extends Component {
         <!-- Present Today -->
         <div class="col-lg-6 col-md-6 col-12">
             <div class="stat-card">
-                <div class="stat-card-icon icon-success">
-                    <iconify-icon icon="mdi:account-check"></iconify-icon>
-                </div>
-                <h6 class="stat-card-title">Present Today</h6>
-                <div class="stat-card-value">{{ $present }} <span class="stat-card-total">/ {{ $totalEmployees }}</span>
-                </div>
-                <p class="stat-card-subtitle">
-                    {{ $totalEmployees > 0 ? number_format(($present / $totalEmployees) * 100, 1) : 0 }}%
-                </p>
+                <a href="{{ route('attendance.index', ['filterStatus' => 'present']) }}" class="stat-card-link">
+                    <div class="stat-card-icon icon-success">
+                        <iconify-icon icon="mdi:account-check"></iconify-icon>
+                    </div>
+                    <h6 class="stat-card-title">Present Today</h6>
+                    <div class="stat-card-value">{{ $present }} <span
+                            class="stat-card-total">/ {{ $totalEmployees }}</span>
+                    </div>
+                    <p class="stat-card-subtitle">
+                        {{ $totalEmployees > 0 ? number_format(($present / $totalEmployees) * 100, 1) : 0 }}%
+                    </p>
+                </a>
             </div>
         </div>
 
         <!-- Absent Today -->
         <div class="col-lg-6 col-md-6 col-12">
             <div class="stat-card">
-                <div class="stat-card-icon icon-danger">
-                    <iconify-icon icon="mdi:account-remove"></iconify-icon>
-                </div>
-                <h6 class="stat-card-title">Absent Today</h6>
-                <div class="stat-card-value">{{ $absent }} <span class="stat-card-total">/ {{ $totalEmployees }}</span>
-                </div>
-                <p class="stat-card-subtitle">
-                    {{ $totalEmployees > 0 ? number_format(($absent / $totalEmployees) * 100, 1) : 0 }}%
-                </p>
+                <a href="{{ route('attendance.index', ['filterStatus' => 'absent']) }}" class="stat-card-link">
+                    <div class="stat-card-icon icon-danger">
+                        <iconify-icon icon="mdi:account-remove"></iconify-icon>
+                    </div>
+                    <h6 class="stat-card-title">Absent Today</h6>
+                    <div class="stat-card-value">{{ $absent }} <span
+                            class="stat-card-total">/ {{ $totalEmployees }}</span>
+                    </div>
+                    <p class="stat-card-subtitle">
+                        {{ $totalEmployees > 0 ? number_format(($absent / $totalEmployees) * 100, 1) : 0 }}%
+                    </p>
+                </a>
             </div>
         </div>
 
         <!-- Sick Off Today -->
         <div class="col-lg-3 col-md-6 col-12">
             <div class="stat-card">
-                <div class="stat-card-icon icon-info">
-                    <iconify-icon icon="mdi:medical-bag"></iconify-icon>
-                </div>
-                <h6 class="stat-card-title">Sick Off Today</h6>
-                <div class="stat-card-value">{{ $sickOff }} <span class="stat-card-total">/ {{ $totalEmployees }}</span>
-                </div>
-                <p class="stat-card-subtitle">
-                    Out of {{ $totalEmployees }} Total
-                </p>
+                <a href="{{ route('attendance.index', ['filterStatus' => 'sick_off']) }}" class="stat-card-link">
+                    <div class="stat-card-icon icon-info">
+                        <iconify-icon icon="mdi:medical-bag"></iconify-icon>
+                    </div>
+                    <h6 class="stat-card-title">Sick Off Today</h6>
+                    <div class="stat-card-value">{{ $sickOff }} <span
+                            class="stat-card-total">/ {{ $totalEmployees }}</span>
+                    </div>
+                    <p class="stat-card-subtitle">
+                        Out of {{ $totalEmployees }} Total
+                    </p>
+                </a>
             </div>
         </div>
 
         <!-- On Leave Today -->
         <div class="col-lg-3 col-md-6 col-12">
             <div class="stat-card">
-                <div class="stat-card-icon icon-warning">
-                    <iconify-icon icon="mdi:airplane-takeoff"></iconify-icon>
-                </div>
-                <h6 class="stat-card-title">On Leave Today</h6>
-                <div class="stat-card-value">{{ $onLeave }} <span class="stat-card-total">/ {{ $totalEmployees }}</span>
-                </div>
-                <p class="stat-card-subtitle">
-                    Out of {{ $totalEmployees }} Total
-                </p>
+                <a href="{{ route('attendance.index', ['filterStatus' => 'on_leave']) }}" class="stat-card-link">
+                    <div class="stat-card-icon icon-warning">
+                        <iconify-icon icon="mdi:airplane-takeoff"></iconify-icon>
+                    </div>
+                    <h6 class="stat-card-title">On Leave Today</h6>
+                    <div class="stat-card-value">{{ $onLeave }} <span
+                            class="stat-card-total">/ {{ $totalEmployees }}</span>
+                    </div>
+                    <p class="stat-card-subtitle">
+                        Out of {{ $totalEmployees }} Total
+                    </p>
+                </a>
             </div>
         </div>
 
         <!-- Off Shift Today -->
         <div class="col-lg-3 col-md-6 col-12">
             <div class="stat-card">
-                <div class="stat-card-icon icon-cyan">
-                    <iconify-icon icon="mdi:clock-remove-outline"></iconify-icon>
-                </div>
-                <h6 class="stat-card-title">Off Shift Today</h6>
-                <div class="stat-card-value">{{ $offShift }} <span
-                        class="stat-card-total">/ {{ $totalEmployees }}</span></div>
-                <p class="stat-card-subtitle">
-                    Out of {{ $totalEmployees }} Total
-                </p>
+                <a href="{{ route('attendance.index', ['filterStatus' => 'off_shift']) }}" class="stat-card-link">
+                    <div class="stat-card-icon icon-cyan">
+                        <iconify-icon icon="mdi:clock-remove-outline"></iconify-icon>
+                    </div>
+                    <h6 class="stat-card-title">Off Shift Today</h6>
+                    <div class="stat-card-value">{{ $offShift }} <span
+                            class="stat-card-total">/ {{ $totalEmployees }}</span></div>
+                    <p class="stat-card-subtitle">
+                        Out of {{ $totalEmployees }} Total
+                    </p>
+                </a>
             </div>
         </div>
 
         <!-- Inactive Employees -->
         <div class="col-lg-3 col-md-6 col-12">
             <div class="stat-card">
-                <div class="stat-card-icon icon-secondary">
-                    <iconify-icon icon="mdi:account-off"></iconify-icon>
-                </div>
-                <h6 class="stat-card-title">Inactive Employees</h6>
-                <div class="stat-card-value">{{ $inactiveEmployees }} <span
-                        class="stat-card-total">/ {{ $totalEmployees }}</span></div>
-                <p class="stat-card-subtitle">
-                    Out of {{ $totalEmployees }} Total
-                </p>
+                <a href="{{ route('employees.index', ['active' => '0']) }}" class="stat-card-link">
+                    <div class="stat-card-icon icon-secondary">
+                        <iconify-icon icon="mdi:account-off"></iconify-icon>
+                    </div>
+                    <h6 class="stat-card-title">Inactive Employees</h6>
+                    <div class="stat-card-value">{{ $inactiveEmployees }} <span
+                            class="stat-card-total">/ {{ $totalEmployees }}</span></div>
+                    <p class="stat-card-subtitle">
+                        Out of {{ $totalEmployees }} Total
+                    </p>
+                </a>
             </div>
         </div>
     </div>

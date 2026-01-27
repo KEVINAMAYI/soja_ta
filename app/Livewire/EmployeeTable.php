@@ -19,6 +19,14 @@ class EmployeeTable extends DataTableComponent
     protected $model = Employee::class;
 
 
+    public function mount(): void
+    {
+        // If the URL contains ?active=0 or ?active=1
+        if (request()->has('active')) {
+            $this->setFilter('active', request()->query('active'));
+        }
+    }
+
     public function configure(): void
     {
         $this->setPrimaryKey('id');
