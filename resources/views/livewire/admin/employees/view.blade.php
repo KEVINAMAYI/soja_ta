@@ -686,7 +686,7 @@ new class extends Component {
                 </div>
 
                 <div class="info-row">
-                    <span class="info-label">Shift</span>
+                    <span class="info-label">Shift</span><br/>
                     <span class="info-value">
                         @if($employee->shift)
                             <span class="badge bg-warning text-dark me-1">{{ $employee->shift->name }}</span>

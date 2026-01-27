@@ -46,7 +46,7 @@ new class extends Component {
         if (!$orgId) return;
 
         // Get all employees in organization
-        $employees = Employee::where('organization_id', $orgId)->get();
+        $employees = Employee::where('organization_id', $orgId)->where('active', 1)->get();
         $this->totalEmployees = $employees->count();
         $employeeIds = $employees->pluck('id');
 

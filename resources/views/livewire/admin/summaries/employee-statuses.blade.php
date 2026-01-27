@@ -21,7 +21,7 @@ new class extends Component {
         $orgId = Auth::user()->employee->organization_id ?? null;
 
         // Total employees in the organization
-        $this->totalEmployees = Employee::where('organization_id', $orgId)->count();
+        $this->totalEmployees = Employee::where('organization_id', $orgId)->where('active',1)->count();
 
         $today = Carbon::today();
 

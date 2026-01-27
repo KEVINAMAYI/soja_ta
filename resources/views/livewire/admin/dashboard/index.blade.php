@@ -37,7 +37,7 @@ new class extends Component {
         $employeeRecord = Employee::where('user_id', auth()->id())->first();
         $orgId = $employeeRecord->organization_id;
 
-        $employees = Employee::where('organization_id', $orgId)->get();
+        $employees = Employee::where('organization_id', $orgId)->where('active',1)->get();
         $this->totalEmployees = $employees->count();
         $employeeIds = $employees->pluck('id');
 
@@ -217,6 +217,7 @@ new class extends Component {
             $employees = DB::table('employees')
                 ->where('shift_id', $shift->id)
                 ->where('organization_id', $organizationId)
+                ->where('active', 1)
                 ->get(['id']);
 
             $totalEmployees = $employees->count();
