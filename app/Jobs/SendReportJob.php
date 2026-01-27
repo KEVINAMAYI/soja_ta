@@ -54,7 +54,7 @@ class SendReportJob implements ShouldQueue
 
             $reportFile = $this->generateReport($setting);
 
-            \Log::error('🚨 SendReportJob DEBUG @ line 66', [
+            \Log::info('🚨 SendReportJob DEBUG @ line 66', [
                 'settingId' => $this->settingId ?? 'not set',
                 'organizationId' => $this->organizationId ?? 'not set',
 
@@ -69,7 +69,7 @@ class SendReportJob implements ShouldQueue
 
             // FIX: Check if report generation failed and exit early
             if (!$reportFile || !isset($reportFile['path'])) {
-                Log::warning('Report generation failed - skipping email', [
+                Log::info('Report generation failed - skipping email', [
                     'report_type' => $setting->report_type,
                     'organization_id' => $this->organizationId,
                     'report_file' => $reportFile,
