@@ -22,20 +22,15 @@ class SendReportJob implements ShouldQueue
     public int $settingId;
     public int $organizationId;
 
-    /**
-     * Pass only IDs (serializable) to avoid queue serialization issues.
-     */
     public function __construct(int $settingId, int $organizationId)
     {
         $this->settingId = $settingId;
         $this->organizationId = $organizationId;
-
     }
 
     public function handle()
     {
         try {
-
             $setting = ReportSetting::find($this->settingId);
 
             if (!$setting) {
@@ -53,39 +48,58 @@ class SendReportJob implements ShouldQueue
 
             $reportFile = $this->generateReport($setting);
 
-            if (!$reportFile) {
-                Log::warning('Report generation returned null', [
+            // FIX: Check if report generation failed and exit early
+            if (!$reportFile || !isset($reportFile['path'])) {
+                Log::warning('Report generation failed - skipping email', [
                     'report_type' => $setting->report_type,
                     'organization_id' => $this->organizationId,
+                    'report_file' => $reportFile,
                 ]);
-            } else {
-                Log::info('Report generated successfully', [
-                    'file_path' => $reportFile,
+
+                // Still update scheduling even if report failed
+                $now = Carbon::now();
+                $nextRun = $this->calculateNextRun($setting, $now);
+
+                $setting->update([
+                    'last_run_at' => $now,
+                    'next_run_at' => $nextRun,
                 ]);
+
+                return; // EXIT EARLY - Don't try to send email
             }
 
+            Log::info('Report generated successfully', [
+                'file_path' => $reportFile['path'],
+            ]);
+
+            // Only send email if report was generated successfully
             Mail::to($setting->email)->send(new ReportMail($setting, $reportFile['path']));
 
             // Update last_run_at and next_run_at
             $now = Carbon::now();
             $nextRun = $this->calculateNextRun($setting, $now);
 
-            $updated = $setting->update([
+            $setting->update([
                 'last_run_at' => $now,
                 'next_run_at' => $nextRun,
             ]);
 
-
+            Log::info('Report sent successfully', [
+                'email' => $setting->email,
+                'next_run_at' => $nextRun,
+            ]);
 
         } catch (\Throwable $e) {
             Log::error('Report sending failed', [
                 'setting_id' => $this->settingId,
                 'organization_id' => $this->organizationId,
                 'error' => $e->getMessage(),
+                'line' => $e->getLine(),
+                'file' => $e->getFile(),
                 'stack' => $e->getTraceAsString(),
             ]);
 
-            throw $e; // rethrow so Laravel marks it failed
+            throw $e;
         }
     }
 
@@ -98,6 +112,11 @@ class SendReportJob implements ShouldQueue
             $type = $setting->report_type;
             $frequency = $setting->frequency;
 
+            Log::info('Generating report', [
+                'type' => $type,
+                'frequency' => $frequency,
+                'organization_id' => $this->organizationId,
+            ]);
 
             // Determine date ranges based on frequency
             switch ($frequency) {
@@ -107,12 +126,9 @@ class SendReportJob implements ShouldQueue
                     break;
 
                 case 'weekly':
-                    // Get the week ending on the configured day_of_week
                     $dayOfWeek = $setting->day_of_week ?? 'Monday';
                     $endOfWeek = now()->previous($dayOfWeek);
 
-                    // If today is the configured day and we haven't passed the report time yet,
-                    // use last occurrence of that day
                     if (now()->isSameDay($endOfWeek)) {
                         $endOfWeek = now();
                     }
@@ -122,23 +138,18 @@ class SendReportJob implements ShouldQueue
                     break;
 
                 case 'monthly':
-                    // If day_of_week is set, calculate based on last occurrence in previous month
                     if ($setting->day_of_week) {
                         $dayOfWeek = $setting->day_of_week;
-
-                        // Get last occurrence of the specified day in the previous month
                         $lastMonth = now()->subMonth();
                         $lastOccurrence = $lastMonth->endOfMonth()->previous($dayOfWeek);
 
-                        // If that day is actually in the month before, get the last one in our target month
                         if ($lastOccurrence->month !== $lastMonth->month) {
                             $lastOccurrence = $lastMonth->endOfMonth();
                         }
 
-                        $startDate = $lastOccurrence->copy()->subDays(29)->toDateString(); // ~30 days
+                        $startDate = $lastOccurrence->copy()->subDays(29)->toDateString();
                         $endDate = $lastOccurrence->toDateString();
                     } else {
-                        // Default: Previous full month
                         $startDate = now()->subMonth()->startOfMonth()->toDateString();
                         $endDate = now()->subMonth()->endOfMonth()->toDateString();
                     }
@@ -149,37 +160,45 @@ class SendReportJob implements ShouldQueue
                     $endDate = now()->toDateString();
             }
 
-            // Generate report based on type
+            Log::info('Date range calculated', [
+                'start_date' => $startDate,
+                'end_date' => $endDate,
+            ]);
+
+            // Generate report based on type - FIX THE SWITCH STATEMENT
+            $attendances = null;
+            $view = null;
+            $reportName = null;
+
             switch ($type) {
                 case 'attendance':
-                    // Always use getDaily for attendance reports
+                    Log::info('Processing attendance report');
                     $attendances = $reportService->getDaily(
                         $this->organizationId,
                         $ids,
                         $startDate,
                         $endDate,
-                        null // status
+                        null
                     );
                     $view = 'exports.attendance.daily';
                     $reportName = 'attendance';
                     break;
 
                 case 'timesheets':
-                    // Always use getMonthly for timesheet reports
-                    // Note: getMonthly signature needs all parameters
+                    Log::info('Processing timesheets report');
                     $attendances = $reportService->getMonthly(
                         $this->organizationId,
                         $ids,
                         $startDate,
                         $endDate,
-                        null // department_id
+                        null
                     );
                     $view = 'exports.attendance.monthly';
                     $reportName = 'timesheets';
                     break;
 
                 case 'department':
-                    // Always use getByDepartment for department reports
+                    Log::info('Processing department report');
                     $attendances = $reportService->getByDepartment(
                         $this->organizationId,
                         $ids,
@@ -191,11 +210,15 @@ class SendReportJob implements ShouldQueue
                     break;
 
                 default:
-                    Log::warning('Unknown report type', ['type' => $type]);
+                    Log::warning('Unknown report type', [
+                        'type' => $type,
+                        'available_types' => ['attendance', 'timesheets', 'department']
+                    ]);
                     return null;
             }
 
-            if ($attendances->isEmpty()) {
+            // Check if we got data
+            if (!$attendances || $attendances->isEmpty()) {
                 Log::warning('No attendance records found', [
                     'organization_id' => $this->organizationId,
                     'type' => $type,
@@ -206,9 +229,13 @@ class SendReportJob implements ShouldQueue
                 return null;
             }
 
+            Log::info('Attendance records found', [
+                'count' => $attendances->count(),
+            ]);
+
             $reportTitle = ucfirst($reportName) . ' Report - ' . ucfirst($frequency);
 
-            return $reportGenerator->generate(
+            $result = $reportGenerator->generate(
                 $view,
                 [
                     'title' => $reportTitle,
@@ -222,22 +249,27 @@ class SendReportJob implements ShouldQueue
                 saveToDisk: true
             );
 
+            Log::info('Report generator returned', [
+                'result' => $result ? 'success' : 'null',
+                'has_path' => isset($result['path']),
+            ]);
+
+            return $result;
+
         } catch (\Throwable $e) {
-            Log::error('Report generation failed', [
+            Log::error('Report generation exception', [
                 'error' => $e->getMessage(),
+                'line' => $e->getLine(),
+                'file' => $e->getFile(),
                 'stack' => $e->getTraceAsString(),
-                'type' => $setting->report_type,
-                'frequency' => $setting->frequency,
+                'type' => $setting->report_type ?? 'unknown',
+                'frequency' => $setting->frequency ?? 'unknown',
                 'organization_id' => $this->organizationId,
             ]);
             return null;
         }
     }
 
-
-    /**
-     * Calculate next run datetime for this report.
-     */
     private function calculateNextRun(ReportSetting $setting, Carbon $from): ?Carbon
     {
         $tzNow = $from->copy()->setTimezone($setting->timezone ?? config('app.timezone'));

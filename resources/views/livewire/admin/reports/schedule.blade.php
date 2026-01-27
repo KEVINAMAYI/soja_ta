@@ -18,13 +18,13 @@ new class extends Component {
     public $time = '09:00';
     public $day_of_week = null;
     public $timezone = 'Africa/Nairobi';
-    public $report_type = 'daily_attendance';
-    public $export_report_type = 'daily_attendance';
+    public $report_type = 'attendance'; // FIX: Changed from 'daily_attendance'
+    public $export_report_type = 'attendance'; // FIX: Changed from 'daily_attendance'
 
     // dynamic dropdown data
     public $availableEmails = [];
     public $availableFrequencies = ['daily', 'weekly', 'monthly'];
-    public $reportTypes = ['attendance', 'timesheets', 'department'];
+    public $reportTypes = ['attendance', 'timesheets', 'department']; // ✅ This is correct
     public $availableDays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
     public $availableTimezones = [];
     public $startDate;
@@ -41,7 +41,7 @@ new class extends Component {
     {
         return [
             'emails' => 'required|string',
-            'export_report_type' => 'required|string',
+            'export_report_type' => 'required|in:attendance,timesheets,department', // FIX: Added validation
             'frequency' => 'required|in:daily,weekly,monthly',
             'time' => 'required',
             'day_of_week' => 'nullable|in:Monday,Tuesday,Wednesday,Thursday,Friday,Saturday,Sunday',
@@ -51,7 +51,6 @@ new class extends Component {
 
     public function mount()
     {
-
         // 👇 preload supported PHP timezones
         $this->availableTimezones = \DateTimeZone::listIdentifiers();
         $this->startDate = now()->toDateString();
@@ -71,13 +70,10 @@ new class extends Component {
         }
 
         $this->loadReportSettings();
-
     }
-
 
     public function loadReportSettings()
     {
-
         // Simplified - just get raw data first
         $settings = ReportSetting::where('organization_id', auth()->user()->employee->organization_id)
             ->orderBy('report_type')
@@ -112,7 +108,6 @@ new class extends Component {
             ->toArray();
     }
 
-
     #[On('filter-updated')]
     public function dateChaged()
     {
@@ -124,7 +119,6 @@ new class extends Component {
     {
         $this->dispatch('timesheet-range-updated', startDate: $this->timeSheetsStartDate, endDate: $this->timeSheetsEndDate, department_id: $this->department_id);
     }
-
 
     public function saveReportSetting()
     {
@@ -154,8 +148,15 @@ new class extends Component {
             });
 
             if (empty($emailArray)) {
-                throw new Exception('Please provide at least one valid email address');
+                throw new \Exception('Please provide at least one valid email address');
             }
+
+            // FIX: Log what we're about to save
+            \Log::info('Saving report settings', [
+                'report_type' => $this->export_report_type,
+                'frequency' => $this->frequency,
+                'emails' => $emailArray,
+            ]);
 
             // Save settings for each email
             foreach ($emailArray as $email) {
@@ -163,7 +164,7 @@ new class extends Component {
                     [
                         'organization_id' => $orgId,
                         'email' => $email,
-                        'report_type' => $this->export_report_type,
+                        'report_type' => $this->export_report_type, // ✅ This should now be 'attendance', 'timesheets', or 'department'
                     ],
                     [
                         'frequency' => $this->frequency,
@@ -194,7 +195,7 @@ new class extends Component {
                 ->position('top-end')
                 ->show();
 
-        } catch (Exception $e) {
+        } catch (\Exception $e) {
             DB::rollBack();
 
             logger()->error('Report settings save failed', [
@@ -211,12 +212,9 @@ new class extends Component {
         }
     }
 
-
     public function toggleReportStatus($ids)
     {
-
         try {
-
             // Normalize input
             $ids = is_string($ids) ? json_decode($ids, true) : $ids;
 
@@ -265,7 +263,6 @@ new class extends Component {
                 ->show();
 
         } catch (\Exception $e) {
-
             LivewireAlert::title('Error!')
                 ->text('Something went wrong while updating report settings.')
                 ->error()
@@ -324,7 +321,6 @@ new class extends Component {
                 ->show();
 
         } catch (\Exception $e) {
-
             // ERROR TOAST
             LivewireAlert::title('Error!')
                 ->text('Something went wrong while deleting report settings.')
@@ -340,7 +336,6 @@ new class extends Component {
             ]);
         }
     }
-
 
     public function runReport($ids)
     {
@@ -397,7 +392,6 @@ new class extends Component {
                 ->show();
 
         } catch (\Exception $e) {
-
             LivewireAlert::title('Error!')
                 ->text('Could not run the report right now.')
                 ->error()
@@ -412,19 +406,17 @@ new class extends Component {
         }
     }
 
-
     public function resetForm()
     {
         $this->reset(['emails', 'frequency', 'time', 'day_of_week']);
         $this->timezone = 'Africa/Nairobi';
+        $this->export_report_type = 'attendance'; // FIX: Reset to valid value
     }
-
 
     public function closeModal()
     {
         $this->dispatch('hide-report-modal');
     }
-
 
     #[On('setReportType')]
     public function setReportType($type)
