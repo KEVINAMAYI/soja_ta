@@ -114,7 +114,7 @@ class SendReportJob implements ShouldQueue
             ]);
 
         } catch (\Throwable $e) {
-            Log::error('Report sending failed', [
+            Log::info('Report sending failed', [
                 'setting_id' => $this->settingId,
                 'organization_id' => $this->organizationId,
                 'error' => $e->getMessage(),
