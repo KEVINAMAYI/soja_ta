@@ -29,17 +29,21 @@ new class extends Component {
         $attendances = Attendance::whereHas('employee', fn($q) => $q->where('organization_id', $orgId))
             ->whereDate('date', $today)->get();
 
-        // Present (clocked in/out) — unique employees
-        $this->present = $attendances
+        // Get employees who actually showed up (clocked in or out)
+        $presentEmployeeIds = $attendances
             ->whereIn('status', ['clocked_in', 'clocked_out'])
-            ->unique('employee_id')
-            ->count();
+            ->pluck('employee_id')
+            ->unique();
 
-        // Absent — unique employees
-        $this->absent = $attendances
+        // Get employees marked absent BUT exclude those who showed up
+        $absentEmployeeIds = $attendances
             ->whereIn('status', ['absent', 'unchecked_in'])
-            ->unique('employee_id')
-            ->count();
+            ->pluck('employee_id')
+            ->unique()
+            ->reject(fn($id) => $presentEmployeeIds->contains($id)); // Exclude present employees
+
+        $this->present = $presentEmployeeIds->count();
+        $this->absent = $absentEmployeeIds->count();
 
         // On Leave — unique employees
         $this->onLeave = $attendances
