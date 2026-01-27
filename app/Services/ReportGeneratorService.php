@@ -3,32 +3,55 @@
 namespace App\Services;
 
 use Barryvdh\DomPDF\Facade\Pdf;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 
 class ReportGeneratorService
 {
     public function generate(string $view, array $data, string $fileName, bool $saveToDisk = false)
     {
-        $pdf = Pdf::loadView($view, $data)
-            ->setPaper('a4', 'landscape')
-            ->setOptions([
-                'isHtml5ParserEnabled' => true,
-                'isRemoteEnabled' => true,
-                'defaultFont' => 'DejaVu Sans',
+        try {
+            Log::info('Starting PDF generation', [
+                'view' => $view,
+                'fileName' => $fileName,
+                'saveToDisk' => $saveToDisk,
             ]);
 
-        if ($saveToDisk) {
-            $path = "reports/{$fileName}-" . now()->timestamp . ".pdf";
+            $pdf = Pdf::loadView($view, $data)
+                ->setPaper('a4', 'landscape')
+                ->setOptions([
+                    'isHtml5ParserEnabled' => true,
+                    'isRemoteEnabled' => true,
+                    'defaultFont' => 'DejaVu Sans',
+                ]);
 
-            // save to public storage
-            Storage::disk('public')->put($path, $pdf->output());
+            if ($saveToDisk) {
+                $path = "reports/{$fileName}-" . now()->timestamp . ".pdf";
 
-            return [
-                'path' => storage_path("app/public/{$path}"), // ✅ local file path for email attachment
-                'url'  => asset("storage/{$path}"),           // ✅ public URL for browser access
-            ];
+                Log::info('Saving PDF to disk', ['path' => $path]);
+
+                Storage::disk('public')->put($path, $pdf->output());
+
+                $fullPath = storage_path("app/public/{$path}");
+
+                Log::info('PDF saved successfully', [
+                    'path' => $fullPath,
+                    'exists' => file_exists($fullPath),
+                ]);
+
+                return [
+                    'path' => $fullPath,
+                    'url' => asset("storage/{$path}"),
+                ];
+            }
+
+            return $pdf;
+        } catch (\Exception $e) {
+            Log::error('PDF generation failed', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+            return null;  // ← This might be what's happening
         }
-
-        return $pdf;
     }
 }

@@ -48,6 +48,15 @@ class SendReportJob implements ShouldQueue
 
             $reportFile = $this->generateReport($setting);
 
+            Log::info('DEBUG: Report generation complete', [
+                'reportFile' => $reportFile,
+                'reportFile_type' => gettype($reportFile),
+                'is_null' => is_null($reportFile),
+                'is_array' => is_array($reportFile),
+                'setting_id' => $this->settingId,
+                'organization_id' => $this->organizationId,
+            ]);
+
             // FIX: Check if report generation failed and exit early
             if (!$reportFile || !isset($reportFile['path'])) {
                 Log::warning('Report generation failed - skipping email', [
