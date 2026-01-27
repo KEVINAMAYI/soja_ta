@@ -89,6 +89,10 @@ new class extends Component {
         $this->inactiveCount = Employee::where('organization_id', $orgId)
             ->where('active', 0)
             ->count();
+
+        $this->inactiveCount = Employee::where('organization_id', $orgId)
+            ->where('active', 0)
+            ->count();
     }
 
     #[On('filter-updated')]
@@ -360,6 +364,7 @@ new class extends Component {
                         <option value="on_leave">On Leave</option>
                         <option value="off_shift">Off Shift</option>
                         <option value="sick_off">Sick Off</option>
+                        <option value="inactive">Inactive Employees</option>
                     </select>
                 </div>
             </div>
