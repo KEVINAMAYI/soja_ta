@@ -36,7 +36,11 @@ new class extends Component {
             'weekHours' => Attendance::where('employee_id', $employeeId)
                 ->whereBetween('date', [now()->startOfWeek(), now()->endOfWeek()])
                 ->sum('worked_hours'),
-            'locations' => $this->employee->currentAssignment ? 1 : 0,
+            'locations' => Attendance::where('employee_id', $employeeId)
+                ->whereIn('status', ['clocked_in', 'clocked_out'])
+                ->whereNotNull('work_location_id')
+                ->distinct('work_location_id')
+                ->count('work_location_id'),
             'checkins' => Attendance::where('employee_id', $employeeId)
                 ->whereDate('date', today())
                 ->where('status', 'clocked_in')
@@ -127,7 +131,7 @@ new class extends Component {
         /* Profile Header */
         .profile-header {
             background: #f8f9fa;
-            border-radius: 10px;
+            border-radius: 12px;
             padding: 2rem;
             display: flex;
             align-items: center;
@@ -155,6 +159,33 @@ new class extends Component {
             color: #6c757d;
         }
 
+        /* Updated Stats Cards to Match Image */
+        .stat-card-new {
+            background: white;
+            border-left: 4px solid #0d6efd;
+            border-radius: 8px;
+            padding: 1.5rem;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            height: 100%;
+        }
+
+        .stat-value {
+            font-size: 2.5rem;
+            font-weight: 700;
+            color: #2c3e50;
+            margin: 0 0 0.5rem 0;
+            line-height: 1;
+        }
+
+        .stat-label {
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: #6c757d;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin: 0;
+        }
+
         /* Tabs */
         .nav-tabs {
             border-bottom: 1px solid #dee2e6;
@@ -174,13 +205,79 @@ new class extends Component {
             background: transparent;
         }
 
-        /* Cards */
-        .stat-card {
-            border: 1px solid #e9ecef;
-            border-radius: 10px;
-            padding: 1rem;
-            text-align: center;
+        /* Information Cards */
+        .info-card {
             background: white;
+            border-radius: 12px;
+            padding: 1.5rem;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            height: 100%;
+        }
+
+        .info-card-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 1.5rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid #e9ecef;
+        }
+
+        .info-card-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.25rem;
+        }
+
+        .info-card-icon.blue {
+            background-color: #dbeafe;
+            color: #2563eb;
+        }
+
+        .info-card-icon.green {
+            background-color: #d1fae5;
+            color: #10b981;
+        }
+
+        .info-card-icon.orange {
+            background-color: #fed7aa;
+            color: #f97316;
+        }
+
+        .info-card-title {
+            font-size: 1rem;
+            font-weight: 600;
+            color: #1f2937;
+            margin: 0;
+        }
+
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.75rem 0;
+            border-bottom: 1px solid #f3f4f6;
+        }
+
+        .info-row:last-child {
+            border-bottom: none;
+        }
+
+        .info-label {
+            font-size: 0.875rem;
+            color: #6b7280;
+            font-weight: 500;
+        }
+
+        .info-value {
+            font-size: 0.875rem;
+            color: #1f2937;
+            font-weight: 600;
+            text-align: right;
         }
 
         /* Table styling */
@@ -208,8 +305,8 @@ new class extends Component {
             font-weight: 600;
             color: #495057;
             display: flex;
-            justify-content: space-between; /* distribute space */
-            align-items: center; /* vertical center */
+            justify-content: space-between;
+            align-items: center;
             gap: 1.5rem;
         }
 
@@ -219,22 +316,11 @@ new class extends Component {
             align-items: center;
         }
 
-
-        .profile-header {
-            background: #f8f9fa;
-            border-radius: 10px;
-            padding: 2rem;
-            display: flex;
-            align-items: center;
-            gap: 20px;
-            border: 1px solid #e9ecef;
-        }
-
         .profile-initials {
             width: 110px;
             height: 110px;
             border-radius: 50%;
-            background-color: #0d6efd; /* bootstrap primary */
+            background-color: #0d6efd;
             color: white;
             display: flex;
             align-items: center;
@@ -244,17 +330,6 @@ new class extends Component {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             user-select: none;
             box-shadow: 0 0 10px rgba(13, 110, 253, 0.4);
-        }
-
-        .profile-info h3 {
-            font-weight: 700;
-            margin-bottom: 0.3rem;
-            color: #2c3e50;
-        }
-
-        .profile-info p {
-            margin: 0;
-            color: #6c757d;
         }
 
         .card-stat {
@@ -284,9 +359,21 @@ new class extends Component {
 
         .header-gradient {
             background: white;
-            color: #e14326;
+            color: #2c3e50;
             padding: 30px;
             border-radius: 16px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+
+        .header-gradient h2 {
+            color: #1f2937;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+        }
+
+        .header-gradient p {
+            color: #6b7280;
+            margin-bottom: 0;
         }
 
         .map-placeholder {
@@ -314,7 +401,7 @@ new class extends Component {
             content: '';
             width: 14px;
             height: 14px;
-            background-color: #198754; /* default green */
+            background-color: #198754;
             border-radius: 50%;
             position: absolute;
             left: -30px;
@@ -431,17 +518,16 @@ new class extends Component {
         .qr-code-container {
             text-align: center;
             padding: 2rem;
-            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
-            border-radius: 12px;
-            border: 2px dashed #dee2e6;
+            background: #f8f9fa;
+            border-radius: 8px;
         }
 
         .qr-code-wrapper {
             background: white;
             padding: 1.5rem;
-            border-radius: 10px;
+            border-radius: 8px;
             display: inline-block;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
             margin-bottom: 1rem;
         }
 
@@ -454,23 +540,23 @@ new class extends Component {
             margin: 0 auto;
         }
 
-        #employee-qr-code {
+        #qrcode-canvas {
             display: flex;
             justify-content: center;
             align-items: center;
         }
 
-        #employee-qr-code svg {
+        #qrcode-canvas svg {
             width: 200px !important;
             height: 200px !important;
         }
 
         .btn-download-qr {
-            background-color: #e14326;
+            background-color: #f97316;
             color: white;
             border: none;
             padding: 0.6rem 1.5rem;
-            border-radius: 8px;
+            border-radius: 6px;
             font-weight: 600;
             transition: all 0.3s ease;
             display: inline-flex;
@@ -479,9 +565,9 @@ new class extends Component {
         }
 
         .btn-download-qr:hover {
-            background-color: #c9381f;
+            background-color: #ea580c;
             transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(225, 67, 38, 0.3);
+            box-shadow: 0 4px 12px rgba(249, 115, 22, 0.3);
         }
 
         .qr-info-text {
@@ -498,50 +584,73 @@ new class extends Component {
     <!-- Profile Header -->
     <div class="header-gradient mb-4">
         <a href="{{ route('employees.index') }}" class="btn btn-light btn-sm mb-3">← Back to Employees List</a>
-        <h2 style="color:#e14326;">{{ $employee->name }}</h2>
-        <p class="mb-0">Comprehensive activity and location tracking</p>
+        <h2>{{ $employee->name }}</h2>
+        <p>Comprehensive activity and location tracking</p>
     </div>
 
     <!-- Stats -->
-    <div class="row text-center mb-4">
+    <div class="row mb-4 g-3">
         <div class="col-md-3">
-            <div class="card-stat bg-white"><h3>{{ $stats['todayHours'] }}</h3>
-                <p class="text-muted">Hours Today</p></div>
+            <div class="stat-card-new">
+                <h2 class="stat-value">{{ $stats['todayHours'] }}</h2>
+                <p class="stat-label">HOURS TODAY</p>
+            </div>
         </div>
         <div class="col-md-3">
-            <div class="card-stat bg-white"><h3>{{ $stats['weekHours'] }}</h3>
-                <p class="text-muted">Hours This Week</p></div>
+            <div class="stat-card-new">
+                <h2 class="stat-value">{{ $stats['weekHours'] }}</h2>
+                <p class="stat-label">HOURS THIS WEEK</p>
+            </div>
         </div>
         <div class="col-md-3">
-            <div class="card-stat bg-white"><h3>{{ $stats['locations'] }}</h3>
-                <p class="text-muted">Locations Visited</p></div>
+            <div class="stat-card-new">
+                <h2 class="stat-value">{{ $stats['locations'] }}</h2>
+                <p class="stat-label">LOCATIONS VISITED</p>
+            </div>
         </div>
         <div class="col-md-3">
-            <div class="card-stat bg-white"><h3>{{ $stats['checkins'] }}</h3>
-                <p class="text-muted">Check-ins Today</p></div>
+            <div class="stat-card-new">
+                <h2 class="stat-value">{{ $stats['checkins'] }}</h2>
+                <p class="stat-label">CHECK-INS TODAY</p>
+            </div>
         </div>
     </div>
 
-    <div class="row g-4 align-items-stretch">
+    <div class="row g-3 align-items-stretch">
         <!-- Employee Info -->
         <div class="col-md-4 d-flex">
-            <div class="card-section bg-white w-100 d-flex flex-column">
-                <div class="section-title mb-3">
-                    <iconify-icon icon="mdi:account-badge" class="me-2" style="color: #2563eb;" width="20"
-                                  height="20"></iconify-icon>
-                    Employee Information
+            <div class="info-card w-100">
+                <div class="info-card-header">
+                    <div class="info-card-icon blue">
+                        <iconify-icon icon="mdi:account-badge" width="24" height="24"></iconify-icon>
+                    </div>
+                    <h3 class="info-card-title">Employee Information</h3>
                 </div>
-                <div class="mb-2"><strong>Full Name:</strong> {{ $employee->name  }}</div>
-                <div class="mb-2"><strong>Employee ID:</strong> {{ $employee->id_number }}</div>
-                <div class="mb-2"><strong>Department:</strong> <span
-                        class="fw-bold">{{ $employee->department->name  }}</span>
+
+                <div class="info-row">
+                    <span class="info-label">Full Name</span>
+                    <span class="info-value">{{ $employee->name }}</span>
                 </div>
-                <div class="mb-2">
-                    <strong>Role:</strong>
-                    {{ $employee->user?->roles->pluck('name')
-                        ->map(fn($r) => ucwords(str_replace('-', ' ', $r)))
-                        ->join(', ') ?? 'N/A' }}
+
+                <div class="info-row">
+                    <span class="info-label">Employee ID</span>
+                    <span class="info-value">{{ $employee->id_number }}</span>
                 </div>
+
+                <div class="info-row">
+                    <span class="info-label">Department</span>
+                    <span class="info-value">{{ $employee->department->name }}</span>
+                </div>
+
+                <div class="info-row">
+                    <span class="info-label">Role</span>
+                    <span class="info-value">
+                        {{ $employee->user?->roles->pluck('name')
+                            ->map(fn($r) => ucwords(str_replace('-', ' ', $r)))
+                            ->join(', ') ?? 'N/A' }}
+                    </span>
+                </div>
+
                 @php
                     $status = $employee->latestAttendance?->status ?? null;
 
@@ -569,69 +678,82 @@ new class extends Component {
 
                 @endphp
 
-                <div class="mb-2">
-                    <strong>Current Status:</strong>
-                    <span class="badge {{ $badgeClass }} status-badge">{{ $displayStatus }}</span>
+                <div class="info-row">
+                    <span class="info-label">Current Status</span>
+                    <span class="info-value">
+                        <span class="badge {{ $badgeClass }} status-badge">{{ $displayStatus }}</span>
+                    </span>
                 </div>
 
-                <div class="mb-2">
-                    <strong>Shift:</strong>
-                    @if($employee->shift)
-                        <span class="badge bg-primary me-1">{{ $employee->shift->name }}</span>
-                        <span class="text-muted"> {{ \Carbon\Carbon::parse($employee->shift->start_time)->format('g:i A') }}
-                            &ndash;  {{ \Carbon\Carbon::parse($employee->shift->end_time)->format('g:i A') }}
-                        </span>
-                    @else
-                        <span class="text-muted">No shift assigned</span>
-                    @endif
+                <div class="info-row">
+                    <span class="info-label">Shift</span>
+                    <span class="info-value">
+                        @if($employee->shift)
+                            <span class="badge bg-warning text-dark me-1">{{ $employee->shift->name }}</span>
+                            {{ \Carbon\Carbon::parse($employee->shift->start_time)->format('g:i A') }}
+                            - {{ \Carbon\Carbon::parse($employee->shift->end_time)->format('g:i A') }}
+                        @else
+                            <span class="text-muted">No shift assigned</span>
+                        @endif
+                    </span>
                 </div>
             </div>
         </div>
 
         <!-- Current Location -->
         <div class="col-md-4 d-flex">
-            <div class="card-section bg-white w-100 d-flex flex-column p-4 rounded shadow-sm">
-                <div class="section-title mb-3 d-flex align-items-center">
-                    <iconify-icon icon="mdi:map-marker" class="me-2" style="color: #22c55e;" width="20"
-                                  height="20"></iconify-icon>
-                    <h6 class="mb-0">Current Location</h6>
+            <div class="info-card w-100">
+                <div class="info-card-header">
+                    <div class="info-card-icon green">
+                        <iconify-icon icon="mdi:map-marker" width="24" height="24"></iconify-icon>
+                    </div>
+                    <h3 class="info-card-title">Current Location</h3>
                 </div>
 
                 @if ($workLocation)
-                    <div class="mb-2">
-                        <strong>Name:</strong>
-                        {{ $workLocation ? ucwords(str_replace('_', ' ', $workLocation->name)) : '' }}
+                    <div class="info-row">
+                        <span class="info-label">Name</span>
+                        <span class="info-value">{{ ucwords(str_replace('_', ' ', $workLocation->name)) }}</span>
                     </div>
 
-                    <div class="mb-2">
-                        <strong>Building:</strong>
-                        {{ $workLocation ? ucwords(str_replace('_', ' ', $workLocation->type)) : '' }}
+                    <div class="info-row">
+                        <span class="info-label">Building</span>
+                        <span class="info-value">{{ ucwords(str_replace('_', ' ', $workLocation->type)) }}</span>
                     </div>
 
-                    <div class="mb-2">
-                        <strong>Address:</strong>
-                        {{ $workLocation ? ucwords(str_replace('_', ' ', $workLocation->address)) : '' }}
+                    <div class="info-row">
+                        <span class="info-label">Address</span>
+                        <span class="info-value"
+                              style="max-width: 200px;">{{ ucwords(str_replace('_', ' ', $workLocation->address)) }}</span>
                     </div>
 
-                    <div class="mb-2 d-flex align-items-center">
-                        <strong class="me-2">Active:</strong>
-                        @if ($workLocation->active)
-                            <iconify-icon icon="mdi:check-circle" style="color: #22c55e;" width="18"
-                                          height="18"></iconify-icon>
-                            <span class="ms-1 text-success">Active</span>
-                        @else
-                            <iconify-icon icon="mdi:close-circle" style="color: #dc2626;" width="18"
-                                          height="18"></iconify-icon>
-                            <span class="ms-1 text-danger">Inactive</span>
-                        @endif
-                    </div>
-                    <div class="mb-2">
-                        <strong>GPS Coordinates:</strong> {{ $workLocation->latitude }} , {{ $workLocation->longitude }}
+                    <div class="info-row">
+                        <span class="info-label">Status</span>
+                        <span class="info-value">
+                            @if ($workLocation->active)
+                                <span class="badge bg-success">
+                                    <iconify-icon icon="mdi:check-circle" width="14" height="14"></iconify-icon>
+                                    Active
+                                </span>
+                            @else
+                                <span class="badge bg-danger">
+                                    <iconify-icon icon="mdi:close-circle" width="14" height="14"></iconify-icon>
+                                    Inactive
+                                </span>
+                            @endif
+                        </span>
                     </div>
 
-                    <div class="mt-3 text-muted small d-flex align-items-center">
-                        <iconify-icon icon="mdi:information-outline" class="me-1" width="18" height="18"></iconify-icon>
-                        Live location Map view is available in the mobile app.
+                    <div class="info-row">
+                        <span class="info-label">GPS Coordinates</span>
+                        <span class="info-value"
+                              style="font-size: 0.75rem;">{{ $workLocation->latitude }}, {{ $workLocation->longitude }}</span>
+                    </div>
+
+                    <div class="mt-3 p-2 bg-light rounded text-center">
+                        <iconify-icon icon="mdi:information-outline" class="me-1" width="16" height="16"
+                                      style="color: #6c757d;"></iconify-icon>
+                        <small class="text-muted">Live location Map view is available in the mobile app.</small>
                     </div>
 
                 @else
@@ -649,15 +771,17 @@ new class extends Component {
 
         <!-- QR Code Section -->
         <div class="col-md-4 d-flex">
-            <div class="card-section bg-white w-100 d-flex flex-column">
-                <div class="section-title mb-3">
-                    <iconify-icon icon="mdi:qrcode" class="me-2" style="color: #e14326;" width="20" height="20"></iconify-icon>
-                    Employee QR Code
+            <div class="info-card w-100">
+                <div class="info-card-header">
+                    <div class="info-card-icon orange">
+                        <iconify-icon icon="mdi:qrcode" width="24" height="24"></iconify-icon>
+                    </div>
+                    <h3 class="info-card-title">Employee QR Code</h3>
                 </div>
 
                 <div class="qr-code-container">
                     <div class="qr-code-wrapper">
-                        <div id="qrcode-canvas" class="d-flex justify-content-center"></div>
+                        <div id="qrcode-canvas"></div>
                     </div>
 
                     <div class="mt-3">
@@ -667,7 +791,7 @@ new class extends Component {
                         </button>
                     </div>
 
-                    <p class="qr-info-text">
+                    <p class="qr-info-text mb-0">
                         Encoded ID: {{ $employee->qr_code }}
                     </p>
                 </div>
@@ -683,13 +807,6 @@ new class extends Component {
                href="#"
                wire:click.prevent="$set('activeTab', 'overview')">
                 Activity Timeline - Today
-            </a>
-        </li>
-        <li class="nav-item">
-            <a class="nav-link {{ $activeTab === 'attendance' ? 'active' : '' }}"
-               href="#"
-               wire:click.prevent="$set('activeTab', 'attendance')">
-                Timesheets
             </a>
         </li>
     </ul>
@@ -722,113 +839,8 @@ new class extends Component {
                         </div>
                     @endforelse
                 </div>
-
             </div>
         </div>
-
-        <!-- Attendance Tab -->
-        <div class="tab-pane fade {{ $activeTab === 'attendance' ? 'show active' : '' }}" id="attendance">
-            <div>
-                <!-- Filter Bar -->
-                <div class="filter-bar d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
-                    <input type="text"
-                           wire:model="search"
-                           wire:keyup.debounce.500ms="$dispatch('refresh-timesheets')"
-                           class="form-control w-50"
-                           placeholder="🔍 Search employees...">
-
-                    <div class="d-flex gap-2">
-                        <select wire:model="status"
-                                wire:change="$dispatch('refresh-timesheets')"
-                                class="form-select" style="width: 160px;">
-                            <option value="all">All Statuses</option>
-                            <option value="clocked_in">Clocked In</option>
-                            <option value="clocked_out">Clocked Out</option>
-                            <option value="absent">Absent</option>
-                            <option value="on_leave">On Leave</option>
-                            <option value="off_shift">OffShift</option>
-                            <option value="sick_off">Sick Off</option>
-                        </select>
-
-                        <select wire:model="week"
-                                wire:change="$dispatch('refresh-timesheets')"
-                                class="form-select" style="width: 160px;">
-                            <option value="current">Current Week</option>
-                            <option value="last">Last Week</option>
-                        </select>
-                    </div>
-                </div>
-
-                <!-- Table -->
-                <table class="table table-hover table-bordered align-middle">
-                    <thead class="table-light">
-                    <tr>
-                        <th>Date</th>
-                        <th>Employee</th>
-                        <th>Worked Hours</th>
-                        <th>Overtime Hours</th>
-                        <th>Status</th>
-                    </tr>
-                    </thead>
-                    <tbody>
-                    @forelse($timesheets as $sheet)
-                        <tr>
-                            <!-- Date -->
-                            <td>
-                                {{ $sheet->date ? \Carbon\Carbon::parse($sheet->date)->format('M d, Y') : '-' }}
-                            </td>
-
-                            <!-- Employee -->
-                            <td>{{ $sheet->employee->user->name ?? 'N/A' }}</td>
-
-                            <!-- Worked Hours -->
-                            <td>{{ $sheet->worked_hours ?? '0h' }}</td>
-
-                            <!-- Overtime Hours -->
-                            <td class="{{ ($sheet->overtime_hours ?? 0) >= 8 ? 'overtime-high' : (($sheet->overtime_hours ?? 0) > 0 ? 'overtime-mid' : '') }}">
-                                {{ $sheet->overtime_hours ?? '0h' }}
-                            </td>
-
-
-                            <!-- Status -->
-                            <td>
-                                @php
-                                    $statusClass = match($sheet->status) {
-                                        'clocked_in'  => 'clocked-in',
-                                        'clocked_out' => 'clocked-out',
-                                        'absent'      => 'absent',
-                                        'on_leave'    => 'on-leave',
-                                        'off_shift'    => 'off-shift',
-                                        'not_scheduled'    => 'not-scheduled',
-                                        'unchecked_in' => 'absent',
-                                        'sick_off' => 'sick-off',
-                                        default       => 'absent'
-                                    };
-                                    $statusLabel = match($sheet->status) {
-                                        'clocked_in'   => 'Clocked In',
-                                        'clocked_out'  => 'Clocked Out',
-                                        'absent'       => 'Absent',
-                                        'on_leave'     => 'On Leave',
-                                        'off_shift'    => 'Off Shift',
-                                        'not_scheduled'    => 'Not Scheduled',
-                                        'sick_off'    => 'Sick Off',
-                                        'unchecked_in' => 'Absent'
-                                    };
-                                @endphp
-                                <span class="status-badge {{ $statusClass }}">{{ $statusLabel }}</span>
-                            </td>
-                        </tr>
-                    @empty
-                        <tr>
-                            <td colspan="6" class="text-center text-muted">No attendance records found</td>
-                        </tr>
-                    @endforelse
-                    </tbody>
-                </table>
-
-            </div>
-        </div>
-
     </div>
 </div>
 
@@ -844,9 +856,9 @@ new class extends Component {
             text: qrData,
             width: 200,
             height: 200,
-            colorDark : "#000000",
-            colorLight : "#ffffff",
-            correctLevel : QRCode.CorrectLevel.H
+            colorDark: "#000000",
+            colorLight: "#ffffff",
+            correctLevel: QRCode.CorrectLevel.H
         });
 
         // 2. Download Function
@@ -876,4 +888,3 @@ new class extends Component {
         }
     </script>
 @endpush
-

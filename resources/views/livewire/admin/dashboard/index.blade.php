@@ -46,18 +46,21 @@ new class extends Component {
             ->whereDate('date', $today)
             ->get();
 
-        $this->presentToday = $attendancesToday
+        // Step 1: Get employees who actually showed up (clocked in or out)
+        $presentEmployeeIds = $attendancesToday
             ->whereIn('status', ['clocked_in', 'clocked_out'])
             ->pluck('employee_id')
-            ->unique()
-            ->count();
+            ->unique();
 
-        // Leave arrivals
-        $this->absentToday = $attendancesToday
+       // Step 2: Get employees marked absent BUT exclude those who showed up
+        $absentEmployeeIds = $attendancesToday
             ->whereIn('status', ['absent', 'unchecked_in'])
             ->pluck('employee_id')
             ->unique()
-            ->count();;
+            ->reject(fn($id) => $presentEmployeeIds->contains($id)); // Key fix!
+
+        $this->presentToday = $presentEmployeeIds->count();
+        $this->absentToday = $absentEmployeeIds->count();
 
         // Leave arrivals
         $this->leaveToday = $attendancesToday

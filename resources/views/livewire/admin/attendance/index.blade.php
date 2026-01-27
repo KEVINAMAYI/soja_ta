@@ -55,18 +55,22 @@ new class extends Component {
             ->whereBetween('date', [$this->startDate, $this->endDate])
             ->get();
 
-        // Calculate stats
-        $this->presentCount = $attendances
+        // Get employees who actually showed up (clocked in or out)
+        $presentEmployeeIds = $attendances
             ->whereIn('status', ['clocked_in', 'clocked_out'])
             ->pluck('employee_id')
-            ->unique()
-            ->count();
+            ->unique();
 
-        $this->absentCount = $attendances
+        // Get employees marked absent BUT exclude those who showed up
+        $absentEmployeeIds = $attendances
             ->whereIn('status', ['absent', 'unchecked_in'])
             ->pluck('employee_id')
             ->unique()
-            ->count();
+            ->reject(fn($id) => $presentEmployeeIds->contains($id));
+
+
+        $this->presentCount = $presentEmployeeIds->count();
+        $this->absentCount = $absentEmployeeIds->count();
 
         $this->sickOffCount = $attendances
             ->where('status', 'sick_off')

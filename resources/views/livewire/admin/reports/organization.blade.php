@@ -67,16 +67,21 @@ new class extends Component {
                     ->where('department_id', $dept->id)
                 )->get();
 
-            // Filter counts directly from the collection
-            $presentData[] = $attendances->whereIn('status', ['clocked_in', 'clocked_out'])
+            // Get employees who actually showed up (clocked in or out)
+            $presentEmployeeIds = $attendances
+                ->whereIn('status', ['clocked_in', 'clocked_out'])
                 ->pluck('employee_id')
-                ->unique()
-                ->count();
+                ->unique();
 
-            $absentData[] = $attendances->whereIn('status', ['absent', 'unchecked_in'])
+            // Get employees marked absent BUT exclude those who showed up
+            $absentEmployeeIds = $attendances
+                ->whereIn('status', ['absent', 'unchecked_in'])
                 ->pluck('employee_id')
                 ->unique()
-                ->count();
+                ->reject(fn($id) => $presentEmployeeIds->contains($id)); // Exclude present employees
+
+            $presentData[] = $presentEmployeeIds->count();
+            $absentData[] = $absentEmployeeIds->count();
 
             $leaveData[] = $attendances->where('status', 'on_leave')
                 ->pluck('employee_id')
