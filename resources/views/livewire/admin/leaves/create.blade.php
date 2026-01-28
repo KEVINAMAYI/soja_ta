@@ -540,10 +540,11 @@ new class extends Component {
                         $isDisabled = isset($emp['current_status_badge']) && $emp['current_status_badge'];
                     @endphp
 
-                    <div @if(!$isDisabled) wire:click="toggleEmployee({{ $emp['id'] }})" @endif
-                    class="list-group-item list-group-item-action employee-card
-                @if(in_array($emp['id'], $selectedEmployees)) selected @endif
-                @if($isDisabled) disabled bg-light text-muted @endif">
+                    <div wire:key="emp-card-{{ $emp['id'] }}"
+                         @if(!$isDisabled) wire:click="toggleEmployee({{ $emp['id'] }})" @endif
+                         class="list-group-item list-group-item-action employee-card
+                         @if(in_array($emp['id'], $selectedEmployees)) selected @endif
+                         @if($isDisabled) disabled bg-light text-muted @endif">
 
                         <input type="checkbox" class="form-check-input me-3"
                                {{ in_array($emp['id'], $selectedEmployees) ? 'checked' : '' }}

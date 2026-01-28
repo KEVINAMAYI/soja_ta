@@ -38,15 +38,15 @@
 
                         <p style="margin-top: 30px;">
                             Regards,<br>
-                            <strong>{{ config('app.name') }}</strong> Team
+                            <strong>Soja TA</strong> Team
                         </p>
                     </td>
                 </tr>
 
                 <tr>
                     <td style="padding-top: 30px; font-size: 12px; color: #6b7280; text-align: center; border-top: 1px solid #e5e7eb;">
-                        <p style="margin: 0;">You’re receiving this email because you subscribed to reports from {{ config('app.name') }}.</p>
-                        <p style="margin: 5px 0 0;">&copy; {{ date('Y') }} {{ config('app.name') }}. All rights reserved.</p>
+                        <p style="margin: 0;">You’re receiving this email because you subscribed to reports from Soja TA.</p>
+                        <p style="margin: 5px 0 0;">&copy; {{ date('Y') }} Soja TA. All rights reserved.</p>
                     </td>
                 </tr>
 

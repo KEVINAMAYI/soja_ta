@@ -166,6 +166,7 @@ new class extends Component {
                 // Employees assigned to this shift
                 $employees = DB::table('employees')
                     ->where('shift_id', $shift->id)
+                    ->where('active', 1)
                     ->where('organization_id', $organizationId)
                     ->get(['id', 'name']);
 
