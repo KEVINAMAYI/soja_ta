@@ -11,10 +11,17 @@ use Illuminate\Support\Facades\Notification;
 
 class AttendanceSeeder
 {
-    public function seedMissingAttendanceRecords(?int $orgId = null): void
+    /**
+     * Seed missing attendance records
+     *
+     * @param int|null $orgId Organization ID filter
+     * @param Carbon|null $targetDate Date to process (defaults to today)
+     */
+    public function seedMissingAttendanceRecords(?int $orgId = null, ?Carbon $targetDate = null): void
     {
-        $today = now()->toDateString();
-        $now = now();
+        // Use provided date or default to now
+        $now = $targetDate ?? now();
+        $today = $now->toDateString();
 
         $employees = Employee::with('shift')
             ->when($orgId, fn($q) => $q->where('organization_id', $orgId))
