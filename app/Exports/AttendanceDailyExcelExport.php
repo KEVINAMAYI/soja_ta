@@ -46,7 +46,7 @@ class AttendanceDailyExcelExport implements FromView, ShouldAutoSize, WithTitle,
 
         // 🔹 Filter by selected employees (if any)
         if (!empty($this->selectedIds)) {
-            $query->whereIn('employee_id', $this->selectedIds);
+            $query->whereIn('id', $this->selectedIds);
         }
 
         // 🔹 Filter by date range (only if BOTH dates are provided)

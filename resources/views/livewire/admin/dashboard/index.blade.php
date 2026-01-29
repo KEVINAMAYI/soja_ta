@@ -37,7 +37,7 @@ new class extends Component {
         $employeeRecord = Employee::where('user_id', auth()->id())->first();
         $orgId = $employeeRecord->organization_id;
 
-        $employees = Employee::where('organization_id', $orgId)->where('active',1)->get();
+        $employees = Employee::where('organization_id', $orgId)->where('active', 1)->get();
         $this->totalEmployees = $employees->count();
         $employeeIds = $employees->pluck('id');
 
@@ -52,7 +52,7 @@ new class extends Component {
             ->pluck('employee_id')
             ->unique();
 
-       // Step 2: Get employees marked absent BUT exclude those who showed up
+        // Step 2: Get employees marked absent BUT exclude those who showed up
         $absentEmployeeIds = $attendancesToday
             ->whereIn('status', ['absent', 'unchecked_in'])
             ->pluck('employee_id')
@@ -124,6 +124,7 @@ new class extends Component {
             ->get()
             ->map(fn($att) => [
                 'name' => $att->employee->name,
+                'id' => $att->employee->id,
                 'department' => $att->employee->department->name ?? 'N/A',
                 'status' => match ($att->status) {
                     'clocked_in' => 'Clocked In',
@@ -162,18 +163,19 @@ new class extends Component {
             ->toArray();
 
 
-        // Work locations with id
+        // Work locations with id and is_default flag
         $this->workLocations = WorkLocation::where('organization_id', $orgId)
             ->where('active', true)
             ->get()
             ->map(function ($loc) {
                 return [
-                    'id' => $loc->id, // 🔹 fix added
+                    'id' => $loc->id,
                     'name' => $loc->name,
                     'lat' => $loc->latitude,
                     'lng' => $loc->longitude,
                     'radius_m' => $loc->radius_m,
                     'address' => $loc->address,
+                    'is_default' => $loc->is_default ?? 0,
                 ];
             })
             ->toArray();
@@ -447,6 +449,7 @@ new class extends Component {
                 opacity: 0.6;
             }
         }
+
         .shift-monitoring-card {
             background: white;
             border-radius: 16px;
@@ -904,7 +907,8 @@ new class extends Component {
                         <iconify-icon icon="mdi:account-check"></iconify-icon>
                     </div>
                     <h6 class="stat-card-title">Present Today</h6>
-                    <div class="stat-card-value">{{ $presentToday }} <span class="stat-card-total">/ {{ $totalEmployees }}</span></div>
+                    <div class="stat-card-value">{{ $presentToday }} <span
+                            class="stat-card-total">/ {{ $totalEmployees }}</span></div>
                     <p class="stat-card-subtitle">
                         {{ number_format(($presentToday / $totalEmployees) * 100, 1) }}%
                     </p>
@@ -920,7 +924,8 @@ new class extends Component {
                         <iconify-icon icon="mdi:account-remove"></iconify-icon>
                     </div>
                     <h6 class="stat-card-title">Absent Today</h6>
-                    <div class="stat-card-value">{{ $absentToday }} <span class="stat-card-total">/ {{ $totalEmployees }}</span></div>
+                    <div class="stat-card-value">{{ $absentToday }} <span
+                            class="stat-card-total">/ {{ $totalEmployees }}</span></div>
                     <p class="stat-card-subtitle">
                         Out of {{ $totalEmployees }} Total
                     </p>
@@ -936,7 +941,8 @@ new class extends Component {
                         <iconify-icon icon="mdi:medical-bag"></iconify-icon>
                     </div>
                     <h6 class="stat-card-title">Sick Off Today</h6>
-                    <div class="stat-card-value">{{ $sickOffToday }} <span class="stat-card-total">/ {{ $totalEmployees }}</span></div>
+                    <div class="stat-card-value">{{ $sickOffToday }} <span
+                            class="stat-card-total">/ {{ $totalEmployees }}</span></div>
                     <p class="stat-card-subtitle">
                         Out of {{ $totalEmployees }} Total
                     </p>
@@ -952,7 +958,8 @@ new class extends Component {
                         <iconify-icon icon="mdi:airplane-takeoff"></iconify-icon>
                     </div>
                     <h6 class="stat-card-title">On Leave Today</h6>
-                    <div class="stat-card-value">{{ $leaveToday }} <span class="stat-card-total">/ {{ $totalEmployees }}</span></div>
+                    <div class="stat-card-value">{{ $leaveToday }} <span
+                            class="stat-card-total">/ {{ $totalEmployees }}</span></div>
                     <p class="stat-card-subtitle">
                         Out of {{ $totalEmployees }} Total
                     </p>
@@ -968,7 +975,8 @@ new class extends Component {
                         <iconify-icon icon="mdi:clock-remove-outline"></iconify-icon>
                     </div>
                     <h6 class="stat-card-title">Off Shift Today</h6>
-                    <div class="stat-card-value">{{ $OffShiftToday }} <span class="stat-card-total">/ {{ $totalEmployees }}</span></div>
+                    <div class="stat-card-value">{{ $OffShiftToday }} <span
+                            class="stat-card-total">/ {{ $totalEmployees }}</span></div>
                     <p class="stat-card-subtitle">
                         Out of {{ $totalEmployees }} Total
                     </p>
@@ -983,7 +991,8 @@ new class extends Component {
                         <iconify-icon icon="mdi:account-off"></iconify-icon>
                     </div>
                     <h6 class="stat-card-title">Inactive Employees</h6>
-                    <div class="stat-card-value">{{ $inactiveEmployees }} <span class="stat-card-total">/ {{ $totalEmployees }}</span></div>
+                    <div class="stat-card-value">{{ $inactiveEmployees }} <span
+                            class="stat-card-total">/ {{ $totalEmployees }}</span></div>
                     <p class="stat-card-subtitle">
                         Out of {{ $totalEmployees }} Total
                     </p>
@@ -1013,82 +1022,83 @@ new class extends Component {
         </div>
     </div>
 
-        <!-- Department Overview -->
-        <div style="margin-top:5px;" class="col-lg-8">
-            <div class="card shadow-sm h-100">
-                <div class="card-header department-overview-title fw-semibold">
-                    Department Overview
-                </div>
-                <div class="card-body">
-                    @foreach ($departmentStats as $dept)
-                        @php
-                            $perc = $dept['total'] ? round(($dept['clocked_in'] / $dept['total']) * 100) : 0;
-                        @endphp
-                        <div class="mb-3">
-                            <div class="d-flex justify-content-between small fw-semibold">
-                                <span>{{ $dept['name'] }}</span>
-                                <span>{{ $dept['clocked_in'] }}/{{ $dept['total'] }} ({{ $perc }}%)</span>
-                            </div>
-                            <div class="progress" style="height:6px;">
-                                <div class="progress-bar bg-primary" style="width: {{ $perc }}%"></div>
-                            </div>
+    <!-- Department Overview -->
+    <div style="margin-top:5px;" class="col-lg-8">
+        <div class="card shadow-sm h-100">
+            <div class="card-header department-overview-title fw-semibold">
+                Department Overview
+            </div>
+            <div class="card-body">
+                @foreach ($departmentStats as $dept)
+                    @php
+                        $perc = $dept['total'] ? round(($dept['clocked_in'] / $dept['total']) * 100) : 0;
+                    @endphp
+                    <div class="mb-3">
+                        <div class="d-flex justify-content-between small fw-semibold">
+                            <span>{{ $dept['name'] }}</span>
+                            <span>{{ $dept['clocked_in'] }}/{{ $dept['total'] }} ({{ $perc }}%)</span>
                         </div>
-                    @endforeach
-                </div>
+                        <div class="progress" style="height:6px;">
+                            <div class="progress-bar bg-primary" style="width: {{ $perc }}%"></div>
+                        </div>
+                    </div>
+                @endforeach
             </div>
         </div>
+    </div>
 
-        <!-- Shift Monitoring -->
-        <div style="margin-top:5px;" class="col-lg-4">
-            <div class="card shadow-sm h-100">
-                <div class="card-header shift-monitoring-title fw-semibold">
-                    Shift Monitoring
-                </div>
-                <div class="card-body">
-                    <div class="row g-3">
-                        <!-- Total Shifts -->
-                        <div class="col-6">
-                            <div class="quick-action-box text-center">
-                                <div class="quick-action-value">{{ $shiftStats['total'] }}</div>
-                                <div class="quick-action-label">Total Shifts</div>
-                            </div>
+    <!-- Shift Monitoring -->
+    <div style="margin-top:5px;" class="col-lg-4">
+        <div class="card shadow-sm h-100">
+            <div class="card-header shift-monitoring-title fw-semibold">
+                Shift Monitoring
+            </div>
+            <div class="card-body">
+                <div class="row g-3">
+                    <!-- Total Shifts -->
+                    <div class="col-6">
+                        <div class="quick-action-box text-center">
+                            <div class="quick-action-value">{{ $shiftStats['total'] }}</div>
+                            <div class="quick-action-label">Total Shifts</div>
                         </div>
+                    </div>
 
-                        <!-- Fully Staffed -->
-                        <div class="col-6">
-                            <div class="quick-action-box text-center">
-                                <div class="quick-action-value text-success">{{ $shiftStats['full'] }}</div>
-                                <div class="quick-action-label">Fully Staffed</div>
-                            </div>
+                    <!-- Fully Staffed -->
+                    <div class="col-6">
+                        <div class="quick-action-box text-center">
+                            <div class="quick-action-value text-success">{{ $shiftStats['full'] }}</div>
+                            <div class="quick-action-label">Fully Staffed</div>
                         </div>
+                    </div>
 
-                        <!-- Partial Coverage -->
-                        <div class="col-6">
-                            <div class="quick-action-box text-center">
-                                <div class="quick-action-value text-warning">{{ $shiftStats['partial'] }}</div>
-                                <div class="quick-action-label">Partial Coverage</div>
-                            </div>
+                    <!-- Partial Coverage -->
+                    <div class="col-6">
+                        <div class="quick-action-box text-center">
+                            <div class="quick-action-value text-warning">{{ $shiftStats['partial'] }}</div>
+                            <div class="quick-action-label">Partial Coverage</div>
                         </div>
+                    </div>
 
-                        <!-- Critical Gaps -->
-                        <div class="col-6">
-                            <div class="quick-action-box text-center">
-                                <div class="quick-action-value text-danger">{{ $shiftStats['critical'] }}</div>
-                                <div class="quick-action-label">Critical Gaps</div>
-                            </div>
+                    <!-- Critical Gaps -->
+                    <div class="col-6">
+                        <div class="quick-action-box text-center">
+                            <div class="quick-action-value text-danger">{{ $shiftStats['critical'] }}</div>
+                            <div class="quick-action-label">Critical Gaps</div>
                         </div>
+                    </div>
 
-                        <!-- View Full Coverage -->
-                        <div class="col-12">
-                            <a href="{{ route('shifts.coverage') }}" class="quick-action-box text-center text-decoration-none d-block">
-                                <span class="me-2">View Full Coverage</span>
-                                <iconify-icon icon="mdi:arrow-right"></iconify-icon>
-                            </a>
-                        </div>
+                    <!-- View Full Coverage -->
+                    <div class="col-12">
+                        <a href="{{ route('shifts.coverage') }}"
+                           class="quick-action-box text-center text-decoration-none d-block">
+                            <span class="me-2">View Full Coverage</span>
+                            <iconify-icon icon="mdi:arrow-right"></iconify-icon>
+                        </a>
                     </div>
                 </div>
             </div>
         </div>
+    </div>
 
 
     <!-- Recent Activity Entries -->
@@ -1156,7 +1166,8 @@ new class extends Component {
 
                             <!-- View Button -->
                             <td>
-                                <a href="{{ $emp['view_link'] }}" class="btn btn-sm btn-primary">View Details</a>
+                                <a href="{{ route('attendance.employee-detailed-attendance', ['employeeId' => $emp['id']]) }}"
+                                   class="btn btn-sm btn-primary">View Details</a>
                             </td>
                         </tr>
                     @endforeach
@@ -1177,9 +1188,17 @@ new class extends Component {
         const employeeLocations = @json($employeeLocations);
 
         function initMap() {
+            // --- Find default location for initial center ---
+            const defaultLocation = workLocations.find(loc => loc.is_default === 1);
+
+            // Set initial center: use default location if exists, otherwise Nairobi fallback
+            const initialCenter = defaultLocation
+                ? { lat: parseFloat(defaultLocation.lat), lng: parseFloat(defaultLocation.lng) }
+                : { lat: -1.2921, lng: 36.8219 }; // Nairobi fallback
+
             const map = new google.maps.Map(document.getElementById("map"), {
                 zoom: 15,
-                center: {lat: -1.2921, lng: 36.8219}, // Nairobi fallback
+                center: initialCenter,
             });
 
             const bounds = new google.maps.LatLngBounds();
@@ -1294,19 +1313,17 @@ new class extends Component {
                 }
             });
 
-            // --- Fit map bounds ---
-            if (!bounds.isEmpty()) {
+            // --- Fit map bounds only if no default location ---
+            if (!defaultLocation && !bounds.isEmpty()) {
                 map.fitBounds(bounds);
 
-                // 👇 cap zoom (don’t let it zoom out too far)
+                // 👇 cap zoom (don't let it zoom out too far)
                 google.maps.event.addListenerOnce(map, "bounds_changed", function () {
                     if (map.getZoom() > 16) map.setZoom(16);  // street level
                     if (map.getZoom() < 14) map.setZoom(14);  // prevent zooming out too much
                 });
-            } else {
-                map.setCenter({lat: -1.2921, lng: 36.8219});
-                map.setZoom(15);
             }
+            // If default location exists, map is already centered on it with zoom 15
 
         }
 
@@ -1352,7 +1369,3 @@ new class extends Component {
             src="https://maps.googleapis.com/maps/api/js?key={{ $googleMapsApiKey }}&callback=initMap">
     </script>
 @endpush
-
-
-
-

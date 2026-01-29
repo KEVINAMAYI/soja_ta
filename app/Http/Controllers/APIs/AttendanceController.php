@@ -587,7 +587,7 @@ class AttendanceController extends Controller
             $attendance->update([
                 'status' => 'clocked_out',
                 'check_out_time' => $checkOutTime,
-                'worked_hours' => round($regularHours + $overtimeHours, 2),
+                'worked_hours' => round($regularHours , 2),
                 'overtime_hours' => round($overtimeHours, 2),
                 'is_early_checkout' => $isEarlyCheckout,
                 'minutes_early' => $minutesEarly,

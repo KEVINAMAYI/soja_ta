@@ -74,10 +74,21 @@ new class extends Component {
 
     public function selectShift($shiftId)
     {
-        $shifts = $this->getShifts();
-        $this->selectedShift = collect($shifts)->firstWhere('id', $shiftId);
-        $this->availableStaff = $this->getAvailableStaff();
+        // Force close panels first
         $this->showStaffPanel = false;
+        $this->showAddStaffPanel = false;
+
+        $shifts = $this->getShifts();
+        $newShift = collect($shifts)->firstWhere('id', $shiftId);
+
+        // Force Livewire to detect the change by resetting first
+        $this->selectedShift = null;
+
+        // Then set the new shift (this triggers a re-render)
+        $this->selectedShift = $newShift;
+
+        // Reload available staff for this shift
+        $this->availableStaff = $this->getAvailableStaff();
     }
 
     public function closeShiftDetails()
@@ -172,10 +183,14 @@ new class extends Component {
 
                 $totalEmployees = $employees->count();
 
+                // Create unique ID by combining shift ID with date
+                $uniqueShiftId = $shift->id . '_' . $date;
+
                 // For future dates, show as "scheduled" not critical
                 if ($isFutureDate) {
                     $allShifts[] = [
-                        'id' => $shift->id,
+                        'id' => $uniqueShiftId,
+                        'shift_id' => $shift->id,
                         'date' => $date,
                         'time' => $shift->start_time . ' - ' . $shift->end_time,
                         'dept' => $shift->name,
@@ -189,7 +204,8 @@ new class extends Component {
 
                 if ($totalEmployees === 0) {
                     $allShifts[] = [
-                        'id' => $shift->id,
+                        'id' => $uniqueShiftId,
+                        'shift_id' => $shift->id,
                         'date' => $date,
                         'time' => $shift->start_time . ' - ' . $shift->end_time,
                         'dept' => $shift->name,
@@ -221,7 +237,8 @@ new class extends Component {
                 }
 
                 $allShifts[] = [
-                    'id' => $shift->id,
+                    'id' => $uniqueShiftId,
+                    'shift_id' => $shift->id,
                     'date' => $date,
                     'time' => $shift->start_time . ' - ' . $shift->end_time,
                     'dept' => $shift->name,
@@ -290,7 +307,7 @@ new class extends Component {
         if (!$this->selectedShift) return [];
 
         $organizationId = auth()->user()->employee->organization_id;
-        $currentShiftId = $this->selectedShift['id'];
+        $currentShiftId = $this->selectedShift['shift_id']; // Use shift_id instead of id
 
         return Employee::query()
             ->where('organization_id', $organizationId)
@@ -314,7 +331,7 @@ new class extends Component {
 
         try {
             $employee = Employee::findOrFail($employeeId);
-            $newShiftId = $this->selectedShift['id'];
+            $newShiftId = $this->selectedShift['shift_id']; // Use shift_id instead of id
 
             $employee->update([
                 'shift_id' => $newShiftId,
@@ -323,7 +340,7 @@ new class extends Component {
 
             $this->loadShifts();
             $shifts = $this->getShifts();
-            $this->selectedShift = collect($shifts)->firstWhere('id', $newShiftId);
+            $this->selectedShift = collect($shifts)->firstWhere('id', $this->selectedShift['id']);
 
             LivewireAlert::title('Awesome!')
                 ->text("{$employee->name} has been assigned successfully!")
@@ -705,7 +722,7 @@ new class extends Component {
 
                             @forelse($dayShifts as $shift)
                                 <div class="col-12">
-                                    <div wire:click="selectShift({{ $shift['id'] }})"
+                                    <div wire:click="selectShift('{{ $shift['id'] }}')"
                                          class="shift-card shift-status-{{ $shift['status'] }} p-3 rounded {{ $selectedShift && $selectedShift['id'] === $shift['id'] ? 'selected' : '' }}">
                                         <div class="d-flex justify-content-between align-items-start mb-3">
                                             <div>
@@ -788,7 +805,7 @@ new class extends Component {
                                 @endphp
                                 <div class="col">
                                     @forelse($dayShifts as $shift)
-                                        <div wire:click="selectShift({{ $shift['id'] }})"
+                                        <div wire:click="selectShift('{{ $shift['id'] }}')"
                                              class="shift-card shift-status-{{ $shift['status'] }} p-2 rounded mb-2 {{ $selectedShift && $selectedShift['id'] === $shift['id'] ? 'selected' : '' }}"
                                              style="font-size: 12px;">
                                             <div class="d-flex justify-content-between align-items-start mb-2">
@@ -1088,6 +1105,4 @@ new class extends Component {
 
 </div>
 
-
 </div>
-

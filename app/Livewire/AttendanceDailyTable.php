@@ -204,7 +204,7 @@ class AttendanceDailyTable extends DataTableComponent
                     $formatted = $value ? Carbon::parse($value)->format('M d, Y g:i A') : '-';
 
                     if (empty($value)) {
-                        $formatted = "<span class='fw-semibold text-primary'>Never Clocked In</span>";
+                        $formatted = "<span class='fw-semibold text-primary'>Didn't Clocked In</span>";
                     } else {
                         $formatted = "<span class='fw-semibold text-success'>{$formatted}</span>";
 
@@ -244,7 +244,7 @@ class AttendanceDailyTable extends DataTableComponent
 
                         if (empty($formatted)) {
                             if (empty($value)) {
-                                $formatted = "<span class='fw-semibold text-primary'>Never Clocked Out</span>";
+                                $formatted = "<span class='fw-semibold text-primary'>Didn't Clocked Out</span>";
                             } else {
                                 $formatted = $value ? Carbon::parse($value)->format('M d, Y g:i A') : '-';
                                 $formatted = "<span class='fw-semibold text-success'>{$formatted}</span>";

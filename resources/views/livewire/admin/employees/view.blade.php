@@ -26,7 +26,25 @@ new class extends Component {
             ->where('organization_id', auth()->user()->employee->organization_id)
             ->findOrFail($employeeId);
 
-        $this->workLocation = $this->employee->currentAssignment->first()?->location;
+        // Try to get the most recent checked-in location first
+        $recentAttendance = Attendance::where('employee_id', $employeeId)
+            ->where('status', 'clocked_in')
+            ->whereNotNull('work_location_id')
+            ->orderBy('check_in_time', 'desc')
+            ->with('location')
+            ->first();
+
+        // If no current check-in, get the last known location (clocked_in or clocked_out)
+        if (!$recentAttendance) {
+            $recentAttendance = Attendance::where('employee_id', $employeeId)
+                ->whereIn('status', ['clocked_in', 'clocked_out'])
+                ->whereNotNull('work_location_id')
+                ->orderByRaw('COALESCE(check_out_time, check_in_time) DESC')
+                ->with('location')
+                ->first();
+        }
+
+        $this->workLocation = $recentAttendance?->location;
 
         // Example stats
         $this->stats = [
@@ -700,14 +718,19 @@ new class extends Component {
             </div>
         </div>
 
-        <!-- Current Location -->
+        <!-- Current/Last Known Location -->
         <div class="col-md-4 d-flex">
             <div class="info-card w-100">
                 <div class="info-card-header">
                     <div class="info-card-icon green">
                         <iconify-icon icon="mdi:map-marker" width="24" height="24"></iconify-icon>
                     </div>
-                    <h3 class="info-card-title">Current Location</h3>
+                    @php
+                        // Determine if this is current or last known location
+                        $isCurrentlyCheckedIn = $employee->latestAttendance?->status === 'clocked_in';
+                        $locationTitle = $isCurrentlyCheckedIn ? 'Current Check-In Location' : 'Last Known Location';
+                    @endphp
+                    <h3 class="info-card-title">{{ $locationTitle }}</h3>
                 </div>
 
                 @if ($workLocation)
@@ -750,19 +773,25 @@ new class extends Component {
                               style="font-size: 0.75rem;">{{ $workLocation->latitude }}, {{ $workLocation->longitude }}</span>
                     </div>
 
-                    <div class="mt-3 p-2 bg-light rounded text-center">
+                    <div class="mt-3 p-2 {{ $isCurrentlyCheckedIn ? 'bg-success bg-opacity-10' : 'bg-light' }} rounded text-center">
                         <iconify-icon icon="mdi:information-outline" class="me-1" width="16" height="16"
-                                      style="color: #6c757d;"></iconify-icon>
-                        <small class="text-muted">Live location Map view is available in the mobile app.</small>
+                                      style="color: {{ $isCurrentlyCheckedIn ? '#198754' : '#6c757d' }};"></iconify-icon>
+                        <small class="{{ $isCurrentlyCheckedIn ? 'text-success fw-semibold' : 'text-muted' }}">
+                            @if($isCurrentlyCheckedIn)
+                                Employee is currently checked in at this location
+                            @else
+                                Last recorded location - Employee is not currently checked in
+                            @endif
+                        </small>
                     </div>
 
                 @else
                     <div class="text-center py-4 px-3 border rounded bg-light">
                         <iconify-icon icon="mdi:map-marker-off" width="48" height="48"
                                       style="color:#adb5bd;"></iconify-icon>
-                        <h6 class="mt-3 mb-1 text-secondary fw-bold">No Work Location Assigned</h6>
+                        <h6 class="mt-3 mb-1 text-secondary fw-bold">No Location History</h6>
                         <p class="text-muted mb-0 small">
-                            This employee is not currently assigned to any work location.
+                            This employee has not checked in at any location yet.
                         </p>
                     </div>
                 @endif
