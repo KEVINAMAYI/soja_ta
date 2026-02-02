@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\APIs;
 
+use App\Helpers\ServerTime;
 use Firebase\JWT\JWT;
 use Firebase\JWT\Key;
 use Illuminate\Support\Facades\Auth;
@@ -27,7 +28,6 @@ class AttendanceController extends Controller
         $validated = $request->validate([
             'identifier_type' => 'required|in:id_number,qr_code,face_id',
             'identifier_value' => 'required|string',
-            'check_in_time' => 'required|date',
             'latitude' => 'required|numeric',
             'longitude' => 'required|numeric',
             'device_id' => 'nullable|exists:devices,id',
@@ -35,7 +35,12 @@ class AttendanceController extends Controller
         ]);
 
         return $this->processCheckIn($validated['identifier_value'],
-            $validated['identifier_type'], $validated['check_in_time'], $validated['latitude'], $validated['longitude'], $validated['work_location_id'], $validated['device_id'] ?? null);
+            $validated['identifier_type'],
+            ServerTime::now(),
+            $validated['latitude'],
+            $validated['longitude'],
+            $validated['work_location_id'],
+            $validated['device_id'] ?? null);
     }
 
     /**
@@ -46,10 +51,13 @@ class AttendanceController extends Controller
         $validated = $request->validate([
             'identifier_type' => 'required|in:id_number,qr_code,face_id',
             'identifier_value' => 'required|string',
-            'check_out_time' => 'required|date'
         ]);
 
-        return $this->processCheckOut($validated['identifier_value'], $validated['identifier_type'], $validated['check_out_time']);
+        return $this->processCheckOut(
+            $validated['identifier_value'],
+            $validated['identifier_type'],
+            ServerTime::now()
+        );
     }
 
 
