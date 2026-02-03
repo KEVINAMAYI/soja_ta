@@ -95,7 +95,7 @@ class CleanupOldAttendance extends Command
                 $attendance->update([
                     'status' => 'clocked_out',
                     'check_out_time' => $expectedCheckOut,
-                    'worked_hours' => round($regularHours + $overtimeHours, 2),
+                    'worked_hours' => round($regularHours , 2),
                     'overtime_hours' => round($overtimeHours, 2),
                     'auto_clocked_out' => true,
                     'auto_clocked_out_reason' => 'System cleanup - missing checkout',

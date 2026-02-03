@@ -509,6 +509,7 @@ class AttendanceController extends Controller
 
             // ✅ If not found within window, check for ANY older unchecked attendance
             if (!$attendance) {
+
                 $attendance = Attendance::where('employee_id', $employee->id)
                     ->whereNotNull('check_in_time')
                     ->whereNull('check_out_time')
