@@ -47,10 +47,15 @@ class AttendanceReportService
 
         $records = $query->get();
 
-        // Unique per employee per date
-        return $records->unique(function ($item) {
-            return $item->employee_id . '_' . $item->date;
-        })->values();
+        // Only apply unique filter when status filtering is used
+        if ($status) {
+            return $records->unique(function ($item) {
+                return $item->employee_id . '_' . $item->date;
+            })->values();
+        }
+
+        return $records;
+
     }
 
 
