@@ -53,6 +53,7 @@ Route::middleware(['auth'])->prefix('admin')->group(function () {
     //shifts
     Volt::route('shifts/create', 'admin.shifts.create')->name('shifts.create');
     Volt::route('shifts/coverage', 'admin.shifts.coverage')->name('shifts.coverage');
+    Volt::route('shifts/organization-settings', 'admin.shifts.organization-settings')->name('shifts.organization-settings');
 
 
 });

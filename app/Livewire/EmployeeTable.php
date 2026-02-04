@@ -4,6 +4,7 @@ namespace App\Livewire;
 
 use App\Exports\EmployeesExcelExport;
 use App\Models\Role;
+use App\Models\Shift;
 use Jantinnerezo\LivewireAlert\Facades\LivewireAlert;
 use Livewire\Attributes\On;
 use Maatwebsite\Excel\Facades\Excel;
@@ -17,7 +18,6 @@ use Rappasoft\LaravelLivewireTables\Views\Filters\SelectFilter;
 class EmployeeTable extends DataTableComponent
 {
     protected $model = Employee::class;
-
 
     public function mount(): void
     {
@@ -34,16 +34,26 @@ class EmployeeTable extends DataTableComponent
         $this->setEagerLoadAllRelationsStatus(true);
     }
 
-
     public function builder(): \Illuminate\Database\Eloquent\Builder
     {
         $orgId = auth()->user()->employee->organization_id ?? null;
 
         $query = Employee::query()
             ->select('employees.*')
-            ->with(['organization', 'shift', 'user', 'assignments'])
+            ->with([
+                'organization',
+                'shift', // Legacy single shift
+                'currentShift', // Current active shift
+                'shifts' => function ($query) {
+                    $query->withPivot(['priority', 'is_active', 'effective_from', 'effective_until'])
+                        ->orderByPivot('priority', 'desc');
+                },
+                'activeShifts', // All active shifts
+                'user',
+                'assignments',
+                'department'
+            ])
             ->where('organization_id', $orgId);
-
 
         if ($this->search !== null && $this->search !== '') {
             $query->where(function ($q) {
@@ -56,20 +66,9 @@ class EmployeeTable extends DataTableComponent
         return $query;
     }
 
-
     public function columns(): array
     {
         return [
-
-            // 🕓 Shift
-            Column::make("Shift", "shift_id")
-                ->format(fn($value, $row) => $row->shift?->name
-                    ? "<span class='fw-semibold text-primary'>{$row->shift->name}</span>"
-                    : "<span class='text-muted'>—</span>"
-                )
-                ->html()
-                ->sortable(),
-
             // 👤 Employee (with icon, title, email, and ID number)
             Column::make("Employee", "name")
                 ->format(function ($value, $row) {
@@ -92,26 +91,102 @@ class EmployeeTable extends DataTableComponent
                         : '';
 
                     return "
-            <div class='d-flex align-items-start'>
-                {$icon}
-                <div class='d-flex flex-column'>
-                    <span class='fw-semibold text-dark'>{$row->name}</span>
-                    {$title}
-                    {$email}
-                    {$idNumber}
-                    {$department}
-                </div>
-            </div>
-        ";
+                        <div class='d-flex align-items-start'>
+                            {$icon}
+                            <div class='d-flex flex-column'>
+                                <span class='fw-semibold text-dark'>{$row->name}</span>
+                                {$title}
+                                {$email}
+                                {$idNumber}
+                                {$department}
+                            </div>
+                        </div>
+                    ";
                 })
                 ->html()
                 ->sortable(),
+
+            // 🕓 Current Active Shift
+            Column::make("Current Shift", "current_shift_id")
+                ->format(function ($value, $row) {
+                    if ($row->currentShift) {
+                        $shiftName = htmlspecialchars($row->currentShift->name);
+                        $shiftTime = $row->currentShift->start_time && $row->currentShift->end_time
+                            ? "<small class='d-block text-muted'>" . date('g:i A', strtotime($row->currentShift->start_time)) . " - " . date('g:i A', strtotime($row->currentShift->end_time)) . "</small>"
+                            : '';
+
+                        return "
+                            <div class='d-flex flex-column'>
+                                <span class='badge bg-success-subtle text-success border border-success px-2 py-1'>
+                                    <i class='ti ti-clock me-1'></i>{$shiftName}
+                                </span>
+                                {$shiftTime}
+                            </div>
+                        ";
+                    }
+
+                    return "<span class='text-muted'>—</span>";
+                })
+                ->html()
+                ->sortable(),
+
+            // 🕓 All Assigned Shifts
+            Column::make("Assigned Shifts", "id")
+                ->format(function ($value, $row) {
+                    // Get only ACTIVE shifts using the activeShifts relationship
+                    $activeShifts = $row->activeShifts;
+
+                    if ($activeShifts->isEmpty()) {
+                        return "<span class='text-muted'>—</span>";
+                    }
+
+                    $badges = $activeShifts->map(function ($shift) use ($row) {
+                        $isCurrent = $row->current_shift_id == $shift->id;
+                        $priority = $shift->pivot->priority ?? 1;
+
+                        // Determine badge style
+                        if ($isCurrent) {
+                            $badgeClass = 'bg-success text-white';
+                            $icon = '<i class="ti ti-star-filled me-1"></i>';
+                            $label = 'Current';
+                        } else {
+                            $badgeClass = 'bg-primary-subtle text-primary border border-primary';
+                            $icon = '<i class="ti ti-clock me-1"></i>';
+                            $label = 'Assigned';
+                        }
+
+                        $shiftName = htmlspecialchars($shift->name);
+                        $priorityBadge = $priority > 1 ? "<small class='ms-1 opacity-75'>P{$priority}</small>" : '';
+
+                        $tooltip = $this->buildShiftTooltip($shift, $isCurrent);
+
+                        return "
+                            <span class='badge {$badgeClass} px-2 py-1 me-1 mb-1'
+                                  data-bs-toggle='tooltip'
+                                  data-bs-html='true'
+                                  title='{$tooltip}'>
+                                {$icon}{$shiftName}{$priorityBadge}
+                            </span>
+                        ";
+                    })->implode('');
+
+                    $count = $activeShifts->count();
+                    $countLabel = $count === 1 ? '1 shift' : "{$count} shifts";
+
+                    return "
+                        <div class='d-flex flex-wrap align-items-center'>
+                            {$badges}
+                            <small class='text-muted ms-2'>({$countLabel})</small>
+                        </div>
+                    ";
+                })
+                ->html()
+                ->collapseOnMobile(),
 
 
             // 📍 Assigned Locations
             Column::make("Work Locations", "name")
                 ->format(function ($value, $row) {
-
                     $locations = $row->assignments
                         ->load('location')
                         ->pluck('location.name')
@@ -124,10 +199,10 @@ class EmployeeTable extends DataTableComponent
 
                     $badges = $locations->map(function ($loc) {
                         return "
-                <span class='badge bg-primary-subtle text-primary border px-2 py-1 me-1 mb-1'>
-                    <i class='ti ti-map-pin me-1'></i>{$loc}
-                </span>
-            ";
+                            <span class='badge bg-primary-subtle text-primary border px-2 py-1 me-1 mb-1'>
+                                <i class='ti ti-map-pin me-1'></i>{$loc}
+                            </span>
+                        ";
                     })->implode('');
 
                     return "<div class='d-flex flex-wrap'>{$badges}</div>";
@@ -151,6 +226,42 @@ class EmployeeTable extends DataTableComponent
         ];
     }
 
+    /**
+     * Build tooltip content for shift badge
+     */
+    private function buildShiftTooltip($shift, bool $isCurrent = false): string
+    {
+        $details = [];
+
+        // Current status
+        if ($isCurrent) {
+            $details[] = '<strong>Status:</strong> <span class="text-success">✓ Currently Active</span>';
+        }
+
+        // Time range
+        if ($shift->start_time && $shift->end_time) {
+            $details[] = '<strong>Time:</strong> ' . date('g:i A', strtotime($shift->start_time)) . ' - ' . date('g:i A', strtotime($shift->end_time));
+        }
+
+        // Pattern type
+        if ($shift->pattern_type) {
+            $patternLabel = ucfirst(str_replace('_', ' ', $shift->pattern_type));
+            $details[] = '<strong>Pattern:</strong> ' . $patternLabel;
+        }
+
+        // Days (if custom or rotating)
+        if (in_array($shift->pattern_type, ['custom', 'rotating']) && !empty($shift->pattern_days)) {
+            $days = is_array($shift->pattern_days) ? implode(', ', $shift->pattern_days) : $shift->pattern_days;
+            $details[] = '<strong>Days:</strong> ' . $days;
+        }
+
+        // Grace period
+        if ($shift->grace_period_enabled && $shift->grace_period_minutes) {
+            $details[] = '<strong>Grace Period:</strong> ' . $shift->grace_period_minutes . ' mins';
+        }
+
+        return implode('<br>', $details);
+    }
 
     public function filters(): array
     {
@@ -162,9 +273,13 @@ class EmployeeTable extends DataTableComponent
                 ->pluck('name', 'id')
                 ->toArray();
 
-        return [
+        $shiftOptions = ['' => 'All Shifts'] +
+            Shift::where('organization_id', $orgId)
+                ->pluck('name', 'id')
+                ->toArray();
 
-            // ✅ Active Filter (correct handling of "", 1, 0)
+        return [
+            // ✅ Active Filter
             'active' => SelectFilter::make('Active')
                 ->options([
                     '' => 'All',
@@ -173,27 +288,63 @@ class EmployeeTable extends DataTableComponent
                 ])
                 ->filter(function ($builder, $value) {
                     if ($value === '' || $value === null) {
-                        return; // DO NOT apply filter
+                        return;
                     }
                     $builder->where('active', (int)$value);
                 }),
 
-            // ✅ Role Filter (organization-based + correct All behavior)
+            // ✅ Role Filter
             'role' => SelectFilter::make('Role')
                 ->options($roleOptions)
                 ->filter(function ($builder, $value) {
                     if ($value === '' || $value === null) {
-                        return; // All roles → do not filter
+                        return;
                     }
 
-                    // Filter employees that have selected role
                     $builder->whereHas('user.roles', function ($q) use ($value) {
                         $q->where('id', $value);
                     });
                 }),
+
+            // ✅ Current Shift Filter
+            'current_shift' => SelectFilter::make('Current Shift')
+                ->options($shiftOptions)
+                ->filter(function ($builder, $value) {
+                    if ($value === '' || $value === null) {
+                        return;
+                    }
+                    $builder->where('current_shift_id', $value);
+                }),
+
+            // ✅ Assigned Shift Filter (any of employee's shifts)
+            'assigned_shift' => SelectFilter::make('Has Shift Assigned')
+                ->options($shiftOptions)
+                ->filter(function ($builder, $value) {
+                    if ($value === '' || $value === null) {
+                        return;
+                    }
+
+                    $builder->whereHas('shifts', function ($q) use ($value) {
+                        $q->where('shifts.id', $value);
+                    });
+                }),
+
+            // ✅ Shift Status Filter
+            'shift_status' => SelectFilter::make('Shift Status')
+                ->options([
+                    '' => 'All Statuses',
+                    'active' => 'Active',
+                    'off_shift' => 'Off Shift',
+                    'sick_off' => 'Sick Off',
+                ])
+                ->filter(function ($builder, $value) {
+                    if ($value === '' || $value === null || $value === 'active') {
+                        return;
+                    }
+                    $builder->where('shift_status', $value);
+                }),
         ];
     }
-
 
     public function bulkActions(): array
     {
@@ -210,16 +361,12 @@ class EmployeeTable extends DataTableComponent
         return Excel::download(new EmployeesExcelExport($this->getSelected()), 'employees.xlsx');
     }
 
-
     public function exportPdf()
     {
         $ids = $this->getSelected();
-
         $url = route('employees.export.pdf', ['ids' => $ids]);
-
         return redirect()->to($url);
     }
-
 
     public function bulkDelete()
     {
@@ -232,14 +379,11 @@ class EmployeeTable extends DataTableComponent
             ->toast()
             ->position('top-end')
             ->show();
-
     }
-
 
     public function activate()
     {
         Employee::whereIn('id', $this->getSelected())->update(['active' => true]);
-
         $this->clearSelected();
 
         LivewireAlert::title('Awesome!')
@@ -253,7 +397,6 @@ class EmployeeTable extends DataTableComponent
     public function deactivate()
     {
         Employee::whereIn('id', $this->getSelected())->update(['active' => false]);
-
         $this->clearSelected();
 
         LivewireAlert::title('Awesome!')
@@ -263,5 +406,4 @@ class EmployeeTable extends DataTableComponent
             ->position('top-end')
             ->show();
     }
-
 }

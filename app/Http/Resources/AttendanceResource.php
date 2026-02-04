@@ -33,7 +33,8 @@ class AttendanceResource extends JsonResource
             'status' => $this->status,
             'device_id' => $this->device_id,
             'employee_check_in_location' => new WorkLocationResource($this->location),
-            'shift' => new ShiftResource($this->employee->shift)
+            'shifts' => ShiftResource::collection($this->employee->activeShifts),
+            'current_shift' => new ShiftResource($this->employee->currentShift)
         ];
     }
 

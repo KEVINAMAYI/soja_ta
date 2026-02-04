@@ -68,9 +68,9 @@ class AttendanceDailyTable extends DataTableComponent
             // Get inactive employees and their latest attendance records
             $query = Attendance::query()
                 ->select('attendances.*')
-                ->with(['employee', 'employee.shift'])
+                ->with(['employee', 'shift'])
                 ->whereBetween('date', [$startDate, $endDate])
-                ->whereHas('employee', function($q) use ($orgId) {
+                ->whereHas('employee', function ($q) use ($orgId) {
                     $q->where('organization_id', $orgId)
                         ->where('active', 0);
                 });
@@ -94,7 +94,7 @@ class AttendanceDailyTable extends DataTableComponent
             ->select('attendances.*')
             ->with(['employee', 'employee.shift'])
             ->whereBetween('date', [$startDate, $endDate])
-            ->whereHas('employee', function($q) use ($orgId) {
+            ->whereHas('employee', function ($q) use ($orgId) {
                 $q->where('organization_id', $orgId)
                     ->where('active', 1); // Only active employees for normal filters
             });
@@ -174,16 +174,23 @@ class AttendanceDailyTable extends DataTableComponent
             Column::make("Employee")
                 ->label(fn($row) => view('livewire.admin.attendance.employee', ['attendance' => $row])),
 
+
             Column::make("Shift")
                 ->label(function ($row) {
-                    if (!$row->employee->shift) {
-                        return '<span class="text-muted">-</span>';
+                    // Use the shift from the attendance record
+                    $shift = $row->shift ?? null;
+
+                    if (!$shift) {
+                        return '<span class="text-muted">No shift assigned</span>';
                     }
-                    $shift = $row->employee->shift;
+
                     $formattedStart = Carbon::parse($shift->start_time)->format('g:i A');
                     $formattedEnd = Carbon::parse($shift->end_time)->format('g:i A');
 
-                    return "<strong>{$shift->name}</strong><br><small>{$formattedStart} - {$formattedEnd}</small>";
+                    // If employee has multiple shifts, show an indicator
+                    $multiShiftIndicator = '';
+
+                    return "<strong>{$shift->name}</strong><br><small>{$formattedStart} - {$formattedEnd}</small>{$multiShiftIndicator}";
                 })
                 ->html(),
 
