@@ -6,22 +6,43 @@ use Jantinnerezo\LivewireAlert\Facades\LivewireAlert;
 use Livewire\Attributes\On;
 use Livewire\Volt\Component;
 use App\Models\Shift;
+use App\Models\OrganizationShiftSetting;
+use Illuminate\Support\Facades\DB;
 
 new class extends Component {
-
 
     public $shifts = [];
     public $selectedShift = [];
     public $showPatternModal = false;
     public $showAddShift = false;
+    public $showMultiShiftModal = false;
     public string $activeShiftTab = 'shift_settings';
     public string $tabTitle;
     public string $tabIcon;
+
+    // Multi-shift assignment (ONLY system now)
     public $assignedStaffIds = [];
     public $availableStaff = [];
     public $assignedStaff = [];
     public $assigningShift;
     public $searchTerm = '';
+
+    // Track pending changes
+    public $pendingChanges = false;
+    public $originalAssignedStaffIds = [];
+
+    // Multi-shift modal
+    public $selectedEmployeeForMultiShift = null;
+    public $employeeMultiShifts = [];
+    public $newShiftAssignment = [
+        'shift_id' => null,
+        'priority' => 0,
+        'effective_from' => null,
+        'effective_until' => null,
+    ];
+
+    // Organization settings
+    public $orgSettings = null;
 
     public $shiftPatterns = [
         ['id' => 'weekdays', 'name' => 'Weekdays Only', 'description' => 'Monday to Friday'],
@@ -31,12 +52,13 @@ new class extends Component {
         ['id' => 'custom', 'name' => 'Custom Days', 'description' => 'Select specific days']
     ];
 
-
     public function rules()
     {
         return [
             'assignedStaffIds' => 'array',
             'assignedStaffIds.*' => 'exists:employees,id',
+            'newShiftAssignment.shift_id' => 'required|exists:shifts,id',
+            'newShiftAssignment.priority' => 'required|integer|min:0|max:999',
         ];
     }
 
@@ -46,33 +68,61 @@ new class extends Component {
     public function mount()
     {
         $this->loadShifts();
+        $this->loadOrgSettings(); // This loads the org settings
 
 
-        // After saving — now reload truth from DB
-        $this->assignedStaffIds = Employee::where('shift_id', $this->selectedShift['id'])
-            ->pluck('id')
-            ->toArray();
+        if (count($this->shifts) > 0) {
+            // ✅ FIX: Load from employee_shift_assignments pivot table
+            $this->assignedStaffIds = DB::table('employee_shift_assignments')
+                ->where('shift_id', $this->selectedShift['id'])
+                ->where('is_active', true)
+                ->pluck('employee_id')
+                ->toArray();
 
-        $this->assigningShift = Shift::findOrFail($this->selectedShift['id']);
+            $this->originalAssignedStaffIds = $this->assignedStaffIds;
+            $this->assigningShift = Shift::findOrFail($this->selectedShift['id']);
 
-        $this->assignedStaff = Employee::whereIn('id', $this->assignedStaffIds)
-            ->with('shift')
-            ->get();
+            $this->assignedStaff = Employee::whereIn('id', $this->assignedStaffIds)
+                ->with(['shifts'])
+                ->get();
+        }
 
         $this->searchEmployees();
     }
 
+    public function loadOrgSettings()
+    {
+        $organizationId = auth()->user()->employee->organization_id;
+        $this->orgSettings = OrganizationShiftSetting::getForOrganization($organizationId);
+
+        // If no settings exist, create default ones
+        if (!$this->orgSettings) {
+            $this->orgSettings = OrganizationShiftSetting::create([
+                'organization_id' => $organizationId,
+                'allow_auto_shift_detection' => false,
+                'allow_manual_shift_selection' => true,
+                'require_approval_for_manual_shift_change' => false,
+                'shift_change_cooldown_minutes' => 240,
+                'auto_detection_minimum_score' => 40,
+            ]);
+        }
+    }
+
     public function loadShifts()
     {
-        // Load from database
         $organizationId = auth()->user()->employee->organization_id;
 
         $dbShifts = Shift::where('organization_id', $organizationId)
-            ->withCount('employees')
             ->orderBy('created_at', 'asc')
             ->get();
 
         $this->shifts = $dbShifts->map(function ($shift) {
+            // ✅ FIX: Count from employee_shift_assignments
+            $employeesCount = DB::table('employee_shift_assignments')
+                ->where('shift_id', $shift->id)
+                ->where('is_active', true)
+                ->count();
+
             return [
                 'id' => $shift->id,
                 'name' => $shift->name,
@@ -84,13 +134,12 @@ new class extends Component {
                 'autoClockOut' => $shift->auto_clock_out,
                 'warningTime' => $shift->warning_time_minutes,
                 'breakDuration' => $shift->break_minutes,
-                'employees' => $shift->employees_count,
+                'employees' => $employeesCount,
                 'pattern' => $shift->pattern_type,
                 'patternDays' => $shift->pattern_days ?? ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'],
                 'notifyManagers' => $shift->notify_managers_overtime,
                 'mobileNotifications' => $shift->employee_mobile_notifications,
                 'emailSummaries' => $shift->email_summaries,
-                // New grace period fields
                 'gracePeriodEnabled' => $shift->grace_period_enabled,
                 'gracePeriodMinutes' => $shift->grace_period_minutes,
                 'trackLateCheckin' => $shift->track_late_checkin,
@@ -105,16 +154,72 @@ new class extends Component {
         }
     }
 
+
+    // ✅ FIXED: Add database save to toggle methods
+
+    public function toggleAutoDetection()
+    {
+        if ($this->orgSettings) {
+            $this->orgSettings->allow_auto_shift_detection = !$this->orgSettings->allow_auto_shift_detection;
+            $this->orgSettings->save();
+
+            LivewireAlert::title('Success!')
+                ->text('Auto shift detection ' . ($this->orgSettings->allow_auto_shift_detection ? 'enabled' : 'disabled'))
+                ->success()
+                ->toast()
+                ->position('top-end')
+                ->show();
+        }
+    }
+
+    public function toggleManualSelection()
+    {
+        if ($this->orgSettings) {
+            $this->orgSettings->allow_manual_shift_selection = !$this->orgSettings->allow_manual_shift_selection;
+            $this->orgSettings->save();
+
+            LivewireAlert::title('Success!')
+                ->text('Manual shift selection ' . ($this->orgSettings->allow_manual_shift_selection ? 'enabled' : 'disabled'))
+                ->success()
+                ->toast()
+                ->position('top-end')
+                ->show();
+        }
+    }
+
+    public function toggleApprovalRequired()
+    {
+        if ($this->orgSettings) {
+            $this->orgSettings->require_approval_for_manual_shift_change = !$this->orgSettings->require_approval_for_manual_shift_change;
+            $this->orgSettings->save();
+
+            LivewireAlert::title('Success!')
+                ->text('Approval requirement ' . ($this->orgSettings->require_approval_for_manual_shift_change ? 'enabled' : 'disabled'))
+                ->success()
+                ->toast()
+                ->position('top-end')
+                ->show();
+        }
+    }
+
     public function selectShift($shiftId)
     {
         if (!$shiftId) return;
+
+        if ($this->pendingChanges) {
+            LivewireAlert::title('Unsaved Changes!')
+                ->text('You have unsaved staff assignments. Please save or discard them before switching shifts.')
+                ->warning()
+                ->toast()
+                ->position('top-end')
+                ->show();
+            return;
+        }
 
         $key = array_search($shiftId, array_column($this->shifts, 'id'));
 
         if ($key !== false) {
             $this->selectedShift = $this->shifts[$key];
-
-            // Use find() instead of findOrFail() to handle race conditions gracefully
             $this->assigningShift = Shift::find($shiftId);
 
             if (!$this->assigningShift) {
@@ -122,33 +227,37 @@ new class extends Component {
                 return;
             }
 
-            $this->assignedStaffIds = Employee::where('shift_id', $shiftId)
-                ->pluck('id')
+            // ✅ FIX: Load from employee_shift_assignments
+            $this->assignedStaffIds = DB::table('employee_shift_assignments')
+                ->where('shift_id', $shiftId)
+                ->where('is_active', true)
+                ->pluck('employee_id')
                 ->toArray();
 
+            $this->originalAssignedStaffIds = $this->assignedStaffIds;
+            $this->pendingChanges = false;
+
             $this->assignedStaff = Employee::whereIn('id', $this->assignedStaffIds)
-                ->with('shift')
+                ->with(['shifts'])
                 ->get();
 
             $this->searchEmployees();
         }
     }
 
-
-// Alternative: If you want to add more flexibility
     #[On('searchStaff')]
     public function searchEmployees()
     {
         $organizationId = auth()->user()->employee->organization_id;
 
         $query = Employee::query()
-            ->where('organization_id', $organizationId);
+            ->where('organization_id', $organizationId)
+            ->with(['shifts']);
 
-        // Apply search only if searchTerm exists and is not empty
         if (!empty($this->searchTerm)) {
             $query->where(function ($q) {
                 $q->where('name', 'like', '%' . $this->searchTerm . '%')
-                    ->orWhereHas('shift', function ($sq) {
+                    ->orWhereHas('shifts', function ($sq) {
                         $sq->where('name', 'like', '%' . $this->searchTerm . '%');
                     })
                     ->orWhereHas('department', function ($sq) {
@@ -157,30 +266,26 @@ new class extends Component {
             });
         }
 
-        $this->availableStaff = $query->with('shift')->get();
+        $this->availableStaff = $query->get();
     }
 
     public function getAssignedStaff()
     {
-
-        $this->shiftId = $this->selectedShift['id'];
-        $this->assigningShift = Shift::findOrFail($this->shiftId);
+        $this->assigningShift = Shift::findOrFail($this->selectedShift['id']);
 
         $this->assignedStaff = Employee::whereIn('id', $this->assignedStaffIds)
-            ->with('shift')
+            ->with(['shifts'])
             ->get();
-
     }
-
 
     public function assignStaff($staffId)
     {
         if (!in_array($staffId, $this->assignedStaffIds)) {
             $this->assignedStaffIds[] = $staffId;
+            $this->checkForPendingChanges();
         }
 
         $this->getAssignedStaff();
-
     }
 
     public function removeStaff($staffId)
@@ -189,51 +294,325 @@ new class extends Component {
             array_filter($this->assignedStaffIds, fn($id) => $id != $staffId)
         );
 
+        $this->checkForPendingChanges();
+        $this->getAssignedStaff();
+    }
+
+    private function checkForPendingChanges()
+    {
+        $current = array_values($this->assignedStaffIds);
+        $original = array_values($this->originalAssignedStaffIds);
+
+        sort($current);
+        sort($original);
+
+        $this->pendingChanges = ($current !== $original);
+    }
+
+    public function discardChanges()
+    {
+        $this->assignedStaffIds = $this->originalAssignedStaffIds;
+        $this->pendingChanges = false;
         $this->getAssignedStaff();
 
+        LivewireAlert::title('Changes Discarded')
+            ->text('Staff assignments have been reset.')
+            ->info()
+            ->toast()
+            ->position('top-end')
+            ->show();
     }
 
     public function saveAssignment()
     {
-
-        $this->validate();
-
         try {
+            DB::beginTransaction();
 
-            // Get organization_id
             $organizationId = auth()->user()->employee->organization_id;
             $currentShiftId = $this->selectedShift['id'];
 
-            Employee::where('organization_id', $organizationId)
+            // ✅ FIX: Query employee_shift_assignments
+            $currentlyAssigned = DB::table('employee_shift_assignments')
                 ->where('shift_id', $currentShiftId)
-                ->whereNotIn('id', $this->assignedStaffIds)
-                ->update([
-                    'shift_id' => null,
-                    'shift_status' => 'off_shift'
-                ]);
+                ->where('is_active', true)
+                ->pluck('employee_id')
+                ->toArray();
 
-            Employee::where('organization_id', $organizationId)
-                ->whereIn('id', $this->assignedStaffIds)
-                ->update([
-                    'shift_id' => $currentShiftId,
-                    'shift_status' => 'on_shift'
-                ]);
+            // Remove employees no longer assigned
+            $toRemove = array_diff($currentlyAssigned, $this->assignedStaffIds);
+            foreach ($toRemove as $employeeId) {
+                // ✅ FIX: Soft delete (set is_active = false)
+                DB::table('employee_shift_assignments')
+                    ->where('shift_id', $currentShiftId)
+                    ->where('employee_id', $employeeId)
+                    ->update([
+                        'is_active' => false,
+                        'updated_at' => now()
+                    ]);
+            }
+
+            // Add new employees
+            $toAdd = array_diff($this->assignedStaffIds, $currentlyAssigned);
+            foreach ($toAdd as $employeeId) {
+                // ✅ FIX: Check if exists and reactivate, or create new
+                $existing = DB::table('employee_shift_assignments')
+                    ->where('shift_id', $currentShiftId)
+                    ->where('employee_id', $employeeId)
+                    ->first();
+
+                if ($existing) {
+                    // Reactivate
+                    DB::table('employee_shift_assignments')
+                        ->where('id', $existing->id)
+                        ->update([
+                            'is_active' => true,
+                            'updated_at' => now()
+                        ]);
+                } else {
+                    // Create new
+                    DB::table('employee_shift_assignments')->insert([
+                        'employee_id' => $employeeId,
+                        'shift_id' => $currentShiftId,
+                        'priority' => 0,
+                        'is_active' => true,
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ]);
+                }
+
+                // Update employee's current_shift_id if not set
+                $employee = Employee::find($employeeId);
+                if (!$employee->current_shift_id) {
+                    $employee->current_shift_id = $currentShiftId;
+                    $employee->save();
+                }
+            }
+
+            DB::commit();
+
+            $this->originalAssignedStaffIds = $this->assignedStaffIds;
+            $this->pendingChanges = false;
+
+            $this->loadShifts();
+
+            $key = array_search($currentShiftId, array_column($this->shifts, 'id'));
+            if ($key !== false) {
+                $this->selectedShift = $this->shifts[$key];
+            }
 
             $this->getAssignedStaff();
             $this->searchEmployees();
 
-            LivewireAlert::title('Awesome!')
-                ->text('Staff assignment saved successfully!')
+            LivewireAlert::title('Success!')
+                ->text('Staff assignments saved successfully!')
                 ->success()
                 ->toast()
                 ->position('top-end')
                 ->show();
 
-
         } catch (\Exception $e) {
+            DB::rollBack();
+            \Log::error('Save assignment error: ' . $e->getMessage());
 
             LivewireAlert::title('Error!')
-                ->text('Failed to save assignment!')
+                ->text('Failed to save staff assignments. Please try again.')
+                ->error()
+                ->toast()
+                ->position('top-end')
+                ->show();
+        }
+    }
+
+    public function openMultiShiftModal($employeeId)
+    {
+        $this->selectedEmployeeForMultiShift = Employee::with('shifts')->findOrFail($employeeId);
+
+        $this->employeeMultiShifts = $this->selectedEmployeeForMultiShift->shifts
+            ->filter(function ($shift) {
+                return $shift->pivot->is_active == true;
+            })
+            ->map(function ($shift) {  // ✅ Added -> before map
+                return [
+                    'id' => $shift->id,
+                    'name' => $shift->name,
+                    'start_time' => $shift->start_time,
+                    'end_time' => $shift->end_time,
+                    'priority' => $shift->pivot->priority,
+                    'is_active' => $shift->pivot->is_active,
+                    'effective_from' => $shift->pivot->effective_from,
+                    'effective_until' => $shift->pivot->effective_until,
+                ];
+            })
+            ->values()  // ✅ Reset array keys after filtering
+            ->toArray();
+
+        $this->showMultiShiftModal = true;
+    }
+
+
+    public function addShiftToEmployee()
+    {
+        $this->validate([
+            'newShiftAssignment.shift_id' => 'required|exists:shifts,id',
+            'newShiftAssignment.priority' => 'required|integer|min:0|max:999',
+        ]);
+
+        try {
+            // ✅ FIX: Check only for ACTIVE assignments using DB query
+            $activeExists = DB::table('employee_shift_assignments')
+                ->where('employee_id', $this->selectedEmployeeForMultiShift->id)
+                ->where('shift_id', $this->newShiftAssignment['shift_id'])
+                ->where('is_active', true)  // ← KEY FIX: Only check active assignments
+                ->exists();
+
+            if ($activeExists) {
+                LivewireAlert::title('Info!')
+                    ->text('This shift is already assigned to the employee.')
+                    ->info()
+                    ->toast()
+                    ->position('top-end')
+                    ->show();
+                return;
+            }
+
+            // ✅ FIX: Check if there's an inactive assignment we can reactivate
+            $inactiveAssignment = DB::table('employee_shift_assignments')
+                ->where('employee_id', $this->selectedEmployeeForMultiShift->id)
+                ->where('shift_id', $this->newShiftAssignment['shift_id'])
+                ->where('is_active', false)
+                ->first();
+
+            if ($inactiveAssignment) {
+                // Reactivate the existing assignment with new priority and dates
+                DB::table('employee_shift_assignments')
+                    ->where('id', $inactiveAssignment->id)
+                    ->update([
+                        'priority' => $this->newShiftAssignment['priority'],
+                        'is_active' => true,
+                        'effective_from' => $this->newShiftAssignment['effective_from'],
+                        'effective_until' => $this->newShiftAssignment['effective_until'],
+                        'updated_at' => now()
+                    ]);
+            } else {
+                // Create new assignment using DB insert (more reliable)
+                DB::table('employee_shift_assignments')->insert([
+                    'employee_id' => $this->selectedEmployeeForMultiShift->id,
+                    'shift_id' => $this->newShiftAssignment['shift_id'],
+                    'priority' => $this->newShiftAssignment['priority'],
+                    'is_active' => true,
+                    'effective_from' => $this->newShiftAssignment['effective_from'],
+                    'effective_until' => $this->newShiftAssignment['effective_until'],
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+            }
+
+            $employee = $this->selectedEmployeeForMultiShift;
+            if (!$employee->current_shift_id) {
+                $employee->current_shift_id = $this->newShiftAssignment['shift_id'];
+                $employee->save();
+            }
+
+            $this->selectedEmployeeForMultiShift->refresh();
+            $this->openMultiShiftModal($this->selectedEmployeeForMultiShift->id);
+            $this->selectShift($this->selectedShift['id']);
+
+            $this->newShiftAssignment = [
+                'shift_id' => null,
+                'priority' => 100,
+                'effective_from' => null,
+                'effective_until' => null,
+            ];
+
+            LivewireAlert::title('Success!')
+                ->text('Shift assigned successfully!')
+                ->success()
+                ->toast()
+                ->position('top-end')
+                ->show();
+
+        } catch (\Exception $e) {
+            \Log::error('Add shift error: ' . $e->getMessage());
+
+            LivewireAlert::title('Error!')
+                ->text('Failed to assign shift.')
+                ->error()
+                ->toast()
+                ->position('top-end')
+                ->show();
+        }
+    }
+
+    
+    public function removeShiftFromEmployee($shiftId)
+    {
+        try {
+            // ✅ FIX: Soft delete
+            DB::table('employee_shift_assignments')
+                ->where('employee_id', $this->selectedEmployeeForMultiShift->id)
+                ->where('shift_id', $shiftId)
+                ->update([
+                    'is_active' => false,
+                    'updated_at' => now()
+                ]);
+
+            // If removing current_shift_id, find next highest priority
+            if ($this->selectedEmployeeForMultiShift->current_shift_id == $shiftId) {
+                $nextShift = DB::table('employee_shift_assignments')
+                    ->where('employee_id', $this->selectedEmployeeForMultiShift->id)
+                    ->where('is_active', true)
+                    ->orderBy('priority', 'desc')
+                    ->first();
+
+                $this->selectedEmployeeForMultiShift->current_shift_id = $nextShift->shift_id ?? null;
+                $this->selectedEmployeeForMultiShift->save();
+            }
+
+            $this->selectedEmployeeForMultiShift->refresh();
+            $this->openMultiShiftModal($this->selectedEmployeeForMultiShift->id);
+            $this->selectShift($this->selectedShift['id']);
+
+            LivewireAlert::title('Success!')
+                ->text('Shift removed successfully!')
+                ->success()
+                ->toast()
+                ->position('top-end')
+                ->show();
+
+        } catch (\Exception $e) {
+            LivewireAlert::title('Error!')
+                ->text('Failed to remove shift.')
+                ->error()
+                ->toast()
+                ->position('top-end')
+                ->show();
+        }
+    }
+
+    public function updateShiftPriority($shiftId, $newPriority)
+    {
+        try {
+            DB::table('employee_shift_assignments')
+                ->where('employee_id', $this->selectedEmployeeForMultiShift->id)
+                ->where('shift_id', $shiftId)
+                ->update([
+                    'priority' => $newPriority,
+                    'updated_at' => now()
+                ]);
+
+            $this->selectedEmployeeForMultiShift->refresh();
+            $this->openMultiShiftModal($this->selectedEmployeeForMultiShift->id);
+
+            LivewireAlert::title('Success!')
+                ->text('Priority updated successfully!')
+                ->success()
+                ->toast()
+                ->position('top-end')
+                ->show();
+
+        } catch (\Exception $e) {
+            LivewireAlert::title('Error!')
+                ->text('Failed to update priority.')
                 ->error()
                 ->toast()
                 ->position('top-end')
@@ -267,7 +646,6 @@ new class extends Component {
 
     public function handlePatternChange($patternId)
     {
-
         $newPatternDays = [];
 
         switch ($patternId) {
@@ -314,11 +692,10 @@ new class extends Component {
         $this->selectedShift['trackEarlyCheckout'] = !$this->selectedShift['trackEarlyCheckout'];
     }
 
+
     public function saveShift()
     {
-
         $shift = Shift::find($this->selectedShift['id']);
-
 
         if ($shift) {
             $shift->update([
@@ -336,31 +713,39 @@ new class extends Component {
                 'notify_managers_overtime' => $this->selectedShift['notifyManagers'] ?? false,
                 'employee_mobile_notifications' => $this->selectedShift['mobileNotifications'] ?? true,
                 'email_summaries' => $this->selectedShift['emailSummaries'] ?? false,
-                // New grace period fields
                 'grace_period_enabled' => $this->selectedShift['gracePeriodEnabled'] ?? true,
                 'grace_period_minutes' => $this->selectedShift['gracePeriodMinutes'] ?? 15,
                 'track_late_checkin' => $this->selectedShift['trackLateCheckin'] ?? true,
                 'notify_on_late_checkin' => $this->selectedShift['notifyOnLateCheckin'] ?? false,
                 'track_early_checkout' => $this->selectedShift['trackEarlyCheckout'] ?? true,
                 'early_checkout_threshold_minutes' => $this->selectedShift['earlyCheckoutThreshold'] ?? 15,
-
             ]);
 
-            // Reload shifts to reflect changes
+            // ✅ SAVE ORGANIZATION SETTINGS WITH VALIDATION
+            if ($this->orgSettings) {
+                // Validate organization settings
+                $this->validate([
+                    'orgSettings.shift_change_cooldown_minutes' => 'required|integer|min:0|max:1440',
+                    'orgSettings.auto_detection_minimum_score' => 'required|integer|min:0|max:100',
+                ]);
+
+                // Save the organization settings
+                $this->orgSettings->save();
+            }
+
             $this->loadShifts();
 
-            // Re-select the current shift
-            $this->selectShift($shift->id);
+            $key = array_search($shift->id, array_column($this->shifts, 'id'));
+            if ($key !== false) {
+                $this->selectedShift = $this->shifts[$key];
+            }
 
             LivewireAlert::title('Awesome!')
-                ->text('Shift saved successfully!')
+                ->text('Shift and organization settings saved successfully!')
                 ->success()
                 ->toast()
                 ->position('top-end')
                 ->show();
-
-            $this->loadShifts();
-
         }
     }
 
@@ -384,7 +769,6 @@ new class extends Component {
             'employee_mobile_notifications' => true,
             'email_summaries' => false,
             'status' => 'active',
-            // New grace period defaults
             'grace_period_enabled' => true,
             'grace_period_minutes' => 15,
             'track_late_checkin' => true,
@@ -405,10 +789,13 @@ new class extends Component {
         $shift = Shift::find($this->selectedShift['id']);
 
         if ($shift) {
+            // ✅ FIX: Check employee_shift_assignments
+            $activeEmployees = DB::table('employee_shift_assignments')
+                ->where('shift_id', $shift->id)
+                ->where('is_active', true)
+                ->count();
 
-            // Check if shift has employees
-            if ($shift->employees()->count() > 0) {
-
+            if ($activeEmployees > 0) {
                 LivewireAlert::title('Error!')
                     ->text('Cannot delete shift with assigned employees. Please reassign employees first.')
                     ->error()
@@ -419,10 +806,8 @@ new class extends Component {
                 return;
             }
 
-            $shiftId = $shift->id;
             $shift->delete();
 
-            // Reload shifts FIRST
             $this->loadShifts();
 
             if (count($this->shifts) > 0) {
@@ -438,7 +823,6 @@ new class extends Component {
         }
     }
 
-
     public function getPatternDisplay($pattern, $days)
     {
         $patternInfo = collect($this->shiftPatterns)->firstWhere('id', $pattern);
@@ -449,7 +833,6 @@ new class extends Component {
 
         return $patternInfo['name'];
     }
-
 
     #[On('time-selected')]
     public function calculateShiftDuration()
@@ -462,7 +845,6 @@ new class extends Component {
             $start = Carbon::parse($this->selectedShift['startTime']);
             $end = Carbon::parse($this->selectedShift['endTime']);
 
-            // Handle overnight shift
             if ($end->lt($start)) {
                 $end->addDay();
             }
@@ -474,24 +856,20 @@ new class extends Component {
             $this->selectedShift['duration'] = round($minutes / 60, 2);
 
         } catch (\Exception $e) {
-            // Fail silently (optional)
+            // Fail silently
         }
     }
-
 
     #[On('shiftTabChanged')]
     public function shiftTabChanged($tabId)
     {
-
-        $this->activeShiftTab = $tabId;  // ✅ CORRECT
+        $this->activeShiftTab = $tabId;
         $this->changeShiftBreadcrumb();
-
     }
 
     public function changeShiftBreadcrumb()
     {
         switch ($this->activeShiftTab) {
-
             case 'shift_settings':
                 $this->tabTitle = 'Shift Settings';
                 $this->tabIcon = '<iconify-icon icon="mdi:calendar-clock-outline" class="fs-5"></iconify-icon>';
@@ -508,9 +886,7 @@ new class extends Component {
                 $this->tabIcon = '<iconify-icon icon="mdi:cog-outline" class="fs-5"></iconify-icon>';
                 break;
         }
-
     }
-
 }; ?>
 
 @push('styles')
@@ -861,7 +1237,7 @@ new class extends Component {
         }
 
         .staff-item.assigned-item {
-            background-color: #d1e7dd;
+            /*background-color: #d1e7dd;*/
             border-color: #badbcc;
         }
 
@@ -871,11 +1247,12 @@ new class extends Component {
             gap: 0.75rem;
         }
 
-        .staff-avatar {
+        .staff-avatar-unassigned {
             width: 40px;
             height: 40px;
-            background: linear-gradient(135deg, #0d6efd 0%, #6610f2 100%);
+            background: white;
             border-radius: 50%;
+            border: solid #e14326 2px;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -885,9 +1262,25 @@ new class extends Component {
             flex-shrink: 0;
         }
 
-        .staff-avatar.assigned {
-            background: linear-gradient(135deg, #198754 0%, #20c997 100%);
+        .staff-avatar-assigned {
+            width: 40px;
+            height: 40px;
+            background: white;
+            border-radius: 50%;
+            border: solid green 2px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: 600;
+            font-size: 0.875rem;
+            flex-shrink: 0;
         }
+
+        .staff-avatar {
+            border: solid green 2px;
+        }
+
 
         .staff-info {
             flex: 1;
@@ -974,7 +1367,6 @@ new class extends Component {
         }
 
         .summary-box {
-            background-color: #cfe2ff;
             border: 1px solid #b6d4fe;
             border-radius: 8px;
             padding: 1rem;
@@ -1019,6 +1411,93 @@ new class extends Component {
         .save-button:disabled {
             opacity: 0.5;
             cursor: not-allowed;
+        }
+
+        /* Add to existing styles */
+        .shift-assignment-item {
+            background-color: #f8f9fa;
+            transition: all 0.2s ease;
+        }
+
+        .shift-assignment-item:hover {
+            background-color: #e9ecef;
+        }
+
+        /* Enhanced Styles for Improved UI */
+        .status-indicator-wrapper {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+
+        .status-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            border: 2px solid white;
+            box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.1);
+        }
+
+        /* Improve scrollbar */
+        .staff-list::-webkit-scrollbar {
+            width: 10px;
+        }
+
+        .staff-list::-webkit-scrollbar-track {
+            background: #f8f9fa;
+            border-radius: 5px;
+        }
+
+        .staff-list::-webkit-scrollbar-thumb {
+            background: #dee2e6;
+            border-radius: 5px;
+        }
+
+        .staff-list::-webkit-scrollbar-thumb:hover {
+            background: #adb5bd;
+        }
+
+        /* FIXED: Status dot colors */
+        .status-dot.status-assigned {
+            background-color: #28a745;
+        }
+
+        .status-dot.status-other-shift {
+            background-color: #ffc107;
+        }
+
+        .status-dot.status-unassigned {
+            background-color: #dc3545;
+        }
+
+        /* FIXED: Better button styling */
+        .btn-assign {
+            background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+            border: none;
+            color: white;
+            padding: 0.375rem 0.75rem;
+            border-radius: 6px;
+            transition: all 0.2s ease;
+        }
+
+        .btn-assign:hover {
+            transform: scale(1.05);
+            box-shadow: 0 2px 8px rgba(40, 167, 69, 0.3);
+        }
+
+        /* Update summary box styling */
+        .summary-box {
+            border-radius: 12px;
+            padding: 1.25rem;
+            margin-top: 0;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+            transition: all 0.3s ease;
+        }
+
+        .summary-box:hover {
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            transform: translateY(-2px);
         }
 
     </style>
@@ -1718,18 +2197,188 @@ new class extends Component {
                             </div>
                         </div>
 
+                        <!-- Organization Settings Section -->
+                        <div class="config-section mb-4">
+                            <div class="section-header">
+                                <h5 class="mb-0">
+                                    <svg width="20" height="20" class="text-info me-2" fill="currentColor"
+                                         viewBox="0 0 24 24">
+                                        <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+                                        <path d="M2 17l10 5 10-5M2 12l10 5 10-5"/>
+                                    </svg>
+                                    Organization Settings
+                                </h5>
+                            </div>
+
+                            <div class="section-body">
+
+                                <!-- Auto Detection Toggle -->
+                                <div class="d-flex justify-content-between align-items-center pb-3 mb-3 border-bottom">
+                                    <div>
+                                        <h6 class="mb-1">Enable Auto Shift Detection</h6>
+                                        <p class="text-muted small mb-0">
+                                            Allow system to automatically detect which shift an employee should be checked into.
+                                        </p>
+                                    </div>
+                                    <label class="toggle-switch">
+                                        <input type="checkbox"
+                                               wire:click="toggleAutoDetection"
+                                            {{ $orgSettings->allow_auto_shift_detection ?? false ? 'checked' : '' }}>
+                                        <span class="toggle-slider"></span>
+                                    </label>
+                                </div>
+
+                                @if($orgSettings && $orgSettings->allow_auto_shift_detection)
+                                    <!-- Detection Settings -->
+                                    <div class="row g-3 mb-3">
+                                        <div class="col-md-6">
+                                            <label class="form-label fw-semibold">Minimum Detection Score</label>
+                                            <input type="number"
+                                                   wire:model.defer="orgSettings.auto_detection_minimum_score"
+                                                   class="form-control"
+                                                   min="0"
+                                                   max="100">
+                                            <small class="text-muted">
+                                                Minimum score required for auto-detection to succeed (0-100). Default: 40
+                                            </small>
+                                        </div>
+
+                                        <div class="col-md-6">
+                                            <label class="form-label fw-semibold">Shift Change Cooldown</label>
+                                            <div class="input-group">
+                                                <input type="number"
+                                                       wire:model.defer="orgSettings.shift_change_cooldown_minutes"
+                                                       class="form-control"
+                                                       min="0"
+                                                       max="1440">
+                                                <span class="input-group-text">minutes</span>
+                                            </div>
+                                            <small class="text-muted">
+                                                Time required between shift changes. Default: 240 minutes (4 hours)
+                                            </small>
+                                        </div>
+                                    </div>
+
+                                    <!-- Info Alert -->
+                                    <div class="alert alert-info mb-3">
+                                        <h6 class="mb-2">
+                                            <svg width="16" height="16" class="me-1" fill="currentColor" viewBox="0 0 24 24">
+                                                <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor"
+                                                        stroke-width="2"/>
+                                                <line x1="12" y1="16" x2="12" y2="12" stroke="currentColor" stroke-width="2"/>
+                                                <line x1="12" y1="8" x2="12.01" y2="8" stroke="currentColor" stroke-width="2"/>
+                                            </svg>
+                                            How Auto Detection Works
+                                        </h6>
+                                        <ul class="small mb-0">
+                                            <li>System scores each shift based on: day pattern match, time proximity, grace
+                                                period, and priority
+                                            </li>
+                                            <li>The shift with the highest score above the minimum threshold is selected</li>
+                                            <li>If no shift meets the minimum score, detection fails and employee must select
+                                                manually (if enabled)
+                                            </li>
+                                        </ul>
+                                    </div>
+                                @endif
+
+                                <!-- Manual Selection Toggle -->
+                                <div class="d-flex justify-content-between align-items-center pb-3 mb-3 border-bottom">
+                                    <div>
+                                        <h6 class="mb-1">Allow Manual Shift Selection</h6>
+                                        <p class="text-muted small mb-0">
+                                            Employees can manually select their shift during check-in if auto-detection fails or
+                                            is disabled
+                                        </p>
+                                    </div>
+                                    <label class="toggle-switch">
+                                        <input type="checkbox"
+                                               wire:click="toggleManualSelection"
+                                            {{ $orgSettings->allow_manual_shift_selection ?? false ? 'checked' : '' }}>
+                                        <span class="toggle-slider"></span>
+                                    </label>
+                                </div>
+
+                                @if($orgSettings && $orgSettings->allow_manual_shift_selection)
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <div>
+                                            <h6 class="mb-1">Require Manager Approval</h6>
+                                            <p class="text-muted small mb-0">
+                                                Manual shift changes require manager approval before taking effect
+                                            </p>
+                                        </div>
+                                        <label class="toggle-switch">
+                                            <input type="checkbox"
+                                                   wire:click="toggleApprovalRequired"
+                                                {{ $orgSettings->require_approval_for_manual_shift_change ?? false ? 'checked' : '' }}>
+                                            <span class="toggle-slider"></span>
+                                        </label>
+                                    </div>
+                                @endif
+
+                            </div>
+                        </div>
+
                     </div>
 
                     <!-- Overtime Policy Tab -->
                     <div class="mt-3 tab-pane fade {{ $activeShiftTab === 'assign_employee' ? 'show active' : '' }}"
                          id="tab-assign-employee">
                         <div class="staff-assignment-card">
-                            <div class="section-header">
-                                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                          d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"></path>
-                                </svg>
-                                <h2>Assign Staff to {{ $assigningShift->name }}</h2>
+                            <!-- Header -->
+                            <div class="d-flex justify-content-between align-items-center mb-4">
+                                <div class="section-header">
+                                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                              d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"></path>
+                                    </svg>
+                                    <div>
+                                        <h2>Staff Assignment</h2>
+                                        <p class="text-muted small mb-0">{{ $assigningShift->start_time }}
+                                            - {{ $assigningShift->end_time }}</p>
+                                    </div>
+                                </div>
+
+                                <!-- Save Button (Top Right) -->
+                                <div class="d-flex gap-2">
+                                    @if($pendingChanges)
+                                        <button type="button"
+                                                wire:click.prevent="discardChanges"
+                                                class="btn btn-outline-secondary btn-md">
+                                            <svg width="18" height="18" class="me-2" fill="currentColor"
+                                                 viewBox="0 0 24 24">
+                                                <path
+                                                    d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"
+                                                    stroke="currentColor" stroke-width="2" fill="none"/>
+                                            </svg>
+                                            Discard
+                                        </button>
+                                    @endif
+
+                                    <button type="button"
+                                            wire:click.prevent="saveAssignment"
+                                            wire:loading.attr="disabled"
+                                            class="btn btn-primary btn-md {{ !$pendingChanges ? 'disabled' : '' }}"
+                                        {{ !$pendingChanges ? 'disabled' : '' }}>
+                                        <svg width="18" height="18" class="me-2" fill="currentColor"
+                                             viewBox="0 0 24 24">
+                                            <path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"
+                                                  fill="none" stroke="currentColor" stroke-width="2"/>
+                                            <polyline points="17 21 17 13 7 13 7 21" stroke="currentColor"
+                                                      stroke-width="2"/>
+                                            <polyline points="7 3 7 8 15 8" stroke="currentColor" stroke-width="2"/>
+                                        </svg>
+                                        <span wire:loading.remove wire:target="saveAssignment">
+            @if($pendingChanges)
+                                                Save  ({{ count($assignedStaffIds) }})
+                                            @else
+                                                No Changes
+                                            @endif
+        </span>
+                                        <span wire:loading wire:target="saveAssignment">Saving...</span>
+                                    </button>
+                                </div>
+
                             </div>
 
                             @if (session()->has('success'))
@@ -1744,118 +2393,229 @@ new class extends Component {
                                 </div>
                             @endif
 
-                            <!-- Search -->
-                            <h3 class="section-title">All Staff</h3>
+                            <!-- Search Bar -->
                             <div class="search-wrapper">
                                 <svg class="search-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                           d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
                                 </svg>
-                                <input
-                                    type="text"
-                                    wire:model="searchTerm"
-                                    wire:keyup="$dispatch('searchStaff')"
-                                    placeholder="Search by name, role, or department..."
-                                    class="search-input"
-                                />
+                                <input type="text"
+                                       wire:model="searchTerm"
+                                       wire:keyup="$dispatch('searchStaff')"
+                                       placeholder="Search by name, department, or current shift..."
+                                       class="search-input"/>
                             </div>
 
-                            <!-- All Staff List -->
-                            <div class="staff-list">
+                            <!-- Summary Stats -->
+                            <div class="row g-3 mb-4">
+                                <div class="col-md-4">
+                                    <div class="summary-box">
+                                        <div class="d-flex align-items-center">
+                                            <div class="me-3"
+                                                 style="width: 48px; height: 48px; background: transparent; display: flex; align-items: center; justify-content: center;">
+                                                <svg width="32" height="32" fill="none" stroke="#FF6B6B"
+                                                     stroke-width="2" viewBox="0 0 24 24">
+                                                    <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/>
+                                                    <circle cx="9" cy="7" r="4"/>
+                                                    <path d="M23 21v-2a4 4 0 00-3-3.87"/>
+                                                    <path d="M17 7a4 4 0 010 7.87"/>
+                                                </svg>
+                                            </div>
+                                            <div>
+                                                <div class="text-muted small fw-semibold">Total Staff</div>
+                                                <div class="h3 mb-0 fw-bold"
+                                                     style="color: #FF6B6B;">{{ $availableStaff->count() }}</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="summary-box">
+                                        <div class="d-flex align-items-center">
+                                            <div class="me-3"
+                                                 style="width: 48px; height: 48px; background: transparent; display: flex; align-items: center; justify-content: center;">
+                                                <svg width="32" height="32" fill="none" stroke="#4CAF50"
+                                                     stroke-width="2" viewBox="0 0 24 24">
+                                                    <path d="M22 11.08V12a10 10 0 11-5.93-9.14"/>
+                                                    <polyline points="22 4 12 14.01 9 11.01"/>
+                                                </svg>
+                                            </div>
+                                            <div>
+                                                <div class="text-muted small fw-semibold">Assigned</div>
+                                                <div class="h3 mb-0 fw-bold"
+                                                     style="color: #4CAF50;">{{ count($assignedStaffIds) }}</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="summary-box">
+                                        <div class="d-flex align-items-center">
+                                            <div class="me-3"
+                                                 style="width: 48px; height: 48px; background: transparent; display: flex; align-items: center; justify-content: center;">
+                                                <svg width="32" height="32" fill="none" stroke="#2196F3"
+                                                     stroke-width="2" viewBox="0 0 24 24">
+                                                    <circle cx="12" cy="12" r="10"/>
+                                                    <polyline points="12 6 12 12 16 14"/>
+                                                </svg>
+                                            </div>
+                                            <div>
+                                                <div class="text-muted small fw-semibold">Unassigned</div>
+                                                <div class="h3 mb-0 fw-bold"
+                                                     style="color: #2196F3;">{{ $availableStaff->count() - count($assignedStaffIds) }}</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Single Unified Staff List -->
+                            <div class="staff-list" style="max-height: 600px;">
                                 @forelse($availableStaff as $staff)
-                                    <div wire:click="assignStaff({{ $staff->id }})"
-                                         class="staff-item {{ in_array($staff->id, $assignedStaffIds) ? 'disabled' : 'clickable' }}">
+                                    @php
+                                        $isAssignedToThisShift = in_array($staff->id, $assignedStaffIds);
+
+                                        // Count ALL active shifts for this employee
+                                        $totalShiftCount = DB::table('employee_shift_assignments')
+                                            ->where('employee_id', $staff->id)
+                                            ->where('is_active', true)
+                                            ->count();
+
+                                        // Count shifts EXCLUDING the current one (for status dot logic)
+                                        $otherShiftsCount = DB::table('employee_shift_assignments')
+                                            ->where('employee_id', $staff->id)
+                                            ->where('is_active', true)
+                                            ->where('shift_id', '!=', $this->selectedShift['id'])
+                                            ->count();
+
+                                        $hasOtherShifts = $otherShiftsCount > 0;
+                                    @endphp
+
+                                    <div class="staff-item {{ $isAssignedToThisShift ? 'assigned-item' : '' }}">
                                         <div class="staff-item-content">
-                                            <div class="staff-avatar">
+                                            <!-- Status Indicator Dot -->
+                                            <div class="status-indicator-wrapper me-2">
+                                                @if($isAssignedToThisShift)
+                                                    <div class="status-dot status-assigned"
+                                                         data-bs-toggle="tooltip"
+                                                         title="Assigned to this shift"></div>
+                                                @elseif($hasOtherShifts)
+                                                    <div class="status-dot status-other-shift"
+                                                         data-bs-toggle="tooltip"
+                                                         title="Assigned to {{ $otherShiftsCount }} other shift(s)"></div>
+                                                @else
+                                                    <div class="status-dot status-unassigned"
+                                                         data-bs-toggle="tooltip"
+                                                         title="Not assigned to any shift"></div>
+                                                @endif
+                                            </div>
+
+                                            <!-- Avatar -->
+                                            <div
+                                                class="{{ $isAssignedToThisShift ? 'staff-avatar-assigned text-success assigned' : 'staff-avatar-unassigned text-primary' }}">
                                                 {{ $this->getInitials($staff->name) }}
                                             </div>
+
+                                            <!-- Staff Info -->
                                             <div class="staff-info">
-                                                <div class="staff-name">{{ $staff->name }}</div>
+                                                <div class="d-flex align-items-center mb-1">
+                                                    <div class="staff-name me-2">{{ $staff->name }}</div>
+                                                </div>
+
+                                                <!-- Staff Details -->
                                                 <div class="staff-details">
-                                                    {{ $staff->shift?->name ?? 'No Shift' }}
-                                                    • {{ $staff->department->name }}
+    <span class="me-3">
+        <svg width="14" height="14" class="me-1" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/>
+        </svg>
+        {{ $staff->department->name }}
+    </span>
+
+                                                    @if($isAssignedToThisShift)
+                                                        <span class="badge text-success">
+            <svg width="12" height="12" class="me-1" fill="currentColor" viewBox="0 0 24 24">
+                <polyline points="20 6 9 17 4 12" fill="none" stroke="currentColor" stroke-width="2"/>
+            </svg>
+            Assigned
+        </span>
+                                                    @else
+                                                        <span class="badge text-primary">Not Assigned</span>
+                                                    @endif
                                                 </div>
                                             </div>
-                                            @if(in_array($staff->id, $assignedStaffIds))
-                                                <div class="assigned-badge">Assigned</div>
-                                            @endif
+
+                                            <!-- Action Buttons -->
+                                            <div class="d-flex align-items-center gap-2">
+                                                <!-- Multi-Shift Manager Button -->
+                                                @if($orgSettings && $orgSettings->allow_auto_shift_detection)
+                                                    <button wire:click.stop="openMultiShiftModal({{ $staff->id }})"
+                                                            class="btn btn-sm btn-outline-primary"
+                                                            data-bs-toggle="tooltip"
+                                                            title="Manage all shifts for this employee">
+                                                        <svg width="16" height="16" fill="currentColor"
+                                                             viewBox="0 0 24 24">
+                                                            <circle cx="12" cy="12" r="10" fill="none"
+                                                                    stroke="currentColor" stroke-width="2"/>
+                                                            <path d="M12 6v6l4 2" stroke="currentColor"
+                                                                  stroke-width="2"/>
+                                                        </svg>
+                                                        @if($totalShiftCount > 0)
+                                                            <span
+                                                                class="badge bg-primary ms-1">{{ $totalShiftCount }}</span>
+                                                        @else
+                                                            <span class="ms-1">Manage</span>
+                                                        @endif
+                                                    </button>
+                                                @endif
+
+                                                <!-- Assign/Remove Button -->
+                                                @if($isAssignedToThisShift)
+                                                    <button
+                                                        wire:click="removeStaff({{ $staff->id }})"
+                                                        class="delete-btn mw-3 mb-1 btn btn-outline-danger p-1 d-flex align-items-center justify-content-center"
+                                                        title="Remove staff">
+                                                        <svg width="16" height="16" fill="none" stroke="currentColor"
+                                                             stroke-width="2"
+                                                             viewBox="0 0 24 24">
+                                                            <polyline points="3 6 5 6 21 6"/>
+                                                            <path d="M19 6l-1 14H6L5 6"/>
+                                                            <path d="M10 11v6"/>
+                                                            <path d="M14 11v6"/>
+                                                            <path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"/>
+                                                        </svg>
+                                                    </button>
+                                                @else
+                                                    <button
+                                                        wire:click="assignStaff({{ $staff->id }})"
+                                                        class="btn border-primary btn-sm"
+                                                        title="Assign staff">
+                                                        <svg width="16" height="16"
+                                                             fill="none"
+                                                             stroke="orange"
+                                                             stroke-width="2"
+                                                             viewBox="0 0 20 20"
+                                                             stroke-linecap="round"
+                                                             stroke-linejoin="round">
+                                                            <line x1="4" y1="10" x2="16" y2="10"/>
+                                                            <line x1="10" y1="4" x2="10" y2="16"/>
+                                                        </svg>
+                                                    </button>
+                                                @endif
+
+                                            </div>
                                         </div>
                                     </div>
                                 @empty
                                     <div class="empty-state">
                                         <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round"
-                                                  stroke-width="2"
-                                                  d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"></path>
-                                        </svg>
-                                        <p class="empty-state-text">No staff found</p>
-                                        <p class="empty-state-subtext">Try adjusting your search</p>
-                                    </div>
-                                @endforelse
-                            </div>
-
-                            <!-- Assigned Staff Section -->
-                            <div class="assigned-section">
-                                <h3 class="section-title">
-                                    Assigned Staff ({{ count($assignedStaffIds) }})
-                                </h3>
-
-                                @if(count($assignedStaffIds) === 0)
-                                    <div class="empty-state">
-                                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                                   d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"></path>
                                         </svg>
-                                        <p class="empty-state-text">No staff assigned yet</p>
-                                        <p class="empty-state-subtext">Click on staff from above to assign them</p>
+                                        <p class="empty-state-text">No staff found</p>
+                                        <p class="empty-state-subtext">Try adjusting your search or add new staff
+                                            members</p>
                                     </div>
-                                @else
-                                    <div class="assigned-list">
-                                        @foreach($assignedStaff as $staff)
-                                            <div class="staff-item assigned-item">
-                                                <div class="staff-item-content">
-                                                    <div class="staff-avatar assigned">
-                                                        {{ $this->getInitials($staff->name) }}
-                                                    </div>
-                                                    <div class="staff-info">
-                                                        <div class="staff-name">{{ $staff->name }}</div>
-                                                        <div class="staff-details">
-                                                            {{ $staff->shift?->name ?? 'No Shift' }}
-                                                            • {{ $staff->department->name }}
-                                                        </div>
-                                                    </div>
-                                                    <button
-                                                        wire:click="removeStaff({{ $staff->id }})"
-                                                        class="remove-button"
-                                                    >
-                                                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                            <path stroke-linecap="round" stroke-linejoin="round"
-                                                                  stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                                                        </svg>
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        @endforeach
-                                    </div>
-
-                                    <div class="summary-box">
-                                        <div class="summary-content">
-                                            <div>
-                                                <div class="summary-label">Total Staff</div>
-                                                <div class="summary-value">{{ count($assignedStaffIds) }}</div>
-                                            </div>
-                                            <button
-                                                wire:click="saveAssignment"
-                                                wire:loading.attr="disabled"
-                                                class="save-button"
-                                            >
-                                                <span wire:loading.remove
-                                                      wire:target="saveAssignment">Save Assignment</span>
-                                                <span wire:loading wire:target="saveAssignment">Saving...</span>
-                                            </button>
-                                        </div>
-                                    </div>
-                                @endif
+                                @endforelse
                             </div>
                         </div>
                     </div>
@@ -1973,6 +2733,221 @@ new class extends Component {
             </div>
         </div>
     @endif
+
+    <!-- Multi-Shift Assignment Modal -->
+    <!-- Multi-Shift Assignment Modal -->
+    @if($showMultiShiftModal && $selectedEmployeeForMultiShift)
+        <div class="modal-backdrop-custom" wire:click.self="$set('showMultiShiftModal', false)">
+            <div class="modal-content-custom" style="max-width: 1200px;">
+                <div class="d-flex justify-content-between align-items-center mb-4">
+                    <div>
+                        <h5 class="mb-1">
+                            <svg width="20" height="20" class="text-primary me-2" fill="currentColor"
+                                 viewBox="0 0 24 24">
+                                <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/>
+                                <circle cx="9" cy="7" r="4"/>
+                                <path d="M23 21v-2a4 4 0 00-3-3.87"/>
+                                <path d="M17 7a4 4 0 010 7.87"/>
+                            </svg>
+                            Multi-Shift Assignment
+                        </h5>
+                        <p class="text-muted small mb-0">
+                            Employee: <strong>{{ $selectedEmployeeForMultiShift->name }}</strong>
+                            • Department:
+                            <strong>{{ $selectedEmployeeForMultiShift->department->name ?? 'N/A' }}</strong>
+                        </p>
+                    </div>
+                    <button wire:click="$set('showMultiShiftModal', false)" class="btn btn-close"></button>
+                </div>
+
+                <div class="row g-4">
+                    <!-- Left Column: Add New Shift -->
+                    <div class="col-md-5">
+                        <div class="config-section mb-3">
+                            <div class="section-header">
+                                <h6 class="mb-0">
+                                    <svg width="16" height="16" class="text-primary me-2" fill="currentColor"
+                                         viewBox="0 0 24 24">
+                                        <line x1="12" y1="5" x2="12" y2="19" stroke="currentColor" stroke-width="2"/>
+                                        <line x1="5" y1="12" x2="19" y2="12" stroke="currentColor" stroke-width="2"/>
+                                    </svg>
+                                    Add New Shift Assignment
+                                </h6>
+                            </div>
+                            <div class="section-body">
+                                <div style="margin-top:-30px;" class="mb-3">
+                                    <label class="form-label fw-bold">Select Shift</label>
+                                    <select wire:model="newShiftAssignment.shift_id" class="form-select form-select-md">
+                                        <option value="">-- Choose a Shift --</option>
+                                        @foreach($shifts as $shift)
+                                            <option value="{{ $shift['id'] }}">
+                                                {{ $shift['name'] }} ({{ $shift['startTime'] }}
+                                                - {{ $shift['endTime'] }})
+                                            </option>
+                                        @endforeach
+                                    </select>
+                                </div>
+
+                                <div class="mb-3">
+                                    <label class="form-label fw-bold">Priority Level</label>
+                                    <input type="number"
+                                           wire:model="newShiftAssignment.priority"
+                                           class="form-control form-control-md"
+                                           min="0"
+                                           max="999"
+                                           placeholder="Enter priority (0-999)">
+                                    <small class="text-muted">Higher number = Higher priority. Used for shift
+                                        detection.</small>
+                                </div>
+
+                                <div class="mb-3">
+                                    <label class="form-label fw-bold">Effective From (Optional)</label>
+                                    <input type="date"
+                                           wire:model="newShiftAssignment.effective_from"
+                                           class="form-control form-control-md">
+                                </div>
+
+                                <div class="mb-3">
+                                    <label class="form-label fw-bold">Effective Until (Optional)</label>
+                                    <input type="date"
+                                           wire:model="newShiftAssignment.effective_until"
+                                           class="form-control form-control-md">
+                                </div>
+
+                                <button wire:click="addShiftToEmployee" class="btn btn-primary btn-md w-100">
+                                    <svg width="18" height="18" class="me-2" fill="currentColor" viewBox="0 0 24 24">
+                                        <line x1="12" y1="5" x2="12" y2="19" stroke="currentColor" stroke-width="2"/>
+                                        <line x1="5" y1="12" x2="19" y2="12" stroke="currentColor" stroke-width="2"/>
+                                    </svg>
+                                    Add Shift to Employee
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Right Column: Current Shifts -->
+                    <div class="col-md-7">
+                        <div class="config-section">
+                            <div class="section-header">
+                                <h6 class="mb-0">
+                                    <svg width="16" height="16" class="text-success me-2" fill="currentColor"
+                                         viewBox="0 0 24 24">
+                                        <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor"
+                                                stroke-width="2"/>
+                                        <path d="M12 6v6l4 2" stroke="currentColor" stroke-width="2"/>
+                                    </svg>
+                                    Current Shift Assignments ({{ count($employeeMultiShifts) }})
+                                </h6>
+                            </div>
+                            <div style="margin-top:-30px;" class="section-body">
+                                @if(count($employeeMultiShifts) === 0)
+                                    <div class="text-center py-5 text-muted">
+                                        <svg width="64" height="64" class="mb-3 opacity-50" fill="currentColor"
+                                             viewBox="0 0 24 24">
+                                            <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor"
+                                                    stroke-width="2"/>
+                                            <line x1="12" y1="8" x2="12" y2="12" stroke="currentColor"
+                                                  stroke-width="2"/>
+                                            <line x1="12" y1="16" x2="12.01" y2="16" stroke="currentColor"
+                                                  stroke-width="2"/>
+                                        </svg>
+                                        <p class="mb-1 fw-bold">No shifts assigned yet</p>
+                                        <p class="small">Add a shift using the form on the left</p>
+                                    </div>
+                                @else
+                                    <div style="max-height: 500px; overflow-y: auto;">
+                                        @foreach($employeeMultiShifts as $index => $shift)
+                                            <div class="shift-assignment-item border rounded p-3 mb-3">
+                                                <div class="d-flex justify-content-between align-items-start">
+                                                    <div class="flex-grow-1">
+                                                        <div class="d-flex align-items-center mb-2">
+                                                            <div class="badge bg-secondary me-2">#{{ $index + 1 }}</div>
+                                                            <h6 class="mb-0 me-3">{{ $shift['name'] }}</h6>
+                                                            <span
+                                                                class="badge bg-primary">Priority: {{ $shift['priority'] }}</span>
+                                                            @if($shift['is_active'])
+                                                                <span class="badge bg-success ms-2">Active</span>
+                                                            @else
+                                                                <span class="badge bg-secondary ms-2">Inactive</span>
+                                                            @endif
+                                                        </div>
+
+                                                        <div class="row g-2 small text-muted">
+                                                            <div class="col-md-6">
+                                                                <div class="mb-2">
+                                                                    <strong>⏰ Time:</strong> {{ $shift['start_time'] }}
+                                                                    - {{ $shift['end_time'] }}
+                                                                </div>
+                                                            </div>
+                                                            @if($shift['effective_from'] || $shift['effective_until'])
+                                                                <div class="col-md-6">
+                                                                    <div class="mb-2">
+                                                                        <strong>📅 Effective Period:</strong><br>
+                                                                        {{ $shift['effective_from'] ? \Carbon\Carbon::parse($shift['effective_from'])->format('M d, Y') : 'Start' }}
+                                                                        →
+                                                                        {{ $shift['effective_until'] ? \Carbon\Carbon::parse($shift['effective_until'])->format('M d, Y') : 'End' }}
+                                                                    </div>
+                                                                </div>
+                                                            @endif
+                                                        </div>
+                                                    </div>
+
+                                                    <button
+                                                        wire:click="removeShiftFromEmployee({{ $shift['id'] }})"
+                                                        wire:confirm="Are you sure you want to remove this shift assignment?"
+                                                        class="btn btn-sm btn-outline-danger ms-3"
+                                                        title="Remove shift">
+                                                        <svg width="16" height="16" fill="none" stroke="currentColor"
+                                                             stroke-width="2"
+                                                             viewBox="0 0 24 24">
+                                                            <polyline points="3 6 5 6 21 6"/>
+                                                            <path d="M19 6l-1 14H6L5 6"/>
+                                                            <path d="M10 11v6"/>
+                                                            <path d="M14 11v6"/>
+                                                            <path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"/>
+                                                        </svg>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        @endforeach
+                                    </div>
+
+                                    <!-- Summary Info -->
+                                    <div class="alert alert-info mt-3 mb-0">
+                                        <div class="d-flex align-items-center">
+                                            <svg width="20" height="20" class="me-2" fill="currentColor"
+                                                 viewBox="0 0 24 24">
+                                                <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor"
+                                                        stroke-width="2"/>
+                                                <path d="M12 16v-4m0-4h.01" stroke="currentColor" stroke-width="2"/>
+                                            </svg>
+                                            <div>
+                                                <strong>Total Assigned
+                                                    Shifts: {{ count($employeeMultiShifts) }}</strong>
+                                                <p class="mb-0 small">The system will use priority to determine the
+                                                    active shift when multiple shifts overlap.</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                @endif
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="d-flex gap-2 pt-4 border-top mt-4">
+                    <button wire:click="$set('showMultiShiftModal', false)" class="btn btn-secondary btn-lg flex-fill">
+                        <svg width="16" height="16" class="me-2" fill="currentColor" viewBox="0 0 24 24">
+                            <line x1="18" y1="6" x2="6" y2="18" stroke="currentColor" stroke-width="2"/>
+                            <line x1="6" y1="6" x2="18" y2="18" stroke="currentColor" stroke-width="2"/>
+                        </svg>
+                        Close
+                    </button>
+                </div>
+            </div>
+        </div>
+    @endif
+
 </div>
 
 @push('scripts')

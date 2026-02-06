@@ -329,6 +329,7 @@ new class extends Component {
 
                         <livewire:admin.organizations.edit :id="$org->id"/>
 
+
                     </div>
 
                     <!-- Locations and Assignments Tab -->

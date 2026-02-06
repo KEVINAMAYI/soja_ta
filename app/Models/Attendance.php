@@ -30,6 +30,12 @@ class Attendance extends Model
         'grace_period_end_time',
         'expected_check_out_time',
         'early_checkout_threshold_time',
+        'auto_shift_detected',
+        'shift_detection_method',
+        'shift_detection_log',
+        'shift_id',
+        'is_late_checkout',
+        'late_checkout_hours',
     ];
 
     protected $casts = [
@@ -60,6 +66,11 @@ class Attendance extends Model
     public function employee()
     {
         return $this->belongsTo(Employee::class);
+    }
+
+    public function shift()
+    {
+        return $this->belongsTo(Shift::class);
     }
 
     public function overtimes()

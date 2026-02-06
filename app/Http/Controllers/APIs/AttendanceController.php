@@ -17,6 +17,7 @@ use App\Http\Resources\AttendanceResource;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use App\Models\OrganizationShiftSetting;
 
 class AttendanceController extends Controller
 {
@@ -68,13 +69,13 @@ class AttendanceController extends Controller
                $latitude,
                $longitude,
                $work_location_id,
-               $deviceId = null
+               $deviceId = null,
+               $manualShiftId = null
     )
     {
         DB::beginTransaction();
 
         try {
-
             $loggedInEmployee = auth()->user()->employee;
 
             if (!$loggedInEmployee) {
@@ -91,14 +92,15 @@ class AttendanceController extends Controller
                 ], 403);
             }
 
-            /**
-             * ✅ Case 1: Check-in via QR Code (JWT or Legacy)
-             */
+            // ==========================================
+            // STEP 1: IDENTIFY EMPLOYEE (QR/ID/FACE)
+            // ==========================================
+            $employee = null;
+
             if ($column === 'qr_code') {
                 $incomingQr = trim($value);
-                $employee = null;
 
-                // ✅ Step 1: Try to find employee by QR directly (DB first)
+                // Try to find employee by QR directly (DB first)
                 $employee = Employee::where('qr_code', $incomingQr)->first();
 
                 if ($employee && $employee->active == 0) {
@@ -109,17 +111,16 @@ class AttendanceController extends Controller
                 }
 
                 if (!$employee) {
-
-                    // ✅ Step 2: Only if not found, decide if legacy or new JWT QR
+                    // Only if not found, decide if legacy or new JWT QR
                     if (substr_count($incomingQr, '.') !== 2) {
-                        // 🧩 Legacy 5-char (no dots, old style)
+                        // Legacy 5-char (no dots, old style)
                         return response()->json([
                             'code' => 1003,
                             'message' => 'Legacy QR code not recognized or not linked to any employee.'
                         ], 404);
                     }
 
-                    // 🧩 Signed JWT QR (new style)
+                    // Signed JWT QR (new style)
                     $publicKeyPath = storage_path('app/keys/public.pem');
                     if (!file_exists($publicKeyPath)) {
                         return response()->json([
@@ -147,9 +148,7 @@ class AttendanceController extends Controller
                         ], 400);
                     }
 
-                    /**
-                     * ✅ Step 3: Handle unassigned QR cases
-                     */
+                    // Handle unassigned QR cases
                     if (!empty($deviceId)) {
                         // Supervisor/admin scanning from device
                         return response()->json([
@@ -174,16 +173,14 @@ class AttendanceController extends Controller
                         ], 409);
                     }
 
-                    // ✅ Assign QR to logged-in employee (self registration)
+                    // Assign QR to logged-in employee (self registration)
                     $loggedInEmployee->qr_code = $incomingQr;
                     $loggedInEmployee->save();
 
                     $employee = $loggedInEmployee;
                 }
-            } /**
-             * ✅ Case 2: Normal check-in (ID number, face_id, etc.)
-             */
-            else {
+            } else {
+                // Normal check-in (ID number, face_id, etc.)
                 $employee = Employee::where($column, $value)->firstOrFail();
 
                 if ($employee && $employee->active == 0) {
@@ -194,9 +191,9 @@ class AttendanceController extends Controller
                 }
             }
 
-            /**
-             * ✅ Authorization and Organization Validation
-             */
+            // ==========================================
+            // STEP 2: AUTHORIZATION CHECK
+            // ==========================================
             $isSelf = $employee->id === $loggedInEmployee->id;
 
             if (!$isSelf) {
@@ -215,32 +212,149 @@ class AttendanceController extends Controller
                 }
             }
 
-            /**
-             * ========================================
-             * ✅ SHIFT PATTERN VALIDATION
-             * ========================================
-             */
-            $shift = $employee->shift;
+            $checkInTimeCarbon = Carbon::parse($checkInTime);
 
-            if (!$shift) {
+            // ==========================================
+            // STEP 3: SHIFT DETECTION/SELECTION
+            // ==========================================
+            $orgSettings = OrganizationShiftSetting::getForOrganization($employee->organization_id);
+            $shiftDetectionResult = null;
+            $selectedShift = null;
+            $detectionMethod = 'unknown';
+
+            // Case 1: Manual shift selection provided
+            if ($manualShiftId) {
+                if (!$orgSettings->allow_manual_shift_selection) {
+                    return response()->json([
+                        'code' => 1003,
+                        'message' => 'Manual shift selection is not allowed for your organization.',
+                    ], 403);
+                }
+
+                // Verify the shift is assigned to the employee
+                $manualShift = $employee->activeShifts()->where('shifts.id', $manualShiftId)->first();
+
+                if (!$manualShift) {
+                    return response()->json([
+                        'code' => 1003,
+                        'message' => 'The selected shift is not assigned to you or is not active.',
+                        'available_shifts' => $employee->activeShifts()->get(['id', 'name', 'start_time', 'end_time']),
+                    ], 403);
+                }
+
+                $selectedShift = $manualShift;
+                $detectionMethod = 'manual';
+
+                $shiftDetectionResult = [
+                    'shift' => $selectedShift,
+                    'auto_detected' => false,
+                    'method' => 'manual',
+                    'log' => [
+                        'detection_method' => 'manual',
+                        'reason' => 'Shift manually selected by user',
+                        'shift_id' => $selectedShift->id,
+                        'shift_name' => $selectedShift->name,
+                    ],
+                ];
+            }
+            // Case 2: Auto-detection or fallback
+            else {
+                $shiftDetectionResult = $employee->detectShiftForTime($checkInTimeCarbon);
+
+                if (!$shiftDetectionResult['shift']) {
+                    // Provide helpful error based on detection method
+                    $errorMessage = match($shiftDetectionResult['method']) {
+                        'fallback' => 'No shift assigned. Please contact your manager.',
+                        'failed' => 'Could not automatically detect your shift. Multiple shifts available but none scored high enough.',
+                        'none' => 'No shift found for this check-in time.',
+                        default => 'Unable to determine shift. Please contact your manager.',
+                    };
+
+                    $responseData = [
+                        'code' => 1003,
+                        'message' => $errorMessage,
+                        'detection_log' => $shiftDetectionResult['log'],
+                    ];
+
+                    // If manual selection is allowed, provide available shifts
+                    if ($orgSettings->allow_manual_shift_selection) {
+                        $responseData['available_shifts'] = $employee->activeShifts()
+                            ->get(['id', 'name', 'start_time', 'end_time'])
+                            ->map(function($shift) {
+                                return [
+                                    'id' => $shift->id,
+                                    'name' => $shift->name,
+                                    'start_time' => $shift->start_time,
+                                    'end_time' => $shift->end_time,
+                                ];
+                            });
+                        $responseData['message'] .= ' You can manually select a shift.';
+                    }
+
+                    return response()->json($responseData, 403);
+                }
+
+                $selectedShift = $shiftDetectionResult['shift'];
+                $detectionMethod = $shiftDetectionResult['method'];
+            }
+
+            // ==========================================
+            // STEP 4: SHIFT CHANGE COOLDOWN CHECK
+            // ==========================================
+            if ($employee->current_shift_id &&
+                $employee->current_shift_id != $selectedShift->id) {
+
+                if (!$employee->canChangeShift()) {
+                    $cooldownEnds = $employee->getShiftChangeCooldownRemaining();
+                    $minutesRemaining = now()->diffInMinutes($cooldownEnds);
+
+                    return response()->json([
+                        'code' => 1003,
+                        'message' => 'Shift change cooldown active. You recently changed shifts.',
+                        'current_shift' => [
+                            'id' => $employee->currentShift->id,
+                            'name' => $employee->currentShift->name,
+                        ],
+                        'attempted_shift' => [
+                            'id' => $selectedShift->id,
+                            'name' => $selectedShift->name,
+                        ],
+                        'cooldown_ends_at' => $cooldownEnds->toDateTimeString(),
+                        'minutes_remaining' => $minutesRemaining,
+                    ], 403);
+                }
+
+                // Update current shift (cooldown passed)
+                $employee->switchToShift($selectedShift);
+
+            } else if (!$employee->current_shift_id) {
+                // First time assignment
+                $employee->current_shift_id = $selectedShift->id;
+                $employee->save();
+            }
+
+            // ==========================================
+            // STEP 5: VALIDATE SHIFT PATTERN (DAY CHECK)
+            // ==========================================
+            $dayOfWeek = $checkInTimeCarbon->format('D');
+            $isScheduledToday = $this->isEmployeeScheduledToday($selectedShift, $checkInTimeCarbon);
+
+            if (!$isScheduledToday) {
+                $patternName = $this->getPatternName($selectedShift->pattern_type);
+
                 return response()->json([
                     'code' => 1003,
-                    'message' => 'No shift assigned. Please contact your manager.'
+                    'message' => "You are not scheduled to work today on the '{$selectedShift->name}' shift.",
+                    'shift_name' => $selectedShift->name,
+                    'shift_pattern' => $patternName,
+                    'scheduled_days' => $selectedShift->pattern_days ?? [],
+                    'today' => $dayOfWeek,
                 ], 403);
             }
 
-            // Check if employee is scheduled to work today based on shift pattern
-            if (!$this->isEmployeeScheduledToday($shift, now())) {
-                $patternName = $this->getPatternName($shift->pattern_type);
-                return response()->json([
-                    'code' => 1003,
-                    'message' => "You are not scheduled to work today. Your shift pattern is: {$patternName}.",
-                    'shift_pattern' => $shift->pattern_type,
-                    'scheduled_days' => $shift->pattern_days ?? [],
-                ], 403);
-            }
-
-            // Check if employee is in off_shift or sick_off status
+            // ==========================================
+            // STEP 6: CHECK OFF-SHIFT STATUS
+            // ==========================================
             if (in_array($employee->shift_status, ['off_shift', 'sick_off', 'on_leave'])) {
                 $statusLabel = match ($employee->shift_status) {
                     'off_shift' => 'temporarily off shift',
@@ -257,20 +371,14 @@ class AttendanceController extends Controller
                 ], 403);
             }
 
-            /**
-             * ========================================
-             * ✅ CHECK FOR UNCHECKED-OUT ATTENDANCE
-             * ========================================
-             */
-            $checkInTimeCarbon = $checkInTime ? Carbon::parse($checkInTime) : now();
-
-            // Calculate shift window for finding recent attendance
-            $shiftDurationHours = (float)$shift->duration_hours;
-            $maxOvertimeHours = (float)($shift->max_overtime_hours ?? 0);
+            // ==========================================
+            // STEP 7: CHECK FOR UNCHECKED-OUT ATTENDANCE
+            // ==========================================
+            $shiftDurationHours = (float)$selectedShift->duration_hours;
+            $maxOvertimeHours = (float)($selectedShift->max_overtime_hours ?? 0);
             $bufferHours = 4;
             $maxShiftWindow = $shiftDurationHours + $maxOvertimeHours + $bufferHours;
 
-            // Check for any unchecked-out attendance within the shift window
             $recentUncheckedOut = Attendance::where('employee_id', $employee->id)
                 ->whereNotNull('check_in_time')
                 ->whereNull('check_out_time')
@@ -284,42 +392,35 @@ class AttendanceController extends Controller
 
                 return response()->json([
                     'code' => 1003,
-                    'message' => "You are already checked in from {$lastCheckIn->format('Y-m-d H:i')} ({$hoursSinceCheckIn} hours ago). Please check out first before checking in again.",
+                    'message' => "You are already checked in from {$lastCheckIn->format('Y-m-d H:i')} ({$hoursSinceCheckIn} hours ago). Please check out first.",
                     'last_check_in_time' => $lastCheckIn->toDateTimeString(),
                     'hours_since_check_in' => round($hoursSinceCheckIn, 2),
+                    'last_shift' => $recentUncheckedOut->shift?->name,
                 ], 409);
             }
 
-            /**
-             * ========================================
-             * ✅ GET EXPECTED TIMES FROM SHIFT
-             * ========================================
-             */
-            $expectedCheckInTime = Carbon::parse($shift->start_time);
-            $gracePeriodEndTime = $shift->getGracePeriodEndTime();
-            $expectedCheckOutTime = Carbon::parse($shift->end_time);
-            $earlyCheckoutThresholdTime = $shift->getEarlyCheckoutThreshold();
+            // ==========================================
+            // STEP 8: CALCULATE SHIFT TIMES & LATE STATUS
+            // ==========================================
+            $expectedCheckInTime = Carbon::parse($selectedShift->start_time);
+            $gracePeriodEndTime = $selectedShift->getGracePeriodEndTime();
+            $expectedCheckOutTime = Carbon::parse($selectedShift->end_time);
+            $earlyCheckoutThresholdTime = $selectedShift->getEarlyCheckoutThreshold();
 
-            // Initialize late tracking variables
+            // Late tracking
             $isLateCheckin = false;
             $minutesLate = 0;
             $withinGracePeriod = false;
 
-            // Use Shift model methods for late calculation
-            if ($shift->track_late_checkin) {
-                // Check if within grace period (after start but before grace end)
-                $withinGracePeriod = $shift->isWithinGracePeriod($checkInTimeCarbon);
-
-                // Check if actually late (after grace period)
-                $isLateCheckin = $shift->isLateCheckIn($checkInTimeCarbon);
-
-                // Get minutes late from shift start time
-                $minutesLate = $shift->getMinutesLate($checkInTimeCarbon);
+            if ($selectedShift->track_late_checkin) {
+                $withinGracePeriod = $selectedShift->isWithinGracePeriod($checkInTimeCarbon);
+                $isLateCheckin = $selectedShift->isLateCheckIn($checkInTimeCarbon);
+                $minutesLate = $selectedShift->getMinutesLate($checkInTimeCarbon);
             }
 
-            /**
-             * ✅ FETCH ASSIGNED WORK LOCATION (GEOFENCE CHECK)
-             */
+            // ==========================================
+            // STEP 9: GEOFENCE CHECK
+            // ==========================================
             $assignment = EmployeeAssignment::where('employee_id', $employee->id)
                 ->where('work_location_id', $work_location_id)
                 ->where('is_current', true)
@@ -339,60 +440,86 @@ class AttendanceController extends Controller
             if ($distance > $radius) {
                 return response()->json([
                     'code' => 1003,
-                    'distance' => $distance,
+                    'distance' => round($distance, 2),
                     'radius' => $radius,
                     'message' => 'You are outside the allowed geofence. Move closer to your work location.'
                 ], 403);
             }
 
-            /**
-             * ✅ CREATE NEW ATTENDANCE RECORD
-             */
+            // ==========================================
+            // STEP 10: CREATE ATTENDANCE RECORD
+            // ==========================================
             $today = today()->toDateString();
 
             $attendance = new Attendance([
                 'employee_id' => $employee->id,
+                'shift_id' => $selectedShift->id,
                 'date' => $today,
+                'status' => 'clocked_in',
+                'check_in_time' => $checkInTimeCarbon,
+                'latitude' => $latitude,
+                'longitude' => $longitude,
+                'device_id' => $deviceId,
+                'work_location_id' => $work_location_id,
+
+                // Shift detection metadata
+                'auto_shift_detected' => in_array($detectionMethod, ['auto_detection', 'single_shift']),
+                'shift_detection_method' => $detectionMethod,
+                'shift_detection_log' => json_encode($shiftDetectionResult['log'] ?? []),
+
+                // Late tracking
+                'is_late_checkin' => $isLateCheckin,
+                'minutes_late' => $minutesLate,
+                'within_grace_period' => $withinGracePeriod,
+
+                // Early/late checkout tracking (set initial values)
+                'is_early_checkout' => false,
+                'minutes_early' => 0,
+                'is_late_checkout' => false,
+                'late_checkout_hours' => 0,
+
+                // Expected times from shift
+                'expected_check_in_time' => $expectedCheckInTime->format('H:i:s'),
+                'grace_period_end_time' => $gracePeriodEndTime->format('H:i:s'),
+                'expected_check_out_time' => $expectedCheckOutTime->format('H:i:s'),
+                'early_checkout_threshold_time' => $earlyCheckoutThresholdTime->format('H:i:s'),
             ]);
-
-            $attendance->status = 'clocked_in';
-            $attendance->check_in_time = $checkInTimeCarbon;
-            $attendance->latitude = $latitude;
-            $attendance->longitude = $longitude;
-            $attendance->device_id = $deviceId;
-            $attendance->work_location_id = $work_location_id;
-
-            // Late check-in tracking
-            $attendance->is_late_checkin = $isLateCheckin;
-            $attendance->minutes_late = $minutesLate;
-            $attendance->within_grace_period = $withinGracePeriod;
-
-            // Early checkout tracking (set initial values)
-            $attendance->is_early_checkout = false;
-            $attendance->minutes_early = 0;
-
-            // Late checkout tracking (set initial values)
-            $attendance->is_late_checkout = false;
-            $attendance->late_checkout_hours = 0;
-
-            // Store expected shift times
-            $attendance->expected_check_in_time = $expectedCheckInTime->format('H:i:s');
-            $attendance->grace_period_end_time = $gracePeriodEndTime->format('H:i:s');
-            $attendance->expected_check_out_time = $expectedCheckOutTime->format('H:i:s');
-            $attendance->early_checkout_threshold_time = $earlyCheckoutThresholdTime->format('H:i:s');
 
             $attendance->save();
 
             DB::commit();
 
-            return response()->json([
+            // ==========================================
+            // STEP 11: RETURN SUCCESS RESPONSE
+            // ==========================================
+            $responseData = [
                 'code' => 1000,
                 'message' => 'Check-in successful',
-                'data' => new AttendanceResource($attendance)
-            ], 201);
+                'shift_info' => [
+                    'id' => $selectedShift->id,
+                    'name' => $selectedShift->name,
+                    'detection_method' => $detectionMethod,
+                    'auto_detected' => in_array($detectionMethod, ['auto_detection', 'single_shift']),
+                    'score' => $shiftDetectionResult['score'] ?? null,
+                ],
+                'data' => new AttendanceResource($attendance),
+            ];
+
+            // Add warning if late
+            if ($isLateCheckin && !$withinGracePeriod) {
+                $responseData['warning'] = "You checked in {$minutesLate} minutes late.";
+            } else if ($isLateCheckin && $withinGracePeriod) {
+                $responseData['info'] = "You checked in within the grace period.";
+            }
+
+            return response()->json($responseData, 201);
 
         } catch (\Exception $e) {
             DB::rollBack();
+            \Log::error('Check-in error: ' . $e->getMessage(), [
+                'employee_id' => $employee->id ?? null,
+                'trace' => $e->getTraceAsString()
+            ]);
             return $this->errorResponse('Check-in failed', $e);
         }
     }
@@ -775,6 +902,8 @@ class AttendanceController extends Controller
             if (str_contains($message, 'foreign key constraint')) {
                 return 'Cannot delete or update because of related data.';
             }
+
+            var_dump($message);
 
             return 'A database error occurred. Please try again later.';
         }

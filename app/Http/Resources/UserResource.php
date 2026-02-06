@@ -39,7 +39,9 @@ class UserResource extends JsonResource
                 'weekly_worked_hours' => $this->employee->weeklyWorkedHours($this->employee->id),
                 'monthly_worked_hours' => $this->employee->monthlyWorkedHours($this->employee->id),
                 'weekly_overtime_hours' => $this->employee->weeklyOvertimeHours($this->employee->id),
-            ]
+            ],
+            'shifts' => ShiftResource::collection($this->employee->activeShifts),
+            'current_shift' => new ShiftResource($this->employee->currentShift)
         ];
     }
 
