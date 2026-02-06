@@ -154,12 +154,18 @@ new class extends Component {
             ->get();
 
         $allShifts = [];
-        $today = Carbon::today();
+        $now = Carbon::now(); // For accurate time comparison
 
         // Generate shifts for each day in the range
         while ($startDate <= $endDate) {
             $date = $startDate->toDateString();
-            $isFutureDate = $startDate->isFuture();
+            $dateCarbon = $startDate->copy();
+
+            // Check if this date is in the future
+            $isFutureDate = $dateCarbon->isFuture();
+
+            // For today, check if shift has already ended
+            $isToday = $dateCarbon->isToday();
 
             // Get the day of week in short format (Mon, Tue, etc.)
             $dayOfWeek = $startDate->format('D'); // Returns: Mon, Tue, Wed, etc.
@@ -174,9 +180,16 @@ new class extends Component {
                     continue;
                 }
 
-                // Employees assigned to this shift
-                $employees = DB::table('employees')
+                // ========================================
+                // ✅ FIX: Get employees from employee_shift_assignments
+                // ========================================
+                $employeeIds = DB::table('employee_shift_assignments')
                     ->where('shift_id', $shift->id)
+                    ->where('is_active', true)
+                    ->pluck('employee_id');
+
+                $employees = DB::table('employees')
+                    ->whereIn('id', $employeeIds)
                     ->where('active', 1)
                     ->where('organization_id', $organizationId)
                     ->get(['id', 'name']);
@@ -186,7 +199,9 @@ new class extends Component {
                 // Create unique ID by combining shift ID with date
                 $uniqueShiftId = $shift->id . '_' . $date;
 
-                // For future dates, show as "scheduled" not critical
+                // ========================================
+                // ✅ FIX: Handle future dates AND future shifts today
+                // ========================================
                 if ($isFutureDate) {
                     $allShifts[] = [
                         'id' => $uniqueShiftId,
@@ -202,6 +217,30 @@ new class extends Component {
                     continue;
                 }
 
+                // For today, check if shift hasn't started yet
+                if ($isToday) {
+                    $shiftStart = Carbon::parse($date . ' ' . $shift->start_time);
+
+                    if ($now->lessThan($shiftStart)) {
+                        // Shift hasn't started yet today
+                        $allShifts[] = [
+                            'id' => $uniqueShiftId,
+                            'shift_id' => $shift->id,
+                            'date' => $date,
+                            'time' => $shift->start_time . ' - ' . $shift->end_time,
+                            'dept' => $shift->name,
+                            'required' => $totalEmployees,
+                            'assigned' => 0,
+                            'staff' => $employees->map(fn($e) => ['id' => $e->id, 'name' => $e->name])->toArray(),
+                            'status' => 'scheduled',
+                        ];
+                        continue;
+                    }
+                }
+
+                // ========================================
+                // Handle shifts with no employees assigned
+                // ========================================
                 if ($totalEmployees === 0) {
                     $allShifts[] = [
                         'id' => $uniqueShiftId,
@@ -217,9 +256,12 @@ new class extends Component {
                     continue;
                 }
 
-                // Attendance for this shift's employees on this date (only for past/today)
+                // ========================================
+                // ✅ FIX: Get attendance for employees assigned to THIS shift
+                // ========================================
                 $presentEmployeeIds = DB::table('attendances')
                     ->whereDate('date', $date)
+                    ->where('shift_id', $shift->id) // ← Match specific shift
                     ->whereIn('employee_id', $employees->pluck('id'))
                     ->whereIn('status', ['clocked_in', 'clocked_out'])
                     ->pluck('employee_id')
@@ -254,6 +296,7 @@ new class extends Component {
 
         return $allShifts;
     }
+
 
 
     public function removeStaffFromShift($employeeId)
