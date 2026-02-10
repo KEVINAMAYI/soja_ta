@@ -346,15 +346,26 @@ class AttendanceController extends Controller
             }
 
             /**
-             * ✅ CREATE NEW ATTENDANCE RECORD
+             * ✅ FILL EXISTING OR CREATE NEW ATTENDANCE RECORD
              */
             $today = today()->toDateString();
 
-            $attendance = new Attendance([
-                'employee_id' => $employee->id,
-                'date' => $today,
-            ]);
+            // Try to find existing absent/unchecked_in record for today
+            $attendance = Attendance::where('employee_id', $employee->id)
+                ->where('date', $today)
+                ->whereIn('status', ['absent', 'unchecked_in'])
+                ->whereNull('check_in_time')
+                ->first();
 
+            // If no empty record exists, create new one
+            if (!$attendance) {
+                $attendance = new Attendance([
+                    'employee_id' => $employee->id,
+                    'date' => $today,
+                ]);
+            }
+
+            // Fill/update the record with check-in data
             $attendance->status = 'clocked_in';
             $attendance->check_in_time = $checkInTimeCarbon;
             $attendance->latitude = $latitude;
@@ -367,7 +378,7 @@ class AttendanceController extends Controller
             $attendance->minutes_late = $minutesLate;
             $attendance->within_grace_period = $withinGracePeriod;
 
-            // Early checkout tracking (set initial values)
+           // Early checkout tracking (set initial values)
             $attendance->is_early_checkout = false;
             $attendance->minutes_early = 0;
 

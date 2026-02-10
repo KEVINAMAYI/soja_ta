@@ -146,11 +146,10 @@ if ($organization) {
         </tr>
     @endif
     <tr>
-        <th>Employee</th>
-        <th>Email</th>
-        <th>Phone</th>
-        <th>Shift</th>
         <th>Date</th>
+        <th>Employee</th>
+        <th>Department</th>
+        <th>Shift</th>
         <th>Clock In</th>
         <th>Clock Out</th>
         <th>Worked (hours)</th>
@@ -161,14 +160,14 @@ if ($organization) {
     <tbody>
     @foreach($attendances as $attendance)
         <tr>
-            <td>{{ $attendance->employee->name ?? '-' }}</td>
-            <td>{{ $attendance->employee->user->email ?? '-' }}</td>
-            <td>{{ number_format($attendance->employee->phone ?? 0, 0, '', '') }}</td>
-            <td>{{ optional($attendance->employee->shift)->name ?? '-' }}</td>
             <td>
                 {{ \Carbon\Carbon::parse($attendance->date)->format('M d, Y') }}
             </td>
-            <td style="color: green;">
+            <td>{{ $attendance->employee->name ?? '-' }}</td>
+            <td>{{ $attendance->employee->department->name ?? '-' }}</td>
+            <td>{{ optional($attendance->employee->shift)->name ?? '-' }}</td>
+
+            <td>
                 {{ $attendance->check_in_time
                     ? \Carbon\Carbon::parse($attendance->check_in_time)->format('M d, Y g:i A')
                     : '-' }}
@@ -193,9 +192,15 @@ if ($organization) {
                 {{ number_format($attendance->overtime_hours ?? 0, 2) }}
             </td>
             <td>
-                <span style="color: {{ $attendance->status === 'Clocked In' ? '#27ae60' : '#e74c3c' }};">
-                     {{ in_array($attendance->status, ['unchecked_in', 'absent']) ? 'Absent' : \Illuminate\Support\Str::of($attendance->status)->replace('_', ' ')->title() }}
-              </span>
+                @php
+                    $isPresent = in_array($attendance->status, ['clocked_in', 'clocked_out']);
+                    $isAbsent = in_array($attendance->status, ['unchecked_in', 'absent']);
+
+                    $displayStatus = $isPresent ? 'Present' : ($isAbsent ? 'Absent' : \Illuminate\Support\Str::of($attendance->status)->replace('_', ' ')->title());
+                    $color = $isPresent ? '#27ae60' : '#e74c3c';
+                @endphp
+
+                <span style="color: {{ $color }};">{{ $displayStatus }}</span>
             </td>
         </tr>
     @endforeach
