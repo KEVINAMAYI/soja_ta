@@ -63,7 +63,8 @@ new class extends Component {
     {
         $orgId = auth()->user()->employee->organization_id;
 
-        // Get all employees in organization
+        // With SoftDeletes trait, this automatically excludes soft-deleted employees
+        // But let's be explicit for clarity
         $employees = Employee::where('organization_id', $orgId)->get();
 
         $this->totalEmployees = $employees->count();
@@ -342,6 +343,8 @@ new class extends Component {
         }
     }
 
+
+
     #[On('deactivate-employee')]
     public function deactivateEmployee($id)
     {
@@ -381,16 +384,15 @@ new class extends Component {
     public function deleteEmployee($id)
     {
         try {
-            DB::beginTransaction();
 
             $employee = Employee::findOrFail($id);
-            $employee->user()->delete();
+
+            // Soft delete the employee
             $employee->delete();
 
-            DB::commit();
-
-            LivewireAlert::title('Awesome!')
-                ->text('Employee deleted successfully.')
+            // Show success message
+            LivewireAlert::title('Success!')
+                ->text('Employee deactivated successfully.')
                 ->success()
                 ->toast()
                 ->position('top-end')
@@ -400,12 +402,14 @@ new class extends Component {
             $this->dispatch('refreshDatatable');
             $this->loadSummaryStats(); // Refresh stats
 
+
         } catch (\Exception $e) {
+
             DB::rollBack();
-            logger()->error('Delete employee failed: ' . $e->getMessage());
+            logger()->error('Deleting employee failed: ' . $e->getMessage());
 
             LivewireAlert::title('Error!')
-                ->text('Something went wrong while deleting the employee.')
+                ->text('Something went wrong while deactivating the employee.')
                 ->error()
                 ->toast()
                 ->position('top-end')

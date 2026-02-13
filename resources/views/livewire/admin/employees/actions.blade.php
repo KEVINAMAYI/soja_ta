@@ -50,6 +50,17 @@
                         </a>
                     @endif
                 </li>
+                <li>
+                    <hr class="dropdown-divider">
+                </li>
+                <li>
+                    <a class="dropdown-item d-flex align-items-center gap-2 text-danger" href="javascript:void(0)"
+                       wire:click="$dispatch('delete-employee', { id: {{ $employee->id }}, name: '{{ $employee->name }}' })"
+                       wire:confirm="Are you sure you want to delete {{ $employee->name }}?">
+                        <iconify-icon icon="mdi:delete-outline" class="text-danger w-4 h-4"></iconify-icon>
+                        <span>Delete</span>
+                    </a>
+                </li>
             @else
                 <li>
                     <a class="dropdown-item d-flex align-items-center gap-2"

@@ -64,7 +64,7 @@ class AttendanceController extends Controller
     private function processCheckIn(
         string $value,
         string $column,
-        string $checkInTime,
+        Carbon|string $checkInTime,
                $latitude,
                $longitude,
                $work_location_id,
