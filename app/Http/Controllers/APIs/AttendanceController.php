@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\APIs;
 
 use App\Helpers\ServerTime;
+use App\Models\AttendanceBreakLog;
+use App\Services\BreakDetector;
 use Firebase\JWT\JWT;
 use Firebase\JWT\Key;
 use Illuminate\Support\Facades\Auth;
@@ -61,337 +63,249 @@ class AttendanceController extends Controller
     }
 
 
+    /* ==============================================================
+   UPDATED processCheckIn
+   Handles two scenarios:
+   A) First check-in of the day   → normal flow
+   B) Re-check-in after break     → close open break log
+   ============================================================== */
+
     private function processCheckIn(
-        string $value,
-        string $column,
+        string        $value,
+        string        $column,
         Carbon|string $checkInTime,
-               $latitude,
-               $longitude,
-               $work_location_id,
-               $deviceId = null
+                      $latitude,
+                      $longitude,
+                      $work_location_id,
+                      $deviceId = null
     )
     {
         DB::beginTransaction();
-
         try {
 
+            /* 1. Resolve logged-in employee ------------------------------------ */
             $loggedInEmployee = auth()->user()->employee;
-
             if (!$loggedInEmployee) {
-                return response()->json([
-                    'code' => 1003,
-                    'message' => 'No employee profile found.'
-                ], 404);
+                return response()->json(['code' => 1003, 'message' => 'No employee profile found.'], 404);
             }
-
             if ($loggedInEmployee->active == 0) {
-                return response()->json([
-                    'code' => 1003,
-                    'message' => 'Your account is inactive. Kindly Contact admin.',
-                ], 403);
+                return response()->json(['code' => 1003, 'message' => 'Your account is inactive. Kindly contact admin.'], 403);
             }
 
-            /**
-             * ✅ Case 1: Check-in via QR Code (JWT or Legacy)
-             */
+            /* 2. Resolve target employee (QR / ID / face_id / etc.) ----------- */
             if ($column === 'qr_code') {
                 $incomingQr = trim($value);
-                $employee = null;
-
-                // ✅ Step 1: Try to find employee by QR directly (DB first)
                 $employee = Employee::where('qr_code', $incomingQr)->first();
 
                 if ($employee && $employee->active == 0) {
-                    return response()->json([
-                        'code' => 1003,
-                        'message' => 'Employee account is inactive. Kindly Contact admin.',
-                    ], 403);
+                    return response()->json(['code' => 1003, 'message' => 'Employee account is inactive.'], 403);
                 }
 
                 if (!$employee) {
-
-                    // ✅ Step 2: Only if not found, decide if legacy or new JWT QR
                     if (substr_count($incomingQr, '.') !== 2) {
-                        // 🧩 Legacy 5-char (no dots, old style)
-                        return response()->json([
-                            'code' => 1003,
-                            'message' => 'Legacy QR code not recognized or not linked to any employee.'
-                        ], 404);
+                        return response()->json(['code' => 1003, 'message' => 'Legacy QR code not recognised.'], 404);
                     }
-
-                    // 🧩 Signed JWT QR (new style)
                     $publicKeyPath = storage_path('app/keys/public.pem');
                     if (!file_exists($publicKeyPath)) {
-                        return response()->json([
-                            'code' => 1003,
-                            'message' => 'Public key not found on server.'
-                        ], 500);
+                        return response()->json(['code' => 1003, 'message' => 'Public key not found on server.'], 500);
                     }
-
                     try {
                         $decoded = JWT::decode($incomingQr, new Key(file_get_contents($publicKeyPath), 'ES256'));
                     } catch (\Exception $e) {
-                        return response()->json([
-                            'code' => 1003,
-                            'message' => 'Invalid or tampered QR code.',
-                            'error' => $e->getMessage(),
-                        ], 400);
+                        return response()->json(['code' => 1003, 'message' => 'Invalid or tampered QR code.', 'error' => $e->getMessage()], 400);
                     }
-
                     $orgId = $decoded->o ?? null;
-
                     if (!$orgId) {
-                        return response()->json([
-                            'code' => 1003,
-                            'message' => 'QR code expired or invalid.'
-                        ], 400);
+                        return response()->json(['code' => 1003, 'message' => 'QR code expired or invalid.'], 400);
                     }
-
-                    /**
-                     * ✅ Step 3: Handle unassigned QR cases
-                     */
                     if (!empty($deviceId)) {
-                        // Supervisor/admin scanning from device
-                        return response()->json([
-                            'code' => 1003,
-                            'message' => 'QR code is valid but not yet assigned to any employee. Please assign it before use.'
-                        ], 403);
+                        return response()->json(['code' => 1003, 'message' => 'QR not assigned to any employee.'], 403);
                     }
-
-                    // Regular employee scanning (self-assignment)
                     if ($loggedInEmployee->organization_id != $orgId) {
-                        return response()->json([
-                            'code' => 1003,
-                            'message' => 'QR code belongs to a different organization.'
-                        ], 400);
+                        return response()->json(['code' => 1003, 'message' => 'QR code belongs to a different organization.'], 400);
                     }
-
-                    // Check if code already assigned
                     if (Employee::where('qr_code', $incomingQr)->exists()) {
-                        return response()->json([
-                            'code' => 1003,
-                            'message' => 'This QR code is already linked to another employee.'
-                        ], 409);
+                        return response()->json(['code' => 1003, 'message' => 'QR code already linked to another employee.'], 409);
                     }
-
-                    // ✅ Assign QR to logged-in employee (self registration)
                     $loggedInEmployee->qr_code = $incomingQr;
                     $loggedInEmployee->save();
-
                     $employee = $loggedInEmployee;
                 }
-            } /**
-             * ✅ Case 2: Normal check-in (ID number, face_id, etc.)
-             */
-            else {
+            } else {
                 $employee = Employee::where($column, $value)->firstOrFail();
-
-                if ($employee && $employee->active == 0) {
-                    return response()->json([
-                        'code' => 1003,
-                        'message' => 'Employee account is inactive. Kindly Contact admin.',
-                    ], 403);
+                if ($employee->active == 0) {
+                    return response()->json(['code' => 1003, 'message' => 'Employee account is inactive.'], 403);
                 }
             }
 
-            /**
-             * ✅ Authorization and Organization Validation
-             */
+            /* 3. Authorisation ------------------------------------------------- */
             $isSelf = $employee->id === $loggedInEmployee->id;
-
             if (!$isSelf) {
                 if ($employee->organization_id !== $loggedInEmployee->organization_id) {
-                    return response()->json([
-                        'code' => 1003,
-                        'message' => 'You cannot check in employees from another organization.'
-                    ], 403);
+                    return response()->json(['code' => 1003, 'message' => 'Cannot check in employees from another organization.'], 403);
                 }
-
                 if (!auth()->user()->can('checkin-other-employees')) {
-                    return response()->json([
-                        'code' => 1003,
-                        'message' => 'You do not have permission to check in other employees.'
-                    ], 403);
+                    return response()->json(['code' => 1003, 'message' => 'No permission to check in other employees.'], 403);
                 }
             }
 
-            /**
-             * ========================================
-             * ✅ SHIFT PATTERN VALIDATION
-             * ========================================
-             */
+            /* 4. Shift validation --------------------------------------------- */
             $shift = $employee->shift;
-
             if (!$shift) {
-                return response()->json([
-                    'code' => 1003,
-                    'message' => 'No shift assigned. Please contact your manager.'
-                ], 403);
+                return response()->json(['code' => 1003, 'message' => 'No shift assigned. Please contact your manager.'], 403);
             }
-
-            // Check if employee is scheduled to work today based on shift pattern
             if (!$this->isEmployeeScheduledToday($shift, now())) {
-                $patternName = $this->getPatternName($shift->pattern_type);
                 return response()->json([
                     'code' => 1003,
-                    'message' => "You are not scheduled to work today. Your shift pattern is: {$patternName}.",
+                    'message' => 'You are not scheduled to work today.',
                     'shift_pattern' => $shift->pattern_type,
                     'scheduled_days' => $shift->pattern_days ?? [],
                 ], 403);
             }
-
-            // Check if employee is in off_shift or sick_off status
             if (in_array($employee->shift_status, ['off_shift', 'sick_off', 'on_leave'])) {
-                $statusLabel = match ($employee->shift_status) {
+                $label = match ($employee->shift_status) {
                     'off_shift' => 'temporarily off shift',
                     'sick_off' => 'on sick leave',
                     'on_leave' => 'on leave',
                     default => $employee->shift_status,
                 };
-
-                return response()->json([
-                    'code' => 1003,
-                    'message' => "You cannot check in. You are currently {$statusLabel}.",
-                    'shift_status' => $employee->shift_status,
-                    'end_date' => $employee->end_off_shift_date,
-                ], 403);
+                return response()->json(['code' => 1003, 'message' => "You cannot check in. You are currently {$label}."], 403);
             }
 
-            /**
-             * ========================================
-             * ✅ CHECK FOR UNCHECKED-OUT ATTENDANCE
-             * ========================================
-             */
+            /* 5. Resolve check-in time ---------------------------------------- */
             $checkInTimeCarbon = $checkInTime ? Carbon::parse($checkInTime) : now();
 
-            // Calculate shift window for finding recent attendance
-            $shiftDurationHours = (float)$shift->duration_hours;
-            $maxOvertimeHours = (float)($shift->max_overtime_hours ?? 0);
-            $bufferHours = 4;
-            $maxShiftWindow = $shiftDurationHours + $maxOvertimeHours + $bufferHours;
-
-            // Check for any unchecked-out attendance within the shift window
-            $recentUncheckedOut = Attendance::where('employee_id', $employee->id)
-                ->whereNotNull('check_in_time')
-                ->whereNull('check_out_time')
-                ->where('check_in_time', '>=', $checkInTimeCarbon->copy()->subHours($maxShiftWindow))
-                ->latest('check_in_time')
-                ->first();
-
-            if ($recentUncheckedOut) {
-                $lastCheckIn = Carbon::parse($recentUncheckedOut->check_in_time);
-                $hoursSinceCheckIn = $lastCheckIn->diffInHours($checkInTimeCarbon);
-
-                return response()->json([
-                    'code' => 1003,
-                    'message' => "You are already checked in from {$lastCheckIn->format('Y-m-d H:i')} ({$hoursSinceCheckIn} hours ago). Please check out first before checking in again.",
-                    'last_check_in_time' => $lastCheckIn->toDateTimeString(),
-                    'hours_since_check_in' => round($hoursSinceCheckIn, 2),
-                ], 409);
-            }
-
-            /**
-             * ========================================
-             * ✅ GET EXPECTED TIMES FROM SHIFT
-             * ========================================
-             */
-            $expectedCheckInTime = Carbon::parse($shift->start_time);
-            $gracePeriodEndTime = $shift->getGracePeriodEndTime();
-            $expectedCheckOutTime = Carbon::parse($shift->end_time);
-            $earlyCheckoutThresholdTime = $shift->getEarlyCheckoutThreshold();
-
-            // Initialize late tracking variables
-            $isLateCheckin = false;
-            $minutesLate = 0;
-            $withinGracePeriod = false;
-
-            // Use Shift model methods for late calculation
-            if ($shift->track_late_checkin) {
-                // Check if within grace period (after start but before grace end)
-                $withinGracePeriod = $shift->isWithinGracePeriod($checkInTimeCarbon);
-
-                // Check if actually late (after grace period)
-                $isLateCheckin = $shift->isLateCheckIn($checkInTimeCarbon);
-
-                // Get minutes late from shift start time
-                $minutesLate = $shift->getMinutesLate($checkInTimeCarbon);
-            }
-
-            /**
-             * ✅ FETCH ASSIGNED WORK LOCATION (GEOFENCE CHECK)
-             */
+            /* 6. Geofence check ----------------------------------------------- */
             $assignment = EmployeeAssignment::where('employee_id', $employee->id)
                 ->where('work_location_id', $work_location_id)
                 ->where('is_current', true)
                 ->first();
 
             if (!$assignment || !$assignment->location) {
-                return response()->json([
-                    'code' => 1003,
-                    'message' => 'No assigned work location found.'
-                ], 403);
+                return response()->json(['code' => 1003, 'message' => 'No assigned work location found.'], 403);
             }
-
             $workLocation = $assignment->location;
             $distance = $workLocation->distanceTo((float)$latitude, (float)$longitude);
             $radius = $workLocation->radius_m ?? 100;
-
             if ($distance > $radius) {
-                return response()->json([
-                    'code' => 1003,
-                    'distance' => $distance,
-                    'radius' => $radius,
-                    'message' => 'You are outside the allowed geofence. Move closer to your work location.'
-                ], 403);
+                return response()->json(['code' => 1003, 'distance' => $distance, 'radius' => $radius, 'message' => 'You are outside the allowed geofence.'], 403);
             }
 
-            /**
-             * ✅ FILL EXISTING OR CREATE NEW ATTENDANCE RECORD
-             */
+            // Also check for a break-checkout attendance (check_out_time IS set but is_break_checkout = true)
+            $breakCheckoutAttendance = Attendance::where('employee_id', $employee->id)
+                ->whereNotNull('check_in_time')
+                ->whereNotNull('check_out_time')
+                ->where('is_break_checkout', true)
+                ->whereDate('date', today())
+                ->latest('check_out_time')
+                ->first();
+
+            if ($breakCheckoutAttendance && BreakDetector::isEnabled($employee)) {
+                /* ---- RETURNING FROM BREAK ------------------------------------ */
+
+                // Close the open break log
+                $closedLog = BreakDetector::closeBreakLog($breakCheckoutAttendance, $checkInTimeCarbon);
+
+                // Re-open the attendance record for continued work
+                $breakCheckoutAttendance->update([
+                    'check_out_time' => null,         // re-open
+                    'is_break_checkout' => false,
+                    'status' => 'clocked_in',
+                    'break_count' => $breakCheckoutAttendance->break_count + 1,
+                ]);
+
+                DB::commit();
+
+                $breakMinutes = $closedLog?->actual_duration_minutes ?? 0;
+
+                return response()->json([
+                    'code' => 1000,
+                    'message' => 'Welcome back! Break recorded.',
+                    'type' => 'break_return',
+                    'data' => new AttendanceResource($breakCheckoutAttendance->fresh()),
+                    'break' => [
+                        'duration_minutes' => $breakMinutes,
+                        'is_compliant' => $closedLog?->is_compliant ?? true,
+                        'excess_minutes' => $closedLog?->excess_minutes ?? 0,
+                        'matched_break' => $closedLog?->shiftBreak?->name ?? 'Unscheduled Break',
+                    ],
+                ], 200);
+            }
+
+            /* 8. ---------------------------------------------------------------
+               NORMAL FIRST CHECK-IN OF THE DAY
+               Prevent double check-in
+            ------------------------------------------------------------------- */
+            $shiftDurationHours = (float)$shift->duration_hours;
+            $maxOvertimeHours = (float)($shift->max_overtime_hours ?? 0);
+            $maxShiftWindow = $shiftDurationHours + $maxOvertimeHours + 4;
+
+            $recentUncheckedOut = Attendance::where('employee_id', $employee->id)
+                ->whereNotNull('check_in_time')
+                ->whereNull('check_out_time')
+                ->where('is_break_checkout', false)
+                ->where('check_in_time', '>=', $checkInTimeCarbon->copy()->subHours($maxShiftWindow))
+                ->latest('check_in_time')
+                ->first();
+
+            if ($recentUncheckedOut) {
+                $lastCheckIn = Carbon::parse($recentUncheckedOut->check_in_time);
+                $hoursSince = $lastCheckIn->diffInHours($checkInTimeCarbon);
+                return response()->json([
+                    'code' => 1003,
+                    'message' => "Already checked in from {$lastCheckIn->format('Y-m-d H:i')} ({$hoursSince}h ago). Please check out first.",
+                    'last_check_in_time' => $lastCheckIn->toDateTimeString(),
+                    'hours_since_check_in' => round($hoursSince, 2),
+                ], 409);
+            }
+
+            /* 9. Late / grace period ------------------------------------------ */
+            $expectedCheckInTime = Carbon::parse($shift->start_time);
+            $gracePeriodEndTime = $shift->getGracePeriodEndTime();
+            $expectedCheckOutTime = Carbon::parse($shift->end_time);
+            $earlyCheckoutThresholdTime = $shift->getEarlyCheckoutThreshold();
+
+            $isLateCheckin = false;
+            $minutesLate = 0;
+            $withinGracePeriod = false;
+
+            if ($shift->track_late_checkin) {
+                $withinGracePeriod = $shift->isWithinGracePeriod($checkInTimeCarbon);
+                $isLateCheckin = $shift->isLateCheckIn($checkInTimeCarbon);
+                $minutesLate = $shift->getMinutesLate($checkInTimeCarbon);
+            }
+
+            /* 10. Create / fill attendance record ------------------------------ */
             $today = today()->toDateString();
 
-            // Try to find existing absent/unchecked_in record for today
             $attendance = Attendance::where('employee_id', $employee->id)
                 ->where('date', $today)
                 ->whereIn('status', ['absent', 'unchecked_in'])
                 ->whereNull('check_in_time')
-                ->first();
+                ->first() ?? new Attendance(['employee_id' => $employee->id, 'date' => $today]);
 
-            // If no empty record exists, create new one
-            if (!$attendance) {
-                $attendance = new Attendance([
-                    'employee_id' => $employee->id,
-                    'date' => $today,
-                ]);
-            }
-
-            // Fill/update the record with check-in data
             $attendance->status = 'clocked_in';
             $attendance->check_in_time = $checkInTimeCarbon;
             $attendance->latitude = $latitude;
             $attendance->longitude = $longitude;
             $attendance->device_id = $deviceId;
             $attendance->work_location_id = $work_location_id;
-
-            // Late check-in tracking
             $attendance->is_late_checkin = $isLateCheckin;
             $attendance->minutes_late = $minutesLate;
             $attendance->within_grace_period = $withinGracePeriod;
-
-           // Early checkout tracking (set initial values)
             $attendance->is_early_checkout = false;
             $attendance->minutes_early = 0;
-
-            // Late checkout tracking (set initial values)
             $attendance->is_late_checkout = false;
             $attendance->late_checkout_hours = 0;
-
-            // Store expected shift times
+            $attendance->total_break_minutes = 0;
+            $attendance->paid_break_minutes = 0;
+            $attendance->excess_break_minutes = 0;
+            $attendance->break_count = 0;
+            $attendance->is_break_checkout = false;
             $attendance->expected_check_in_time = $expectedCheckInTime->format('H:i:s');
             $attendance->grace_period_end_time = $gracePeriodEndTime->format('H:i:s');
             $attendance->expected_check_out_time = $expectedCheckOutTime->format('H:i:s');
             $attendance->early_checkout_threshold_time = $earlyCheckoutThresholdTime->format('H:i:s');
-
             $attendance->save();
 
             DB::commit();
@@ -399,7 +313,8 @@ class AttendanceController extends Controller
             return response()->json([
                 'code' => 1000,
                 'message' => 'Check-in successful',
-                'data' => new AttendanceResource($attendance)
+                'type' => 'check_in',
+                'data' => new AttendanceResource($attendance),
             ], 201);
 
         } catch (\Exception $e) {
@@ -408,12 +323,6 @@ class AttendanceController extends Controller
         }
     }
 
-
-    /**
-     * ========================================
-     * HELPER METHODS - Add to your controller
-     * ========================================
-     */
 
     /**
      * Check if employee is scheduled to work today based on shift pattern
@@ -452,64 +361,51 @@ class AttendanceController extends Controller
     }
 
 
-    /**
-     * Handle check-out logic
-     */
+    /* ==============================================================
+   UPDATED processCheckOut
+   Handles two scenarios:
+   A) Checkout during a break window  → mark as break_checkout
+   B) Final checkout                  → calculate everything and close
+   ============================================================== */
+
     private function processCheckOut(string $value, string $column, string $checkOutTimeInput)
     {
         DB::beginTransaction();
         try {
+
+            /* 1. Resolve employee --------------------------------------------- */
             $employee = Employee::with('organization', 'shift')
                 ->where($column, $value)
                 ->firstOrFail();
 
             $loggedInEmployee = auth()->user()->employee;
-
             if (!$loggedInEmployee) {
-                return response()->json([
-                    'code' => 1003,
-                    'message' => 'No employee profile found.'
-                ], 404);
+                return response()->json(['code' => 1003, 'message' => 'No employee profile found.'], 404);
             }
 
             $isSelf = $employee->id === $loggedInEmployee->id;
-
             if (!$isSelf) {
                 if ($employee->organization_id !== $loggedInEmployee->organization_id) {
-                    return response()->json([
-                        'code' => 1003,
-                        'message' => 'You cannot check out employees from another organization.'
-                    ], 403);
+                    return response()->json(['code' => 1003, 'message' => 'Cannot check out employees from another organization.'], 403);
                 }
-
                 if (!auth()->user()->can('checkin-other-employees')) {
-                    return response()->json([
-                        'code' => 1003,
-                        'message' => 'You do not have permission to check out other employees.'
-                    ], 403);
+                    return response()->json(['code' => 1003, 'message' => 'No permission to check out other employees.'], 403);
                 }
             }
 
+            /* 2. Shift guard -------------------------------------------------- */
             $shift = $employee->shift;
-
             if (!$shift) {
-                return response()->json([
-                    'code' => 1003,
-                    'message' => 'No shift assigned to employee.'
-                ], 404);
+                return response()->json(['code' => 1003, 'message' => 'No shift assigned to employee.'], 404);
             }
 
             $checkOutTime = $checkOutTimeInput ? Carbon::parse($checkOutTimeInput) : now();
 
-            // ✅ Calculate maximum possible shift duration
-            // shift duration + max overtime + buffer for delays
+            /* 3. Find open attendance ----------------------------------------- */
             $shiftDurationHours = (float)$shift->duration_hours;
             $maxOvertimeHours = (float)($shift->max_overtime_hours ?? 0);
-            $bufferHours = 4; // Grace period for late checkouts
+            $maxShiftWindow = $shiftDurationHours + $maxOvertimeHours + 4;
 
-            $maxShiftWindow = $shiftDurationHours + $maxOvertimeHours + $bufferHours;
-
-            // ✅ First try: Look for unchecked attendance within the shift's maximum duration
             $attendance = Attendance::where('employee_id', $employee->id)
                 ->whereNotNull('check_in_time')
                 ->whereNull('check_out_time')
@@ -518,7 +414,7 @@ class AttendanceController extends Controller
                 ->latest('check_in_time')
                 ->first();
 
-            // ✅ If not found within window, check for ANY older unchecked attendance
+            // Fallback: any open record
             if (!$attendance) {
                 $attendance = Attendance::where('employee_id', $employee->id)
                     ->whereNotNull('check_in_time')
@@ -527,130 +423,186 @@ class AttendanceController extends Controller
                     ->first();
 
                 if (!$attendance) {
-                    return response()->json([
-                        'code' => 1003,
-                        'message' => 'Not checked in or already checked out.'
-                    ], 409);
+                    return response()->json(['code' => 1003, 'message' => 'Not checked in or already checked out.'], 409);
                 }
-
-                // ✅ Found old attendance - allow checkout but warn/flag it
-                $checkInTime = Carbon::parse($attendance->check_in_time);
-                $minutesWorked = $checkInTime->diffInMinutes($checkOutTime, false);
-                $hoursWorked = round($minutesWorked / 60, 2);
-
-
-                // Add flag that this is a late checkout
-                $isLateCheckout = true;
-                $lateCheckoutMessage = "Warning: Checking out {$hoursWorked} hours after check-in (expected max: {$maxShiftWindow} hours).";
-
-            } else {
-                // Normal checkout within expected window
-                $checkInTime = Carbon::parse($attendance->check_in_time);
-                $minutesWorked = $checkInTime->diffInMinutes($checkOutTime, false);
-                $hoursWorked = round($minutesWorked / 60, 2);
-                $isLateCheckout = false;
-                $lateCheckoutMessage = null;
-
             }
 
-            // ✅ Validate checkout time is not before check-in
-            if ($hoursWorked < 0) {
+            $checkInTime = Carbon::parse($attendance->check_in_time);
+            $rawMinutesWorked = $checkInTime->diffInMinutes($checkOutTime, false);
+
+            if ($rawMinutesWorked < 0) {
+                return response()->json(['code' => 1003, 'message' => 'Check-out time cannot be before check-in time.'], 400);
+            }
+
+            /* 4. ---------------------------------------------------------------
+               BREAK WINDOW DETECTION
+               If break tracking is enabled and checkout falls in a break window
+               → treat as a break checkout, not a final checkout
+            ------------------------------------------------------------------- */
+            if (BreakDetector::isBreakCheckout($checkOutTime, $employee, $attendance)) {
+
+                // Open a break log
+                BreakDetector::openBreakLog($attendance, $checkOutTime, $shift);
+
+                // Mark attendance as "on break" — set check_out_time so we know when break started
+                $attendance->update([
+                    'check_out_time' => $checkOutTime,
+                    'is_break_checkout' => true,
+                    'status' => 'on_break',
+                ]);
+
+                DB::commit();
+
+                $matchedBreak = BreakDetector::matchBreakWindow($checkOutTime, $shift);
+
                 return response()->json([
-                    'code' => 1003,
-                    'message' => 'Check-out time cannot be before check-in time.'
-                ], 400);
+                    'code' => 1000,
+                    'message' => 'Break started. Check back in when ready.',
+                    'type' => 'break_checkout',
+                    'data' => new AttendanceResource($attendance->fresh()),
+                    'break' => [
+                        'matched_break' => $matchedBreak?->name ?? 'Break',
+                        'expected_duration' => $matchedBreak?->duration_minutes,
+                        'max_duration' => $matchedBreak?->max_duration_minutes ?? $matchedBreak?->duration_minutes,
+                        'break_started_at' => $checkOutTime->toDateTimeString(),
+                    ],
+                ], 200);
             }
 
-            // ================================
-            // SHIFT SETTINGS & CALCULATIONS
-            // ================================
-            $shiftStart = Carbon::parse($shift->start_time);
-            $shiftEnd = Carbon::parse($shift->end_time);
-            if ($shiftEnd->lt($shiftStart)) {
-                $shiftEnd->addDay();
+            /* 5. ---------------------------------------------------------------
+               FINAL CHECKOUT
+               Auto-close any still-open break log (employee forgot to check back in)
+            ------------------------------------------------------------------- */
+            $inProgressBreak = AttendanceBreakLog::where('attendance_id', $attendance->id)
+                ->where('status', 'in_progress')
+                ->latest('break_start_time')
+                ->first();
+
+            if ($inProgressBreak) {
+                $breakStart = Carbon::parse($inProgressBreak->break_start_time);
+                $actualBreakMins = $breakStart->diffInMinutes($checkOutTime);
+                $sb = $inProgressBreak->shiftBreak;
+                $maxAllowed = $sb ? ($sb->max_duration_minutes ?? $sb->duration_minutes) : null;
+                $excessMins = $maxAllowed !== null ? max(0, $actualBreakMins - $maxAllowed) : 0;
+
+                $inProgressBreak->update([
+                    'break_end_time' => $checkOutTime,
+                    'actual_duration_minutes' => $actualBreakMins,
+                    'excess_minutes' => $excessMins,
+                    'is_compliant' => $excessMins === 0,
+                    'is_taken' => true,
+                    'status' => $excessMins === 0 ? 'completed' : 'exceeded',
+                    'notes' => 'Auto-closed on final check-out.',
+                ]);
             }
 
-            $durationHours = (float)$shift->duration_hours;
-            $maxOvertimeHours = (float)$shift->max_overtime_hours;
+            /* 6. Calculate break deductions ----------------------------------- */
+            $deductions = BreakDetector::calculateDeductions($attendance);
+            $unpaidMinutes = $deductions['unpaid_minutes'];
+            $paidMinutes = $deductions['paid_minutes'];
+            $excessMinutes = $deductions['excess_minutes'];
+            $breakLogs = $deductions['logs'];
 
+            /* 7. Net worked hours --------------------------------------------- */
+            $netMinutesWorked = max(0, $rawMinutesWorked - $unpaidMinutes);
+            $hoursWorked = round($netMinutesWorked / 60, 2);
+            $effectiveDurationHours = (float)$shift->duration_hours;
 
-            // ================================
-            // EARLY CHECKOUT LOGIC
-            // ================================
-            $isEarlyCheckout = $shift->isEarlyCheckOut($checkOutTime);
-            $minutesEarly = $isEarlyCheckout ? $shift->getMinutesEarly($checkOutTime) : 0;
-
-            // ================================
-            // CALCULATE HOURS (MATCH AUTO-CLOCKOUT)
-            // ================================
+            /* 8. Regular + overtime split ------------------------------------- */
             if ($shift->overtime_enabled) {
-                // Regular hours capped at duration_hours
-                $regularHours = min($hoursWorked, $durationHours);
-
-                // Overtime = worked - duration hours
-                $overtimeHours = max(0, $hoursWorked - $durationHours);
-
-                // Enforce max overtime cap
-                if ($maxOvertimeHours > 0) {
-                    $overtimeHours = min($overtimeHours, $maxOvertimeHours);
-                }
+                $regularHours = min($hoursWorked, $effectiveDurationHours);
+                $overtimeHours = min(max(0, $hoursWorked - $effectiveDurationHours), $maxOvertimeHours);
             } else {
-                // If OT disabled → no overtime
-                $regularHours = min($hoursWorked, $durationHours);
+                $regularHours = min($hoursWorked, $effectiveDurationHours);
                 $overtimeHours = 0;
             }
 
-            // ================================
-            // SAVE ATTENDANCE
-            // ================================
+            /* 9. Apply break penalties ---------------------------------------- */
+            foreach ($breakLogs as $log) {
+                if ($log->is_compliant || !$log->shiftBreak || $log->excess_minutes <= 0) {
+                    continue;
+                }
+                $excessHours = round($log->excess_minutes / 60, 2);
+                switch ($log->shiftBreak->penalty_type) {
+                    case 'deduct_overtime':
+                        $spill = max(0, $excessHours - $overtimeHours);
+                        $overtimeHours = max(0, $overtimeHours - $excessHours);
+                        $regularHours = max(0, $regularHours - $spill);
+                        break;
+                    case 'auto_deduct':
+                        $regularHours = max(0, $regularHours - $excessHours);
+                        break;
+                    case 'flag_review':
+                    case 'none':
+                    default:
+                        break;
+                }
+            }
+
+            /* 10. Early checkout ---------------------------------------------- */
+            $isEarlyCheckout = $shift->isEarlyCheckOut($checkOutTime);
+            $minutesEarly = $isEarlyCheckout ? $shift->getMinutesEarly($checkOutTime) : 0;
+
+            /* 11. Late checkout flag ------------------------------------------ */
+            $isLateCheckout = $rawMinutesWorked > ($maxShiftWindow * 60);
+            $lateHours = $isLateCheckout ? round(($rawMinutesWorked / 60) - $maxShiftWindow, 2) : 0;
+
+            /* 12. Save attendance --------------------------------------------- */
             $attendance->update([
                 'status' => 'clocked_out',
                 'check_out_time' => $checkOutTime,
-                'worked_hours' => round($regularHours , 2),
+                'is_break_checkout' => false,
+                'worked_hours' => round($regularHours, 2),
                 'overtime_hours' => round($overtimeHours, 2),
                 'is_early_checkout' => $isEarlyCheckout,
                 'minutes_early' => $minutesEarly,
-                'is_late_checkout' => $isLateCheckout ?? false,
-                'late_checkout_hours' => $isLateCheckout ? round($hoursWorked - $maxShiftWindow, 2) : 0,
+                'is_late_checkout' => $isLateCheckout,
+                'late_checkout_hours' => $lateHours,
+                'total_break_minutes' => $unpaidMinutes,
+                'paid_break_minutes' => $paidMinutes,
+                'excess_break_minutes' => $excessMinutes,
+                'break_count' => $deductions['break_count'],
             ]);
 
-            // ================================
-            // CREATE OVERTIME RECORD
-            // ================================
+            /* 13. Mark pending break logs as skipped -------------------------- */
+            AttendanceBreakLog::where('attendance_id', $attendance->id)
+                ->where('status', 'pending')
+                ->update(['status' => 'skipped', 'notes' => 'Employee checked out without taking this break.']);
+
+            /* 14. Create overtime record ------------------------------------- */
             if ($overtimeHours > 0) {
                 Overtime::create([
                     'employee_id' => $employee->id,
                     'attendance_id' => $attendance->id,
                     'date' => $checkOutTime->toDateString(),
-                    'start_time' => $checkInTime->copy()->addHours($durationHours),
+                    'start_time' => $checkInTime->copy()->addHours($effectiveDurationHours),
                     'end_time' => $checkOutTime,
                     'hours' => round($overtimeHours, 2),
-                    'reason' => 'Auto-calculated on checkout',
+                    'reason' => 'Auto-calculated on check-out',
                 ]);
             }
 
+            /* 15. Commit ------------------------------------------------------- */
             DB::commit();
 
-            $responseData = [
+            return response()->json([
+                'code' => 1000,
                 'message' => 'Check-out successful',
-                'data' => new AttendanceResource($attendance)
-            ];
-
-            // Add warning message if it's a late checkout
-            if ($isLateCheckout && $lateCheckoutMessage) {
-                $responseData['warning'] = $lateCheckoutMessage;
-                $responseData['hours_since_checkin'] = round($hoursWorked, 2);
-                $responseData['expected_max_hours'] = $maxShiftWindow;
-            }
-
-            return response()->json($responseData, 200);
+                'type' => 'final_checkout',
+                'data' => new AttendanceResource($attendance->fresh()),
+                'break_summary' => [
+                    'total_unpaid_break_minutes' => $unpaidMinutes,
+                    'total_paid_break_minutes' => $paidMinutes,
+                    'total_excess_minutes' => $excessMinutes,
+                    'break_count' => $deductions['break_count'],
+                ],
+            ], 200);
 
         } catch (\Exception $e) {
             DB::rollBack();
             return $this->errorResponse('Check-out failed', $e);
         }
     }
-
 
     public function attendanceHistory(Request $request, $employeeId = null)
     {

@@ -30,6 +30,12 @@ class Attendance extends Model
         'grace_period_end_time',
         'expected_check_out_time',
         'early_checkout_threshold_time',
+        'is_break_checkout',
+        'total_break_minutes',
+        'paid_break_minutes',
+        'excess_break_minutes',
+        'is_break_checkout',
+        'break_count'
     ];
 
     protected $casts = [

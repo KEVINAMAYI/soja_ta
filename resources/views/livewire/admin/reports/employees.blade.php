@@ -24,7 +24,7 @@ new class extends Component {
     // dynamic dropdown data
     public $availableEmails = [];
     public $availableFrequencies = ['daily', 'weekly', 'monthly'];
-    public $reportTypes = ['attendance', 'timesheets', 'department'];
+    public $reportTypes = ['attendance', 'timesheets', 'department','break'];
     public $availableDays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
     public $availableTimezones = [];
     public $startDate;
@@ -613,19 +613,20 @@ new class extends Component {
                 </li>
 
 
+
                 <!-- Leave -->
-                {{--                <li class="nav-item" role="presentation">--}}
-                {{--                    <button--}}
-                {{--                        type="button"--}}
-                {{--                        class="nav-link position-relative rounded-0 d-flex align-items-center justify-content-center bg-transparent fs-3 py-3--}}
-                {{--                   {{ $report_type === 'scheduled' ? 'active' : '' }}"--}}
-                {{--                        onclick="Livewire.dispatch('setReportType', { type: 'scheduled' })"--}}
-                {{--                        role="tab"--}}
-                {{--                        aria-selected="{{ $report_type === 'scheduled' ? 'true' : 'false' }}">--}}
-                {{--                        <i class="ti ti-timeline-event mx-2 fs-6"></i>--}}
-                {{--                        <span class="d-none d-md-block">Report Schedules</span>--}}
-                {{--                    </button>--}}
-                {{--                </li>--}}
+                <li class="nav-item" role="presentation">
+                    <button
+                        type="button"
+                        class="nav-link position-relative rounded-0 d-flex align-items-center justify-content-center bg-transparent fs-3 py-3
+                   {{ $report_type === 'break' ? 'active' : '' }}"
+                        onclick="Livewire.dispatch('setReportType', { type: 'break' })"
+                        role="tab"
+                        aria-selected="{{ $report_type === 'break' ? 'true' : 'false' }}">
+                        <i class="ti ti-coffee mx-2 fs-6"></i>
+                        <span class="d-none d-md-block">Break Report</span>
+                    </button>
+                </li>
 
 
             </ul>
@@ -845,6 +846,16 @@ new class extends Component {
                          tabindex="0">
 
                         <livewire:admin.reports.departments/>
+                    </div>
+
+
+                    <div class="tab-pane fade show {{ $report_type === 'break' ? 'show active' : '' }}"
+                         id="tab-daily-break"
+                         role="tabpanel"
+                         aria-labelledby="tab-daily-break-tab"
+                         tabindex="0">
+
+                        <livewire:admin.reports.breaks/>
                     </div>
 
                     <div class="tab-pane fade show {{ $report_type === 'scheduled' ? 'show active' : '' }}"

@@ -18,6 +18,7 @@ class Organization extends Model
         'description',
         'website',
         'logo_path',
+        'break_tracking_enabled'
     ];
 
     public function employees()

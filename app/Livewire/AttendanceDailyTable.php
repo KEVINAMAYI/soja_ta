@@ -210,9 +210,9 @@ class AttendanceDailyTable extends DataTableComponent
 
                         if ($row->is_late_checkin && $row->employee->shift->track_late_checkin) {
                             if ($row->within_grace_period) {
-                                $badge = "<span style='background-color:#ffc107; color:#000; padding:2px 8px; border-radius:12px; font-size:0.7rem; margin-left:6px; font-weight:500;'>⏰ {$this->formatMinutes($row->minutes_late)} Late (Grace)</span>";
+                                $badge = "<br><span style='background-color:#ffc107; color:#000; padding:2px 8px; border-radius:12px; font-size:0.7rem; margin-left:6px; font-weight:500;'>⏰ {$this->formatMinutes($row->minutes_late)} Late (Grace)</span>";
                             } else {
-                                $badge = "<span style='background-color:#dc3545; color:#fff; padding:2px 8px; border-radius:12px; font-size:0.7rem; margin-left:6px; font-weight:500;'>🔴 {$this->formatMinutes($row->minutes_late)} Late</span>";
+                                $badge = "<br><span style='background-color:#dc3545; color:#fff; padding:2px 8px; border-radius:12px; font-size:0.7rem; margin-left:6px; font-weight:500;'>🔴 {$this->formatMinutes($row->minutes_late)} Late</span>";
                             }
                         } elseif ($row->within_grace_period && $row->minutes_late > 0) {
                             $badge = "<span style='background-color:#17a2b8; color:#fff; padding:2px 8px; border-radius:12px; font-size:0.7rem; margin-left:6px; font-weight:500;'>✓ On time</span>";
@@ -253,8 +253,9 @@ class AttendanceDailyTable extends DataTableComponent
                             $formatted = "<span class='fw-semibold text-success'>{$formatted}</span>";
 
                             if ($row->is_early_checkout && $row->employee->shift->track_early_checkout) {
-                                $badge = "<span style='background-color:#ff6b6b; color:#fff; padding:2px 8px; border-radius:12px; font-size:0.7rem; margin-left:6px; font-weight:500;'>⚠️ {$this->formatMinutes($row->minutes_early)} Early</span>";
+                                $badge = "<br><span style='background-color:#ff6b6b; color:#fff; padding:2px 8px; border-radius:12px; font-size:0.7rem; margin-left:6px; font-weight:500;'>⚠️ {$this->formatMinutes($row->minutes_early)} Early</span>";
                             }
+
                         }
                     }
 

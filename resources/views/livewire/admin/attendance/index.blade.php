@@ -386,7 +386,7 @@ new class extends Component {
                         <option value="on_leave">On Leave</option>
                         <option value="off_shift">Off Shift</option>
                         <option value="sick_off">Sick Off</option>
-                        {{--                        <option value="inactive">Inactive Employees</option>--}}
+                        <option value="on_break">On Break</option>
                     </select>
                 </div>
             </div>

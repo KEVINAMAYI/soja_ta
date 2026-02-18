@@ -6,6 +6,8 @@ use Jantinnerezo\LivewireAlert\Facades\LivewireAlert;
 use Livewire\Attributes\On;
 use Livewire\Volt\Component;
 use App\Models\Shift;
+use App\Models\ShiftBreak;
+use App\Models\Attendancebreaklog;
 
 new class extends Component {
 
@@ -23,6 +25,25 @@ new class extends Component {
     public $assigningShift;
     public $searchTerm = '';
 
+    // NEW: Break management properties
+    public $breaks = [];
+    public $editingBreakIndex = null;
+    public $showAddBreakModal = false;
+    public $currentBreak = [];
+
+    public $breakTypes = [
+        ['value' => 'paid', 'label' => 'Paid Break', 'description' => 'Time counted toward working hours'],
+        ['value' => 'unpaid', 'label' => 'Unpaid Break', 'description' => 'Time deducted from working hours'],
+        ['value' => 'flexible', 'label' => 'Flexible Break', 'description' => 'Can be taken anytime within shift'],
+    ];
+
+    public $penaltyTypes = [
+        ['value' => 'none', 'label' => 'No Penalty', 'description' => 'Track only, no automatic action'],
+        ['value' => 'deduct_overtime', 'label' => 'Deduct Overtime Minutes', 'description' => 'Excess time deducted from overtime'],
+        ['value' => 'flag_review', 'label' => 'Flag for Manager Review', 'description' => 'Manager must review and approve'],
+        ['value' => 'auto_deduct', 'label' => 'Auto-deduct from Hours', 'description' => 'Automatically reduce worked hours'],
+    ];
+
     public $shiftPatterns = [
         ['id' => 'weekdays', 'name' => 'Weekdays Only', 'description' => 'Monday to Friday'],
         ['id' => 'weekends', 'name' => 'Weekends Only', 'description' => 'Saturday and Sunday'],
@@ -31,17 +52,23 @@ new class extends Component {
         ['id' => 'custom', 'name' => 'Custom Days', 'description' => 'Select specific days']
     ];
 
+    public $dayAbbreviations = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    public $dayNames = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
     public function rules()
     {
         return [
             'assignedStaffIds' => 'array',
             'assignedStaffIds.*' => 'exists:employees,id',
+            'currentBreak.name' => 'required|string|max:255',
+            'currentBreak.type' => 'required|in:paid,unpaid,flexible',
+            'currentBreak.duration_minutes' => 'required|integer|min:1|max:480',
+            'currentBreak.max_duration_minutes' => 'nullable|integer|min:1|max:480',
+            'currentBreak.window_start_time' => 'nullable|date_format:H:i',
+            'currentBreak.window_end_time' => 'nullable|date_format:H:i',
+            'currentBreak.penalty_type' => 'required|in:none,deduct_overtime,flag_review,auto_deduct',
         ];
     }
-
-    public $dayAbbreviations = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-    public $dayNames = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
     public function mount()
     {
@@ -60,6 +87,314 @@ new class extends Component {
             ->get();
 
         $this->searchEmployees();
+
+        $this->loadBreaks();
+
+    }
+
+    public function loadBreaks()
+    {
+        if (!isset($this->selectedShift['id'])) {
+            $this->breaks = [];
+            return;
+        }
+
+        $dbBreaks = ShiftBreak::where('shift_id', $this->selectedShift['id'])
+            ->ordered()
+            ->get();
+
+        $this->breaks = $dbBreaks->map(function ($break) {
+            return [
+                'id' => $break->id,
+                'name' => $break->name,
+                'type' => $break->type,
+                'window_start_time' => $break->window_start_time ? Carbon::parse($break->window_start_time)->format('H:i') : null,
+                'window_end_time' => $break->window_end_time ? Carbon::parse($break->window_end_time)->format('H:i') : null,
+                'duration_minutes' => $break->duration_minutes,
+                'max_duration_minutes' => $break->max_duration_minutes,
+                'penalty_type' => $break->penalty_type,
+                'require_punch' => $break->require_punch,
+                'notify_on_approaching' => $break->notify_on_approaching,
+                'notify_minutes_before' => $break->notify_minutes_before,
+                'is_mandatory' => $break->is_mandatory,
+                'order' => $break->order,
+                'is_active' => $break->is_active,
+            ];
+        })->toArray();
+    }
+
+    public function openAddBreakModal()
+    {
+        $this->resetBreakForm();
+        $this->showAddBreakModal = true;
+    }
+
+    public function openEditBreakModal($index)
+    {
+        $this->editingBreakIndex = $index;
+        $this->currentBreak = $this->breaks[$index];
+        $this->showAddBreakModal = true;
+    }
+
+    public function resetBreakForm()
+    {
+        $this->currentBreak = [
+            'name' => '',
+            'type' => 'unpaid',
+            'window_start_time' => null,
+            'window_end_time' => null,
+            'duration_minutes' => 30,
+            'max_duration_minutes' => null,
+            'penalty_type' => 'none',
+            'require_punch' => false,
+            'notify_on_approaching' => false,
+            'notify_minutes_before' => null,
+            'is_mandatory' => false,
+            'is_active' => true,
+        ];
+        $this->editingBreakIndex = null;
+    }
+
+
+    private function recalculateAndSaveDuration(): void
+    {
+        if (!isset($this->selectedShift['id'])) {
+            return;
+        }
+
+        $startTime = $this->selectedShift['startTime'] ?? null;
+        $endTime = $this->selectedShift['endTime'] ?? null;
+
+        if (!$startTime || !$endTime) {
+            return;
+        }
+
+        try {
+
+            $start = Carbon::parse($startTime);
+            $end = Carbon::parse($endTime);
+
+            // Handle overnight shifts
+            if ($end->lt($start)) {
+                $end->addDay();
+            }
+
+            $rawMinutes = $start->diffInMinutes($end);
+
+            // Sum only ACTIVE, UNPAID breaks — these are the ones that eat into work time
+            $unpaidBreakMinutes = ShiftBreak::where('shift_id', $this->selectedShift['id'])
+                ->where('is_active', true)
+                ->where('type', '!=', 'paid')
+                ->sum('duration_minutes');
+
+            $effectiveMinutes = max(0, $rawMinutes - $unpaidBreakMinutes);
+            $effectiveHours = round($effectiveMinutes / 60, 2);
+
+            // Persist to shifts table
+            Shift::where('id', $this->selectedShift['id'])
+                ->update(['duration_hours' => $effectiveHours]);
+
+            // Keep the in-memory selectedShift in sync so the UI reflects it immediately
+            $this->selectedShift['duration'] = $effectiveHours;
+
+            // Also update the matching entry in $this->shifts array
+            foreach ($this->shifts as &$shift) {
+                if ($shift['id'] === $this->selectedShift['id']) {
+                    $shift['duration'] = $effectiveHours;
+                    break;
+                }
+            }
+            unset($shift); // clear reference
+
+        } catch (\Throwable $e) {
+            // Fail silently — the next full loadShifts() will self-correct
+        }
+    }
+
+
+    public function saveBreak()
+    {
+        $this->validate([
+            'currentBreak.name' => 'required|string|max:255',
+            'currentBreak.type' => 'required|in:paid,unpaid,flexible',
+            'currentBreak.duration_minutes' => 'required|integer|min:1|max:480',
+        ]);
+
+        try {
+            if ($this->editingBreakIndex !== null) {
+                // Update existing break
+                $breakId = $this->breaks[$this->editingBreakIndex]['id'] ?? null;
+
+                if ($breakId) {
+                    $break = ShiftBreak::find($breakId);
+                    if ($break) {
+                        $break->update($this->currentBreak);
+                    }
+                }
+            } else {
+                // Create new break
+                $orderMax = ShiftBreak::where('shift_id', $this->selectedShift['id'])->max('order') ?? 0;
+
+                ShiftBreak::create(array_merge($this->currentBreak, [
+                    'shift_id' => $this->selectedShift['id'],
+                    'order' => $orderMax + 1,
+                ]));
+            }
+
+            $this->recalculateAndSaveDuration();
+            $this->loadBreaks();
+            $this->loadShifts(); // Refresh shift data
+            $this->selectShift($this->selectedShift['id']); // Reselect to update display
+
+            $this->showAddBreakModal = false;
+            $this->resetBreakForm();
+
+            LivewireAlert::title('Success!')
+                ->text($this->editingBreakIndex !== null ? 'Break updated successfully!' : 'Break added successfully!')
+                ->success()
+                ->toast()
+                ->position('top-end')
+                ->show();
+
+        } catch (\Exception $e) {
+            LivewireAlert::title('Error!')
+                ->text('Failed to save break: ' . $e->getMessage())
+                ->error()
+                ->toast()
+                ->position('top-end')
+                ->show();
+        }
+    }
+
+    public function deleteBreak($index)
+    {
+        try {
+            $breakId = $this->breaks[$index]['id'] ?? null;
+
+            if ($breakId) {
+                $break = ShiftBreak::find($breakId);
+                if ($break) {
+                    $break->delete();
+
+                    $this->recalculateAndSaveDuration();
+                    $this->loadBreaks();
+                    $this->loadShifts();
+
+                    LivewireAlert::title('Success!')
+                        ->text('Break deleted successfully!')
+                        ->success()
+                        ->toast()
+                        ->position('top-end')
+                        ->show();
+                }
+            }
+        } catch (\Exception $e) {
+            LivewireAlert::title('Error!')
+                ->text('Failed to delete break: ' . $e->getMessage())
+                ->error()
+                ->toast()
+                ->position('top-end')
+                ->show();
+        }
+    }
+
+    public function toggleBreakActive($index)
+    {
+        try {
+            $breakId = $this->breaks[$index]['id'] ?? null;
+
+            if ($breakId) {
+                $break = ShiftBreak::find($breakId);
+                if ($break) {
+                    $break->update(['is_active' => !$break->is_active]);
+                    $this->recalculateAndSaveDuration();
+                    $this->loadBreaks();
+                }
+            }
+        } catch (\Exception $e) {
+            // Handle error silently or show notification
+        }
+    }
+
+    public function moveBreakUp($index)
+    {
+        if ($index > 0) {
+            $this->swapBreakOrder($index, $index - 1);
+        }
+    }
+
+    public function moveBreakDown($index)
+    {
+        if ($index < count($this->breaks) - 1) {
+            $this->swapBreakOrder($index, $index + 1);
+        }
+    }
+
+    private function swapBreakOrder($index1, $index2)
+    {
+        $break1Id = $this->breaks[$index1]['id'] ?? null;
+        $break2Id = $this->breaks[$index2]['id'] ?? null;
+
+        if ($break1Id && $break2Id) {
+            $break1 = ShiftBreak::find($break1Id);
+            $break2 = ShiftBreak::find($break2Id);
+
+            if ($break1 && $break2) {
+                $tempOrder = $break1->order;
+                $break1->update(['order' => $break2->order]);
+                $break2->update(['order' => $tempOrder]);
+
+                $this->loadBreaks();
+            }
+        }
+    }
+
+    public function getBreakTypeLabel($type)
+    {
+        return collect($this->breakTypes)->firstWhere('value', $type)['label'] ?? ucfirst($type);
+    }
+
+    public function getPenaltyTypeLabel($type)
+    {
+        return collect($this->penaltyTypes)->firstWhere('value', $type)['label'] ?? 'None';
+    }
+
+    /**
+     * Calculate total break time
+     */
+    public function getTotalBreakMinutes()
+    {
+        return collect($this->breaks)
+            ->where('is_active', true)
+            ->where('type', '!=', 'paid')
+            ->sum('duration_minutes');
+    }
+
+    /**
+     * Calculate effective shift duration
+     */
+    public function getEffectiveShiftDuration()
+    {
+        if (!isset($this->selectedShift['startTime']) || !isset($this->selectedShift['endTime'])) {
+            return 0;
+        }
+
+        try {
+            $start = Carbon::parse($this->selectedShift['startTime']);
+            $end = Carbon::parse($this->selectedShift['endTime']);
+
+            if ($end->lt($start)) {
+                $end->addDay();
+            }
+
+            $totalMinutes = $start->diffInMinutes($end);
+            $breakMinutes = $this->getTotalBreakMinutes();
+            $effectiveMinutes = max(0, $totalMinutes - $breakMinutes);
+
+            return round($effectiveMinutes / 60, 2);
+        } catch (\Exception $e) {
+            return 0;
+        }
     }
 
     public function loadShifts()
@@ -397,7 +732,12 @@ new class extends Component {
         $this->selectShift($shift->id);
         $this->showAddShift = false;
 
-        session()->flash('message', 'New shift created successfully!');
+        LivewireAlert::title('Awesome!')
+            ->text('New Shift Added successfully!')
+            ->success()
+            ->toast()
+            ->position('top-end')
+            ->show();
     }
 
     public function deleteShift()
@@ -452,32 +792,37 @@ new class extends Component {
 
 
     #[On('time-selected')]
-    public function calculateShiftDuration()
+    public function calculateShiftDuration(): void
     {
         if (!isset($this->selectedShift['startTime']) || !isset($this->selectedShift['endTime'])) {
             return;
         }
 
         try {
-            $start = Carbon::parse($this->selectedShift['startTime']);
-            $end = Carbon::parse($this->selectedShift['endTime']);
+            $start = \Carbon\Carbon::parse($this->selectedShift['startTime']);
+            $end = \Carbon\Carbon::parse($this->selectedShift['endTime']);
 
-            // Handle overnight shift
             if ($end->lt($start)) {
                 $end->addDay();
             }
 
-            $minutes = $start->diffInMinutes($end);
-            $break = $this->selectedShift['breakDuration'] ?? 0;
-            $minutes -= $break;
+            $rawMinutes = $start->diffInMinutes($end);
 
-            $this->selectedShift['duration'] = round($minutes / 60, 2);
+            // Re-use the same logic — unpaid active breaks reduce effective hours
+            $unpaidBreakMinutes = collect($this->breaks)
+                ->where('is_active', true)
+                ->where('type', '!=', 'paid')
+                ->sum('duration_minutes');
+
+            $effectiveMinutes = max(0, $rawMinutes - $unpaidBreakMinutes);
+
+            $this->selectedShift['duration'] = round($effectiveMinutes / 60, 2);
 
         } catch (\Exception $e) {
-            // Fail silently (optional)
+            // Fail silently
         }
-    }
 
+    }
 
     #[On('shiftTabChanged')]
     public function shiftTabChanged($tabId)
@@ -1021,6 +1366,888 @@ new class extends Component {
             cursor: not-allowed;
         }
 
+        .breaks-list {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .break-item {
+            background: white;
+            border: 1px solid #dee2e6;
+            border-radius: 0.5rem;
+            padding: 1rem;
+            transition: all 0.3s ease;
+        }
+
+        .break-item:hover {
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .break-item.break-inactive {
+            background-color: #f8f9fa;
+            opacity: 0.6;
+        }
+
+        .drag-handle {
+            cursor: grab;
+            color: #adb5bd;
+            padding: 0.25rem;
+        }
+
+        .drag-handle:active {
+            cursor: grabbing;
+        }
+
+        .break-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 0.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+        }
+
+        .break-icon.paid {
+            background: linear-gradient(135deg, #198754 0%, #20c997 100%);
+        }
+
+        .break-icon.unpaid {
+            background: linear-gradient(135deg, #6c757d 0%, #adb5bd 100%);
+        }
+
+        .break-icon.flexible {
+            background: linear-gradient(135deg, #0d6efd 0%, #6610f2 100%);
+        }
+
+        .toggle-switch-small {
+            position: relative;
+            display: inline-block;
+            width: 36px;
+            height: 20px;
+        }
+
+        .toggle-switch-small input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .toggle-slider-small {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #6c757d;
+            transition: .4s;
+            border-radius: 20px;
+        }
+
+        .toggle-slider-small:before {
+            position: absolute;
+            content: "";
+            height: 14px;
+            width: 14px;
+            left: 3px;
+            bottom: 3px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+
+        input:checked + .toggle-slider-small {
+            background-color: #0d6efd;
+        }
+
+        input:checked + .toggle-slider-small:before {
+            transform: translateX(16px);
+        }
+
+        .form-check-card {
+            border: 1px solid #dee2e6;
+            border-radius: 0.5rem;
+            padding: 1rem;
+            transition: all 0.2s ease;
+            cursor: pointer;
+            height: 100%;
+        }
+
+        .form-check-card:hover {
+            border-color: #adb5bd;
+        }
+
+        .form-check-card input[type="radio"]:checked ~ label,
+        .form-check-card:has(input[type="radio"]:checked) {
+            border-color: #0d6efd;
+            background-color: #e7f1ff;
+        }
+
+        .form-check-card .form-check-input {
+            margin-top: 0.2rem;
+        }
+
+        /* Modal Improvements */
+        .modal-content-custom {
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+
+        /* Break Summary Cards */
+        .card.border-0 {
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+
+        /* Alert Variants */
+        .alert-info {
+            background-color: #cff4fc;
+            border-color: #b6effb;
+            color: #055160;
+        }
+
+        /* Responsive Adjustments */
+        @media (max-width: 768px) {
+            .break-item .row {
+                font-size: 0.875rem;
+            }
+
+            .break-item .d-flex.gap-2 {
+                flex-wrap: wrap;
+            }
+
+            .modal-content-custom {
+                width: 95%;
+                padding: 1rem;
+            }
+        }
+
+
+        /* ===== OVERLAY ===== */
+        .break-modal-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(15, 23, 42, 0.65);
+            backdrop-filter: blur(4px);
+            z-index: 1060;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 1.5rem;
+            animation: breakFadeIn 0.2s ease;
+        }
+
+        @keyframes breakFadeIn {
+            from {
+                opacity: 0;
+            }
+            to {
+                opacity: 1;
+            }
+        }
+
+        /* ===== MODAL CONTAINER ===== */
+        .break-modal-container {
+            background: #ffffff;
+            border-radius: 1.25rem;
+            width: 100%;
+            max-width: 1100px;
+            max-height: 92vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 25px 60px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(0, 0, 0, 0.05);
+            animation: breakSlideUp 0.25s ease;
+        }
+
+        @keyframes breakSlideUp {
+            from {
+                transform: translateY(20px);
+                opacity: 0;
+            }
+            to {
+                transform: translateY(0);
+                opacity: 1;
+            }
+        }
+
+        /* ===== HEADER ===== */
+        .break-modal-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 1.75rem 2rem;
+            border-bottom: 1px solid #f1f5f9;
+            background: linear-gradient(135deg, #f8faff 0%, #ffffff 100%);
+            flex-shrink: 0;
+        }
+
+        .break-modal-title-group {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .break-modal-icon-wrap {
+            width: 52px;
+            height: 52px;
+            border-radius: 14px;
+            background: linear-gradient(135deg, #3b82f6, #6366f1);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            flex-shrink: 0;
+            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+        }
+
+        .break-modal-title {
+            font-size: 1.375rem;
+            font-weight: 700;
+            color: #0f172a;
+            margin: 0 0 0.2rem;
+            letter-spacing: -0.02em;
+        }
+
+        .break-modal-subtitle {
+            font-size: 0.875rem;
+            color: #64748b;
+            margin: 0;
+        }
+
+        .break-modal-close {
+            width: 40px;
+            height: 40px;
+            border-radius: 10px;
+            border: 1px solid #e2e8f0;
+            background: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            color: #64748b;
+            transition: all 0.2s;
+            flex-shrink: 0;
+        }
+
+        .break-modal-close:hover {
+            background: #fee2e2;
+            border-color: #fca5a5;
+            color: #dc2626;
+        }
+
+        /* ===== FORM BODY ===== */
+        .break-modal-form {
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        .break-modal-body {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0;
+            flex: 1;
+            overflow-y: auto;
+        }
+
+        .break-modal-col {
+            padding: 1.75rem 2rem;
+        }
+
+        .break-modal-col:first-child {
+            border-right: 1px solid #f1f5f9;
+        }
+
+        /* ===== SECTIONS ===== */
+        .break-form-section {
+            margin-bottom: 2rem;
+        }
+
+        .break-form-section:last-child {
+            margin-bottom: 0;
+        }
+
+        .break-section-label {
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+            font-size: 0.8rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: #94a3b8;
+            margin-bottom: 1rem;
+        }
+
+        .break-section-num {
+            width: 24px;
+            height: 24px;
+            border-radius: 6px;
+            background: #f1f5f9;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.7rem;
+            font-weight: 800;
+            color: #475569;
+        }
+
+        .break-section-hint {
+            font-size: 0.8rem;
+            color: #94a3b8;
+            margin: -0.5rem 0 0.75rem;
+        }
+
+        /* ===== FIELDS ===== */
+        .break-field-group {
+            margin-bottom: 1rem;
+        }
+
+        .break-field-label {
+            display: block;
+            font-size: 0.875rem;
+            font-weight: 600;
+            color: #374151;
+            margin-bottom: 0.5rem;
+        }
+
+        .break-required {
+            color: #ef4444;
+            margin-left: 2px;
+        }
+
+        .break-optional {
+            font-weight: 400;
+            color: #94a3b8;
+            font-size: 0.8em;
+        }
+
+        .break-input {
+            width: 100%;
+            border: 1.5px solid #e2e8f0;
+            border-radius: 10px;
+            padding: 0.7rem 1rem;
+            font-size: 0.95rem;
+            color: #1e293b;
+            background: #f8fafc;
+            transition: all 0.2s;
+            outline: none;
+        }
+
+        .break-input:focus {
+            border-color: #6366f1;
+            background: #ffffff;
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.12);
+        }
+
+        .break-input-lg {
+            padding: 0.85rem 1rem;
+            font-size: 1rem;
+        }
+
+        .break-field-hint {
+            display: block;
+            font-size: 0.78rem;
+            color: #94a3b8;
+            margin-top: 0.35rem;
+        }
+
+        .break-error {
+            display: block;
+            font-size: 0.78rem;
+            color: #ef4444;
+            margin-top: 0.35rem;
+        }
+
+        /* ===== TYPE CARDS ===== */
+        .break-type-grid {
+            display: flex;
+            flex-direction: column;
+            gap: 0.6rem;
+        }
+
+        .break-type-card {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            padding: 0.9rem 1rem;
+            border: 1.5px solid #e2e8f0;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.2s;
+            background: #f8fafc;
+            position: relative;
+        }
+
+        .break-type-card:hover {
+            border-color: #a5b4fc;
+            background: #fafbff;
+        }
+
+        .break-type-card--active {
+            background: #eff6ff !important;
+            border-color: #6366f1 !important;
+        }
+
+        .break-type-radio {
+            display: none;
+        }
+
+        .break-type-icon {
+            width: 42px;
+            height: 42px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            color: white;
+        }
+
+        .break-type-card--paid .break-type-icon {
+            background: linear-gradient(135deg, #10b981, #059669);
+        }
+
+        .break-type-card--unpaid .break-type-icon {
+            background: linear-gradient(135deg, #64748b, #475569);
+        }
+
+        .break-type-card--flexible .break-type-icon {
+            background: linear-gradient(135deg, #6366f1, #8b5cf6);
+        }
+
+        .break-type-text {
+            flex: 1;
+        }
+
+        .break-type-name {
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: #1e293b;
+            margin-bottom: 0.15rem;
+        }
+
+        .break-type-desc {
+            font-size: 0.78rem;
+            color: #64748b;
+        }
+
+        .break-type-check {
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            background: #e2e8f0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: transparent;
+            flex-shrink: 0;
+            transition: all 0.2s;
+        }
+
+        .break-type-card--active .break-type-check {
+            background: #6366f1;
+            color: white;
+        }
+
+        /* ===== TIME ROW ===== */
+        .break-time-row {
+            display: grid;
+            grid-template-columns: 1fr auto 1fr;
+            align-items: end;
+            gap: 0.75rem;
+        }
+
+        .break-time-separator {
+            padding-bottom: 0.7rem;
+            color: #cbd5e1;
+            display: flex;
+            align-items: center;
+        }
+
+        .break-time-input-wrap {
+            position: relative;
+        }
+
+        .break-time-icon {
+            position: absolute;
+            left: 0.75rem;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #94a3b8;
+            pointer-events: none;
+        }
+
+        .break-input-time {
+            padding-left: 2.25rem;
+        }
+
+        /* ===== DURATION GRID ===== */
+        .break-duration-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+        }
+
+        .break-input-suffix-wrap {
+            position: relative;
+            display: flex;
+            align-items: center;
+        }
+
+        .break-input-num {
+            padding-right: 3.5rem;
+        }
+
+        .break-input-suffix {
+            position: absolute;
+            right: 0.85rem;
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: #94a3b8;
+            pointer-events: none;
+        }
+
+        /* ===== PENALTY LIST ===== */
+        .break-penalty-list {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .break-penalty-option {
+            display: flex;
+            align-items: center;
+            gap: 0.85rem;
+            padding: 0.75rem 1rem;
+            border: 1.5px solid #e2e8f0;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.2s;
+            background: #f8fafc;
+        }
+
+        .break-penalty-option:hover {
+            border-color: #c7d2fe;
+            background: #f5f3ff;
+        }
+
+        .break-penalty-option--active {
+            border-color: #6366f1 !important;
+            background: #eff6ff !important;
+        }
+
+        .break-penalty-radio {
+            display: none;
+        }
+
+        .break-penalty-dot {
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            border: 2px solid #cbd5e1;
+            flex-shrink: 0;
+            transition: all 0.2s;
+            position: relative;
+        }
+
+        .break-penalty-option--active .break-penalty-dot {
+            border-color: #6366f1;
+            background: #6366f1;
+            box-shadow: inset 0 0 0 3px white;
+        }
+
+        .break-penalty-name {
+            font-size: 0.875rem;
+            font-weight: 600;
+            color: #1e293b;
+        }
+
+        .break-penalty-desc {
+            font-size: 0.775rem;
+            color: #64748b;
+        }
+
+        /* ===== WARNING BOX ===== */
+        .break-warning-box {
+            display: flex;
+            gap: 0.75rem;
+            padding: 0.875rem 1rem;
+            background: #fffbeb;
+            border: 1px solid #fcd34d;
+            border-radius: 10px;
+            margin-top: 0.75rem;
+            color: #92400e;
+        }
+
+        .break-warning-box svg {
+            flex-shrink: 0;
+            margin-top: 2px;
+            stroke: #d97706;
+        }
+
+        .break-warning-box strong {
+            display: block;
+            font-size: 0.85rem;
+            font-weight: 700;
+            margin-bottom: 0.2rem;
+        }
+
+        .break-warning-box p {
+            font-size: 0.8rem;
+            margin: 0;
+        }
+
+        /* ===== TOGGLE LIST ===== */
+        .break-toggle-list {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .break-toggle-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0.85rem 1rem;
+            border: 1.5px solid #e2e8f0;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: border-color 0.2s;
+            background: #f8fafc;
+        }
+
+        .break-toggle-item:hover {
+            border-color: #c7d2fe;
+        }
+
+        .break-toggle-info {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            color: #475569;
+        }
+
+        .break-toggle-info svg {
+            flex-shrink: 0;
+        }
+
+        .break-toggle-name {
+            font-size: 0.875rem;
+            font-weight: 600;
+            color: #1e293b;
+        }
+
+        .break-toggle-desc {
+            font-size: 0.775rem;
+            color: #64748b;
+        }
+
+        /* ===== SWITCH ===== */
+        .break-switch {
+            position: relative;
+            width: 44px;
+            height: 24px;
+            flex-shrink: 0;
+        }
+
+        .break-switch-input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+            position: absolute;
+        }
+
+        .break-switch-slider {
+            position: absolute;
+            inset: 0;
+            background: #cbd5e1;
+            border-radius: 24px;
+            cursor: pointer;
+            transition: 0.3s;
+        }
+
+        .break-switch-slider:before {
+            content: '';
+            position: absolute;
+            width: 18px;
+            height: 18px;
+            left: 3px;
+            top: 3px;
+            background: white;
+            border-radius: 50%;
+            transition: 0.3s;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+        }
+
+        .break-switch-input:checked + .break-switch-slider {
+            background: #6366f1;
+        }
+
+        .break-switch-input:checked + .break-switch-slider:before {
+            transform: translateX(20px);
+        }
+
+        /* ===== NOTIFY MINUTES ===== */
+        .break-notify-minutes {
+            margin-top: 0.75rem;
+            padding: 0.875rem 1rem;
+            background: #f0f9ff;
+            border: 1px dashed #7dd3fc;
+            border-radius: 10px;
+        }
+
+        /* ===== FOOTER ===== */
+        .break-modal-footer {
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 0.75rem;
+            padding: 1.25rem 2rem;
+            border-top: 1px solid #f1f5f9;
+            background: #f8fafc;
+            flex-shrink: 0;
+        }
+
+        .break-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.7rem 1.75rem;
+            border-radius: 10px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: none;
+        }
+
+        .break-btn-cancel {
+            background: white;
+            color: #64748b;
+            border: 1.5px solid #e2e8f0;
+        }
+
+        .break-btn-cancel:hover {
+            background: #f1f5f9;
+            color: #1e293b;
+        }
+
+        .break-btn-save {
+            background: linear-gradient(135deg, #6366f1, #4f46e5);
+            color: white;
+            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.35);
+            padding: 0.7rem 2.25rem;
+        }
+
+        .break-btn-save:hover {
+            background: linear-gradient(135deg, #4f46e5, #4338ca);
+            box-shadow: 0 6px 16px rgba(99, 102, 241, 0.45);
+            transform: translateY(-1px);
+        }
+
+        /* ===== RESPONSIVE ===== */
+        @media (max-width: 768px) {
+            .break-modal-body {
+                grid-template-columns: 1fr;
+            }
+
+            .break-modal-col:first-child {
+                border-right: none;
+                border-bottom: 1px solid #f1f5f9;
+            }
+
+            .break-duration-grid {
+                grid-template-columns: 1fr 1fr;
+            }
+        }
+
+
+        /* ===== BREAK SUMMARY STRIP ===== */
+        .break-summary-strip {
+            display: flex;
+            align-items: center;
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            padding: 0.875rem 1.5rem;
+            margin-bottom: 1.5rem;
+            gap: 0;
+        }
+
+        .break-summary-item {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            flex: 1;
+        }
+
+        .break-summary-divider {
+            width: 1px;
+            height: 36px;
+            background: #e2e8f0;
+            margin: 0 1.5rem;
+            flex-shrink: 0;
+        }
+
+        .break-summary-icon {
+            width: 36px;
+            height: 36px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+
+        .break-summary-icon--blue {
+            background: #eff6ff;
+            color: #3b82f6;
+        }
+
+        .break-summary-icon--amber {
+            background: #fffbeb;
+            color: #f59e0b;
+        }
+
+        .break-summary-icon--green {
+            background: #f0fdf4;
+            color: #22c55e;
+        }
+
+        .break-summary-value {
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: #0f172a;
+            line-height: 1.2;
+        }
+
+        .break-summary-unit {
+            font-size: 0.75rem;
+            font-weight: 500;
+            color: #94a3b8;
+        }
+
+        .break-summary-label {
+            font-size: 0.75rem;
+            color: #64748b;
+            margin-top: 1px;
+        }
+
+        .break-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 0.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            flex-shrink: 0;
+        }
+
     </style>
 @endpush
 
@@ -1226,29 +2453,20 @@ new class extends Component {
                                 </h5>
 
                                 <div class="row g-3">
-                                    <div class="col-md-4">
+                                    <div class="col-md-6">
                                         <label class="form-label">Start Time</label>
                                         <input type="time"
                                                wire:input="$dispatch('time-selected')"
                                                wire:model="selectedShift.startTime"
                                                class="form-control">
                                     </div>
-                                    <div class="col-md-4">
+                                    <div class="col-md-6">
                                         <label class="form-label">End Time</label>
                                         <input type="time"
                                                wire:input="$dispatch('time-selected')"
                                                wire:model="selectedShift.endTime"
                                                class="form-control">
                                     </div>
-                                    <div class="col-md-4">
-                                        <label class="form-label">Break Time (minutes)</label>
-                                        <input type="number"
-                                               wire:input="$dispatch('time-selected')"
-                                               wire:model="selectedShift.breakDuration"
-                                               class="form-control"
-                                               min="0" max="120" step="5">
-                                    </div>
-
                                 </div>
                                 <div class="col-md-12 mt-3">
                                     <label class="form-label">Shift Duration (hours)</label>
@@ -1540,12 +2758,12 @@ new class extends Component {
                                             <div class="input-group">
                                                 <input type="text"
                                                        class="form-control"
-                                                       value="{{ $selectedShift['startTime'] }} - {{ \Carbon\Carbon::parse($selectedShift['startTime'])->addMinutes($selectedShift['gracePeriodMinutes'])->format('H:i') }}"
+                                                       value="{{ $selectedShift['startTime'] }} - {{ Carbon::parse($selectedShift['startTime'])->addMinutes($selectedShift['gracePeriodMinutes'])->format('H:i') }}"
                                                        disabled>
                                             </div>
                                             <small class="text-muted">
                                                 Grace period ends
-                                                at {{ \Carbon\Carbon::parse($selectedShift['startTime'])->addMinutes($selectedShift['gracePeriodMinutes'])->format('H:i') }}
+                                                at {{ Carbon::parse($selectedShift['startTime'])->addMinutes($selectedShift['gracePeriodMinutes'])->format('H:i') }}
                                             </small>
                                         </div>
                                     </div>
@@ -1566,10 +2784,10 @@ new class extends Component {
                                                     <strong class="text-primary">Shift
                                                         Start: {{ $selectedShift['startTime'] }}</strong> <br>
                                                     <strong class="text-primary">Grace Period
-                                                        Ends: {{ \Carbon\Carbon::parse($selectedShift['startTime'])->addMinutes($selectedShift['gracePeriodMinutes'])->format('H:i') }}</strong>
+                                                        Ends: {{ Carbon::parse($selectedShift['startTime'])->addMinutes($selectedShift['gracePeriodMinutes'])->format('H:i') }}</strong>
                                                     <br>
                                                     <strong class="text-primary">Status: Check-ins
-                                                        before {{ \Carbon\Carbon::parse($selectedShift['startTime'])->addMinutes($selectedShift['gracePeriodMinutes'])->format('H:i') }}
+                                                        before {{ Carbon::parse($selectedShift['startTime'])->addMinutes($selectedShift['gracePeriodMinutes'])->format('H:i') }}
                                                         are "On Time", after are "Late"</strong>
                                                 </p>
                                             </div>
@@ -1641,6 +2859,263 @@ new class extends Component {
                                                 end
                                             </small>
                                         </div>
+                                    </div>
+                                @endif
+                            </div>
+                        </div>
+
+                        <!-- Break & Activity Blocks Configuration -->
+                        <div class="config-section">
+                            <div class="section-header">
+                                <div class="d-flex justify-content-between w-100 align-items-center">
+                                    <h5 class="mb-0">
+                                        <svg width="20" height="20" class="text-danger me-2" fill="currentColor"
+                                             viewBox="0 0 24 24">
+                                            <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor"
+                                                    stroke-width="2"/>
+                                            <path d="M12 6v6l4 2" stroke="currentColor" stroke-width="2"
+                                                  stroke-linecap="round"/>
+                                        </svg>
+                                        Break & Activity Blocks
+                                    </h5>
+                                    <button wire:click="openAddBreakModal" class="btn btn-sm btn-primary">
+                                        <svg width="16" height="16" fill="none" stroke="white" stroke-width="2"
+                                             viewBox="0 0 24 24" class="me-1">
+                                            <line x1="12" y1="5" x2="12" y2="19"/>
+                                            <line x1="5" y1="12" x2="19" y2="12"/>
+                                        </svg>
+                                        Add Break
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div class="section-body">
+                                <p class="text-muted small mb-3">
+                                    Configure specific time blocks for breaks, lunch, or other activities with automatic
+                                    tracking and penalty rules.
+                                </p>
+
+                                @if(count($breaks) === 0)
+                                    <div class="alert alert-light border text-center py-5">
+                                        <svg width="48" height="48" class="text-muted mb-3" fill="none"
+                                             stroke="currentColor" viewBox="0 0 24 24">
+                                            <circle cx="12" cy="12" r="10" stroke-width="2"/>
+                                            <path d="M12 6v6l4 2" stroke-width="2" stroke-linecap="round"/>
+                                        </svg>
+                                        <h6 class="text-muted">No Breaks Configured</h6>
+                                        <p class="text-muted small mb-3">Add breaks to track lunch, rest periods, or
+                                            other activities during the shift.</p>
+                                        <button wire:click="openAddBreakModal" class="btn btn-sm btn-primary">
+                                            Add First Break
+                                        </button>
+                                    </div>
+                                @else
+                                    <!-- Break Summary -->
+                                    <!-- Break Summary Strip -->
+                                    <div class="break-summary-strip">
+                                        <div class="break-summary-item">
+                                            <div class="break-summary-icon break-summary-icon--blue">
+                                                <svg width="16" height="16" fill="none" stroke="currentColor"
+                                                     stroke-width="2" viewBox="0 0 24 24">
+                                                    <circle cx="12" cy="12" r="10"/>
+                                                    <path d="M12 6v6l4 2" stroke-linecap="round"/>
+                                                </svg>
+                                            </div>
+                                            <div>
+                                                <div class="break-summary-value">{{ count($breaks) }}</div>
+                                                <div class="break-summary-label">Total Breaks</div>
+                                            </div>
+                                        </div>
+
+                                        <div class="break-summary-divider"></div>
+
+                                        <div class="break-summary-item">
+                                            <div class="break-summary-icon break-summary-icon--amber">
+                                                <svg width="16" height="16" fill="none" stroke="currentColor"
+                                                     stroke-width="2" viewBox="0 0 24 24">
+                                                    <circle cx="12" cy="12" r="10"/>
+                                                    <path d="M12 6v6l4 2" stroke-linecap="round"/>
+                                                    <line x1="12" y1="2" x2="12" y2="4"/>
+                                                </svg>
+                                            </div>
+                                            <div>
+                                                <div class="break-summary-value">{{ $this->getTotalBreakMinutes() }}
+                                                    <span class="break-summary-unit">min</span></div>
+                                                <div class="break-summary-label">Total Break Time</div>
+                                            </div>
+                                        </div>
+
+                                        <div class="break-summary-divider"></div>
+
+                                        <div class="break-summary-item">
+                                            <div class="break-summary-icon break-summary-icon--green">
+                                                <svg width="16" height="16" fill="none" stroke="currentColor"
+                                                     stroke-width="2" viewBox="0 0 24 24">
+                                                    <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/>
+                                                    <circle cx="12" cy="7" r="4"/>
+                                                </svg>
+                                            </div>
+                                            <div>
+                                                <div
+                                                    class="break-summary-value">{{ $this->getEffectiveShiftDuration() }}
+                                                    <span class="break-summary-unit">hrs</span></div>
+                                                <div class="break-summary-label">Effective Work Hours</div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Breaks List -->
+                                    <div class="breaks-list">
+                                        @foreach($breaks as $index => $break)
+                                            <div class="break-item {{ !$break['is_active'] ? 'break-inactive' : '' }}">
+                                                <!-- Break Header -->
+                                                <div class="d-flex justify-content-between align-items-start mb-2">
+                                                    <div class="d-flex align-items-center gap-2">
+                                                        <!-- Drag Handle -->
+                                                        <div class="drag-handle">
+                                                            <svg width="16" height="16" fill="currentColor"
+                                                                 viewBox="0 0 24 24">
+                                                                <circle cx="9" cy="5" r="1"/>
+                                                                <circle cx="9" cy="12" r="1"/>
+                                                                <circle cx="9" cy="19" r="1"/>
+                                                                <circle cx="15" cy="5" r="1"/>
+                                                                <circle cx="15" cy="12" r="1"/>
+                                                                <circle cx="15" cy="19" r="1"/>
+                                                            </svg>
+                                                        </div>
+
+                                                        <!-- Break Name -->
+                                                        <div>
+                                                            <h6 class="mb-0">{{ $break['name'] }}</h6>
+                                                            <div class="small text-muted">
+                                                                {{ $this->getBreakTypeLabel($break['type']) }}
+                                                                @if($break['is_mandatory'])
+                                                                    <span class="badge bg-danger ms-1"
+                                                                          style="font-size: 0.65rem;">Mandatory</span>
+                                                                @endif
+                                                            </div>
+                                                        </div>
+                                                    </div>
+
+                                                    <!-- Break Actions -->
+                                                    <div class="d-flex align-items-center gap-2">
+                                                        <!-- Active Toggle -->
+                                                        <label class="toggle-switch-small">
+                                                            <input type="checkbox"
+                                                                   wire:click="toggleBreakActive({{ $index }})"
+                                                                {{ $break['is_active'] ? 'checked' : '' }}>
+                                                            <span class="toggle-slider-small"></span>
+                                                        </label>
+
+                                                        <!-- Move Up -->
+                                                        <button wire:click="moveBreakUp({{ $index }})"
+                                                                class="btn btn-sm btn-light"
+                                                            {{ $index === 0 ? 'disabled' : '' }}>
+                                                            <svg width="14" height="14" fill="currentColor"
+                                                                 viewBox="0 0 24 24">
+                                                                <polyline points="18 15 12 9 6 15" stroke="currentColor"
+                                                                          stroke-width="2" fill="none"/>
+                                                            </svg>
+                                                        </button>
+
+                                                        <!-- Move Down -->
+                                                        <button wire:click="moveBreakDown({{ $index }})"
+                                                                class="btn btn-sm btn-light"
+                                                            {{ $index === count($breaks) - 1 ? 'disabled' : '' }}>
+                                                            <svg width="14" height="14" fill="currentColor"
+                                                                 viewBox="0 0 24 24">
+                                                                <polyline points="6 9 12 15 18 9" stroke="currentColor"
+                                                                          stroke-width="2" fill="none"/>
+                                                            </svg>
+                                                        </button>
+
+                                                        <!-- Edit -->
+                                                        <button wire:click="openEditBreakModal({{ $index }})"
+                                                                class="btn btn-sm btn-light">
+                                                            <svg width="16" height="16" fill="none"
+                                                                 stroke="currentColor" stroke-width="2"
+                                                                 viewBox="0 0 24 24">
+                                                                <path
+                                                                    d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
+                                                                <path
+                                                                    d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                                                            </svg>
+                                                        </button>
+
+
+                                                        <!-- Delete -->
+                                                        <button wire:click="deleteBreak({{ $index }})"
+                                                                wire:confirm="Are you sure you want to delete this break?"
+                                                                class="btn btn-sm btn-light text-danger">
+                                                            <svg width="16" height="16" fill="none"
+                                                                 stroke="currentColor" stroke-width="2"
+                                                                 viewBox="0 0 24 24">
+                                                                <polyline points="3 6 5 6 21 6"/>
+                                                                <path d="M19 6l-1 14H6L5 6"/>
+                                                                <path d="M10 11v6"/>
+                                                                <path d="M14 11v6"/>
+                                                                <path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"/>
+                                                            </svg>
+                                                        </button>
+                                                    </div>
+                                                </div>
+
+                                                <!-- Break Details Table -->
+                                                <div class="table-responsive mt-2">
+                                                    <table class="table table-sm table-borderless mb-0"
+                                                           style="font-size: 0.8rem;">
+                                                        <thead>
+                                                        <tr style="border-bottom: 1px solid #e9ecef;">
+                                                            <th class="text-muted fw-normal ps-0">Window Time</th>
+                                                            <th class="text-muted fw-normal">Duration</th>
+                                                            <th class="text-muted fw-normal">Max Duration</th>
+                                                            <th class="text-muted fw-normal">Penalty</th>
+                                                            <th class="text-muted fw-normal">Punch Required</th>
+                                                        </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                        <tr>
+                                                            <td class="fw-medium ps-0">
+                                                                @if($break['window_start_time'] && $break['window_end_time'])
+                                                                    {{ \Carbon\Carbon::parse($break['window_start_time'])->format('h:i A') }}
+                                                                    –
+                                                                    {{ \Carbon\Carbon::parse($break['window_end_time'])->format('h:i A') }}
+                                                                @else
+                                                                    <span class="text-muted">Anytime</span>
+                                                                @endif
+                                                            </td>
+                                                            <td class="fw-medium">{{ $break['duration_minutes'] }}min
+                                                            </td>
+                                                            <td class="fw-medium">{{ $break['max_duration_minutes'] ?? $break['duration_minutes'] }}
+                                                                min
+                                                            </td>
+                                                            <td class="fw-medium">{{ $this->getPenaltyTypeLabel($break['penalty_type']) }}</td>
+                                                            <td>
+                                                                @if($break['require_punch'])
+                                                                    <span
+                                                                        class="badge rounded-pill text-bg-warning">Yes</span>
+                                                                @else
+                                                                    <span class="badge rounded-pill text-bg-secondary">No</span>
+                                                                @endif
+                                                            </td>
+                                                        </tr>
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+
+                                                <!-- Warning/Info Messages -->
+                                                @if($break['notify_on_approaching'] && $break['notify_minutes_before'])
+                                                    <div class="alert alert-info mt-2 mb-0 py-2 small">
+                                                        <svg width="14" height="14" class="me-1" fill="currentColor"
+                                                             viewBox="0 0 24 24">
+                                                            <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+                                                        </svg>
+                                                        Notify {{ $break['notify_minutes_before'] }} minutes before
+                                                        break window
+                                                    </div>
+                                                @endif
+                                            </div>
+                                        @endforeach
                                     </div>
                                 @endif
                             </div>
@@ -1970,6 +3445,381 @@ new class extends Component {
                         Cancel
                     </button>
                 </div>
+            </div>
+        </div>
+    @endif
+
+    <!-- Add Break Modal -->
+    @if($showAddBreakModal)
+        <div class="break-modal-overlay" wire:click.self="$set('showAddBreakModal', false)">
+            <div class="break-modal-container">
+
+                {{-- Modal Header --}}
+                <div class="break-modal-header">
+                    <div class="break-modal-title-group">
+                        <div class="break-modal-icon-wrap">
+                            @if($editingBreakIndex !== null)
+                                <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2"
+                                     viewBox="0 0 24 24">
+                                    <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
+                                    <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                                </svg>
+                            @else
+                                <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2"
+                                     viewBox="0 0 24 24">
+                                    <circle cx="12" cy="12" r="10"/>
+                                    <path d="M12 6v6l4 2" stroke-linecap="round"/>
+                                </svg>
+                            @endif
+                        </div>
+                        <div>
+                            <h3 class="break-modal-title">{{ $editingBreakIndex !== null ? 'Edit Break' : 'Add New Break' }}</h3>
+                            <p class="break-modal-subtitle">Configure break rules, time window, and penalty settings</p>
+                        </div>
+                    </div>
+                    <button wire:click="$set('showAddBreakModal', false)" class="break-modal-close">
+                        <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"
+                             viewBox="0 0 24 24">
+                            <line x1="18" y1="6" x2="6" y2="18"/>
+                            <line x1="6" y1="6" x2="18" y2="18"/>
+                        </svg>
+                    </button>
+                </div>
+
+                {{-- Modal Body --}}
+                <form wire:submit.prevent="saveBreak" class="break-modal-form">
+                    <div class="break-modal-body">
+
+                        {{-- LEFT COLUMN --}}
+                        <div class="break-modal-col">
+
+                            {{-- Section: Basic Info --}}
+                            <div class="break-form-section">
+                                <div class="break-section-label">
+                                    <span class="break-section-num">01</span>
+                                    <span>Basic Information</span>
+                                </div>
+
+                                <div class="break-field-group">
+                                    <label class="break-field-label">
+                                        Break Name <span class="break-required">*</span>
+                                    </label>
+                                    <input type="text"
+                                           wire:model="currentBreak.name"
+                                           class="break-input break-input-lg"
+                                           placeholder="e.g., Lunch Break, Tea Break, Prayer Break">
+                                    @error('currentBreak.name')
+                                    <span class="break-error">{{ $message }}</span>
+                                    @enderror
+                                </div>
+                            </div>
+
+                            {{-- Section: Activity Type --}}
+                            <div class="break-form-section">
+                                <div class="break-section-label">
+                                    <span class="break-section-num">02</span>
+                                    <span>Activity Type <span class="break-required">*</span></span>
+                                </div>
+
+                                <div class="break-type-grid">
+                                    @foreach($breakTypes as $type)
+                                        <label
+                                            class="break-type-card {{ ($currentBreak['type'] ?? '') === $type['value'] ? 'break-type-card--active' : '' }} break-type-card--{{ $type['value'] }}">
+                                            <input type="radio"
+                                                   wire:model.live="currentBreak.type"
+                                                   value="{{ $type['value'] }}"
+                                                   class="break-type-radio">
+                                            <div class="break-type-icon">
+                                                @if($type['value'] === 'paid')
+                                                    <svg width="22" height="22" fill="none" stroke="currentColor"
+                                                         stroke-width="2" viewBox="0 0 24 24">
+                                                        <path d="M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"
+                                                              stroke-linecap="round"/>
+                                                    </svg>
+                                                @elseif($type['value'] === 'unpaid')
+                                                    <svg width="22" height="22" fill="none" stroke="currentColor"
+                                                         stroke-width="2" viewBox="0 0 24 24">
+                                                        <circle cx="12" cy="12" r="10"/>
+                                                        <path d="M4.93 4.93l14.14 14.14"/>
+                                                    </svg>
+                                                @else
+                                                    <svg width="22" height="22" fill="none" stroke="currentColor"
+                                                         stroke-width="2" viewBox="0 0 24 24">
+                                                        <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/>
+                                                        <polyline points="17 6 23 6 23 12"/>
+                                                    </svg>
+                                                @endif
+                                            </div>
+                                            <div class="break-type-text">
+                                                <div class="break-type-name">{{ $type['label'] }}</div>
+                                                <div class="break-type-desc">{{ $type['description'] }}</div>
+                                            </div>
+                                            <div class="break-type-check">
+                                                <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
+                                                    <path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2.5"
+                                                          fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+                                                </svg>
+                                            </div>
+                                        </label>
+                                    @endforeach
+                                </div>
+                                @error('currentBreak.type')
+                                <span class="break-error">{{ $message }}</span>
+                                @enderror
+                            </div>
+
+                            {{-- Section: Time Window --}}
+                            <div class="break-form-section">
+                                <div class="break-section-label">
+                                    <span class="break-section-num">03</span>
+                                    <span>Time Window <span class="break-optional">(Optional)</span></span>
+                                </div>
+                                <p class="break-section-hint">Define when employees should take this break during their
+                                    shift</p>
+
+                                <div class="break-time-row">
+                                    <div class="break-field-group">
+                                        <label class="break-field-label">Window Start</label>
+                                        <div class="break-time-input-wrap">
+                                            <svg class="break-time-icon" width="16" height="16" fill="none"
+                                                 stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                                <circle cx="12" cy="12" r="10"/>
+                                                <path d="M12 6v6l4 2" stroke-linecap="round"/>
+                                            </svg>
+                                            <input type="time"
+                                                   wire:model="currentBreak.window_start_time"
+                                                   class="break-input break-input-time">
+                                        </div>
+                                    </div>
+                                    <div class="break-time-separator">
+                                        <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"
+                                             viewBox="0 0 24 24">
+                                            <path d="M5 12h14M12 5l7 7-7 7"/>
+                                        </svg>
+                                    </div>
+                                    <div class="break-field-group">
+                                        <label class="break-field-label">Window End</label>
+                                        <div class="break-time-input-wrap">
+                                            <svg class="break-time-icon" width="16" height="16" fill="none"
+                                                 stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                                <circle cx="12" cy="12" r="10"/>
+                                                <path d="M12 6v6l4 2" stroke-linecap="round"/>
+                                            </svg>
+                                            <input type="time"
+                                                   wire:model="currentBreak.window_end_time"
+                                                   class="break-input break-input-time">
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                        </div>
+
+                        {{-- RIGHT COLUMN --}}
+                        <div class="break-modal-col">
+
+                            {{-- Section: Duration --}}
+                            <div class="break-form-section">
+                                <div class="break-section-label">
+                                    <span class="break-section-num">04</span>
+                                    <span>Duration Settings</span>
+                                </div>
+
+                                <div class="break-duration-grid">
+                                    <div class="break-field-group">
+                                        <label class="break-field-label">
+                                            Allowed Duration <span class="break-required">*</span>
+                                        </label>
+                                        <div class="break-input-suffix-wrap">
+                                            <input type="number"
+                                                   wire:model="currentBreak.duration_minutes"
+                                                   class="break-input break-input-num"
+                                                   min="1" max="480" placeholder="30">
+                                            <span class="break-input-suffix">min</span>
+                                        </div>
+                                        <span class="break-field-hint">Standard allowed duration</span>
+                                        @error('currentBreak.duration_minutes')
+                                        <span class="break-error">{{ $message }}</span>
+                                        @enderror
+                                    </div>
+
+                                    <div class="break-field-group">
+                                        <label class="break-field-label">Maximum Duration</label>
+                                        <div class="break-input-suffix-wrap">
+                                            <input type="number"
+                                                   wire:model="currentBreak.max_duration_minutes"
+                                                   class="break-input break-input-num"
+                                                   min="1" max="480" placeholder="45">
+                                            <span class="break-input-suffix">min</span>
+                                        </div>
+                                        <span class="break-field-hint">Before penalty applies</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {{-- Section: Penalty --}}
+                            <div class="break-form-section">
+                                <div class="break-section-label">
+                                    <span class="break-section-num">05</span>
+                                    <span>Penalty & Enforcement</span>
+                                </div>
+
+                                <div class="break-field-group">
+                                    <label class="break-field-label">When Time Limit Exceeded</label>
+                                    <div class="break-penalty-list">
+                                        @foreach($penaltyTypes as $penalty)
+                                            <label
+                                                class="break-penalty-option {{ ($currentBreak['penalty_type'] ?? 'none') === $penalty['value'] ? 'break-penalty-option--active' : '' }}">
+                                                <input type="radio"
+                                                       wire:model.live="currentBreak.penalty_type"
+                                                       value="{{ $penalty['value'] }}"
+                                                       class="break-penalty-radio">
+                                                <div class="break-penalty-dot"></div>
+                                                <div class="break-penalty-text">
+                                                    <div class="break-penalty-name">{{ $penalty['label'] }}</div>
+                                                    <div class="break-penalty-desc">{{ $penalty['description'] }}</div>
+                                                </div>
+                                            </label>
+                                        @endforeach
+                                    </div>
+                                </div>
+
+                                @if(($currentBreak['penalty_type'] ?? '') === 'auto_deduct')
+                                    <div class="break-warning-box">
+                                        <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"
+                                             viewBox="0 0 24 24">
+                                            <path
+                                                d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+                                            <line x1="12" y1="9" x2="12" y2="13"/>
+                                            <line x1="12" y1="17" x2="12.01" y2="17"/>
+                                        </svg>
+                                        <div>
+                                            <strong>Auto-Deduct Active</strong>
+                                            <p>Exceeding the time limit will automatically reduce the employee's worked
+                                                hours.</p>
+                                        </div>
+                                    </div>
+                                @endif
+                            </div>
+
+                            {{-- Section: Advanced Options --}}
+                            <div class="break-form-section">
+                                <div class="break-section-label">
+                                    <span class="break-section-num">06</span>
+                                    <span>Advanced Options</span>
+                                </div>
+
+                                <div class="break-toggle-list">
+
+                                    <label class="break-toggle-item">
+                                        <div class="break-toggle-info">
+                                            <svg width="18" height="18" fill="none" stroke="currentColor"
+                                                 stroke-width="2" viewBox="0 0 24 24">
+                                                <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                                                <path d="M7 11V7a5 5 0 0110 0v4"/>
+                                            </svg>
+                                            <div>
+                                                <div class="break-toggle-name">Require Punch Out/In</div>
+                                                <div class="break-toggle-desc">Employees must explicitly punch during
+                                                    this break
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="break-switch">
+                                            <input type="checkbox" wire:model="currentBreak.require_punch"
+                                                   class="break-switch-input" id="require_punch">
+                                            <span class="break-switch-slider"></span>
+                                        </div>
+                                    </label>
+
+                                    <label class="break-toggle-item">
+                                        <div class="break-toggle-info">
+                                            <svg width="18" height="18" fill="none" stroke="currentColor"
+                                                 stroke-width="2" viewBox="0 0 24 24">
+                                                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                                            </svg>
+                                            <div>
+                                                <div class="break-toggle-name">Mandatory Break</div>
+                                                <div class="break-toggle-desc">Employees are required to take this
+                                                    break
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="break-switch">
+                                            <input type="checkbox" wire:model="currentBreak.is_mandatory"
+                                                   class="break-switch-input" id="is_mandatory">
+                                            <span class="break-switch-slider"></span>
+                                        </div>
+                                    </label>
+
+                                    <label class="break-toggle-item">
+                                        <div class="break-toggle-info">
+                                            <svg width="18" height="18" fill="none" stroke="currentColor"
+                                                 stroke-width="2" viewBox="0 0 24 24">
+                                                <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+                                                <path d="M13.73 21a2 2 0 01-3.46 0"/>
+                                            </svg>
+                                            <div>
+                                                <div class="break-toggle-name">Approaching Notification</div>
+                                                <div class="break-toggle-desc">Alert employees before the break limit is
+                                                    reached
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="break-switch">
+                                            <input type="checkbox" wire:model="currentBreak.notify_on_approaching"
+                                                   class="break-switch-input" id="notify_approaching">
+                                            <span class="break-switch-slider"></span>
+                                        </div>
+                                    </label>
+
+                                    @if($currentBreak['notify_on_approaching'] ?? false)
+                                        <div class="break-notify-minutes">
+                                            <label class="break-field-label">Notify how many minutes before?</label>
+                                            <div class="break-input-suffix-wrap" style="max-width: 180px;">
+                                                <input type="number"
+                                                       wire:model="currentBreak.notify_minutes_before"
+                                                       class="break-input break-input-num"
+                                                       min="1" max="60" placeholder="5">
+                                                <span class="break-input-suffix">min</span>
+                                            </div>
+                                        </div>
+                                    @endif
+
+                                </div>
+                            </div>
+
+                        </div>
+                    </div>
+
+                    {{-- Modal Footer --}}
+                    <div class="break-modal-footer">
+                        <button type="button"
+                                wire:click="$set('showAddBreakModal', false)"
+                                class="break-btn break-btn-cancel">
+                            <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"
+                                 viewBox="0 0 24 24">
+                                <line x1="18" y1="6" x2="6" y2="18"/>
+                                <line x1="6" y1="6" x2="18" y2="18"/>
+                            </svg>
+                            Cancel
+                        </button>
+                        <button type="submit" class="break-btn break-btn-save">
+                            <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"
+                                 viewBox="0 0 24 24">
+                                @if($editingBreakIndex !== null)
+                                    <path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/>
+                                    <polyline points="17 21 17 13 7 13 7 21"/>
+                                    <polyline points="7 3 7 8 15 8"/>
+                                @else
+                                    <line x1="12" y1="5" x2="12" y2="19"/>
+                                    <line x1="5" y1="12" x2="19" y2="12"/>
+                                @endif
+                            </svg>
+                            {{ $editingBreakIndex !== null ? 'Update Break' : 'Add Break' }}
+                        </button>
+                    </div>
+                </form>
             </div>
         </div>
     @endif
