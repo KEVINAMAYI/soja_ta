@@ -27,7 +27,7 @@ return new class extends Migration
             $table->boolean('is_mandatory')->default(false);
             $table->integer('order')->default(0); // For sorting breaks
             $table->boolean('is_active')->default(true);
-            $table->json('metadata')->nullable(); // For future extensibility
+            $table->longText('metadata')->nullable();
             $table->timestamps();
 
             // Indexes
