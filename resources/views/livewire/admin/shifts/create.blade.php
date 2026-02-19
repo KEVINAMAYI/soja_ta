@@ -531,13 +531,17 @@ new class extends Component {
     public function saveAssignment()
     {
 
-        $this->validate();
+        $this->validate([
+            'assignedStaffIds' => 'array',
+            'assignedStaffIds.*' => 'exists:employees,id',
+        ]);
 
         try {
 
             // Get organization_id
             $organizationId = auth()->user()->employee->organization_id;
             $currentShiftId = $this->selectedShift['id'];
+
 
             Employee::where('organization_id', $organizationId)
                 ->where('shift_id', $currentShiftId)
@@ -556,6 +560,7 @@ new class extends Component {
 
             $this->getAssignedStaff();
             $this->searchEmployees();
+
 
             LivewireAlert::title('Awesome!')
                 ->text('Staff assignment saved successfully!')
