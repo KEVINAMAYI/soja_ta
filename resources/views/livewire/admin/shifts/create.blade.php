@@ -2479,6 +2479,264 @@ new class extends Component {
                             </div>
                         </div>
 
+
+                        <!-- Break & Activity Blocks Configuration -->
+                        <div class="config-section">
+                            <div class="section-header">
+                                <div class="d-flex justify-content-between w-100 align-items-center">
+                                    <h5 class="mb-0">
+                                        <svg width="20" height="20" class="text-danger me-2" fill="currentColor"
+                                             viewBox="0 0 24 24">
+                                            <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor"
+                                                    stroke-width="2"/>
+                                            <path d="M12 6v6l4 2" stroke="currentColor" stroke-width="2"
+                                                  stroke-linecap="round"/>
+                                        </svg>
+                                        Break & Activity Blocks
+                                    </h5>
+                                    <button wire:click="openAddBreakModal" class="btn btn-sm btn-primary">
+                                        <svg width="16" height="16" fill="none" stroke="white" stroke-width="2"
+                                             viewBox="0 0 24 24" class="me-1">
+                                            <line x1="12" y1="5" x2="12" y2="19"/>
+                                            <line x1="5" y1="12" x2="19" y2="12"/>
+                                        </svg>
+                                        Add Break
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div class="section-body">
+                                <p class="text-muted small mb-3">
+                                    Configure specific time blocks for breaks, lunch, or other activities with automatic
+                                    tracking and penalty rules.
+                                </p>
+
+                                @if(count($breaks) === 0)
+                                    <div class="alert alert-light border text-center py-5">
+                                        <svg width="48" height="48" class="text-muted mb-3" fill="none"
+                                             stroke="currentColor" viewBox="0 0 24 24">
+                                            <circle cx="12" cy="12" r="10" stroke-width="2"/>
+                                            <path d="M12 6v6l4 2" stroke-width="2" stroke-linecap="round"/>
+                                        </svg>
+                                        <h6 class="text-muted">No Breaks Configured</h6>
+                                        <p class="text-muted small mb-3">Add breaks to track lunch, rest periods, or
+                                            other activities during the shift.</p>
+                                        <button wire:click="openAddBreakModal" class="btn btn-sm btn-primary">
+                                            Add First Break
+                                        </button>
+                                    </div>
+                                @else
+                                    <!-- Break Summary -->
+                                    <!-- Break Summary Strip -->
+                                    <div class="break-summary-strip">
+                                        <div class="break-summary-item">
+                                            <div class="break-summary-icon break-summary-icon--blue">
+                                                <svg width="16" height="16" fill="none" stroke="currentColor"
+                                                     stroke-width="2" viewBox="0 0 24 24">
+                                                    <circle cx="12" cy="12" r="10"/>
+                                                    <path d="M12 6v6l4 2" stroke-linecap="round"/>
+                                                </svg>
+                                            </div>
+                                            <div>
+                                                <div class="break-summary-value">{{ count($breaks) }}</div>
+                                                <div class="break-summary-label">Total Breaks</div>
+                                            </div>
+                                        </div>
+
+                                        <div class="break-summary-divider"></div>
+
+                                        <div class="break-summary-item">
+                                            <div class="break-summary-icon break-summary-icon--amber">
+                                                <svg width="16" height="16" fill="none" stroke="currentColor"
+                                                     stroke-width="2" viewBox="0 0 24 24">
+                                                    <circle cx="12" cy="12" r="10"/>
+                                                    <path d="M12 6v6l4 2" stroke-linecap="round"/>
+                                                    <line x1="12" y1="2" x2="12" y2="4"/>
+                                                </svg>
+                                            </div>
+                                            <div>
+                                                <div class="break-summary-value">{{ $this->getTotalBreakMinutes() }}
+                                                    <span class="break-summary-unit">min</span></div>
+                                                <div class="break-summary-label">Total Break Time</div>
+                                            </div>
+                                        </div>
+
+                                        <div class="break-summary-divider"></div>
+
+                                        <div class="break-summary-item">
+                                            <div class="break-summary-icon break-summary-icon--green">
+                                                <svg width="16" height="16" fill="none" stroke="currentColor"
+                                                     stroke-width="2" viewBox="0 0 24 24">
+                                                    <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/>
+                                                    <circle cx="12" cy="7" r="4"/>
+                                                </svg>
+                                            </div>
+                                            <div>
+                                                <div
+                                                    class="break-summary-value">{{ $this->getEffectiveShiftDuration() }}
+                                                    <span class="break-summary-unit">hrs</span></div>
+                                                <div class="break-summary-label">Effective Work Hours</div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Breaks List -->
+                                    <div class="breaks-list">
+                                        @foreach($breaks as $index => $break)
+                                            <div class="break-item {{ !$break['is_active'] ? 'break-inactive' : '' }}">
+                                                <!-- Break Header -->
+                                                <div class="d-flex justify-content-between align-items-start mb-2">
+                                                    <div class="d-flex align-items-center gap-2">
+                                                        <!-- Drag Handle -->
+                                                        <div class="drag-handle">
+                                                            <svg width="16" height="16" fill="currentColor"
+                                                                 viewBox="0 0 24 24">
+                                                                <circle cx="9" cy="5" r="1"/>
+                                                                <circle cx="9" cy="12" r="1"/>
+                                                                <circle cx="9" cy="19" r="1"/>
+                                                                <circle cx="15" cy="5" r="1"/>
+                                                                <circle cx="15" cy="12" r="1"/>
+                                                                <circle cx="15" cy="19" r="1"/>
+                                                            </svg>
+                                                        </div>
+
+                                                        <!-- Break Name -->
+                                                        <div>
+                                                            <h6 class="mb-0">{{ $break['name'] }}</h6>
+                                                            <div class="small text-muted">
+                                                                {{ $this->getBreakTypeLabel($break['type']) }}
+                                                                @if($break['is_mandatory'])
+                                                                    <span class="badge bg-danger ms-1"
+                                                                          style="font-size: 0.65rem;">Mandatory</span>
+                                                                @endif
+                                                            </div>
+                                                        </div>
+                                                    </div>
+
+                                                    <!-- Break Actions -->
+                                                    <div class="d-flex align-items-center gap-2">
+                                                        <!-- Active Toggle -->
+                                                        <label class="toggle-switch-small">
+                                                            <input type="checkbox"
+                                                                   wire:click="toggleBreakActive({{ $index }})"
+                                                                {{ $break['is_active'] ? 'checked' : '' }}>
+                                                            <span class="toggle-slider-small"></span>
+                                                        </label>
+
+                                                        <!-- Move Up -->
+                                                        <button wire:click="moveBreakUp({{ $index }})"
+                                                                class="btn btn-sm btn-light"
+                                                            {{ $index === 0 ? 'disabled' : '' }}>
+                                                            <svg width="14" height="14" fill="currentColor"
+                                                                 viewBox="0 0 24 24">
+                                                                <polyline points="18 15 12 9 6 15" stroke="currentColor"
+                                                                          stroke-width="2" fill="none"/>
+                                                            </svg>
+                                                        </button>
+
+                                                        <!-- Move Down -->
+                                                        <button wire:click="moveBreakDown({{ $index }})"
+                                                                class="btn btn-sm btn-light"
+                                                            {{ $index === count($breaks) - 1 ? 'disabled' : '' }}>
+                                                            <svg width="14" height="14" fill="currentColor"
+                                                                 viewBox="0 0 24 24">
+                                                                <polyline points="6 9 12 15 18 9" stroke="currentColor"
+                                                                          stroke-width="2" fill="none"/>
+                                                            </svg>
+                                                        </button>
+
+                                                        <!-- Edit -->
+                                                        <button wire:click="openEditBreakModal({{ $index }})"
+                                                                class="btn btn-sm btn-light">
+                                                            <svg width="16" height="16" fill="none"
+                                                                 stroke="currentColor" stroke-width="2"
+                                                                 viewBox="0 0 24 24">
+                                                                <path
+                                                                    d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
+                                                                <path
+                                                                    d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                                                            </svg>
+                                                        </button>
+
+
+                                                        <!-- Delete -->
+                                                        <button wire:click="deleteBreak({{ $index }})"
+                                                                wire:confirm="Are you sure you want to delete this break?"
+                                                                class="btn btn-sm btn-light text-danger">
+                                                            <svg width="16" height="16" fill="none"
+                                                                 stroke="currentColor" stroke-width="2"
+                                                                 viewBox="0 0 24 24">
+                                                                <polyline points="3 6 5 6 21 6"/>
+                                                                <path d="M19 6l-1 14H6L5 6"/>
+                                                                <path d="M10 11v6"/>
+                                                                <path d="M14 11v6"/>
+                                                                <path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"/>
+                                                            </svg>
+                                                        </button>
+                                                    </div>
+                                                </div>
+
+                                                <!-- Break Details Table -->
+                                                <div class="table-responsive mt-2">
+                                                    <table class="table table-sm table-borderless mb-0"
+                                                           style="font-size: 0.8rem;">
+                                                        <thead>
+                                                        <tr style="border-bottom: 1px solid #e9ecef;">
+                                                            <th class="text-muted fw-normal ps-0">Window Time</th>
+                                                            <th class="text-muted fw-normal">Duration</th>
+                                                            <th class="text-muted fw-normal">Max Duration</th>
+                                                            <th class="text-muted fw-normal">Penalty</th>
+                                                            <th class="text-muted fw-normal">Punch Required</th>
+                                                        </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                        <tr>
+                                                            <td class="fw-medium ps-0">
+                                                                @if($break['window_start_time'] && $break['window_end_time'])
+                                                                    {{ \Carbon\Carbon::parse($break['window_start_time'])->format('h:i A') }}
+                                                                    –
+                                                                    {{ \Carbon\Carbon::parse($break['window_end_time'])->format('h:i A') }}
+                                                                @else
+                                                                    <span class="text-muted">Anytime</span>
+                                                                @endif
+                                                            </td>
+                                                            <td class="fw-medium">{{ $break['duration_minutes'] }}min
+                                                            </td>
+                                                            <td class="fw-medium">{{ $break['max_duration_minutes'] ?? $break['duration_minutes'] }}
+                                                                min
+                                                            </td>
+                                                            <td class="fw-medium">{{ $this->getPenaltyTypeLabel($break['penalty_type']) }}</td>
+                                                            <td>
+                                                                @if($break['require_punch'])
+                                                                    <span
+                                                                        class="badge rounded-pill text-bg-warning">Yes</span>
+                                                                @else
+                                                                    <span class="badge rounded-pill text-bg-secondary">No</span>
+                                                                @endif
+                                                            </td>
+                                                        </tr>
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+
+                                                <!-- Warning/Info Messages -->
+                                                @if($break['notify_on_approaching'] && $break['notify_minutes_before'])
+                                                    <div class="alert alert-info mt-2 mb-0 py-2 small">
+                                                        <svg width="14" height="14" class="me-1" fill="currentColor"
+                                                             viewBox="0 0 24 24">
+                                                            <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+                                                        </svg>
+                                                        Notify {{ $break['notify_minutes_before'] }} minutes before
+                                                        break window
+                                                    </div>
+                                                @endif
+                                            </div>
+                                        @endforeach
+                                    </div>
+                                @endif
+                            </div>
+                        </div>
+
                         <!-- Shift Pattern -->
                         <div class="config-section">
                             <div class="section-header">
@@ -2859,263 +3117,6 @@ new class extends Component {
                                                 end
                                             </small>
                                         </div>
-                                    </div>
-                                @endif
-                            </div>
-                        </div>
-
-                        <!-- Break & Activity Blocks Configuration -->
-                        <div class="config-section">
-                            <div class="section-header">
-                                <div class="d-flex justify-content-between w-100 align-items-center">
-                                    <h5 class="mb-0">
-                                        <svg width="20" height="20" class="text-danger me-2" fill="currentColor"
-                                             viewBox="0 0 24 24">
-                                            <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor"
-                                                    stroke-width="2"/>
-                                            <path d="M12 6v6l4 2" stroke="currentColor" stroke-width="2"
-                                                  stroke-linecap="round"/>
-                                        </svg>
-                                        Break & Activity Blocks
-                                    </h5>
-                                    <button wire:click="openAddBreakModal" class="btn btn-sm btn-primary">
-                                        <svg width="16" height="16" fill="none" stroke="white" stroke-width="2"
-                                             viewBox="0 0 24 24" class="me-1">
-                                            <line x1="12" y1="5" x2="12" y2="19"/>
-                                            <line x1="5" y1="12" x2="19" y2="12"/>
-                                        </svg>
-                                        Add Break
-                                    </button>
-                                </div>
-                            </div>
-
-                            <div class="section-body">
-                                <p class="text-muted small mb-3">
-                                    Configure specific time blocks for breaks, lunch, or other activities with automatic
-                                    tracking and penalty rules.
-                                </p>
-
-                                @if(count($breaks) === 0)
-                                    <div class="alert alert-light border text-center py-5">
-                                        <svg width="48" height="48" class="text-muted mb-3" fill="none"
-                                             stroke="currentColor" viewBox="0 0 24 24">
-                                            <circle cx="12" cy="12" r="10" stroke-width="2"/>
-                                            <path d="M12 6v6l4 2" stroke-width="2" stroke-linecap="round"/>
-                                        </svg>
-                                        <h6 class="text-muted">No Breaks Configured</h6>
-                                        <p class="text-muted small mb-3">Add breaks to track lunch, rest periods, or
-                                            other activities during the shift.</p>
-                                        <button wire:click="openAddBreakModal" class="btn btn-sm btn-primary">
-                                            Add First Break
-                                        </button>
-                                    </div>
-                                @else
-                                    <!-- Break Summary -->
-                                    <!-- Break Summary Strip -->
-                                    <div class="break-summary-strip">
-                                        <div class="break-summary-item">
-                                            <div class="break-summary-icon break-summary-icon--blue">
-                                                <svg width="16" height="16" fill="none" stroke="currentColor"
-                                                     stroke-width="2" viewBox="0 0 24 24">
-                                                    <circle cx="12" cy="12" r="10"/>
-                                                    <path d="M12 6v6l4 2" stroke-linecap="round"/>
-                                                </svg>
-                                            </div>
-                                            <div>
-                                                <div class="break-summary-value">{{ count($breaks) }}</div>
-                                                <div class="break-summary-label">Total Breaks</div>
-                                            </div>
-                                        </div>
-
-                                        <div class="break-summary-divider"></div>
-
-                                        <div class="break-summary-item">
-                                            <div class="break-summary-icon break-summary-icon--amber">
-                                                <svg width="16" height="16" fill="none" stroke="currentColor"
-                                                     stroke-width="2" viewBox="0 0 24 24">
-                                                    <circle cx="12" cy="12" r="10"/>
-                                                    <path d="M12 6v6l4 2" stroke-linecap="round"/>
-                                                    <line x1="12" y1="2" x2="12" y2="4"/>
-                                                </svg>
-                                            </div>
-                                            <div>
-                                                <div class="break-summary-value">{{ $this->getTotalBreakMinutes() }}
-                                                    <span class="break-summary-unit">min</span></div>
-                                                <div class="break-summary-label">Total Break Time</div>
-                                            </div>
-                                        </div>
-
-                                        <div class="break-summary-divider"></div>
-
-                                        <div class="break-summary-item">
-                                            <div class="break-summary-icon break-summary-icon--green">
-                                                <svg width="16" height="16" fill="none" stroke="currentColor"
-                                                     stroke-width="2" viewBox="0 0 24 24">
-                                                    <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/>
-                                                    <circle cx="12" cy="7" r="4"/>
-                                                </svg>
-                                            </div>
-                                            <div>
-                                                <div
-                                                    class="break-summary-value">{{ $this->getEffectiveShiftDuration() }}
-                                                    <span class="break-summary-unit">hrs</span></div>
-                                                <div class="break-summary-label">Effective Work Hours</div>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <!-- Breaks List -->
-                                    <div class="breaks-list">
-                                        @foreach($breaks as $index => $break)
-                                            <div class="break-item {{ !$break['is_active'] ? 'break-inactive' : '' }}">
-                                                <!-- Break Header -->
-                                                <div class="d-flex justify-content-between align-items-start mb-2">
-                                                    <div class="d-flex align-items-center gap-2">
-                                                        <!-- Drag Handle -->
-                                                        <div class="drag-handle">
-                                                            <svg width="16" height="16" fill="currentColor"
-                                                                 viewBox="0 0 24 24">
-                                                                <circle cx="9" cy="5" r="1"/>
-                                                                <circle cx="9" cy="12" r="1"/>
-                                                                <circle cx="9" cy="19" r="1"/>
-                                                                <circle cx="15" cy="5" r="1"/>
-                                                                <circle cx="15" cy="12" r="1"/>
-                                                                <circle cx="15" cy="19" r="1"/>
-                                                            </svg>
-                                                        </div>
-
-                                                        <!-- Break Name -->
-                                                        <div>
-                                                            <h6 class="mb-0">{{ $break['name'] }}</h6>
-                                                            <div class="small text-muted">
-                                                                {{ $this->getBreakTypeLabel($break['type']) }}
-                                                                @if($break['is_mandatory'])
-                                                                    <span class="badge bg-danger ms-1"
-                                                                          style="font-size: 0.65rem;">Mandatory</span>
-                                                                @endif
-                                                            </div>
-                                                        </div>
-                                                    </div>
-
-                                                    <!-- Break Actions -->
-                                                    <div class="d-flex align-items-center gap-2">
-                                                        <!-- Active Toggle -->
-                                                        <label class="toggle-switch-small">
-                                                            <input type="checkbox"
-                                                                   wire:click="toggleBreakActive({{ $index }})"
-                                                                {{ $break['is_active'] ? 'checked' : '' }}>
-                                                            <span class="toggle-slider-small"></span>
-                                                        </label>
-
-                                                        <!-- Move Up -->
-                                                        <button wire:click="moveBreakUp({{ $index }})"
-                                                                class="btn btn-sm btn-light"
-                                                            {{ $index === 0 ? 'disabled' : '' }}>
-                                                            <svg width="14" height="14" fill="currentColor"
-                                                                 viewBox="0 0 24 24">
-                                                                <polyline points="18 15 12 9 6 15" stroke="currentColor"
-                                                                          stroke-width="2" fill="none"/>
-                                                            </svg>
-                                                        </button>
-
-                                                        <!-- Move Down -->
-                                                        <button wire:click="moveBreakDown({{ $index }})"
-                                                                class="btn btn-sm btn-light"
-                                                            {{ $index === count($breaks) - 1 ? 'disabled' : '' }}>
-                                                            <svg width="14" height="14" fill="currentColor"
-                                                                 viewBox="0 0 24 24">
-                                                                <polyline points="6 9 12 15 18 9" stroke="currentColor"
-                                                                          stroke-width="2" fill="none"/>
-                                                            </svg>
-                                                        </button>
-
-                                                        <!-- Edit -->
-                                                        <button wire:click="openEditBreakModal({{ $index }})"
-                                                                class="btn btn-sm btn-light">
-                                                            <svg width="16" height="16" fill="none"
-                                                                 stroke="currentColor" stroke-width="2"
-                                                                 viewBox="0 0 24 24">
-                                                                <path
-                                                                    d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
-                                                                <path
-                                                                    d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
-                                                            </svg>
-                                                        </button>
-
-
-                                                        <!-- Delete -->
-                                                        <button wire:click="deleteBreak({{ $index }})"
-                                                                wire:confirm="Are you sure you want to delete this break?"
-                                                                class="btn btn-sm btn-light text-danger">
-                                                            <svg width="16" height="16" fill="none"
-                                                                 stroke="currentColor" stroke-width="2"
-                                                                 viewBox="0 0 24 24">
-                                                                <polyline points="3 6 5 6 21 6"/>
-                                                                <path d="M19 6l-1 14H6L5 6"/>
-                                                                <path d="M10 11v6"/>
-                                                                <path d="M14 11v6"/>
-                                                                <path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"/>
-                                                            </svg>
-                                                        </button>
-                                                    </div>
-                                                </div>
-
-                                                <!-- Break Details Table -->
-                                                <div class="table-responsive mt-2">
-                                                    <table class="table table-sm table-borderless mb-0"
-                                                           style="font-size: 0.8rem;">
-                                                        <thead>
-                                                        <tr style="border-bottom: 1px solid #e9ecef;">
-                                                            <th class="text-muted fw-normal ps-0">Window Time</th>
-                                                            <th class="text-muted fw-normal">Duration</th>
-                                                            <th class="text-muted fw-normal">Max Duration</th>
-                                                            <th class="text-muted fw-normal">Penalty</th>
-                                                            <th class="text-muted fw-normal">Punch Required</th>
-                                                        </tr>
-                                                        </thead>
-                                                        <tbody>
-                                                        <tr>
-                                                            <td class="fw-medium ps-0">
-                                                                @if($break['window_start_time'] && $break['window_end_time'])
-                                                                    {{ \Carbon\Carbon::parse($break['window_start_time'])->format('h:i A') }}
-                                                                    –
-                                                                    {{ \Carbon\Carbon::parse($break['window_end_time'])->format('h:i A') }}
-                                                                @else
-                                                                    <span class="text-muted">Anytime</span>
-                                                                @endif
-                                                            </td>
-                                                            <td class="fw-medium">{{ $break['duration_minutes'] }}min
-                                                            </td>
-                                                            <td class="fw-medium">{{ $break['max_duration_minutes'] ?? $break['duration_minutes'] }}
-                                                                min
-                                                            </td>
-                                                            <td class="fw-medium">{{ $this->getPenaltyTypeLabel($break['penalty_type']) }}</td>
-                                                            <td>
-                                                                @if($break['require_punch'])
-                                                                    <span
-                                                                        class="badge rounded-pill text-bg-warning">Yes</span>
-                                                                @else
-                                                                    <span class="badge rounded-pill text-bg-secondary">No</span>
-                                                                @endif
-                                                            </td>
-                                                        </tr>
-                                                        </tbody>
-                                                    </table>
-                                                </div>
-
-                                                <!-- Warning/Info Messages -->
-                                                @if($break['notify_on_approaching'] && $break['notify_minutes_before'])
-                                                    <div class="alert alert-info mt-2 mb-0 py-2 small">
-                                                        <svg width="14" height="14" class="me-1" fill="currentColor"
-                                                             viewBox="0 0 24 24">
-                                                            <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/>
-                                                        </svg>
-                                                        Notify {{ $break['notify_minutes_before'] }} minutes before
-                                                        break window
-                                                    </div>
-                                                @endif
-                                            </div>
-                                        @endforeach
                                     </div>
                                 @endif
                             </div>
