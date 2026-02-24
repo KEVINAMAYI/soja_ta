@@ -14,21 +14,18 @@ new class extends Component {
     public $weekStart;
     public $weekEnd;
 
-    // Stats
-    public $totalEmployees = 0;
-    public $avgPresent = 0;
-    public $avgAbsent = 0;
-    public $avgLate = 0;
+    public $totalEmployees   = 0;
+    public $avgPresent       = 0;
+    public $avgAbsent        = 0;
+    public $avgLate          = 0;
 
-    // Trends
-    public $attendanceTrend = '';
-    public $latenessTrend = '';
+    public $attendanceTrend  = '';
+    public $latenessTrend    = '';
     public $absenteeismTrend = '';
 
-    // Pagination settings
-    public $perPageAbsent = 10;
-    public $perPageLeave = 10;
-    public $perPageDept = 10;
+    public $perPagePresent = 10;
+    public $perPageLeave   = 10;
+    public $perPageDept    = 10;
 
     protected $paginationTheme = 'bootstrap';
 
@@ -46,160 +43,139 @@ new class extends Component {
 
     private function calculateWeekRange()
     {
-        $date = Carbon::parse($this->reportDate);
+        $date            = Carbon::parse($this->reportDate);
         $this->weekStart = $date->copy()->startOfWeek()->toDateString();
-        $this->weekEnd = $date->copy()->endOfWeek()->toDateString();
+        $this->weekEnd   = $date->copy()->endOfWeek()->toDateString();
     }
 
     public function with()
     {
-        $orgId = auth()->user()->employee->organization_id ?? null;
+        $orgId     = auth()->user()->employee->organization_id ?? null;
         $weekStart = Carbon::parse($this->weekStart);
-        $weekEnd = Carbon::parse($this->weekEnd);
+        $weekEnd   = Carbon::parse($this->weekEnd);
 
-        // Get total employees count for the organization
         $this->totalEmployees = Employee::where('active', 1)
             ->when($orgId, fn($q) => $q->where('organization_id', $orgId))
             ->count();
 
-        // Get all attendance records for the week
+        // All attendance for the FULL week
         $weekAttendances = Attendance::with(['employee.department'])
             ->whereBetween('date', [$weekStart, $weekEnd])
-            ->when($orgId, function($q) use ($orgId) {
-                $q->whereHas('employee', function($query) use ($orgId) {
-                    $query->where('organization_id', $orgId);
-                });
-            })
+            ->when($orgId, fn($q) => $q->whereHas('employee',
+                fn($q2) => $q2->where('organization_id', $orgId)
+            ))
             ->get();
 
-        // Calculate weekly averages
-        $workingDays = $weekStart->diffInDaysFiltered(function (Carbon $date) use ($weekEnd) {
-                return $date->isWeekday() && $date->lte($weekEnd);
-            }, $weekEnd) + 1;
-
-        $dailyPresent = $weekAttendances
-            ->whereIn('status', ['clocked_in', 'clocked_out'])
-            ->groupBy('date')
-            ->map(fn($day) => $day->count());
-
-        $dailyAbsent = $weekAttendances
-            ->whereIn('status', ['absent', 'unchecked_in'])
-            ->groupBy('date')
-            ->map(fn($day) => $day->count());
-
-        $dailyLate = $weekAttendances
-            ->where('is_late_checkin', 1)
-            ->groupBy('date')
-            ->map(fn($day) => $day->count());
+        // ── Weekly averages ───────────────────────────────────────────
+        $dailyPresent = $weekAttendances->whereIn('status', ['clocked_in', 'clocked_out'])
+            ->groupBy('date')->map(fn($d) => $d->count());
+        $dailyAbsent  = $weekAttendances->whereIn('status', ['absent', 'unchecked_in'])
+            ->groupBy('date')->map(fn($d) => $d->count());
+        $dailyLate    = $weekAttendances->where('is_late_checkin', 1)
+            ->groupBy('date')->map(fn($d) => $d->count());
 
         $this->avgPresent = $dailyPresent->count() > 0 ? round($dailyPresent->avg()) : 0;
-        $this->avgAbsent = $dailyAbsent->count() > 0 ? round($dailyAbsent->avg()) : 0;
-        $this->avgLate = $dailyLate->count() > 0 ? round($dailyLate->avg()) : 0;
+        $this->avgAbsent  = $dailyAbsent->count()  > 0 ? round($dailyAbsent->avg())  : 0;
+        $this->avgLate    = $dailyLate->count()    > 0 ? round($dailyLate->avg())    : 0;
 
-        // Calculate trends (compare with previous week)
+        // ── Trends vs previous week ───────────────────────────────────
         $prevWeekStart = $weekStart->copy()->subWeek();
-        $prevWeekEnd = $weekEnd->copy()->subWeek();
+        $prevWeekEnd   = $weekEnd->copy()->subWeek();
 
-        $prevWeekAttendances = Attendance::whereBetween('date', [$prevWeekStart, $prevWeekEnd])
-            ->when($orgId, function($q) use ($orgId) {
-                $q->whereHas('employee', function($query) use ($orgId) {
-                    $query->where('organization_id', $orgId);
-                });
-            })
+        $prevAttendances = Attendance::whereBetween('date', [$prevWeekStart, $prevWeekEnd])
+            ->when($orgId, fn($q) => $q->whereHas('employee',
+                fn($q2) => $q2->where('organization_id', $orgId)
+            ))
             ->get();
 
-        $prevAvgPresent = $prevWeekAttendances->whereIn('status', ['clocked_in', 'clocked_out'])
-            ->groupBy('date')
-            ->map(fn($day) => $day->count())
-            ->avg() ?: 0;
+        $prevAvgPresent = $prevAttendances->whereIn('status', ['clocked_in', 'clocked_out'])
+            ->groupBy('date')->map(fn($d) => $d->count())->avg() ?: 0;
+        $prevAvgLate    = $prevAttendances->where('is_late_checkin', 1)
+            ->groupBy('date')->map(fn($d) => $d->count())->avg() ?: 0;
+        $prevAvgAbsent  = $prevAttendances->whereIn('status', ['absent', 'unchecked_in'])
+            ->groupBy('date')->map(fn($d) => $d->count())->avg() ?: 0;
 
-        $prevAvgLate = $prevWeekAttendances->where('is_late_checkin', 1)
-            ->groupBy('date')
-            ->map(fn($day) => $day->count())
-            ->avg() ?: 0;
+        $this->attendanceTrend  = $this->calculateTrend($this->avgPresent, $prevAvgPresent);
+        $this->latenessTrend    = $this->calculateTrend($prevAvgLate, $this->avgLate);
+        $this->absenteeismTrend = $this->calculateTrend($prevAvgAbsent, $this->avgAbsent);
 
-        $prevAvgAbsent = $prevWeekAttendances->whereIn('status', ['absent', 'unchecked_in'])
-            ->groupBy('date')
-            ->map(fn($day) => $day->count())
-            ->avg() ?: 0;
-
-        // Calculate percentage changes
-        $this->attendanceTrend = $this->calculateTrend($this->avgPresent, $prevAvgPresent);
-        $this->latenessTrend = $this->calculateTrend($prevAvgLate, $this->avgLate); // Inverted: lower is better
-        $this->absenteeismTrend = $this->calculateTrend($prevAvgAbsent, $this->avgAbsent); // Inverted: lower is better
-
-        // Absent Employees Data - Group by employee and show which days they were absent
-        $absentByEmployee = $weekAttendances
-            ->whereIn('status', ['absent', 'unchecked_in'])
+        // ── Absent employees — chips only, NO table ───────────────────
+        $absentByEmployee    = $weekAttendances->whereIn('status', ['absent', 'unchecked_in'])
             ->groupBy('employee_id');
 
         $absentEmployeesData = collect();
         foreach ($absentByEmployee as $employeeId => $absences) {
             $employee = $absences->first()->employee;
-            $days = $absences->map(function($attendance) {
-                return Carbon::parse($attendance->date)->format('D');
-            })->toArray();
-
+            $days     = $absences->map(fn($a) => Carbon::parse($a->date)->format('D'))->toArray();
             $absentEmployeesData->push([
-                'employee' => $employee,
-                'days' => $days,
-                'total_days' => count($days)
+                'employee'   => $employee,
+                'days'       => $days,
+                'total_days' => count($days),
             ]);
         }
 
-        // Paginate absent employees
-        $absentPage = request()->get('absentPage', 1);
-        $absentOffset = ($absentPage - 1) * $this->perPageAbsent;
-        $absentEmployeesPaginated = new \Illuminate\Pagination\LengthAwarePaginator(
-            $absentEmployeesData->slice($absentOffset, $this->perPageAbsent)->values(),
-            $absentEmployeesData->count(),
-            $this->perPageAbsent,
-            $absentPage,
-            ['path' => request()->url(), 'pageName' => 'absentPage']
+        // ── Present employees for the FULL week — table ───────────────
+        $presentByEmployee    = $weekAttendances->whereIn('status', ['clocked_in', 'clocked_out'])
+            ->groupBy('employee_id');
+
+        $presentEmployeesData = collect();
+        foreach ($presentByEmployee as $employeeId => $records) {
+            $employee  = $records->first()->employee;
+            $days      = $records->map(fn($a) => Carbon::parse($a->date)->format('D'))->unique()->values()->toArray();
+            $lateDays  = $records->where('is_late_checkin', 1)->count();
+            $otHours   = $records->sum('overtime_hours') ?? 0;
+            $presentEmployeesData->push([
+                'employee'   => $employee,
+                'days'       => $days,
+                'total_days' => count($days),
+                'late_days'  => $lateDays,
+                'ot_hours'   => $otHours,
+            ]);
+        }
+        $presentEmployeesData = $presentEmployeesData->sortByDesc('total_days');
+
+        $presentPage      = request()->get('presentPage', 1);
+        $presentOffset    = ($presentPage - 1) * $this->perPagePresent;
+        $presentPaginated = new \Illuminate\Pagination\LengthAwarePaginator(
+            $presentEmployeesData->slice($presentOffset, $this->perPagePresent)->values(),
+            $presentEmployeesData->count(),
+            $this->perPagePresent,
+            $presentPage,
+            ['path' => request()->url(), 'pageName' => 'presentPage']
         );
 
-        // Employees on Leave Data - Group by employee
+        // ── Employees on Leave ────────────────────────────────────────
         $leavesInWeek = Leave::with(['employee.department'])
             ->where('status', 'approved')
             ->where(function($q) use ($weekStart, $weekEnd) {
                 $q->whereBetween('start_date', [$weekStart, $weekEnd])
                     ->orWhereBetween('end_date', [$weekStart, $weekEnd])
-                    ->orWhere(function($query) use ($weekStart, $weekEnd) {
-                        $query->where('start_date', '<=', $weekStart)
-                            ->where('end_date', '>=', $weekEnd);
-                    });
+                    ->orWhere(fn($q2) => $q2->where('start_date', '<=', $weekStart)->where('end_date', '>=', $weekEnd));
             })
-            ->when($orgId, function($q) use ($orgId) {
-                $q->whereHas('employee', function($query) use ($orgId) {
-                    $query->where('organization_id', $orgId);
-                });
-            })
+            ->when($orgId, fn($q) => $q->whereHas('employee',
+                fn($q2) => $q2->where('organization_id', $orgId)
+            ))
             ->get();
 
         $employeesOnLeaveData = collect();
         foreach ($leavesInWeek as $leave) {
             $leaveStart = Carbon::parse($leave->start_date)->max($weekStart);
-            $leaveEnd = Carbon::parse($leave->end_date)->min($weekEnd);
-
+            $leaveEnd   = Carbon::parse($leave->end_date)->min($weekEnd);
             $days = [];
-            for ($date = $leaveStart->copy(); $date->lte($leaveEnd); $date->addDay()) {
-                if ($date->isWeekday()) {
-                    $days[] = $date->format('D');
-                }
+            for ($d = $leaveStart->copy(); $d->lte($leaveEnd); $d->addDay()) {
+                if ($d->isWeekday()) $days[] = $d->format('D');
             }
-
             $employeesOnLeaveData->push([
-                'employee' => $leave->employee,
+                'employee'   => $leave->employee,
                 'leave_type' => $leave->leave_type,
-                'days' => $days,
-                'total_days' => count($days)
+                'days'       => $days,
+                'total_days' => count($days),
             ]);
         }
 
-        // Paginate leave data
-        $leavePage = request()->get('leavePage', 1);
-        $leaveOffset = ($leavePage - 1) * $this->perPageLeave;
-        $employeesOnLeavePaginated = new \Illuminate\Pagination\LengthAwarePaginator(
+        $leavePage      = request()->get('leavePage', 1);
+        $leaveOffset    = ($leavePage - 1) * $this->perPageLeave;
+        $leavePaginated = new \Illuminate\Pagination\LengthAwarePaginator(
             $employeesOnLeaveData->slice($leaveOffset, $this->perPageLeave)->values(),
             $employeesOnLeaveData->count(),
             $this->perPageLeave,
@@ -207,8 +183,8 @@ new class extends Component {
             ['path' => request()->url(), 'pageName' => 'leavePage']
         );
 
-        // Department Breakdown - Weekly averages
-        $departments = Employee::with(['department'])
+        // ── Department Breakdown (weekly) ─────────────────────────────
+        $departments = Employee::with('department')
             ->where('active', 1)
             ->when($orgId, fn($q) => $q->where('organization_id', $orgId))
             ->get()
@@ -216,34 +192,27 @@ new class extends Component {
 
         $departmentBreakdownData = collect();
         foreach ($departments as $deptId => $employees) {
-            $department = $employees->first()->department;
-            $total = $employees->count();
-
-            $deptAttendances = Attendance::whereIn('employee_id', $employees->pluck('id'))
+            $department     = $employees->first()->department;
+            $total          = $employees->count();
+            $deptPresent    = Attendance::whereIn('employee_id', $employees->pluck('id'))
                 ->whereBetween('date', [$weekStart, $weekEnd])
                 ->whereIn('status', ['clocked_in', 'clocked_out'])
                 ->get();
-
-            $avgPresent = $deptAttendances->groupBy('date')
-                ->map(fn($day) => $day->count())
-                ->avg() ?: 0;
-
+            $avgPresent     = $deptPresent->groupBy('date')->map(fn($d) => $d->count())->avg() ?: 0;
             $attendanceRate = $total > 0 ? round(($avgPresent / $total) * 100, 2) : 0;
-
             $departmentBreakdownData->push([
-                'department' => $department->name ?? 'Unassigned',
-                'total' => $total,
-                'avg_present' => round($avgPresent, 1),
+                'department'      => $department->name ?? 'Unassigned',
+                'total'           => $total,
+                'avg_present'     => round($avgPresent, 1),
                 'attendance_rate' => $attendanceRate,
-                'visual' => $attendanceRate
+                'visual'          => $attendanceRate,
             ]);
         }
 
-        // Sort and paginate department data
         $departmentBreakdownData = $departmentBreakdownData->sortByDesc('total');
-        $deptPage = request()->get('deptPage', 1);
-        $deptOffset = ($deptPage - 1) * $this->perPageDept;
-        $departmentBreakdownPaginated = new \Illuminate\Pagination\LengthAwarePaginator(
+        $deptPage      = request()->get('deptPage', 1);
+        $deptOffset    = ($deptPage - 1) * $this->perPageDept;
+        $deptPaginated = new \Illuminate\Pagination\LengthAwarePaginator(
             $departmentBreakdownData->slice($deptOffset, $this->perPageDept)->values(),
             $departmentBreakdownData->count(),
             $this->perPageDept,
@@ -252,21 +221,18 @@ new class extends Component {
         );
 
         return [
-            'absentEmployeesData' => $absentEmployeesPaginated,
-            'employeesOnLeaveData' => $employeesOnLeavePaginated,
-            'departmentBreakdownData' => $departmentBreakdownPaginated,
+            'absentEmployeesData'    => $absentEmployeesData,   // plain collection — chips only
+            'presentEmployeesData'   => $presentPaginated,
+            'employeesOnLeaveData'   => $leavePaginated,
+            'departmentBreakdownData'=> $deptPaginated,
         ];
     }
 
     private function calculateTrend($current, $previous)
     {
-        if ($previous == 0) {
-            return $current > 0 ? '+100%' : '0%';
-        }
-
+        if ($previous == 0) return $current > 0 ? '+100%' : '0%';
         $change = (($current - $previous) / $previous) * 100;
-        $sign = $change >= 0 ? '+' : '';
-        return $sign . number_format($change, 1) . '%';
+        return ($change >= 0 ? '+' : '') . number_format($change, 1) . '%';
     }
 
     public function getProgressBarColor($rate)
@@ -278,370 +244,341 @@ new class extends Component {
 
     public function getTrendColor($trend)
     {
-        if (str_starts_with($trend, '+')) {
-            return 'success';
-        } elseif (str_starts_with($trend, '-')) {
-            return 'danger';
-        }
+        if (str_starts_with($trend, '+')) return 'success';
+        if (str_starts_with($trend, '-')) return 'danger';
         return 'secondary';
     }
 }; ?>
 
-<div class="row">
-    <div class="col-12">
-        <div class="card">
-            <div class="card-body">
-                <!-- Header -->
-                <div class="d-flex justify-content-between align-items-center mb-4">
-                    <div>
-                        <h4 class="card-title mb-1">
-                            <i class="ti ti-calendar-week me-2"></i>
-                            Weekly Summary Report
-                        </h4>
-                        <small class="text-muted">
-                            <i class="ti ti-calendar me-1"></i>
-                            Week of {{ \Carbon\Carbon::parse($weekStart)->format('M j') }} - {{ \Carbon\Carbon::parse($weekEnd)->format('M j, Y') }}
-                        </small>
-                    </div>
-                </div>
-
-                <!-- Date Picker -->
-                <div class="mb-4">
-                    <label class="form-label small text-muted">Select date in week</label>
-                    <input type="date"
-                           class="form-control"
-                           style="max-width: 200px;"
-                           wire:model.live="reportDate">
-                </div>
-
-                <!-- Stats Cards -->
-                <div class="row mb-4">
-                    <div class="col-md-3">
-                        <div class="card bg-light-primary border-0">
-                            <div class="card-body">
-                                <div class="d-flex align-items-center">
-                                    <div class="flex-shrink-0">
-                                        <i class="ti ti-users fs-1 text-primary"></i>
-                                    </div>
-                                    <div class="flex-grow-1 ms-3">
-                                        <small class="text-muted d-block">Total Employees</small>
-                                        <h3 class="mb-0">{{ $totalEmployees }}</h3>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="col-md-3">
-                        <div class="card bg-light-success border-0">
-                            <div class="card-body">
-                                <div class="d-flex align-items-center">
-                                    <div class="flex-shrink-0">
-                                        <i class="ti ti-check fs-1 text-success"></i>
-                                    </div>
-                                    <div class="flex-grow-1 ms-3">
-                                        <small class="text-muted d-block">Avg Present</small>
-                                        <h3 class="mb-0">{{ $avgPresent }}</h3>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="col-md-3">
-                        <div class="card bg-light-danger border-0">
-                            <div class="card-body">
-                                <div class="d-flex align-items-center">
-                                    <div class="flex-shrink-0">
-                                        <i class="ti ti-x fs-1 text-danger"></i>
-                                    </div>
-                                    <div class="flex-grow-1 ms-3">
-                                        <small class="text-muted d-block">Avg Absent</small>
-                                        <h3 class="mb-0">{{ $avgAbsent }}</h3>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="col-md-3">
-                        <div class="card bg-light-warning border-0">
-                            <div class="card-body">
-                                <div class="d-flex align-items-center">
-                                    <div class="flex-shrink-0">
-                                        <i class="ti ti-clock-exclamation fs-1 text-warning"></i>
-                                    </div>
-                                    <div class="flex-grow-1 ms-3">
-                                        <small class="text-muted d-block">Avg Late</small>
-                                        <h3 class="mb-0">{{ $avgLate }}</h3>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Performance Trends -->
-                <div class="card bg-light mb-4">
-                    <div class="card-body">
-                        <h5 class="mb-3">
-                            <i class="ti ti-trending-up text-primary me-2"></i>
-                            Performance Trends (vs Previous Week)
-                        </h5>
-                        <div class="row">
-                            <div class="col-md-4">
-                                <div class="d-flex justify-content-between align-items-center">
-                                    <span class="text-muted small">Attendance Change</span>
-                                    <span class="badge bg-{{ $this->getTrendColor($attendanceTrend) }} fs-6">
-                                        {{ $attendanceTrend }}
-                                    </span>
-                                </div>
-                            </div>
-                            <div class="col-md-4">
-                                <div class="d-flex justify-content-between align-items-center">
-                                    <span class="text-muted small">Lateness Change</span>
-                                    <span class="badge bg-{{ $this->getTrendColor($latenessTrend) }} fs-6">
-                                        {{ $latenessTrend }}
-                                    </span>
-                                </div>
-                            </div>
-                            <div class="col-md-4">
-                                <div class="d-flex justify-content-between align-items-center">
-                                    <span class="text-muted small">Absenteeism Change</span>
-                                    <span class="badge bg-{{ $this->getTrendColor($absenteeismTrend) }} fs-6">
-                                        {{ $absenteeismTrend }}
-                                    </span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Absent Employees Table -->
-                <div class="mb-4">
-                    <div class="d-flex justify-content-between align-items-center mb-3">
-                        <h5 class="mb-0">
-                            <i class="ti ti-user-x text-danger me-2"></i>
-                            Absent Employees
-                        </h5>
-                        <span class="badge bg-danger">{{ $absentEmployeesData->total() }} Employees</span>
-                    </div>
-
-                    <div class="table-responsive">
-                        <table class="table table-hover align-middle">
-                            <thead class="table-light">
-                            <tr>
-                                <th>Employee</th>
-                                <th>Department</th>
-                                <th>Days Absent</th>
-                                <th>Total Days</th>
-                            </tr>
-                            </thead>
-                            <tbody>
-                            @forelse($absentEmployeesData as $absent)
-                                <tr>
-                                    <td class="fw-medium">{{ $absent['employee']->name ?? 'N/A' }}</td>
-                                    <td>{{ $absent['employee']->department->name ?? 'N/A' }}</td>
-                                    <td>
-                                        <div class="d-flex flex-wrap gap-1">
-                                            @foreach($absent['days'] as $day)
-                                                <span class="badge bg-danger-subtle text-danger">{{ $day }}</span>
-                                            @endforeach
-                                        </div>
-                                    </td>
-                                    <td>
-                                        <span class="badge bg-danger">{{ $absent['total_days'] }} {{ $absent['total_days'] === 1 ? 'day' : 'days' }}</span>
-                                    </td>
-                                </tr>
-                            @empty
-                                <tr>
-                                    <td colspan="4" class="text-center text-muted py-4">
-                                        <i class="ti ti-check-circle fs-3 d-block mb-2 text-success"></i>
-                                        Perfect attendance! No absences this week.
-                                    </td>
-                                </tr>
-                            @endforelse
-                            </tbody>
-                        </table>
-                    </div>
-
-                    @if($absentEmployeesData->hasPages())
-                        <div class="d-flex justify-content-center mt-3">
-                            {{ $absentEmployeesData->links() }}
-                        </div>
-                    @endif
-                </div>
-
-                <!-- Employees on Leave Table -->
-                <div class="mb-4">
-                    <div class="d-flex justify-content-between align-items-center mb-3">
-                        <h5 class="mb-0">
-                            <i class="ti ti-calendar-off text-info me-2"></i>
-                            Employees on Leave
-                        </h5>
-                        <span class="badge bg-info">{{ $employeesOnLeaveData->total() }} Employees</span>
-                    </div>
-
-                    <div class="table-responsive">
-                        <table class="table table-hover align-middle">
-                            <thead class="table-light">
-                            <tr>
-                                <th>Employee</th>
-                                <th>Department</th>
-                                <th>Leave Type</th>
-                                <th>Days on Leave</th>
-                                <th>Total Days</th>
-                            </tr>
-                            </thead>
-                            <tbody>
-                            @forelse($employeesOnLeaveData as $leave)
-                                <tr>
-                                    <td class="fw-medium">{{ $leave['employee']->name ?? 'N/A' }}</td>
-                                    <td>{{ $leave['employee']->department->name ?? 'N/A' }}</td>
-                                    <td>
-                                        <span class="badge bg-info">{{ ucfirst(str_replace('_', ' ', $leave['leave_type'])) }}</span>
-                                    </td>
-                                    <td>
-                                        <div class="d-flex flex-wrap gap-1">
-                                            @foreach($leave['days'] as $day)
-                                                <span class="badge bg-warning-subtle text-warning">{{ $day }}</span>
-                                            @endforeach
-                                        </div>
-                                    </td>
-                                    <td>
-                                        <span class="badge bg-warning">{{ $leave['total_days'] }} {{ $leave['total_days'] === 1 ? 'day' : 'days' }}</span>
-                                    </td>
-                                </tr>
-                            @empty
-                                <tr>
-                                    <td colspan="5" class="text-center text-muted py-4">
-                                        <i class="ti ti-user-check fs-3 d-block mb-2"></i>
-                                        No employees on leave this week.
-                                    </td>
-                                </tr>
-                            @endforelse
-                            </tbody>
-                        </table>
-                    </div>
-
-                    @if($employeesOnLeaveData->hasPages())
-                        <div class="d-flex justify-content-center mt-3">
-                            {{ $employeesOnLeaveData->links() }}
-                        </div>
-                    @endif
-                </div>
-
-                <!-- Department Breakdown -->
-                <div>
-                    <div class="d-flex justify-content-between align-items-center mb-3">
-                        <h5 class="mb-0">
-                            <i class="ti ti-building text-primary me-2"></i>
-                            Department Breakdown
-                        </h5>
-                    </div>
-
-                    <div class="table-responsive">
-                        <table class="table table-hover align-middle">
-                            <thead class="table-light">
-                            <tr>
-                                <th>Department</th>
-                                <th>Total</th>
-                                <th>Avg Present</th>
-                                <th>Attendance Rate</th>
-                                <th>Visual</th>
-                            </tr>
-                            </thead>
-                            <tbody>
-                            @forelse($departmentBreakdownData as $dept)
-                                <tr>
-                                    <td class="fw-medium">{{ $dept['department'] }}</td>
-                                    <td>{{ $dept['total'] }}</td>
-                                    <td>{{ $dept['avg_present'] }}</td>
-                                    <td>
-                                            <span
-                                                class="badge bg-{{ $this->getProgressBarColor($dept['attendance_rate']) }}">
-                                                {{ number_format($dept['attendance_rate'], 1) }}%
-                                            </span>
-                                    </td>
-                                    <td>
-                                        <div class="progress" style="height: 8px; min-width: 150px;">
-                                            <div
-                                                class="progress-bar bg-{{ $this->getProgressBarColor($dept['attendance_rate']) }}"
-                                                role="progressbar"
-                                                style="width: {{ $dept['visual'] }}%"
-                                                aria-valuenow="{{ $dept['visual'] }}"
-                                                aria-valuemin="0"
-                                                aria-valuemax="100">
-                                            </div>
-                                        </div>
-                                    </td>
-                                </tr>
-                            @empty
-                                <tr>
-                                    <td colspan="5" class="text-center text-muted py-4">
-                                        No department data available.
-                                    </td>
-                                </tr>
-                            @endforelse
-                            </tbody>
-                        </table>
-                    </div>
-
-                    @if($departmentBreakdownData->hasPages())
-                        <div class="d-flex justify-content-center mt-3">
-                            {{ $departmentBreakdownData->links() }}
-                        </div>
-                    @endif
-                </div>
-
-                <!-- Footer Note -->
-                <div class="mt-4 text-center">
-                    <small class="text-muted">
-                        This report was automatically generated based on your Time & Attendance System.<br>
-                        Report generated on {{ now()->format('l, F j, Y \a\t g:i A') }}
-                    </small>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
-
 @push('styles')
     <style>
-        .bg-light-primary {
-            background-color: rgba(93, 135, 255, 0.1) !important;
+        .dsr-bar {
+            display: grid;
+            grid-template-columns: 1fr 1px 1fr 1px 1fr 1px 1fr;
+            background: #fff; border: 1px solid #e5e7eb;
+            border-radius: 10px; overflow: hidden; margin-bottom: 1.5rem; width: 100%;
         }
-
-        .bg-light-success {
-            background-color: rgba(19, 194, 150, 0.1) !important;
+        .dsr-bar-cell { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 1.25rem 0.75rem 1rem; text-align: center; }
+        .dsr-bar-divider { background: #e5e7eb; }
+        .dsr-val { font-size: 2.2rem; font-weight: 800; line-height: 1; letter-spacing: -1px; }
+        .dsr-lbl { font-size: 0.63rem; font-weight: 700; color: #9ca3af; letter-spacing: 0.07em; text-transform: uppercase; margin-top: 0.3rem; }
+        .dsr-section-lbl { display: block; font-size: 0.68rem; font-weight: 700; color: #9ca3af; letter-spacing: 0.09em; text-transform: uppercase; margin-bottom: 0.35rem; }
+        .dsr-section-hr { border: none; border-top: 1px solid #e5e7eb; margin: 0 0 1rem 0; }
+        .dsr-hl-card {
+            background: #fff; border: 1px solid #e5e7eb; border-radius: 10px;
+            padding: 1rem 1.15rem; min-height: 88px; height: 100%;
+            display: flex; flex-direction: column; justify-content: center; gap: 0.1rem;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05), 0 2px 6px rgba(0,0,0,0.03);
         }
-
-        .bg-light-danger {
-            background-color: rgba(250, 92, 124, 0.1) !important;
-        }
-
-        .bg-light-warning {
-            background-color: rgba(255, 193, 7, 0.1) !important;
-        }
-
-        .bg-light {
-            background-color: rgba(0, 0, 0, 0.03) !important;
-        }
-
-        .bg-danger-subtle {
-            background-color: rgba(250, 92, 124, 0.1) !important;
-        }
-
-        .bg-warning-subtle {
-            background-color: rgba(255, 193, 7, 0.1) !important;
-        }
-
-        .table-hover tbody tr:hover {
-            background-color: rgba(0, 0, 0, 0.02);
-        }
-
-        .badge {
-            font-weight: 500;
+        .dsr-hl-icon { font-size: 1rem; margin-bottom: 0.2rem; line-height: 1; }
+        .dsr-hl-val  { font-size: 1.15rem; font-weight: 800; line-height: 1.2; }
+        .dsr-hl-sub  { font-size: 0.77rem; color: #6b7280; margin-top: 0.2rem; }
+        .dsr-chip { display: inline-flex; align-items: center; gap: 0.45rem; background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 0.4rem 0.7rem; box-shadow: 0 1px 2px rgba(0,0,0,0.04); }
+        .dsr-chip-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+        .dsr-chip-dot-red    { background: #ef4444; }
+        .dsr-chip-dot-yellow { background: #f59e0b; }
+        .dsr-chip-name { font-size: 0.82rem; font-weight: 600; color: #111827; white-space: nowrap; }
+        .dsr-chip-dept { font-size: 0.71rem; color: #9ca3af; white-space: nowrap; }
+        .dsr-table { width: 100%; border-collapse: collapse; }
+        .dsr-table thead th { font-size: 0.67rem; font-weight: 700; color: #9ca3af; letter-spacing: 0.06em; text-transform: uppercase; padding: 0.55rem 0.85rem; border-bottom: 1px solid #e5e7eb; white-space: nowrap; background: #fff; }
+        .dsr-table tbody td { font-size: 0.875rem; padding: 0.7rem 0.85rem; color: #111827; border-bottom: 1px solid #f3f4f6; vertical-align: middle; }
+        .dsr-table tbody tr:last-child td { border-bottom: none; }
+        .dsr-table tbody tr:hover td { background: #fafafa; }
+        .dsr-name { font-weight: 600; }
+        .dsr-dept { display: inline-block; font-size: 0.71rem; font-weight: 500; color: #6b7280; background: #f3f4f6; border-radius: 99px; padding: 0.18rem 0.55rem; white-space: nowrap; }
+        .dsr-pill { display: inline-block; font-size: 0.71rem; font-weight: 600; border-radius: 99px; padding: 0.2rem 0.6rem; white-space: nowrap; }
+        .dsr-pill-g { background: #f0fdf4; color: #16a34a; border: 1px solid #bbf7d0; }
+        .dsr-pill-b { background: #eff6ff; color: #2563eb; border: 1px solid #bfdbfe; }
+        .dsr-pill-o { background: #fffbeb; color: #d97706; border: 1px solid #fde68a; }
+        .dsr-pill-r { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; }
+        .dsr-ot { font-size: 0.8rem; font-weight: 700; color: #7c3aed; }
+        .dsr-empty { display: flex; flex-direction: column; align-items: center; gap: 0.3rem; padding: 2.5rem 0; }
+        .dsr-empty-icon  { font-size: 2rem; }
+        .dsr-empty-title { font-size: 0.9rem; font-weight: 600; color: #374151; }
+        .dsr-empty-sub   { font-size: 0.8rem; color: #9ca3af; }
+        .dsr-footer { margin-top: 1.5rem; padding-top: 0.75rem; border-top: 1px solid #f3f4f6; text-align: center; font-size: 0.75rem; color: #9ca3af; }
+        .dsr-date-input { width: 160px !important; border-radius: 8px !important; border: 1px solid #e5e7eb !important; font-size: 0.85rem !important; padding: 0.35rem 0.65rem !important; box-shadow: none !important; }
+        .dsr-dept-bar-wrap { height: 6px; background: #e5e7eb; border-radius: 99px; min-width: 120px; overflow: hidden; }
+        .dsr-dept-bar-fill { height: 100%; border-radius: 99px; }
+        @media (max-width: 768px) {
+            .dsr-bar { grid-template-columns: 1fr 1fr; }
+            .dsr-bar-divider { display: none; }
+            .dsr-bar-cell { border-bottom: 1px solid #e5e7eb; }
+            .dsr-val { font-size: 1.6rem; }
         }
     </style>
 @endpush
+
+<div>
+    <div class="card">
+        <div class="card-body p-4">
+
+            {{-- Header --}}
+            <div class="d-flex align-items-start justify-content-between flex-wrap gap-3 mb-4">
+                <div>
+                    <h5 class="mb-0 fw-bold">Weekly Summary Report</h5>
+                    <small class="text-muted">
+                        Week of {{ \Carbon\Carbon::parse($weekStart)->format('M j') }} – {{ \Carbon\Carbon::parse($weekEnd)->format('M j, Y') }}
+                    </small>
+                </div>
+                <input type="date" class="form-control dsr-date-input" wire:model.live="reportDate">
+            </div>
+
+            {{-- Stats bar --}}
+            <div class="dsr-bar">
+                <div class="dsr-bar-cell">
+                    <span class="dsr-val text-dark">{{ $totalEmployees }}</span>
+                    <span class="dsr-lbl">Total Employees</span>
+                </div>
+                <div class="dsr-bar-divider"></div>
+                <div class="dsr-bar-cell">
+                    <span class="dsr-val text-success">{{ $avgPresent }}</span>
+                    <span class="dsr-lbl">Avg Present / Day</span>
+                </div>
+                <div class="dsr-bar-divider"></div>
+                <div class="dsr-bar-cell">
+                    <span class="dsr-val text-danger">{{ $avgAbsent }}</span>
+                    <span class="dsr-lbl">Avg Absent / Day</span>
+                </div>
+                <div class="dsr-bar-divider"></div>
+                <div class="dsr-bar-cell">
+                    <span class="dsr-val text-warning">{{ $avgLate }}</span>
+                    <span class="dsr-lbl">Avg Late / Day</span>
+                </div>
+            </div>
+
+            {{-- Trends (3 cards inline flex — override-proof) --}}
+            <span class="dsr-section-lbl">Performance Trends (vs Previous Week)</span>
+            <hr class="dsr-section-hr">
+            <div style="display:flex; flex-wrap:wrap; gap:0.85rem; margin-bottom:1.5rem;">
+                @php
+                    $trends = [
+                        ['icon' => '📈', 'label' => 'Attendance change from last week',  'value' => $attendanceTrend,  'color' => $this->getTrendColor($attendanceTrend)],
+                        ['icon' => '⏰', 'label' => 'Lateness change from last week',    'value' => $latenessTrend,    'color' => $this->getTrendColor($latenessTrend)],
+                        ['icon' => '🚫', 'label' => 'Absenteeism change from last week', 'value' => $absenteeismTrend, 'color' => $this->getTrendColor($absenteeismTrend)],
+                    ];
+                @endphp
+                @foreach($trends as $t)
+                    <div style="flex:1 1 calc(33.333% - 0.85rem); min-width:180px; box-sizing:border-box;">
+                        <div class="dsr-hl-card">
+                            <div class="dsr-hl-icon">{{ $t['icon'] }}</div>
+                            <div class="dsr-hl-val text-{{ $t['color'] === 'success' ? 'success' : ($t['color'] === 'danger' ? 'danger' : 'muted') }}">
+                                {{ $t['value'] }}
+                            </div>
+                            <div class="dsr-hl-sub">{{ $t['label'] }}</div>
+                        </div>
+                    </div>
+                @endforeach
+            </div>
+
+            {{-- Absent — chips ONLY, no table --}}
+            @if($absentEmployeesData->count() > 0)
+                <span class="dsr-section-lbl">
+                    Absent This Week
+                    <span class="dsr-pill dsr-pill-r ms-1">{{ $absentEmployeesData->count() }}</span>
+                </span>
+                <hr class="dsr-section-hr">
+                <div class="d-flex flex-wrap gap-2 mb-4">
+                    @foreach($absentEmployeesData as $absent)
+                        <div class="dsr-chip">
+                            <span class="dsr-chip-dot dsr-chip-dot-red"></span>
+                            <div>
+                                <div class="dsr-chip-name">{{ $absent['employee']->name ?? 'N/A' }}</div>
+                                <div class="dsr-chip-dept">
+                                    {{ $absent['employee']->department->name ?? 'N/A' }} · {{ $absent['total_days'] }}d
+                                </div>
+                            </div>
+                        </div>
+                    @endforeach
+                </div>
+            @endif
+
+            {{-- Present employees — weekly table --}}
+            <span class="dsr-section-lbl">
+                Present This Week
+                <span class="dsr-pill dsr-pill-g ms-1">{{ $presentEmployeesData->total() }}</span>
+            </span>
+            <hr class="dsr-section-hr">
+            <div class="table-responsive mb-4">
+                <table class="dsr-table">
+                    <thead>
+                    <tr>
+                        <th>Employee</th>
+                        <th>Department</th>
+                        <th>Days Clocked In</th>
+                        <th>Total Days</th>
+                        <th>Late Days</th>
+                        <th>Total OT Hrs</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    @forelse($presentEmployeesData as $present)
+                        <tr>
+                            <td><span class="dsr-name">{{ $present['employee']->name ?? 'N/A' }}</span></td>
+                            <td><span class="dsr-dept">{{ $present['employee']->department->name ?? 'N/A' }}</span></td>
+                            <td>
+                                <div class="d-flex flex-wrap gap-1">
+                                    @foreach($present['days'] as $day)
+                                        <span class="dsr-pill dsr-pill-g">{{ $day }}</span>
+                                    @endforeach
+                                </div>
+                            </td>
+                            <td><span class="dsr-pill dsr-pill-g">{{ $present['total_days'] }}d</span></td>
+                            <td>
+                                @if($present['late_days'] > 0)
+                                    <span class="dsr-pill dsr-pill-o">{{ $present['late_days'] }}d</span>
+                                @else
+                                    <span class="text-muted" style="font-size:0.78rem;">—</span>
+                                @endif
+                            </td>
+                            <td>
+                                @if(($present['ot_hours'] ?? 0) > 0)
+                                    <span class="dsr-ot">+{{ number_format($present['ot_hours'], 2) }}h</span>
+                                @else
+                                    <span class="text-muted">—</span>
+                                @endif
+                            </td>
+                        </tr>
+                    @empty
+                        <tr>
+                            <td colspan="6">
+                                <div class="dsr-empty">
+                                    <span class="dsr-empty-icon">📋</span>
+                                    <div class="dsr-empty-title">No attendance recorded this week</div>
+                                    <div class="dsr-empty-sub">Check back later or select a different week</div>
+                                </div>
+                            </td>
+                        </tr>
+                    @endforelse
+                    </tbody>
+                </table>
+            </div>
+            @if($presentEmployeesData->hasPages())
+                <div class="d-flex justify-content-center mb-4">{{ $presentEmployeesData->links() }}</div>
+            @endif
+
+            {{-- Employees on Leave — chips + table --}}
+            <span class="dsr-section-lbl">
+                Employees on Leave
+                <span class="dsr-pill dsr-pill-o ms-1">{{ $employeesOnLeaveData->total() }}</span>
+            </span>
+            <hr class="dsr-section-hr">
+
+            @if($employeesOnLeaveData->total() > 0)
+                <div class="d-flex flex-wrap gap-2 mb-3">
+                    @foreach($employeesOnLeaveData as $leave)
+                        <div class="dsr-chip">
+                            <span class="dsr-chip-dot dsr-chip-dot-yellow"></span>
+                            <div>
+                                <div class="dsr-chip-name">{{ $leave['employee']->name ?? 'N/A' }}</div>
+                                <div class="dsr-chip-dept">
+                                    {{ ucfirst(str_replace('_', ' ', $leave['leave_type'])) }} · {{ $leave['total_days'] }}d
+                                </div>
+                            </div>
+                        </div>
+                    @endforeach
+                </div>
+            @endif
+
+            <div class="table-responsive mb-4">
+                <table class="dsr-table">
+                    <thead>
+                    <tr>
+                        <th>Employee</th>
+                        <th>Department</th>
+                        <th>Leave Type</th>
+                        <th>Days on Leave</th>
+                        <th>Total</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    @forelse($employeesOnLeaveData as $leave)
+                        <tr>
+                            <td><span class="dsr-name">{{ $leave['employee']->name ?? 'N/A' }}</span></td>
+                            <td><span class="dsr-dept">{{ $leave['employee']->department->name ?? 'N/A' }}</span></td>
+                            <td><span class="dsr-pill dsr-pill-b">{{ ucfirst(str_replace('_', ' ', $leave['leave_type'])) }}</span></td>
+                            <td>
+                                <div class="d-flex flex-wrap gap-1">
+                                    @foreach($leave['days'] as $day)
+                                        <span class="dsr-pill dsr-pill-o">{{ $day }}</span>
+                                    @endforeach
+                                </div>
+                            </td>
+                            <td><span class="dsr-pill dsr-pill-o">{{ $leave['total_days'] }}d</span></td>
+                        </tr>
+                    @empty
+                        <tr>
+                            <td colspan="5">
+                                <div class="dsr-empty">
+                                    <span class="dsr-empty-icon">🏖️</span>
+                                    <div class="dsr-empty-title">No employees on leave</div>
+                                    <div class="dsr-empty-sub">Everyone is in this week.</div>
+                                </div>
+                            </td>
+                        </tr>
+                    @endforelse
+                    </tbody>
+                </table>
+            </div>
+            @if($employeesOnLeaveData->hasPages())
+                <div class="d-flex justify-content-center mb-4">{{ $employeesOnLeaveData->links() }}</div>
+            @endif
+
+            {{-- Department Breakdown --}}
+            <span class="dsr-section-lbl">Department Breakdown</span>
+            <hr class="dsr-section-hr">
+            <div class="table-responsive">
+                <table class="dsr-table">
+                    <thead>
+                    <tr>
+                        <th>Department</th>
+                        <th>Total</th>
+                        <th>Avg Present / Day</th>
+                        <th>Attendance Rate</th>
+                        <th>Visual</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    @forelse($departmentBreakdownData as $dept)
+                        @php
+                            $color     = $this->getProgressBarColor($dept['attendance_rate']);
+                            $pillClass = $color === 'success' ? 'dsr-pill-g' : ($color === 'warning' ? 'dsr-pill-o' : 'dsr-pill-r');
+                            $barColor  = $color === 'success' ? '#16a34a' : ($color === 'warning' ? '#d97706' : '#dc2626');
+                        @endphp
+                        <tr>
+                            <td><span class="dsr-name">{{ $dept['department'] }}</span></td>
+                            <td>{{ $dept['total'] }}</td>
+                            <td>{{ $dept['avg_present'] }}</td>
+                            <td><span class="dsr-pill {{ $pillClass }}">{{ number_format($dept['attendance_rate'], 1) }}%</span></td>
+                            <td>
+                                <div class="dsr-dept-bar-wrap">
+                                    <div class="dsr-dept-bar-fill" style="width:{{ $dept['visual'] }}%; background:{{ $barColor }};"></div>
+                                </div>
+                            </td>
+                        </tr>
+                    @empty
+                        <tr>
+                            <td colspan="5">
+                                <div class="dsr-empty">
+                                    <span class="dsr-empty-icon">🏢</span>
+                                    <div class="dsr-empty-title">No department data</div>
+                                    <div class="dsr-empty-sub">No data available for this period.</div>
+                                </div>
+                            </td>
+                        </tr>
+                    @endforelse
+                    </tbody>
+                </table>
+            </div>
+            @if($departmentBreakdownData->hasPages())
+                <div class="d-flex justify-content-center mt-3">{{ $departmentBreakdownData->links() }}</div>
+            @endif
+
+            <div class="dsr-footer">
+                Automatically generated from your Time & Attendance System ·
+                {{ now()->format('l, F j, Y \a\t g:i A') }}
+            </div>
+
+        </div>
+    </div>
+</div>

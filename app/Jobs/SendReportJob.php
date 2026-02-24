@@ -253,7 +253,27 @@ class SendReportJob implements ShouldQueue
                 return null;
             }
 
-            Log::info('Attendance records found', [
+            // Guard against reports that only contain non-meaningful statuses (e.g. no_scheduled)
+            $meaningfulStatuses = ['clocked_in', 'clocked_out', 'on_break','absent', 'unchecked_in', 'on_leave', 'sick_leave', 'sick_off', 'off_shift'];
+            $hasMeaningfulData = match($type) {
+                'attendance' => $attendances->contains(fn($r) => in_array($r->status, $meaningfulStatuses)),
+                'timesheets', 'department' => $attendances->isNotEmpty(),
+                default => false,
+            };
+
+            if (!$hasMeaningfulData) {
+                Log::info('Report skipped - no meaningful attendance data', [
+                    'type' => $type,
+                    'organization_id' => $this->organizationId,
+                    'start_date' => $startDate,
+                    'end_date' => $endDate,
+                    'record_count' => $attendances->count(),
+                ]);
+                return null;
+            }
+
+            // ↓ Only reaches here if data is meaningful
+            Log::info('Meaningful Attendance records found', [
                 'count' => $attendances->count(),
             ]);
 

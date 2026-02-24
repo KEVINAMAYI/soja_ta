@@ -3,6 +3,7 @@
 namespace App\Livewire;
 
 use App\Exports\AttendanceDailyExcelExport;
+use App\Exports\AttendancePivotDailyExcelExport;
 use Carbon\Carbon;
 use Livewire\Attributes\On;
 use Maatwebsite\Excel\Facades\Excel;
@@ -282,6 +283,21 @@ class AttendanceDailyTable extends DataTableComponent
     {
         return Excel::download(
             new AttendanceDailyExcelExport(
+                selectedIds: $this->getSelected(),
+                startDate: $this->startDate,
+                endDate: $this->endDate,
+                status: $this->status
+            ),
+            'attendance.xlsx'
+        );
+    }
+
+
+    #[On('export-pivot-daily-excel')]
+    public function exportPivotExcel()
+    {
+        return Excel::download(
+            new AttendancePivotDailyExcelExport(
                 selectedIds: $this->getSelected(),
                 startDate: $this->startDate,
                 endDate: $this->endDate,

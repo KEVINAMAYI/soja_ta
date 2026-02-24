@@ -37,6 +37,8 @@ new class extends Component {
     public $department_id;
     public $reportSettings;
 
+
+
     protected function rules()
     {
         return [
@@ -665,6 +667,15 @@ new class extends Component {
                                                             <iconify-icon icon="mdi:file-excel" width="16" height="16"
                                                                           style="margin-right:6px; vertical-align:middle;"></iconify-icon>
                                                             Excel
+                                                        </a>
+                                                    </li>
+                                                    <li>
+                                                        <a href="#"
+                                                           wire:click.prevent="dispatch('export-pivot-daily-excel')"
+                                                           class="dropdown-item">
+                                                            <iconify-icon icon="mdi:file-excel" width="16" height="16"
+                                                                          style="margin-right:6px; vertical-align:middle;"></iconify-icon>
+                                                            Pivot Excel
                                                         </a>
                                                     </li>
                                                     <li>
