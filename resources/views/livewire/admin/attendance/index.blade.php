@@ -39,9 +39,7 @@ new class extends Component {
         $today = now()->toDateString();
         $this->startDate = $today;
         $this->endDate = $today;
-
         $this->loadSummaryStats();
-
         $this->zkbioEnabled = auth()->user()->employee->organization->zkbio_enabled ?? false;
 
     }
@@ -59,15 +57,83 @@ new class extends Component {
     public function syncNow(): void
     {
         try {
-            FetchZKBioTransactions::dispatchSync();
+            $org = auth()->user()->employee->organization;
+
+            if (!$org->zkbio_enabled || !$org->zkbio_device_sn) return;
+
+            $zkbio = app(\App\Services\ZKBioService::class);
+
+            $startDate = now()->subMinutes(5)->format('Y-m-d H:i:s');
+            $endDate = now()->format('Y-m-d H:i:s');
+
+            $deviceSns = array_filter(array_map('trim', explode(',', $org->zkbio_device_sn)));
+
+            foreach ($deviceSns as $deviceSn) {
+                $transactions = $zkbio->getTransactions(
+                    deviceSn: $deviceSn,
+                    pageNo: 1,
+                    pageSize: 50,
+                    startDate: $startDate,
+                    endDate: $endDate,
+                    baseUrl: $org->zkbio_base_url,
+                    accessToken: $org->zkbio_access_token,
+                );
+
+                if (empty($transactions)) continue;
+
+                // DB dedup
+                $incomingLogIds = array_filter(array_column($transactions, 'logId'));
+                $alreadyProcessed = \App\Models\ZkbioProcessedLog::whereIn('log_id', $incomingLogIds)
+                    ->pluck('log_id')->toArray();
+
+                $newTransactions = array_values(array_filter(
+                    $transactions,
+                    fn($tx) => !empty($tx['logId']) && !in_array($tx['logId'], $alreadyProcessed)
+                ));
+
+
+                if (empty($newTransactions)) continue;
+
+                // Mark processed
+                \App\Models\ZkbioProcessedLog::insert(
+                    array_map(fn($tx) => [
+                        'log_id' => $tx['logId'],
+                        'device_sn' => $deviceSn,
+                        'pin' => $tx['pin'] ?? null,
+                        'organization_id' => $org->id,
+                        'processed_at' => now(),
+                    ], $newTransactions)
+                );
+
+                // Sort + process synchronously — no queue
+                usort($newTransactions, fn($a, $b) => strcmp($a['eventTime'], $b['eventTime']));
+
+                $grouped = collect($newTransactions)->groupBy('pin');
+                foreach ($grouped as $pin => $pinTransactions) {
+                    if (!$pin) continue;
+                    \App\Jobs\ProcessZKBioTransactions::dispatchSync(
+                        $pinTransactions->values()->all(),
+                        $org->id
+                    );
+                }
+            }
+
             $this->loadSummaryStats();
             $this->dispatch('date-range-updated',
                 startDate: $this->startDate,
                 endDate: $this->endDate,
                 status: $this->filterStatus
             );
+
+            LivewireAlert::title('Synced!')
+                ->text('Latest records pulled successfully.')
+                ->success()->toast()->position('top-end')->show();
+
         } catch (\Exception $e) {
             \Illuminate\Support\Facades\Log::warning('Manual sync failed: ' . $e->getMessage());
+            LivewireAlert::title('Sync Failed!')
+                ->text($e->getMessage())
+                ->error()->toast()->position('top-end')->show();
         }
     }
 
@@ -365,8 +431,32 @@ new class extends Component {
         </div>
 
         <div class="card card-body">
+
             <div class="row align-items-end mb-4 justify-content-end">
-                <div class="col-md-4 d-flex align-items-center justify-content-end gap-2">
+                <div class="col-12 d-flex align-items-center justify-content-end gap-2 flex-wrap">
+
+                    @if($zkbioEnabled)
+                        <button
+                            wire:click="syncNow"
+                            wire:loading.attr="disabled"
+                            wire:target="syncNow"
+                            class="btn btn-warning btn-sm d-flex align-items-center gap-2"
+                            style="height: 38px;">
+
+                            {{-- Default state --}}
+                            <span wire:loading.class="d-none" wire:target="syncNow" class="d-flex align-items-center gap-2">
+                                <iconify-icon icon="mdi:refresh" style="font-size:16px; line-height:1;"></iconify-icon>
+                                     Sync Now
+                                </span>
+
+                            {{-- Loading state --}}
+                            <span wire:loading.class.remove="d-none" wire:target="syncNow" class="d-none d-flex align-items-center gap-2">
+                                 <span class="spinner-border spinner-border-sm"></span>
+                                      Syncing...
+                                 </span>
+
+                        </button>
+                    @endif
 
                     @if (str_contains($filterStatus ?? '', 'sick_off'))
                         <a href="{{ route('leaves.create') }}" class="btn btn-primary btn-sm"
@@ -387,28 +477,6 @@ new class extends Component {
 
                 </div>
             </div>
-
-
-            {{-- ✅ Sync button row — above filters, far right --}}
-{{--            @if($zkbioEnabled)--}}
-{{--                <div class="d-flex justify-content-end mb-3">--}}
-{{--                    <button--}}
-{{--                        wire:click="syncNow"--}}
-{{--                        wire:loading.attr="disabled"--}}
-{{--                        wire:target="syncNow"--}}
-{{--                        class="btn btn-warning btn-sm"--}}
-{{--                        style="min-width: 130px; height: 36px;">--}}
-{{--        <span wire:loading.remove wire:target="syncNow" class="d-flex align-items-center justify-content-center gap-2">--}}
-{{--            <iconify-icon icon="mdi:refresh" width="16" style="display:flex;"></iconify-icon>--}}
-{{--            Sync Device--}}
-{{--        </span>--}}
-{{--                        <span wire:loading wire:target="syncNow" class="d-flex align-items-center justify-content-center gap-2" style="display:none !important;">--}}
-{{--            <span class="spinner-border spinner-border-sm flex-shrink-0"></span>--}}
-{{--            Syncing...--}}
-{{--        </span>--}}
-{{--                    </button>--}}
-{{--                </div>--}}
-{{--            @endif--}}
 
             {{-- Filters row below --}}
             <div class="row align-items-end mb-4">
@@ -457,7 +525,6 @@ new class extends Component {
                 </div>
 
 
-
             </div>
 
             <livewire:attendance-daily-table :status="$status ?? null" theme="bootstrap-4"/>
@@ -477,7 +544,8 @@ new class extends Component {
                 Echo.channel('attendance')
                     .listen('.sync.completed', (data) => {
                         console.log('ZKBio sync completed — refreshing table');
-                        @this.call('refresh');
+                    @this.call('refresh')
+                        ;
                     });
             }
         });
