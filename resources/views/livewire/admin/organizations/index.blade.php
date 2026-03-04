@@ -119,7 +119,7 @@ new class extends Component {
                     'shift_id' => $shift->id,
                     'user_id' => $user->id,
                     'name' => $this->name,
-                    'id_number' => 'ADMIN999',
+                    'id_number' => 'ADMIN-' . $organization->id, // unique per org
                     'email' => $this->email,
                     'phone' => $this->phone_number,
                     'active' => true,
