@@ -75,46 +75,56 @@ new class extends Component {
             ]);
 
             // Default shift
-            $shift = Shift::factory()->create([
-                'organization_id' => $organization->id,
-                'name' => 'Morning Shift',
-                'start_time' => '08:00:00',
-                'end_time' => '17:00:00',
-                'break_minutes' => 30,
-                'overtime_rate' => 1.5,
-                'status' => 'active',
-                'notes' => 'Standard 8-hour day shift with 30-minute break.',
-            ]);
+            $shift = Shift::firstOrCreate(
+                [
+                    'organization_id' => $organization->id,
+                    'name' => 'Morning Shift',
+                ],
+                [
+                    'start_time' => '08:00:00',
+                    'end_time' => '17:00:00',
+                    'break_minutes' => 30,
+                    'overtime_rate' => 1.5,
+                    'status' => 'active',
+                    'notes' => 'Standard 8-hour day shift with 30-minute break.',
+                ]
+            );
 
             // Create default user (org admin)
-            $user = User::factory()->create([
-                'name' => $this->name,
-                'email' => $this->email,
-                'password' => bcrypt('password'),
-            ]);
+            $user = User::firstOrCreate(
+                ['email' => $this->email],
+                [
+                    'name' => $this->name,
+                    'password' => bcrypt('password'),
+                ]
+            );
 
-            $department = Department::factory()->create([
-                'name' => 'ICT',
-                'description' => 'ICT',
-                'manager_id' => $user->id,
-                'organization_id' => $organization->id
-            ]);
+            $department = Department::firstOrCreate(
+                ['name' => 'ICT', 'organization_id' => $organization->id],
+                [
+                    'description' => 'ICT',
+                    'manager_id' => $user->id,
+                ]
+            );
 
             // Setup default roles + assign admin to user
             $this->setupDefaultRoles($organization, $user);
 
             // Create default employee record
-            Employee::factory()->create([
-                'organization_id' => $organization->id,
-                'department_id' => $department->id,
-                'shift_id' => $shift->id,
-                'user_id' => $user->id,
-                'name' => $this->email,
-                'id_number' => 'ADMIN999',
-                'email' => $this->email,
-                'phone' => $this->phone_number,
-                'active' => true,
-            ]);
+            Employee::firstOrCreate(
+                ['email' => $this->email],
+                [
+                    'organization_id' => $organization->id,
+                    'department_id' => $department->id,
+                    'shift_id' => $shift->id,
+                    'user_id' => $user->id,
+                    'name' => $this->name,
+                    'id_number' => 'ADMIN999',
+                    'email' => $this->email,
+                    'phone' => $this->phone_number,
+                    'active' => true,
+                ]
+            );
 
             DB::commit();
 
@@ -144,7 +154,7 @@ new class extends Component {
             report($e);
 
             LivewireAlert::title('Error!')
-                ->text('Failed to add organization.')
+                ->text($e->getMessage())
                 ->error()
                 ->toast()
                 ->position('top-end')
