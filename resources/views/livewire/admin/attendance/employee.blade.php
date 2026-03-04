@@ -29,8 +29,21 @@
             </small>
         @endif
 
+        @if ($attendance->employee->organization?->zkbio_enabled && $attendance->employee->zkbio_pin)
+            <small class='text-muted d-block'>
+                <i class='ti ti-fingerprint me-1 text-warning'></i>
+                Device PIN: <span
+                    class='badge bg-warning-subtle text-warning border px-2'>{{ $attendance->employee->zkbio_pin }}</span>
+            </small>
+        @elseif ($attendance->employee->organization?->zkbio_enabled && !$attendance->employee->zkbio_pin)
+            <small class='text-danger d-block'>
+                <i class='ti ti-alert-circle me-1'></i>No device PIN assigned
+            </small>
+        @endif
+
         <!-- 👇 CLEAN MINIMAL LINK - ADD THIS 👇 -->
-        <a style="margin-top:5px;" href="{{ route('attendance.employee-detailed-attendance', ['employeeId' => $attendance->employee_id]) }}"
+        <a style="margin-top:5px;"
+           href="{{ route('attendance.employee-detailed-attendance', ['employeeId' => $attendance->employee_id]) }}"
            class="employee-detail-link-clean">
             <span>View attendance details</span>
             <iconify-icon icon="tabler:chevron-right" width="14"></iconify-icon>

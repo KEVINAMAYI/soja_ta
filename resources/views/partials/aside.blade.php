@@ -115,7 +115,9 @@
                                href="{{ route('employees.index') }}"
                                aria-expanded="false">
                                 <iconify-icon icon="mdi:office-building-outline" class="fs-5"></iconify-icon>
-                                <span class="hide-menu">Employees</span>
+                                <span class="hide-menu">
+                                       {{ auth()->user()->employee?->organization?->is_student_record ? 'Students' : 'Employees' }}
+                                    </span>
                             </a>
                         </li>
                     @endcan

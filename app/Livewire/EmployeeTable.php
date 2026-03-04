@@ -91,6 +91,20 @@ class EmployeeTable extends DataTableComponent
                         ? "<small class='text-muted d-block'><i class='ti ti-building me-1'></i>Department: {$row->department->name}</small>"
                         : '';
 
+                    // ✅ ZKBio PIN — only show if org has ZKBio enabled
+                    $zkbioPin = '';
+                    if ($row->organization?->zkbio_enabled && $row->zkbio_pin) {
+                        $zkbioPin = "<small class='text-muted d-block'>
+                <i class='ti ti-fingerprint me-1 text-warning'></i>
+                Device PIN: <span class='badge bg-warning-subtle text-warning border px-2'>{$row->zkbio_pin}</span>
+            </small>";
+                    } elseif ($row->organization?->zkbio_enabled && !$row->zkbio_pin) {
+                        // ZKBio enabled but no PIN assigned yet — warn admin
+                        $zkbioPin = "<small class='text-danger d-block'>
+                <i class='ti ti-alert-circle me-1'></i>No device PIN assigned
+            </small>";
+                    }
+
                     return "
             <div class='d-flex align-items-start'>
                 {$icon}
@@ -100,6 +114,7 @@ class EmployeeTable extends DataTableComponent
                     {$email}
                     {$idNumber}
                     {$department}
+                    {$zkbioPin}
                 </div>
             </div>
         ";

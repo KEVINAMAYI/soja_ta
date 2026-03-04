@@ -31,6 +31,7 @@ class Employee extends Model
         'shift_status',
         'start_off_shift_date',
         'end_off_shift_date',
+        'zkbio_pin'
     ];
 
 
@@ -52,6 +53,15 @@ class Employee extends Model
                     $employee->id ?? (Employee::max('id') + 1)
                 );
             }
+
+            // Only assign zkbio_pin if org has ZKBio enabled
+            if (empty($employee->zkbio_pin)) {
+                $org = $employee->organization ?? \App\Models\Organization::find($employee->organization_id);
+                if ($org?->zkbio_enabled) {
+                    $employee->zkbio_pin = self::generateZKBioPin();
+                }
+            }
+
         });
     }
 
@@ -191,6 +201,25 @@ class Employee extends Model
     public function leaves()
     {
         return $this->hasMany(Leave::class);
+    }
+
+
+    public static function generateZKBioPin(): string
+    {
+        // Get the next available ID by checking what's already taken
+        $max = self::withTrashed() // include soft-deleted to avoid reuse
+        ->whereNotNull('zkbio_pin')
+            ->selectRaw('MAX(CAST(zkbio_pin AS UNSIGNED)) as max_pin')
+            ->value('max_pin');
+
+        $next = max(($max ?? 0) + 1, 1000); // start from 1000 to avoid clashing with legacy device pins like 1, 2, 36
+
+        // Double-check it's not already taken (race condition safety)
+        while (self::withTrashed()->where('zkbio_pin', (string) $next)->exists()) {
+            $next++;
+        }
+
+        return (string) $next;
     }
 
 }

@@ -7,6 +7,9 @@ use Illuminate\Support\Facades\Route;
 use Livewire\Attributes\On;
 use Livewire\Attributes\Url;
 use Livewire\Volt\Component;
+use App\Jobs\FetchZKBioTransactions;
+use Jantinnerezo\LivewireAlert\Facades\LivewireAlert;
+
 
 new class extends Component {
 
@@ -27,6 +30,9 @@ new class extends Component {
     public $offShiftCount = 0;
     public $inactiveCount = 0;
 
+    public bool $zkbioEnabled = false;
+    public bool $syncing = false;
+
     public function mount()
     {
         $this->status = $this->filterStatus;
@@ -35,7 +41,36 @@ new class extends Component {
         $this->endDate = $today;
 
         $this->loadSummaryStats();
+
+        $this->zkbioEnabled = auth()->user()->employee->organization->zkbio_enabled ?? false;
+
     }
+
+    public function refresh(): void
+    {
+        $this->loadSummaryStats();
+        $this->dispatch('date-range-updated',
+            startDate: $this->startDate,
+            endDate: $this->endDate,
+            status: $this->filterStatus
+        );
+    }
+
+    public function syncNow(): void
+    {
+        try {
+            FetchZKBioTransactions::dispatchSync();
+            $this->loadSummaryStats();
+            $this->dispatch('date-range-updated',
+                startDate: $this->startDate,
+                endDate: $this->endDate,
+                status: $this->filterStatus
+            );
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::warning('Manual sync failed: ' . $e->getMessage());
+        }
+    }
+
 
     public function loadSummaryStats()
     {
@@ -329,24 +364,55 @@ new class extends Component {
             </div>
         </div>
 
-
         <div class="card card-body">
             <div class="row align-items-end mb-4 justify-content-end">
-                <div class="col-md-4 text-end">
-                    @if (str_contains($filterStatus, 'sick_off'))
-                        <a href="{{ route('leaves.create') }}" class="btn btn-primary">
+                <div class="col-md-4 d-flex align-items-center justify-content-end gap-2">
+
+                    @if (str_contains($filterStatus ?? '', 'sick_off'))
+                        <a href="{{ route('leaves.create') }}" class="btn btn-primary btn-sm"
+                           style="height: 38px; display:flex; align-items:center;">
                             + Create Sick Off
                         </a>
-                    @elseif (str_contains($filterStatus, 'off_shift'))
-                        <a href="{{ route('leaves.create') }}" class="btn btn-primary">
+                    @elseif (str_contains($filterStatus ?? '', 'off_shift'))
+                        <a href="{{ route('leaves.create') }}" class="btn btn-primary btn-sm"
+                           style="height: 38px; display:flex; align-items:center;">
                             + Create Off Shifts
                         </a>
-                    @elseif (str_contains($filterStatus, 'on_leave'))
-                        <a href="{{ route('leaves.create') }}" class="btn btn-primary">
+                    @elseif (str_contains($filterStatus ?? '', 'on_leave'))
+                        <a href="{{ route('leaves.create') }}" class="btn btn-primary btn-sm"
+                           style="height: 38px; display:flex; align-items:center;">
                             + Create Leave Request
                         </a>
                     @endif
+
                 </div>
+            </div>
+
+
+            {{-- ✅ Sync button row — above filters, far right --}}
+{{--            @if($zkbioEnabled)--}}
+{{--                <div class="d-flex justify-content-end mb-3">--}}
+{{--                    <button--}}
+{{--                        wire:click="syncNow"--}}
+{{--                        wire:loading.attr="disabled"--}}
+{{--                        wire:target="syncNow"--}}
+{{--                        class="btn btn-warning btn-sm"--}}
+{{--                        style="min-width: 130px; height: 36px;">--}}
+{{--        <span wire:loading.remove wire:target="syncNow" class="d-flex align-items-center justify-content-center gap-2">--}}
+{{--            <iconify-icon icon="mdi:refresh" width="16" style="display:flex;"></iconify-icon>--}}
+{{--            Sync Device--}}
+{{--        </span>--}}
+{{--                        <span wire:loading wire:target="syncNow" class="d-flex align-items-center justify-content-center gap-2" style="display:none !important;">--}}
+{{--            <span class="spinner-border spinner-border-sm flex-shrink-0"></span>--}}
+{{--            Syncing...--}}
+{{--        </span>--}}
+{{--                    </button>--}}
+{{--                </div>--}}
+{{--            @endif--}}
+
+            {{-- Filters row below --}}
+            <div class="row align-items-end mb-4">
+                ...
             </div>
 
             <div class="row align-items-end mb-4">
@@ -389,6 +455,9 @@ new class extends Component {
                         <option value="on_break">On Break</option>
                     </select>
                 </div>
+
+
+
             </div>
 
             <livewire:attendance-daily-table :status="$status ?? null" theme="bootstrap-4"/>
@@ -400,6 +469,17 @@ new class extends Component {
     <script>
         window.addEventListener('replace-url', event => {
             window.history.replaceState({}, '', event.detail.url);
+        });
+
+        // Listen for ZKBio sync completion and refresh table instantly
+        window.addEventListener('load', () => {
+            if (typeof Echo !== 'undefined') {
+                Echo.channel('attendance')
+                    .listen('.sync.completed', (data) => {
+                        console.log('ZKBio sync completed — refreshing table');
+                        @this.call('refresh');
+                    });
+            }
         });
     </script>
 @endpush
