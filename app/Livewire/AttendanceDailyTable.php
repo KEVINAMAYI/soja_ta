@@ -5,6 +5,7 @@ namespace App\Livewire;
 use App\Exports\AttendanceDailyExcelExport;
 use App\Exports\AttendancePivotDailyExcelExport;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\Auth;
 use Livewire\Attributes\On;
 use Maatwebsite\Excel\Facades\Excel;
 use Rappasoft\LaravelLivewireTables\DataTableComponent;
@@ -19,7 +20,6 @@ class AttendanceDailyTable extends DataTableComponent
     public $status;
     public $startDate;
     public $endDate;
-
     protected AttendanceSeeder $seeder;
 
 
@@ -71,7 +71,7 @@ class AttendanceDailyTable extends DataTableComponent
                 ->select('attendances.*')
                 ->with(['employee', 'employee.shift'])
                 ->whereBetween('date', [$startDate, $endDate])
-                ->whereHas('employee', function($q) use ($orgId) {
+                ->whereHas('employee', function ($q) use ($orgId) {
                     $q->where('organization_id', $orgId)
                         ->where('active', 0);
                 });
@@ -95,7 +95,7 @@ class AttendanceDailyTable extends DataTableComponent
             ->select('attendances.*')
             ->with(['employee', 'employee.shift'])
             ->whereBetween('date', [$startDate, $endDate])
-            ->whereHas('employee', function($q) use ($orgId) {
+            ->whereHas('employee', function ($q) use ($orgId) {
                 $q->where('organization_id', $orgId)
                     ->where('active', 1); // Only active employees for normal filters
             });
@@ -172,10 +172,10 @@ class AttendanceDailyTable extends DataTableComponent
 
         return [
 
-            Column::make("Employee")
+            Column::make(auth()->user()->employee?->organization?->is_student_record ? "Student" : "Employee")
                 ->label(fn($row) => view('livewire.admin.attendance.employee', ['attendance' => $row])),
 
-            Column::make("Shift")
+            Column::make(auth()->user()->employee?->organization?->is_student_record ? "Session" : "Shift")
                 ->label(function ($row) {
                     if (!$row->employee->shift) {
                         return '<span class="text-muted">-</span>';

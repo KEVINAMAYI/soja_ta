@@ -21,11 +21,13 @@ new class extends Component {
     public $topOvertimeEmployee = null;
     public $earliestClockIn     = null;
     public $absentEmployees     = [];
+    public $entityLabel = 'Employee';
 
     protected $paginationTheme = 'bootstrap';
 
     public function mount(): void
     {
+        $this->entityLabel = auth()->user()->employee?->organization?->is_student_record  ? "Student" : "Employee";
         $this->reportDate = now()->toDateString();
         $this->loadStats();
     }
@@ -427,7 +429,7 @@ new class extends Component {
                 <table class="dsr-table">
                     <thead>
                     <tr>
-                        <th>Employee</th>
+                        <th>{{ $entityLabel }}</th>
                         <th>Department</th>
                         <th>Clock In</th>
                         <th>Clock Out</th>
@@ -483,7 +485,7 @@ new class extends Component {
                             <td colspan="7">
                                 <div class="dsr-empty">
                                     <span class="dsr-empty-icon">📋</span>
-                                    <div class="dsr-empty-title">No employees clocked in yet</div>
+                                    <div class="dsr-empty-title">No {{ strtolower($entityLabel) }}s clocked in yet</div>
                                     <div class="dsr-empty-sub">Check back later or select a different date</div>
                                 </div>
                             </td>

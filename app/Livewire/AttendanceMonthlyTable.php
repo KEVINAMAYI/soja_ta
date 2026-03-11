@@ -112,7 +112,7 @@ class AttendanceMonthlyTable extends DataTableComponent
     {
         return [
             // 👤 Employee Column
-            Column::make("Employee")
+            Column::make(auth()->user()->employee?->organization?->is_student_record  ? "Student" : "Employee")
                 ->label(fn($row) => view('livewire.admin.attendance.employee-timesheet', ['attendance' => $row])),
 
             // ✅ Present Days

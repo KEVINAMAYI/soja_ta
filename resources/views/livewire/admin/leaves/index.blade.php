@@ -466,7 +466,7 @@ new class extends Component {
                 <thead>
                 <tr>
                     <th>
-                        <h6 class="fw-semibold mb-0">Employee</h6>
+                        <h6 class="fw-semibold mb-0">{{ auth()->user()->employee?->organization?->is_student_record  ? "Student" : "Employee" }}</h6>
                     </th>
                     <th>
                         <h6 class="fw-semibold mb-0">Leave Types</h6>

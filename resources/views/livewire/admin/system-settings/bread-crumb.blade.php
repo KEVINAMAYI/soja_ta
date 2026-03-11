@@ -2,6 +2,7 @@
 
 use Livewire\Volt\Component;
 use Livewire\Attributes\Reactive;
+use Illuminate\Support\Facades\Auth;
 
 new class extends Component {
 
@@ -11,9 +12,13 @@ new class extends Component {
     #[Reactive]
     public array $items = [];
 
+    public $entityLabel = 'Employee';
+
     public function mount(string $title = 'Page Title', array $items = []): void
     {
 
+        $isStudentRecord = Auth::user()->employee?->organization?->is_student_record ?? false;
+        $this->entityLabel = $isStudentRecord ? 'Student' : 'Employee';
         $this->title = $title;
         $this->items = $items;
     }

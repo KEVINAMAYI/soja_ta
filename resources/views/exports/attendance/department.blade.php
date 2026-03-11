@@ -147,14 +147,14 @@ if ($organization) {
     @endif
     <tr>
         <th>Department</th>
-        <th>Employee Count</th>
+        <th>{{ auth()->user()->employee?->organization?->is_student_record  ? "Student" : "Employee" }} Count</th>
         <th>Present</th>
         <th>Absent</th>
         <th>Leave</th>
         <th>Sick</th>
         <th>Off Shift</th>
         <th>Total Days</th>
-        <th>Worked Hours</th>
+        <th>{{ auth()->user()->employee?->organization?->is_student_record  ? "School (hours)" : "Worked (hours)" }}</th>
         <th>Overtime Hours</th>
     </tr>
     </thead>

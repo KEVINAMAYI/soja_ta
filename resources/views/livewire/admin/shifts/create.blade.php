@@ -30,6 +30,7 @@ new class extends Component {
     public $editingBreakIndex = null;
     public $showAddBreakModal = false;
     public $currentBreak = [];
+    public $entityLabel = 'Employees';
 
     public $breakTypes = [
         ['value' => 'paid', 'label' => 'Paid Break', 'description' => 'Time counted toward working hours'],
@@ -74,6 +75,7 @@ new class extends Component {
     {
         $this->loadShifts();
 
+        $this->entityLabel = auth()->user()->employee?->organization?->is_student_record  ? "Student" : "Employee";
 
         // After saving — now reload truth from DB
         $this->assignedStaffIds = Employee::where('shift_id', $this->selectedShift['id'])
@@ -848,7 +850,7 @@ new class extends Component {
                 break;
 
             case 'assign_employee':
-                $this->tabTitle = 'Assign Employee';
+                $this->tabTitle = 'Assign'.' '.$entityLabel;
                 $this->tabIcon = '<iconify-icon icon="mdi:account-multiple-check-outline" class="fs-5"></iconify-icon>';
                 $this->getAssignedStaff();
                 break;
@@ -2409,7 +2411,7 @@ new class extends Component {
                             aria-controls="tab-roles-permissions"
                             aria-selected="false">
                             <i class="ti ti-user-circle mx-1 fs-6"></i>
-                            <span class="d-none d-md-block">Assign Employee</span>
+                            <span class="d-none d-md-block">Assign {{ $entityLabel }}</span>
                         </button>
                     </li>
 

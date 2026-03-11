@@ -4,6 +4,7 @@ namespace App\Livewire;
 
 use App\Exports\EmployeesExcelExport;
 use App\Models\Role;
+use Illuminate\Support\Facades\Auth;
 use Jantinnerezo\LivewireAlert\Facades\LivewireAlert;
 use Livewire\Attributes\On;
 use Maatwebsite\Excel\Facades\Excel;
@@ -17,10 +18,15 @@ use Rappasoft\LaravelLivewireTables\Views\Filters\SelectFilter;
 class EmployeeTable extends DataTableComponent
 {
     protected $model = Employee::class;
+    public $entityLabel = 'Employee';
 
 
     public function mount(): void
     {
+
+        $isStudentRecord = Auth::user()->employee?->organization?->is_student_record ?? false;
+        $this->entityLabel = $isStudentRecord ? 'Student' : 'Employee';
+
         // If the URL contains ?active=0 or ?active=1
         if (request()->has('active')) {
             $this->setFilter('active', request()->query('active'));
@@ -62,7 +68,7 @@ class EmployeeTable extends DataTableComponent
         return [
 
             // 🕓 Shift
-            Column::make("Shift", "shift_id")
+            Column::make(    auth()->user()->employee?->organization?->is_student_record ? "Session" : "Shift", "shift_id")
                 ->format(fn($value, $row) => $row->shift?->name
                     ? "<span class='fw-semibold text-primary'>{$row->shift->name}</span>"
                     : "<span class='text-muted'>—</span>"
@@ -71,7 +77,7 @@ class EmployeeTable extends DataTableComponent
                 ->sortable(),
 
             // 👤 Employee (with icon, title, email, and ID number)
-            Column::make("Employee", "name")
+            Column::make(auth()->user()->employee?->organization?->is_student_record  ? "Student" : "Employee", "name")
                 ->format(function ($value, $row) {
                     $icon = '<iconify-icon icon="tabler:user" class="me-2 text-primary" width="20"></iconify-icon>';
 

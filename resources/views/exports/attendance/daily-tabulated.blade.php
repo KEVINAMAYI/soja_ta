@@ -48,7 +48,7 @@
 
     {{-- Date group headers --}}
     <tr>
-        <th class="th-employee" rowspan="2">Employee</th>
+        <th class="th-employee" rowspan="2">{{ auth()->user()->employee?->organization?->is_student_record  ? "Student" : "Employee" }}</th>
         @foreach($dates as $date)
         <th class="th-date" colspan="3">
             {{ \Carbon\Carbon::parse($date)->format('M d, Y') }}
@@ -61,7 +61,7 @@
         @foreach($dates as $date)
         <th class="th-sub">Clock In</th>
         <th class="th-sub">Clock Out</th>
-        <th class="th-sub">Worked (hrs)</th>
+        <th class="th-sub">{{ auth()->user()->employee?->organization?->is_student_record  ? "School (hours)" : "Worked (hours)"}}</th>
         @endforeach
     </tr>
 

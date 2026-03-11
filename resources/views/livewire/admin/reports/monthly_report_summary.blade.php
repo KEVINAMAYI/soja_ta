@@ -30,11 +30,13 @@ new class extends Component {
     public $perPageAbsent = 10;
     public $perPageLeave = 10;
     public $perPageDept = 10;
+    public $entityLabel = 'Employee';
 
     protected $paginationTheme = 'bootstrap';
 
     public function mount()
     {
+        $this->entityLabel = auth()->user()->employee?->organization?->is_student_record ? "Student" : "Employee";
         $this->reportDate = now()->toDateString();
         $this->calculateMonthInfo();
     }
@@ -67,15 +69,15 @@ new class extends Component {
         // Get all attendance records for the month
         $monthAttendances = Attendance::with(['employee.department'])
             ->whereBetween('date', [$startOfMonth, $endOfMonth])
-            ->when($orgId, function($q) use ($orgId) {
-                $q->whereHas('employee', function($query) use ($orgId) {
+            ->when($orgId, function ($q) use ($orgId) {
+                $q->whereHas('employee', function ($query) use ($orgId) {
                     $query->where('organization_id', $orgId);
                 });
             })
             ->get();
 
         // Calculate working days in month
-        $workingDays = $startOfMonth->diffInDaysFiltered(function(Carbon $date) use ($endOfMonth) {
+        $workingDays = $startOfMonth->diffInDaysFiltered(function (Carbon $date) use ($endOfMonth) {
             return $date->isWeekday() && $date->lte($endOfMonth);
         }, $endOfMonth);
 
@@ -90,22 +92,22 @@ new class extends Component {
 
         // Calculate average on leave
         $monthLeaves = Leave::where('status', 'approved')
-            ->where(function($q) use ($startOfMonth, $endOfMonth) {
+            ->where(function ($q) use ($startOfMonth, $endOfMonth) {
                 $q->whereBetween('start_date', [$startOfMonth, $endOfMonth])
                     ->orWhereBetween('end_date', [$startOfMonth, $endOfMonth])
-                    ->orWhere(function($query) use ($startOfMonth, $endOfMonth) {
+                    ->orWhere(function ($query) use ($startOfMonth, $endOfMonth) {
                         $query->where('start_date', '<=', $startOfMonth)
                             ->where('end_date', '>=', $endOfMonth);
                     });
             })
-            ->when($orgId, function($q) use ($orgId) {
-                $q->whereHas('employee', function($query) use ($orgId) {
+            ->when($orgId, function ($q) use ($orgId) {
+                $q->whereHas('employee', function ($query) use ($orgId) {
                     $query->where('organization_id', $orgId);
                 });
             })
             ->get();
 
-        $totalLeaveDays = $monthLeaves->sum(function($leave) use ($startOfMonth, $endOfMonth) {
+        $totalLeaveDays = $monthLeaves->sum(function ($leave) use ($startOfMonth, $endOfMonth) {
             $leaveStart = Carbon::parse($leave->start_date)->max($startOfMonth);
             $leaveEnd = Carbon::parse($leave->end_date)->min($endOfMonth);
             return $leaveStart->diffInDays($leaveEnd) + 1;
@@ -118,14 +120,14 @@ new class extends Component {
         $prevMonthEnd = $startOfMonth->copy()->subMonth()->endOfMonth();
 
         $prevMonthAttendances = Attendance::whereBetween('date', [$prevMonthStart, $prevMonthEnd])
-            ->when($orgId, function($q) use ($orgId) {
-                $q->whereHas('employee', function($query) use ($orgId) {
+            ->when($orgId, function ($q) use ($orgId) {
+                $q->whereHas('employee', function ($query) use ($orgId) {
                     $query->where('organization_id', $orgId);
                 });
             })
             ->get();
 
-        $prevWorkingDays = $prevMonthStart->diffInDaysFiltered(function(Carbon $date) use ($prevMonthEnd) {
+        $prevWorkingDays = $prevMonthStart->diffInDaysFiltered(function (Carbon $date) use ($prevMonthEnd) {
             return $date->isWeekday() && $date->lte($prevMonthEnd);
         }, $prevMonthEnd);
 
@@ -155,14 +157,14 @@ new class extends Component {
         $absentEmployeesQuery = Attendance::with(['employee.department'])
             ->whereBetween('date', [$startOfMonth, $endOfMonth])
             ->whereIn('status', ['absent', 'unchecked_in'])
-            ->when($orgId, function($q) use ($orgId) {
-                $q->whereHas('employee', function($query) use ($orgId) {
+            ->when($orgId, function ($q) use ($orgId) {
+                $q->whereHas('employee', function ($query) use ($orgId) {
                     $query->where('organization_id', $orgId);
                 });
             })
             ->get()
             ->groupBy('employee_id')
-            ->map(function($absences) {
+            ->map(function ($absences) {
                 $employee = $absences->first()->employee;
                 return [
                     'name' => $employee->name ?? 'N/A',
@@ -187,21 +189,21 @@ new class extends Component {
         // Employees on Leave Summary
         $employeesOnLeaveQuery = Leave::with(['employee.department'])
             ->where('status', 'approved')
-            ->where(function($q) use ($startOfMonth, $endOfMonth) {
+            ->where(function ($q) use ($startOfMonth, $endOfMonth) {
                 $q->whereBetween('start_date', [$startOfMonth, $endOfMonth])
                     ->orWhereBetween('end_date', [$startOfMonth, $endOfMonth])
-                    ->orWhere(function($query) use ($startOfMonth, $endOfMonth) {
+                    ->orWhere(function ($query) use ($startOfMonth, $endOfMonth) {
                         $query->where('start_date', '<=', $startOfMonth)
                             ->where('end_date', '>=', $endOfMonth);
                     });
             })
-            ->when($orgId, function($q) use ($orgId) {
-                $q->whereHas('employee', function($query) use ($orgId) {
+            ->when($orgId, function ($q) use ($orgId) {
+                $q->whereHas('employee', function ($query) use ($orgId) {
                     $query->where('organization_id', $orgId);
                 });
             })
             ->get()
-            ->map(function($leave) use ($startOfMonth, $endOfMonth) {
+            ->map(function ($leave) use ($startOfMonth, $endOfMonth) {
                 $leaveStart = Carbon::parse($leave->start_date)->max($startOfMonth);
                 $leaveEnd = Carbon::parse($leave->end_date)->min($endOfMonth);
                 $totalDays = $leaveStart->diffInDays($leaveEnd) + 1;
@@ -342,8 +344,10 @@ new class extends Component {
                                 <div class="d-flex align-items-start gap-2">
                                     <i class="ti ti-check fs-5 text-success"></i>
                                     <div class="flex-grow-1">
-                                        <small class="text-muted d-block" style="font-size: 0.75rem;">Avg Present</small>
-                                        <h2 class="mb-0 fw-bold text-success" style="font-size: 2rem;">{{ $avgPresent }}</h2>
+                                        <small class="text-muted d-block" style="font-size: 0.75rem;">Avg
+                                            Present</small>
+                                        <h2 class="mb-0 fw-bold text-success"
+                                            style="font-size: 2rem;">{{ $avgPresent }}</h2>
                                     </div>
                                 </div>
                             </div>
@@ -357,7 +361,8 @@ new class extends Component {
                                     <i class="ti ti-x fs-5 text-danger"></i>
                                     <div class="flex-grow-1">
                                         <small class="text-muted d-block" style="font-size: 0.75rem;">Avg Absent</small>
-                                        <h2 class="mb-0 fw-bold text-danger" style="font-size: 2rem;">{{ $avgAbsent }}</h2>
+                                        <h2 class="mb-0 fw-bold text-danger"
+                                            style="font-size: 2rem;">{{ $avgAbsent }}</h2>
                                     </div>
                                 </div>
                             </div>
@@ -371,7 +376,8 @@ new class extends Component {
                                     <i class="ti ti-calendar-off fs-5 text-warning"></i>
                                     <div class="flex-grow-1">
                                         <small class="text-muted d-block" style="font-size: 0.75rem;">Avg Leave</small>
-                                        <h2 class="mb-0 fw-bold text-warning" style="font-size: 2rem;">{{ $avgOnLeave }}</h2>
+                                        <h2 class="mb-0 fw-bold text-warning"
+                                            style="font-size: 2rem;">{{ $avgOnLeave }}</h2>
                                     </div>
                                 </div>
                             </div>
@@ -443,7 +449,7 @@ new class extends Component {
                         <table class="table table-hover align-middle">
                             <thead class="table-light">
                             <tr>
-                                <th>Employee</th>
+                                <th>{{ $entityLabel }}</th>
                                 <th>Department</th>
                                 <th>Total Days Absent</th>
                             </tr>
@@ -481,7 +487,7 @@ new class extends Component {
                     <div class="d-flex justify-content-between align-items-center mb-3">
                         <h5 class="mb-0">
                             <i class="ti ti-calendar-off text-warning me-2"></i>
-                            Employees on Leave Summary
+                            {{ $entityLabel }}s on Leave Summary
                         </h5>
                         <span class="badge bg-warning">{{ $employeesOnLeaveData->total() }} Employees</span>
                     </div>
@@ -490,7 +496,7 @@ new class extends Component {
                         <table class="table table-hover align-middle">
                             <thead class="table-light">
                             <tr>
-                                <th>Employee</th>
+                                <th>{{ $entityLabel }}</th>
                                 <th>Department</th>
                                 <th>Leave Type</th>
                                 <th>Total Days</th>
@@ -554,7 +560,8 @@ new class extends Component {
                                     <td>{{ $dept['total'] }}</td>
                                     <td>{{ $dept['avg_present'] }}</td>
                                     <td>
-                                        <span class="badge bg-{{ $this->getProgressBarColor($dept['attendance_rate']) }}">
+                                        <span
+                                            class="badge bg-{{ $this->getProgressBarColor($dept['attendance_rate']) }}">
                                             {{ number_format($dept['attendance_rate'], 1) }}%
                                         </span>
                                     </td>

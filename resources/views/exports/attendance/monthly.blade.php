@@ -154,14 +154,14 @@ if ($organization) {
     @endif
     {{-- End of Excel-specific meta rows --}}
     <tr>
-        <th>Employee</th>
+        <th>{{ auth()->user()->employee?->organization?->is_student_record  ? "Student" : "Employee" }}</th>
         <th>Present</th>
         <th>Absent</th>
         <th>Leave</th>
         <th>Sick</th>
         <th>Off Shift</th>
         <th>Total Days</th>
-        <th>Working Hours</th>
+        <th>{{ auth()->user()->employee?->organization?->is_student_record  ? "School (hours)" : "Worked (hours)" }}</th>
         <th>OT Hours</th>
     </tr>
     </thead>

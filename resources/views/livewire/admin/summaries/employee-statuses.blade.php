@@ -15,9 +15,14 @@ new class extends Component {
     public $offShift;
     public $sickOff;
     public $inactiveEmployees;
+    public $entityLabel = 'Employee';
 
     public function mount()
     {
+
+        $this->isStudentRecord = Auth::user()->employee?->organization?->is_student_record ?? false;
+        $this->entityLabel = $this->isStudentRecord ? 'Student' : 'Employee';
+
         $orgId = Auth::user()->employee->organization_id ?? null;
 
         // Total employees in the organization
@@ -250,7 +255,7 @@ new class extends Component {
                     <div class="stat-card-icon icon-secondary">
                         <iconify-icon icon="mdi:account-off"></iconify-icon>
                     </div>
-                    <h6 class="stat-card-title">Inactive Employees</h6>
+                    <h6 class="stat-card-title">Inactive {{ $entityLabel  }}</h6>
                     <div class="stat-card-value">{{ $inactiveEmployees }} <span
                             class="stat-card-total">/ {{ $totalEmployees }}</span></div>
                     <p class="stat-card-subtitle">

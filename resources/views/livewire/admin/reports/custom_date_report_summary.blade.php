@@ -25,11 +25,14 @@ new class extends Component {
     public $perPagePresent = 10;
     public $perPageLeave   = 10;
     public $perPageDept    = 10;
+    public $entityLabel = 'Employee';
+
 
     protected $paginationTheme = 'bootstrap';
 
     public function mount()
     {
+        $this->entityLabel = auth()->user()->employee?->organization?->is_student_record  ? "Student" : "Employee";
         $this->startDate = now()->startOfWeek()->toDateString();
         $this->endDate   = now()->endOfWeek()->toDateString();
     }
@@ -356,7 +359,7 @@ new class extends Component {
             <div class="dsr-bar">
                 <div class="dsr-bar-cell">
                     <span class="dsr-val text-dark">{{ $totalEmployees }}</span>
-                    <span class="dsr-lbl">Total Employees</span>
+                    <span class="dsr-lbl">Total {{$entityLabel}}s</span>
                 </div>
                 <div class="dsr-bar-divider"></div>
                 <div class="dsr-bar-cell">
@@ -431,7 +434,7 @@ new class extends Component {
                 <table class="dsr-table">
                     <thead>
                     <tr>
-                        <th>Employee</th>
+                        <th>{{$entityLabel}}</th>
                         <th>Department</th>
                         <th>Days Present</th>
                         <th>Total</th>
@@ -490,7 +493,7 @@ new class extends Component {
 
             {{-- Leave — chips + table --}}
             <span class="dsr-section-lbl">
-                Employees on Leave
+                {{ $entityLabel }} on Leave
                 <span class="dsr-pill dsr-pill-o ms-1">{{ $employeesOnLeaveData->total() }}</span>
             </span>
             <hr class="dsr-section-hr">
@@ -513,7 +516,7 @@ new class extends Component {
                 <table class="dsr-table">
                     <thead>
                     <tr>
-                        <th>Employee</th>
+                        <th>{{ $entityLabel }}</th>
                         <th>Department</th>
                         <th>Leave Type</th>
                         <th>Days on Leave</th>
@@ -543,7 +546,7 @@ new class extends Component {
                             <td colspan="5">
                                 <div class="dsr-empty">
                                     <span class="dsr-empty-icon">🏖️</span>
-                                    <div class="dsr-empty-title">No employees on leave</div>
+                                    <div class="dsr-empty-title">No {{ strtolower($entityLabel) }} on leave</div>
                                     <div class="dsr-empty-sub">No approved leave in this period.</div>
                                 </div>
                             </td>

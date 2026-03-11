@@ -13,10 +13,15 @@ new class extends Component {
     public $overtimeChartData = [];
     public $statusData;
     public $topOvertimeEmployees;
+    public $entityLabel = 'Employee';
+
 
     public function mount()
     {
+
         $orgId = Auth::user()->employee->organization_id ?? null;
+        $this->isStudentRecord = Auth::user()->employee?->organization?->is_student_record ?? false;
+        $this->entityLabel = $this->isStudentRecord ? 'Student' : 'Employee';
 
         // --- 1. Monthly Attendance Data ---
         $start = Carbon::now()->startOfMonth();
@@ -193,7 +198,7 @@ new class extends Component {
     <div class="col-lg-12 mt-4">
         <div class="card">
             <div class="card-body">
-                <h4 class="card-title">Monthly Attendance Timeline</h4>
+                <h4 class="card-title">Monthly {{ $entityLabel }} Attendance Timeline</h4>
                 <div id="monthly-employee-attendance" class="ms-n3"></div>
             </div>
         </div>
@@ -231,7 +236,7 @@ new class extends Component {
         <div class="col-lg-4">
             <div class="card h-100 shadow-sm recent-activity-card">
                 <div class="card-header">
-                    <h5 class="mb-0">Top 5 Overtime Employees (This Week)</h5>
+                    <h5 class="mb-0">Top 5 Overtime {{ $entityLabel }}s (This Week)</h5>
                 </div>
                 <div class="card-body">
                     @if ($topOvertimeEmployees->isEmpty())
@@ -414,7 +419,7 @@ new class extends Component {
                         },
                     },
                     title: {
-                        text: "Employee Count"
+                        text: "{{ $entityLabel }} Count"
                     }
                 },
                 xaxis: {
@@ -429,7 +434,7 @@ new class extends Component {
                     shared: false,
                     y: {
                         formatter: function (val) {
-                            return val + " employees";
+                            return val + " {{ Str::lower($entityLabel) }}s";
                         },
                     },
                     theme: "dark",
