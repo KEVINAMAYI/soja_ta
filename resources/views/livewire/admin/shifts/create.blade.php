@@ -2268,7 +2268,7 @@ new class extends Component {
                     <path d="M12 6v6l4 2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
                 </svg>
                 <div>
-                    <h1 class="h3 mb-0">Shift Configuration</h1>
+                    <h1 class="h3 mb-0">{{ auth()->user()->employee?->organization?->is_student_record ? 'Session' : 'Shift' }} Configuration</h1>
                     <p class="text-muted small mb-0">Manage automated clock-out and overtime settings</p>
                 </div>
             </div>
@@ -2290,7 +2290,7 @@ new class extends Component {
         <!-- Sidebar -->
         <div class="shift-sidebar">
             <div class="d-flex justify-content-between align-items-center mb-3">
-                <h5 class="mb-0">Shifts</h5>
+                <h5 class="mb-0">{{ auth()->user()->employee?->organization?->is_student_record ? 'Sessions' : 'Shifts' }}</h5>
                 <button wire:click="$set('showAddShift', true)" class="btn btn-sm btn-link text-primary">
                     <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
                         <line x1="12" y1="5" x2="12" y2="19" stroke="currentColor" stroke-width="2"/>
@@ -2395,7 +2395,7 @@ new class extends Component {
                             aria-controls="tab-shift-settings"
                             aria-selected="true">
                             <i class="ti ti-clock mx-1 fs-6"></i>
-                            <span class="d-none d-md-block">Shift Settings</span>
+                            <span class="d-none d-md-block">{{ auth()->user()->employee?->organization?->is_student_record ? 'Session' : 'Shift' }} Settings</span>
                         </button>
                     </li>
 

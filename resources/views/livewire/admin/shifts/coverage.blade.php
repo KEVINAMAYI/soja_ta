@@ -504,8 +504,12 @@ new class extends Component {
         }
 
         @keyframes fadeIn {
-            from { opacity: 0; }
-            to { opacity: 1; }
+            from {
+                opacity: 0;
+            }
+            to {
+                opacity: 1;
+            }
         }
 
         .modal-custom {
@@ -586,8 +590,9 @@ new class extends Component {
     <div class="bg-white border-bottom py-3 px-4 ">
         <div class="d-flex justify-content-between align-items-center">
             <div>
-                <h1 class="h3 mb-1 fw-bold">Shift Monitoring</h1>
-                <p class="text-muted mb-0 small">Manage shift assignments and coverage</p>
+                <h1 class="h3 mb-1 fw-bold">{{ auth()->user()->employee?->organization?->is_student_record ? 'Session' : 'Shift' }}
+                    Monitoring</h1>
+                <p class="text-muted mb-0 small">Manage {{ auth()->user()->employee?->organization?->is_student_record ? 'Session' : 'Shift' }} assignments and coverage</p>
             </div>
         </div>
     </div>
@@ -967,7 +972,8 @@ new class extends Component {
                                     <div class="progress-bar {{ $barColor }}"
                                          style="width: {{ $percentage }}%; height: 100%;"></div>
                                 </div>
-                                <span class="small fw-semibold">{{ $selectedShift['assigned'] }}/{{ $selectedShift['required'] }}</span>
+                                <span
+                                    class="small fw-semibold">{{ $selectedShift['assigned'] }}/{{ $selectedShift['required'] }}</span>
                             </div>
                         </div>
 
@@ -1003,7 +1009,8 @@ new class extends Component {
                     </div>
                     <div class="modal-body pt-4 pb-4 bg-white" style="max-height: 500px; overflow-y: auto;">
                         @forelse($selectedShift['staff'] as $staff)
-                            <div class="d-flex justify-content-between align-items-center p-3 mb-2 border rounded modal-staff-item bg-white">
+                            <div
+                                class="d-flex justify-content-between align-items-center p-3 mb-2 border rounded modal-staff-item bg-white">
                                 <div class="d-flex align-items-center gap-3">
                                     <div class="staff-avatar" style="margin-left: 0;">
                                         {{ substr($staff['name'], 0, 1) }}
@@ -1067,7 +1074,8 @@ new class extends Component {
                         <!-- Staff List -->
                         <div style="max-height: 400px; overflow-y: auto;">
                             @forelse($availableStaff as $staff)
-                                <div class="d-flex justify-content-between align-items-center p-3 mb-2 border rounded modal-staff-item bg-white">
+                                <div
+                                    class="d-flex justify-content-between align-items-center p-3 mb-2 border rounded modal-staff-item bg-white">
                                     <div>
                                         <div class="fw-bold">{{ $staff->name }}</div>
                                         <div class="text-muted small">

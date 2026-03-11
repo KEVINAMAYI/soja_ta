@@ -164,7 +164,7 @@ new class extends Component {
                     aria-controls="tab-shift-management"
                     aria-selected="false">
                     <i class="ti ti-calendar-time me-2 fs-6"></i>
-                    <span class="d-none d-md-block">Shift Management</span>
+                    <span class="d-none d-md-block">{{ auth()->user()->employee?->organization?->is_student_record ? 'Session' : 'Shift' }} Management</span>
                 </button>
             </li>
 
