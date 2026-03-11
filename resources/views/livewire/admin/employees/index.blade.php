@@ -650,7 +650,7 @@ new class extends Component {
                             </div>
 
                             {{-- Role — hidden for students (defaults to employee) --}}
-                            @if(!$isStudentOrg)
+{{--                            @if(!$isStudentOrg)--}}
                                 <div class="col-md-6 mb-3">
                                     <label class="form-label">Role</label>
                                     <select wire:model="roleName" class="form-control">
@@ -661,7 +661,7 @@ new class extends Component {
                                     </select>
                                     @error('role') <small class="text-danger">{{ $message }}</small> @enderror
                                 </div>
-                            @endif
+{{--                            @endif--}}
 
                             {{-- Active Toggle --}}
                             <div class="col-12 mb-3">
