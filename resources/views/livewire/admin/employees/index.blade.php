@@ -618,8 +618,7 @@ new class extends Component {
 
                             {{-- Shift --}}
                             <div class="col-md-6 mb-3">
-                                <label class="form-label">Shift</label>
-                                <select wire:model="shift_id" class="form-control">
+                                <label class="form-label">{{ auth()->user()->employee?->organization?->is_student_record ? 'Session' : 'Shift' }}</label>                                <select wire:model="shift_id" class="form-control">
                                     <option value="">Select Shift</option>
                                     @foreach ($shifts as $shift)
                                         <option value="{{ $shift->id }}">{{ $shift->name }}</option>

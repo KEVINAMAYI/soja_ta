@@ -65,6 +65,9 @@ class EmployeeTable extends DataTableComponent
 
     public function columns(): array
     {
+
+        $isStudent = auth()->user()->employee?->organization?->is_student_record ?? false;
+
         return [
 
             // 🕓 Shift
@@ -157,9 +160,11 @@ class EmployeeTable extends DataTableComponent
                 ->collapseOnMobile(),
 
             // 🧩 Roles
-            Column::make("Roles")
-                ->label(fn($row) => view('livewire.admin.employees.roles', ['employee' => $row]))
-                ->collapseOnMobile(),
+            ...($isStudent ? [] : [
+                Column::make("Roles")
+                    ->label(fn($row) => view('livewire.admin.employees.roles', ['employee' => $row]))
+                    ->collapseOnMobile(),
+            ]),
 
             // 🟢 Active
             BooleanColumn::make('Active')
