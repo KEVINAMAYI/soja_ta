@@ -502,7 +502,7 @@ new class extends Component {
 
 @php
     $label = $isStudentOrg ? 'Student' : 'Employee';
-    $labelPlural = $isStudentOrg ? 'Students' : 'Employees';
+    $labelPlural = $isStudentOrg ? 'Users' : 'Employees';
 @endphp
 
 <div class="row">
