@@ -212,7 +212,7 @@ class Employee extends Model
             ->selectRaw('MAX(CAST(zkbio_pin AS UNSIGNED)) as max_pin')
             ->value('max_pin');
 
-        $next = max(($max ?? 0) + 1, 1000); // start from 1000 to avoid clashing with legacy device pins like 1, 2, 36
+        $next = max(($max ?? 0) + 1, 1300); // start from 1000 to avoid clashing with legacy device pins like 1, 2, 36
 
         // Double-check it's not already taken (race condition safety)
         while (self::withTrashed()->where('zkbio_pin', (string) $next)->exists()) {
