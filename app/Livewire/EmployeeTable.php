@@ -130,7 +130,7 @@ class EmployeeTable extends DataTableComponent
 
 
             // 📍 Assigned Locations
-            Column::make("Work Locations", "name")
+            Column::make(auth()->user()->employee?->organization?->is_student_record  ? "School Location" : "Work Location", "name")
                 ->format(function ($value, $row) {
 
                     $locations = $row->assignments
