@@ -649,7 +649,7 @@ new class extends Component {
                                 @error('employee_title') <small class="text-danger">{{ $message }}</small> @enderror
                             </div>
 
-                            {{-- Role — hidden for students (defaults to employee) --}}
+                            {{--hidden for students (defaults to employee) --}}
 {{--                            @if(!$isStudentOrg)--}}
                                 <div class="col-md-6 mb-3">
                                     <label class="form-label">Role</label>
