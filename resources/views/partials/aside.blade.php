@@ -116,7 +116,7 @@
                                aria-expanded="false">
                                 <iconify-icon icon="mdi:office-building-outline" class="fs-5"></iconify-icon>
                                 <span class="hide-menu">
-                                       {{ auth()->user()->employee?->organization?->is_student_record ? 'Students' : 'Employees' }}
+                                       {{ auth()->user()->employee?->organization?->is_student_record ? 'Users' : 'Employees' }}
                                     </span>
                             </a>
                         </li>
@@ -139,7 +139,7 @@
                                href="{{ route('shifts.coverage') }}"
                                aria-expanded="false">
                                 <iconify-icon icon="mdi:account-clock-outline" class="fs-5"></iconify-icon>
-                                <span class="hide-menu">Shift Monitoring</span>
+                                <span class="hide-menu">{{ auth()->user()->employee?->organization?->is_student_record ? 'Session' : 'Shift' }} Monitoring</span>
                             </a>
                         </li>
                     @endcan
