@@ -313,7 +313,10 @@ new class extends Component {
                         aria-controls="tab-users"
                         aria-selected="false">
                         <i class="ti ti-users mx-1 fs-6"></i>
-                        <span class="d-none d-md-block">Employees & Departments</span>
+                        <span class="d-none d-md-block">
+                            {{ auth()->user()->employee?->organization?->is_student_record ? 'Users' :
+                            'Employees & Departments' }}
+                        </span>
                     </button>
                 </li>
 
@@ -398,43 +401,46 @@ new class extends Component {
                     <div class="tab-pane fade {{ $activeTab === 'users' ? 'show active' : '' }}"
                          id="tab-users">
 
-                        <div class="accordion" id="customAccordion">
-                            <div class="accordion-item border-0 mb-3 shadow-sm rounded">
-                                <h2 class="accordion-header" id="headingOne">
-                                    <button class="fs-4 accordion-button fw-bold collapsed" type="button"
-                                            data-bs-toggle="collapse" data-bs-target="#collapseOne"
-                                            aria-expanded="false" aria-controls="collapseOne">
-                                        Departments
-                                    </button>
-                                </h2>
-
-
-                                <div id="collapseOne" class="accordion-collapse collapse" aria-labelledby="headingOne"
-                                     data-bs-parent="#customAccordion">
-                                    <livewire:admin.departments.index/>
-                                </div>
-                            </div>
-
-
-                            <div class="accordion" id="userAccordion">
-                                <div class="accordion-item border-0 shadow-sm rounded">
-                                    <h2 class="accordion-header" id="headingUsers">
+                        @if(!auth()->user()->employee?->organization?->is_student_record)
+                            <div class="accordion" id="customAccordion">
+                                <div class="accordion-item border-0 mb-3 shadow-sm rounded">
+                                    <h2 class="accordion-header" id="headingOne">
                                         <button class="fs-4 accordion-button fw-bold collapsed" type="button"
-                                                data-bs-toggle="collapse" data-bs-target="#collapseUsers"
-                                                aria-expanded="false" aria-controls="collapseUsers">
-                                            Employees
+                                                data-bs-toggle="collapse" data-bs-target="#collapseOne"
+                                                aria-expanded="false" aria-controls="collapseOne">
+                                            Departments
                                         </button>
                                     </h2>
-                                    <div id="collapseUsers" class="accordion-collapse collapse"
-                                         aria-labelledby="headingUsers"
-                                         data-bs-parent="#userAccordion">
-                                        <livewire:admin.employees.index :roleId="null"/>
+
+
+                                    <div id="collapseOne" class="accordion-collapse collapse"
+                                         aria-labelledby="headingOne"
+                                         data-bs-parent="#customAccordion">
+                                        <livewire:admin.departments.index/>
                                     </div>
                                 </div>
+                                @endif
+
+
+                                <div class="accordion" id="userAccordion">
+                                    <div class="accordion-item border-0 shadow-sm rounded">
+                                        <h2 class="accordion-header" id="headingUsers">
+                                            <button class="fs-4 accordion-button fw-bold collapsed" type="button"
+                                                    data-bs-toggle="collapse" data-bs-target="#collapseUsers"
+                                                    aria-expanded="false" aria-controls="collapseUsers">
+                                                {{ auth()->user()->employee?->organization?->is_student_record ? 'Users' : 'Employees'}}
+                                            </button>
+                                        </h2>
+                                        <div id="collapseUsers" class="accordion-collapse collapse"
+                                             aria-labelledby="headingUsers"
+                                             data-bs-parent="#userAccordion">
+                                            <livewire:admin.employees.index :roleId="null"/>
+                                        </div>
+                                    </div>
+                                </div>
+
+
                             </div>
-
-
-                        </div>
 
                     </div>
 

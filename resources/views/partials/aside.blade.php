@@ -122,16 +122,18 @@
                         </li>
                     @endcan
 
-                    @can('view-employees')
-                        <li class="sidebar-item">
-                            <a class="sidebar-link {{ request()->routeIs('leaves.index') ? 'active' : '' }}"
-                               href="{{ route('leaves.index') }}"
-                               aria-expanded="false">
-                                <iconify-icon icon="mdi:exit-run" class="fs-5"></iconify-icon>
-                                <span class="hide-menu">Leave Requests</span>
-                            </a>
-                        </li>
-                    @endcan
+                    @if(!auth()->user()->employee?->organization?->is_student_record)
+                        @can('view-employees')
+                            <li class="sidebar-item">
+                                <a class="sidebar-link {{ request()->routeIs('leaves.index') ? 'active' : '' }}"
+                                   href="{{ route('leaves.index') }}"
+                                   aria-expanded="false">
+                                    <iconify-icon icon="mdi:exit-run" class="fs-5"></iconify-icon>
+                                    <span class="hide-menu">Leave Requests</span>
+                                </a>
+                            </li>
+                        @endcan
+                    @endif
 
                     @can('view-employees')
                         <li class="sidebar-item">
@@ -150,7 +152,9 @@
                                href="{{ route('attendance.index') }}"
                                aria-expanded="false">
                                 <iconify-icon icon="mdi:clock-time-eight-outline"></iconify-icon>
-                                <span class="hide-menu">Attendance</span>
+                                <span class="hide-menu">
+                                          {{ auth()->user()->employee?->organization?->is_student_record ? 'Student Logs' : 'Attendance' }}
+                                </span>
                             </a>
                         </li>
                     @endcan

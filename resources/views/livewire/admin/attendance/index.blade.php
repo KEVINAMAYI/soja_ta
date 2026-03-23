@@ -301,7 +301,7 @@ new class extends Component {
     <div class="col-12">
 
         @php
-            $statusLabel = 'Attendance';
+            $statusLabel = auth()->user()->employee?->organization?->is_student_record ? 'Student Logs' : 'Attendance';
             $breadcrumbItems = [
                 [
                     'label' => 'Dashboard',

@@ -19,6 +19,10 @@ class AttendanceSeeder
      */
     public function seedMissingAttendanceRecords(?int $orgId = null, ?Carbon $targetDate = null): void
     {
+
+        if (auth()->user()->employee?->organization?->is_student_record)
+            return;
+
         // Use provided date or default to now
         $now = $targetDate ?? now();
         $today = $now->toDateString();
@@ -337,7 +341,6 @@ class AttendanceSeeder
             }
         }
     }
-
 
 
     /**

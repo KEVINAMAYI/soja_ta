@@ -41,7 +41,9 @@ class AttendanceDailyTable extends DataTableComponent
         $orgId = auth()->user()->employee->organization_id ?? null;
 
         if (in_array($this->status, ['unchecked_in', 'absent', 'on_leave', 'off_shift', 'sick_off'])) {
-            app(AttendanceSeeder::class)->seedMissingAttendanceRecords($orgId);
+            if(!auth()->user()->employee?->organization?->is_student_record){
+                app(AttendanceSeeder::class)->seedMissingAttendanceRecords($orgId);
+            }
         }
 
         $this->dispatch('refreshDatatable');

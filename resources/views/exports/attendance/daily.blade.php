@@ -148,7 +148,9 @@ if ($organization) {
     <tr>
         <th>Date</th>
         <th>{{ auth()->user()->employee?->organization?->is_student_record  ? "Student" : "Employee" }}</th>
-        <th>Department</th>
+        @if(!auth()->user()->employee?->organization?->is_student_record)
+            <th>Department</th>
+        @endif
         <th>{{ auth()->user()->employee?->organization?->is_student_record  ? "Session" : "Shift" }}</th>
         <th>Clock In</th>
         <th>Clock Out</th>
@@ -164,9 +166,10 @@ if ($organization) {
                 {{ \Carbon\Carbon::parse($attendance->date)->format('M d, Y') }}
             </td>
             <td>{{ $attendance->employee->name ?? '-' }}</td>
-            <td>{{ $attendance->employee->department->name ?? '-' }}</td>
+            @if(!auth()->user()->employee?->organization?->is_student_record)
+                <td>{{ $attendance->employee->department->name ?? '-' }}</td>
+            @endif
             <td>{{ optional($attendance->employee->shift)->name ?? '-' }}</td>
-
             <td>
                 {{ $attendance->check_in_time
                     ? \Carbon\Carbon::parse($attendance->check_in_time)->format('M d, Y g:i A')
