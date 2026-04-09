@@ -31,7 +31,9 @@ class Employee extends Model
         'shift_status',
         'start_off_shift_date',
         'end_off_shift_date',
-        'zkbio_pin'
+        'zkbio_pin',
+        'grade',
+        'is_student'
     ];
 
 
@@ -220,6 +222,28 @@ class Employee extends Model
         }
 
         return (string) $next;
+    }
+
+
+    /** True if this employee belongs to a school org */
+    public function isSchoolOrg(): bool
+    {
+        return (bool) ($this->organization?->is_student_record ?? false);
+    }
+
+    /** Display label: Student or Staff/Employee */
+    public function personTypeLabel(): string
+    {
+        if (!$this->isSchoolOrg()) {
+            return 'Employee';
+        }
+        return $this->is_student ? 'Student' : 'Staff';
+    }
+
+
+    public function lastAttendance()
+    {
+        return $this->hasOne(Attendance::class)->latestOfMany('date');
     }
 
 }

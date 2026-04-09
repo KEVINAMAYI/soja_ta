@@ -5,7 +5,7 @@ use Livewire\Volt\Component;
 use App\Models\Attendance;
 use App\Models\Employee;
 use Carbon\Carbon;
-use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\DB;
 
 new class extends Component {
 
@@ -26,121 +26,235 @@ new class extends Component {
     public $workLocations = [];
     public $statusData = [];
     public $shiftStats = [];
-    public $entityLabel = 'Employee'; // or 'Student'
+    public $entityLabel = 'Employee';
 
+    // School-specific
+    public bool $isSchoolOrg = false;
+    public bool $showStudentView = false;
+    public int $onCampusCount = 0;
+    public int $offCampusCount = 0;
+    public int $checkedInTodayCount = 0;
+    public int $checkedOutTodayCount = 0;
+    public int $totalStudents = 0;
+    public array $gradeStats = [];
 
-    public function mount()
+    public function mount(): void
     {
-        $this->entityLabel = auth()->user()->employee?->organization?->is_student_record  ? 'Student' : 'Employee';
+        $this->entityLabel = auth()->user()->employee?->organization?->is_student_record ? 'Student' : 'Employee';
+        $this->isSchoolOrg = (bool)(auth()->user()->employee?->organization?->is_student_record ?? false);
 
-        $today = Carbon::today();
+        // Read ?view= query param to determine which view to show on load
+        $viewParam = request()->query('view', 'staff');
+        $this->showStudentView = $this->isSchoolOrg && ($viewParam === 'student');
+
         $this->googleMapsApiKey = env('GOOGLE_MAPS_API_KEY');
 
-        // Determine organization of logged-in user
-        $employeeRecord = Employee::where('user_id', auth()->id())->first();
-        $orgId = $employeeRecord->organization_id;
+        $today = Carbon::today();
+        $orgId = Employee::where('user_id', auth()->id())->value('organization_id');
 
-        $employees = Employee::where('organization_id', $orgId)->where('active', 1)->get();
+        // Only load the active view's data — no need to load both
+        if ($this->showStudentView) {
+            $this->loadSchoolStats($orgId, $today);
+        } else {
+            $this->loadStaffStats($orgId, $today);
+        }
+    }
+
+    /* ─────────────────────────────────────────────
+       TOGGLE — full page redirect with ?view= param
+       so Google Maps reloads cleanly every time
+    ───────────────────────────────────────────── */
+    public function toggleView(string $mode): void
+    {
+        $this->redirect(request()->url() . '?view=' . $mode);
+    }
+
+    /* ─────────────────────────────────────────────
+       SCHOOL / STUDENT STATS
+    ───────────────────────────────────────────── */
+    private function loadSchoolStats(int $orgId, Carbon $today): void
+    {
+        $students = Employee::where('organization_id', $orgId)
+            ->where('active', 1)
+            ->where('is_student', 1)
+            ->with('lastAttendance')
+            ->get();
+
+        $this->totalStudents = $students->count();
+        $studentIds = $students->pluck('id');
+
+        $this->onCampusCount = $students->filter(
+            fn($s) => $s->lastAttendance?->status === 'clocked_in'
+        )->count();
+
+        $this->offCampusCount = $students->filter(
+            fn($s) => $s->lastAttendance?->status === 'clocked_out'
+        )->count();
+
+        $todayAttendances = Attendance::whereIn('employee_id', $studentIds)
+            ->whereDate('date', $today)
+            ->get();
+
+        $this->checkedInTodayCount  = $todayAttendances->where('status', 'clocked_in')->pluck('employee_id')->unique()->count();
+        $this->checkedOutTodayCount = $todayAttendances->where('status', 'clocked_out')->pluck('employee_id')->unique()->count();
+
+        $this->gradeStats = $this->loadGradeStats($orgId, $today, $studentIds);
+
+        $this->statusData = [
+            'On Campus'  => $this->totalStudents > 0 ? round(($this->onCampusCount  / $this->totalStudents) * 100, 1) : 0,
+            'Off Campus' => $this->totalStudents > 0 ? round(($this->offCampusCount / $this->totalStudents) * 100, 1) : 0,
+        ];
+
+        $this->currentEmployeeStatus = Attendance::with('employee', 'location')
+            ->whereIn('employee_id', $studentIds)
+            ->whereDate('date', $today)
+            ->orderBy('updated_at', 'desc')
+            ->take(5)
+            ->get()
+            ->map(fn($att) => [
+                'name'             => $att->employee->name,
+                'id'               => $att->employee->id,
+                'department'       => $att->employee->grade ?? 'N/A',
+                'status'           => match ($att->status) {
+                    'clocked_in'  => 'Checked In',
+                    'clocked_out' => 'Checked Out',
+                    default       => ucfirst(str_replace('_', ' ', $att->status)),
+                },
+                'datetime'         => $att->check_in_time ?? $att->check_out_time ?? $att->updated_at,
+                'location'         => $att->location->name ?? 'Unknown',
+                'location_details' => $att->location_details ?? null,
+                'view_link'        => route('attendance.employee-detailed-attendance', ['employeeId' => $att->employee->id]),
+            ]);
+
+        $this->loadMapData($orgId, $today);
+    }
+
+    private function loadGradeStats(int $orgId, Carbon $today, $studentIds): array
+    {
+        $byGrade = Employee::where('organization_id', $orgId)
+            ->where('active', 1)
+            ->where('is_student', 1)
+            ->whereNotNull('grade')
+            ->with('lastAttendance')
+            ->get()
+            ->groupBy('grade');
+
+        $todayStr = $today->toDateString();
+        $stats    = [];
+
+        foreach ($byGrade as $grade => $gradeStudents) {
+            $ids = $gradeStudents->pluck('id');
+
+            $onCampus = $gradeStudents->filter(
+                fn($s) => $s->lastAttendance?->status === 'clocked_in'
+            )->count();
+
+            $checkedInToday = Attendance::whereIn('employee_id', $ids)
+                ->whereDate('date', $todayStr)
+                ->whereIn('status', ['clocked_in', 'clocked_out'])
+                ->distinct('employee_id')
+                ->count('employee_id');
+
+            $total = $ids->count();
+            $rate  = $total > 0 ? round(($checkedInToday / $total) * 100) : 0;
+
+            $stats[] = [
+                'grade'          => $grade,
+                'onCampus'       => $onCampus,
+                'checkedInToday' => $checkedInToday,
+                'total'          => $total,
+                'rate'           => $rate,
+                'color'          => $rate >= 80 ? '#22c55e' : ($rate >= 60 ? '#f59e0b' : '#ef4444'),
+            ];
+        }
+
+        return $stats;
+    }
+
+    /* ─────────────────────────────────────────────
+       STAFF STATS
+    ───────────────────────────────────────────── */
+    private function loadStaffStats(int $orgId, Carbon $today): void
+    {
+        $employees   = Employee::where('organization_id', $orgId)->where('active', 1)->get();
         $this->totalEmployees = $employees->count();
         $employeeIds = $employees->pluck('id');
 
-        // Attendances today
         $attendancesToday = Attendance::whereIn('employee_id', $employeeIds)
             ->whereDate('date', $today)
             ->get();
 
-        // Step 1: Get employees who actually showed up (clocked in or out)
         $presentEmployeeIds = $attendancesToday
             ->whereIn('status', ['clocked_in', 'clocked_out'])
             ->pluck('employee_id')
             ->unique();
 
-        // Step 2: Get employees marked absent BUT exclude those who showed up
         $absentEmployeeIds = $attendancesToday
             ->whereIn('status', ['absent', 'unchecked_in'])
             ->pluck('employee_id')
             ->unique()
-            ->reject(fn($id) => $presentEmployeeIds->contains($id)); // Key fix!
+            ->reject(fn($id) => $presentEmployeeIds->contains($id));
 
-        $this->presentToday = $presentEmployeeIds->count();
-        $this->absentToday = $absentEmployeeIds->count();
-
-        // Leave arrivals
-        $this->leaveToday = $attendancesToday
-            ->where('status', 'on_leave')
-            ->pluck('employee_id')
-            ->unique()
-            ->count();
-
-
-        // sick_off
-        $this->sickOffToday = $attendancesToday
-            ->whereIn('status', ['sick_off'])
-            ->pluck('employee_id')
-            ->unique()
-            ->count();;
-
-
-        // Get count of inactive employees (active = 0)
+        $this->presentToday     = $presentEmployeeIds->count();
+        $this->absentToday      = $absentEmployeeIds->count();
+        $this->leaveToday       = $attendancesToday->where('status', 'on_leave')->pluck('employee_id')->unique()->count();
+        $this->sickOffToday     = $attendancesToday->whereIn('status', ['sick_off'])->pluck('employee_id')->unique()->count();
+        $this->OffShiftToday    = $attendancesToday->where('status', 'off_shift')->pluck('employee_id')->unique()->count();
         $this->inactiveEmployees = Employee::where('organization_id', $orgId)->where('active', 0)->count();
 
-        //Off Shift
-        $this->OffShiftToday = $attendancesToday
-            ->where('status', 'off_shift')
-            ->pluck('employee_id')
-            ->unique()
-            ->count();
-
-        // Overtime hours this week
         $weekStart = Carbon::now()->startOfWeek();
-        $weekEnd = Carbon::now()->endOfWeek();
-
+        $weekEnd   = Carbon::now()->endOfWeek();
         $this->overtimeHours = Attendance::whereIn('employee_id', $employeeIds)
             ->whereBetween('date', [$weekStart, $weekEnd])
             ->sum('overtime_hours');
 
-        // Department stats
         $this->departmentStats = $employees->groupBy('department_id')->map(function ($group) {
             $clockedIn = Attendance::whereIn('employee_id', $group->pluck('id'))
                 ->whereDate('date', Carbon::today())
                 ->whereNotNull('check_in_time')
                 ->count();
-            $total = $group->count();
             return [
-                'name' => $group[0]->department->name ?? 'Unknown',
+                'name'       => $group[0]->department->name ?? 'Unknown',
                 'clocked_in' => $clockedIn,
-                'total' => $total,
+                'total'      => $group->count(),
             ];
         });
 
-        // Recent activities (today only, last 5)
-        $this->recentActivities = $attendancesToday
-            ->sortByDesc('created_at')
-            ->take(5);
+        $this->recentActivities = $attendancesToday->sortByDesc('created_at')->take(5);
 
-        // Current employee status
-        $this->currentEmployeeStatus = Attendance::with('employee.department')
+        $this->currentEmployeeStatus = Attendance::with('employee.department', 'location')
             ->whereIn('employee_id', $employeeIds)
             ->whereDate('date', $today)
             ->orderBy('check_in_time', 'desc')
             ->take(5)
             ->get()
             ->map(fn($att) => [
-                'name' => $att->employee->name,
-                'id' => $att->employee->id,
-                'department' => $att->employee->department->name ?? 'N/A',
-                'status' => match ($att->status) {
-                    'clocked_in' => 'Clocked In',
-                    'clocked_out' => 'Clocked Out',
-                    'absent', 'unchecked_in' => 'Absent',
-                    default => ucfirst(str_replace('_', ' ', $att->status)), // fallback
+                'name'             => $att->employee->name,
+                'id'               => $att->employee->id,
+                'department'       => $att->employee->department->name ?? 'N/A',
+                'status'           => match ($att->status) {
+                    'clocked_in'              => 'Clocked In',
+                    'clocked_out'             => 'Clocked Out',
+                    'absent', 'unchecked_in'  => 'Absent',
+                    default                   => ucfirst(str_replace('_', ' ', $att->status)),
                 },
-                'datetime' => $att->check_in_time ?? $att->check_out_time,
-                'location' => $att->location->name ?? 'Unknown', // Optional if you track location
+                'datetime'         => $att->check_in_time ?? $att->check_out_time,
+                'location'         => $att->location->name ?? 'Unknown',
                 'location_details' => $att->location_details ?? null,
-                'view_link' => route('attendance.index'),
+                'view_link'        => route('attendance.employee-detailed-attendance', ['employeeId' => $att->employee->id]),
             ]);
 
+        $this->dailyAttendancePercentage();
+        $this->shiftStats = $this->getShiftStats();
+        $this->loadMapData($orgId, $today);
+    }
+
+    /* ─────────────────────────────────────────────
+       MAP DATA  (shared)
+    ───────────────────────────────────────────── */
+    private function loadMapData(int $orgId, Carbon $today): void
+    {
+        $employeeIds = Employee::where('organization_id', $orgId)->pluck('id');
 
         $this->employeeLocations = Attendance::with('employee.department', 'location')
             ->whereIn('employee_id', $employeeIds)
@@ -150,571 +264,227 @@ new class extends Component {
             ->orderByRaw("FIELD(status, 'clocked_in', 'clocked_out', 'late') ASC")
             ->orderBy('check_in_time', 'desc')
             ->get()
-            ->groupBy('employee_id') // group by employee
-            ->map(fn($group) => $group->first()) // pick the latest attendance per employee
-            ->map(function ($att) {
-                return [
-                    'name' => $att->employee->name,
-                    'department' => $att->employee->department->name ?? 'N/A',
-                    'clock_in' => Carbon::parse($att->check_in_time)->format('h:i A'),
-                    'lat' => $att->latitude,
-                    'lng' => $att->longitude,
-                    'work_location_id' => $att->work_location_id,
-                ];
-            })
+            ->groupBy('employee_id')
+            ->map(fn($group) => $group->first())
+            ->map(fn($att) => [
+                'name'             => $att->employee->name,
+                'department'       => $att->employee->department->name ?? 'N/A',
+                'clock_in'         => Carbon::parse($att->check_in_time)->format('h:i A'),
+                'lat'              => $att->latitude,
+                'lng'              => $att->longitude,
+                'work_location_id' => $att->work_location_id,
+            ])
             ->values()
             ->toArray();
 
-
-        // Work locations with id and is_default flag
         $this->workLocations = WorkLocation::where('organization_id', $orgId)
             ->where('active', true)
             ->get()
-            ->map(function ($loc) {
-                return [
-                    'id' => $loc->id,
-                    'name' => $loc->name,
-                    'lat' => $loc->latitude,
-                    'lng' => $loc->longitude,
-                    'radius_m' => $loc->radius_m,
-                    'address' => $loc->address,
-                    'is_default' => $loc->is_default ?? 0,
-                ];
-            })
+            ->map(fn($loc) => [
+                'id'         => $loc->id,
+                'name'       => $loc->name,
+                'lat'        => $loc->latitude,
+                'lng'        => $loc->longitude,
+                'radius_m'   => $loc->radius_m,
+                'address'    => $loc->address,
+                'is_default' => $loc->is_default ?? 0,
+            ])
             ->toArray();
-
-        $this->dailyAttendancePercentage();
-
-        $this->shiftStats = $this->getShiftStats(); // Add this line
-
-
     }
 
-
-    /**
-     * Get today's shift coverage statistics
-     */
-    private function getShiftStats()
+    /* ─────────────────────────────────────────────
+       SHIFT STATS
+    ───────────────────────────────────────────── */
+    private function getShiftStats(): array
     {
         $organizationId = auth()->user()->employee->organization_id;
-        $today = Carbon::today();
-        $todayString = $today->toDateString();
-        $dayOfWeek = $today->format('D'); // Mon, Tue, Wed, etc.
+        $today          = Carbon::today();
+        $todayString    = $today->toDateString();
+        $dayOfWeek      = $today->format('D');
 
-        // Get all active shifts
-        $shifts = DB::table('shifts')
-            ->where('status', 'active')
-            ->where('organization_id', $organizationId)
-            ->get();
-
+        $shifts    = DB::table('shifts')->where('status', 'active')->where('organization_id', $organizationId)->get();
         $allShifts = [];
 
         foreach ($shifts as $shift) {
-            // Decode pattern_days from JSON
             $patternDays = json_decode($shift->pattern_days, true) ?? [];
+            if (!in_array($dayOfWeek, $patternDays)) continue;
 
-            // Skip this shift if it doesn't run today
-            if (!in_array($dayOfWeek, $patternDays)) {
-                continue;
-            }
-
-            // Get employees assigned to this shift
-            $employees = DB::table('employees')
-                ->where('shift_id', $shift->id)
-                ->where('organization_id', $organizationId)
-                ->where('active', 1)
-                ->get(['id']);
-
+            $employees     = DB::table('employees')->where('shift_id', $shift->id)->where('organization_id', $organizationId)->where('active', 1)->get(['id']);
             $totalEmployees = $employees->count();
 
-            // If no employees assigned, mark as critical
             if ($totalEmployees === 0) {
                 $allShifts[] = ['status' => 'critical'];
                 continue;
             }
 
-            // Get attendance for today
-            $presentEmployeeIds = DB::table('attendances')
+            $presentCount = DB::table('attendances')
                 ->whereDate('date', $todayString)
                 ->whereIn('employee_id', $employees->pluck('id'))
                 ->whereIn('status', ['clocked_in', 'clocked_out'])
-                ->pluck('employee_id')
-                ->unique();
+                ->distinct()->count('employee_id');
 
-            $presentCount = $presentEmployeeIds->count();
-
-            // Determine status
-            if ($presentCount === $totalEmployees) {
-                $status = 'full';
-            } elseif ($presentCount > ($totalEmployees / 2)) {
-                $status = 'partial';
-            } else {
-                $status = 'critical';
-            }
-
+            $status      = $presentCount === $totalEmployees ? 'full' : ($presentCount > ($totalEmployees / 2) ? 'partial' : 'critical');
             $allShifts[] = ['status' => $status];
         }
 
-        // Calculate statistics
-        $shiftsCollection = collect($allShifts);
-
+        $c = collect($allShifts);
         return [
-            'total' => $shiftsCollection->count(),
-            'full' => $shiftsCollection->where('status', 'full')->count(),
-            'partial' => $shiftsCollection->where('status', 'partial')->count(),
-            'critical' => $shiftsCollection->where('status', 'critical')->count(),
-            'scheduled' => 0, // For future dates
+            'total'     => $c->count(),
+            'full'      => $c->where('status', 'full')->count(),
+            'partial'   => $c->where('status', 'partial')->count(),
+            'critical'  => $c->where('status', 'critical')->count(),
+            'scheduled' => 0,
         ];
     }
 
-
-    public function dailyAttendancePercentage()
+    /* ─────────────────────────────────────────────
+       DAILY ATTENDANCE PERCENTAGE
+    ───────────────────────────────────────────── */
+    public function dailyAttendancePercentage(): void
     {
-        // Get organization_id from logged in user
         $organizationId = auth()->user()->employee->organization_id;
-
-        // Count employees in this org
         $totalEmployees = Employee::where('organization_id', $organizationId)->count();
-
-        // Count present employees today
-        $present = Attendance::whereHas('employee', function ($q) use ($organizationId) {
-            $q->where('organization_id', $organizationId);
-        })
+        $present        = Attendance::whereHas('employee', fn($q) => $q->where('organization_id', $organizationId))
             ->whereDate('date', now()->toDateString())
-            ->whereIn('status', ['clocked_in', 'clocked_out']) // ✅ include both
+            ->whereIn('status', ['clocked_in', 'clocked_out'])
             ->count();
-
-        // Absent = everyone else not present
         $absent = max($totalEmployees - $present, 0);
 
-        // Avoid divide by zero
-        if ($totalEmployees > 0) {
-            $presentPercent = round(($present / $totalEmployees) * 100, 2);
-            $absentPercent = round(($absent / $totalEmployees) * 100, 2);
-        } else {
-            $presentPercent = $absentPercent = 0;
-        }
-
-        $this->statusData = [
-            'Present' => $presentPercent,
-            'Absent' => $absentPercent,
-        ];
-
+        $this->statusData = $totalEmployees > 0 ? [
+            'Present' => round(($present / $totalEmployees) * 100, 2),
+            'Absent'  => round(($absent  / $totalEmployees) * 100, 2),
+        ] : ['Present' => 0, 'Absent' => 0];
     }
-
-
 }; ?>
 
 @push('styles')
     <style>
-
-        .department-overview-title, .shift-monitoring-title {
-            font-size: 18px;
-            font-weight: bold;
-            color: #000;
-        }
-
-        .department-overview-card,
-        .recent-activity-card {
-            border-radius: 12px;
-        }
-
-        .department-overview-title, .map-title, .quick-actions-title {
-            font-weight: bold;
-            font-size: 18px;
-            color: #000; /* black */
-        }
-
-        .recent-activity-title, .map-title, .quick-actions-title {
-            font-weight: bold;
-            font-size: 14px;
-            color: #000; /* black */
-        }
-
-        .card-action {
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            text-decoration: none;
-            color: #000;
-            background: #fff;
-            border: 2px dotted #333; /* dotted border on small cards */
-            border-radius: 8px;
-            padding: 15px;
-            transition: all 0.2s ease-in-out;
-            font-weight: 500;
-            height: 100%;
-            text-align: center;
-        }
-
-        .card-action:hover {
-            background: #f5f5f5;
-            transform: scale(1.05);
-        }
-
-        .recent-activity-card {
-            border-radius: 12px;
-        }
-
-        .activity-item {
-            background: linear-gradient(135deg, #f9fbff, #eef4ff);
-            border-radius: 12px;
-            padding: 12px;
-            transition: 0.2s;
-            box-shadow: 0 2px 6px rgba(74, 108, 247, 0.08);
-        }
-
-        .activity-item:hover {
-            background: linear-gradient(135deg, #eef2ff, #e0e7ff);
-            box-shadow: 0 4px 10px rgba(74, 108, 247, 0.15);
-        }
-
-        .icon-wrap {
-            width: 42px;
-            height: 42px;
-            border-radius: 50%;
-            background: linear-gradient(135deg, #dbe4ff, #edf2ff);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: #4a6cf7;
-            font-size: 20px;
-            box-shadow: 0 2px 5px rgba(74, 108, 247, 0.2);
-        }
-
-        .status {
-            font-weight: 500;
-            text-transform: lowercase;
-        }
-
-
-        /* Clocked In Badge */
-        .badge-clocked-in {
-            background-color: #D1F2DC;
-            color: #1E7F45;
-            padding: 6px 14px;
-            border-radius: 999px;
-            font-weight: 500;
-            font-size: 0.875rem;
-        }
-
-        /* Clocked Out Badge */
-        .badge-clocked-out {
-            background-color: #F8D7DA;
-            color: #C82333;
-            padding: 6px 14px;
-            border-radius: 999px;
-            font-weight: 500;
-            font-size: 0.875rem;
-        }
-
-        /* View Details Button */
-        .btn-view-details {
-            background-color: #1677FF;
-            color: #FFFFFF;
-            font-size: 0.875rem;
-            padding: 6px 16px;
-            border-radius: 8px;
-            font-weight: 500;
-            border: none;
-            transition: background-color 0.2s ease;
-            text-decoration: none;
-        }
-
-        .btn-view-details:hover {
-            background-color: #0F62D1;
-            color: #fff;
-        }
-
-
-        .pulse-marker {
-            position: absolute;
-            width: 40px;
-            height: 40px;
-            background: rgba(255, 0, 0, 0.4);
-            border-radius: 50%;
-            animation: pulse 1.5s infinite;
-            pointer-events: none;
-        }
-
-        @keyframes pulse {
-            0% {
-                transform: scale(0.8);
-                opacity: 0.6;
-            }
-            50% {
-                transform: scale(1.5);
-                opacity: 0.3;
-            }
-            100% {
-                transform: scale(0.8);
-                opacity: 0.6;
-            }
-        }
-
-        .shift-monitoring-card {
-            background: white;
-            border-radius: 16px;
-            overflow: hidden;
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-            transition: all 0.3s ease;
-            height: 100%;
-            display: flex;
-            flex-direction: column;
-        }
-
-        .shift-monitoring-card:hover {
-            transform: translateY(-8px);
-            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
-        }
-
-        /* Header */
-        .shift-monitoring-card .card-header {
-            background: linear-gradient(135deg, #e14326 0%, #e14326 100%);
-            padding: 8px;
-            padding-left: 15px;
-            border: none;
-        }
-
-        .shift-monitoring-card .header-content {
-            display: flex;
-            align-items: center;
-            gap: 1rem;
-        }
-
-        .shift-monitoring-card .icon-wrapper {
-            width: 48px;
-            height: 48px;
-            background: rgba(255, 255, 255, 0.2);
-            border-radius: 12px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            backdrop-filter: blur(10px);
-        }
-
-        .shift-monitoring-card .icon-wrapper iconify-icon {
-            font-size: 24px;
-            color: white;
-        }
-
-        .shift-monitoring-card .title {
-            color: white;
-            font-size: 1.25rem;
-            font-weight: 600;
-            margin: 0;
-            letter-spacing: -0.5px;
-        }
-
-        /* Body */
-        .shift-monitoring-card .card-body {
-            padding: 1.5rem;
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-        }
-
-        /* Stats Grid */
-        .stats-grid {
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 1rem;
-            margin-bottom: 1.5rem;
-        }
-
-        /* Stat Box */
-        .stat-box {
-            padding: 10px;
-            border-radius: 12px;
-            display: flex;
-            align-items: center;
-            gap: 1rem;
-            transition: all 0.3s ease;
-            position: relative;
-            overflow: hidden;
-        }
-
-        .stat-box::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            height: 3px;
-            background: currentColor;
-            opacity: 0;
-            transition: opacity 0.3s ease;
-        }
-
-        .stat-box:hover {
-            transform: translateY(-4px);
-        }
-
-        .stat-box:hover::before {
-            opacity: 1;
-        }
-
-        /* Stat Icons */
-        .stat-icon {
-            width: 40px;
-            height: 40px;
-            border-radius: 10px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            flex-shrink: 0;
-        }
-
-        .stat-icon iconify-icon {
-            font-size: 24px;
-        }
-
-        /* Stat Content */
-        .stat-content {
-            flex: 1;
-            min-width: 0;
-        }
-
-        .stat-value {
-            font-size: 20px;
-            font-weight: 700;
-            line-height: 1;
-            margin-bottom: 0.25rem;
-        }
-
-        .stat-label {
-            font-size: 10px;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            opacity: 0.8;
-        }
-
-        /* Total Stats - Neutral Gray */
-        .stat-total {
-            background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
-            color: #334155;
-        }
-
-        .stat-total .stat-icon {
-            color: #334155;
-        }
-
-        /* Success - Green */
-        .stat-success {
-            background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%);
-            color: #065f46;
-        }
-
-        .stat-success .stat-icon {
-            color: #059669;
-        }
-
-        /* Warning - Yellow */
-        .stat-warning {
-            background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
-            color: #78350f;
-        }
-
-        .stat-warning .stat-icon {
-            color: #d97706;
-        }
-
-        /* Danger - Red */
-        .stat-danger {
-            background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
-            color: #7f1d1d;
-        }
-
-        .stat-danger .stat-icon {
-            color: #dc2626;
-        }
-
-        /* View Details Link */
-        .view-details {
-            text-align: center;
-            padding-top: 1rem;
-            border-top: 1px solid #e5e7eb;
-            margin-top: auto;
-        }
-
-        .view-link {
-            color: #667eea;
-            font-weight: 600;
-            font-size: 0.9rem;
+        /* ── Toggle pill ── */
+        .view-toggle {
             display: inline-flex;
-            align-items: center;
-            gap: 0.2rem;
+            background: #f1f5f9;
+            border-radius: 99px;
+            padding: 4px;
+            gap: 2px;
+        }
+        .view-toggle button {
+            border: none;
+            background: transparent;
+            padding: 6px 20px;
+            border-radius: 99px;
+            font-size: .85rem;
+            font-weight: 600;
+            color: #64748b;
+            cursor: pointer;
+            transition: all .2s;
+        }
+        .view-toggle button.active {
+            background: #fff;
+            color: #1e293b;
+            box-shadow: 0 1px 4px rgba(0,0,0,.12);
+        }
+        .view-toggle button:disabled {
+            opacity: .6;
+            cursor: not-allowed;
+        }
+
+        /* ── Toggle loading spinner ── */
+        .toggle-spinner {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border: 2px solid #cbd5e1;
+            border-top-color: #64748b;
+            border-radius: 50%;
+            animation: spin .6s linear infinite;
+            margin-right: 4px;
+            vertical-align: middle;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* ── Stat cards ── */
+        .stat-card {
+            cursor: pointer;
+            background: #fff;
+            border: none;
+            border-radius: 8px;
+            padding: 1.25rem;
+            height: 100%;
             transition: all 0.3s ease;
         }
-
-        .shift-monitoring-card:hover .view-link {
-            gap: 0.45rem;
-            color: #764ba2;
+        .stat-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 8px 16px rgba(0,0,0,.1);
         }
-
-        .view-link iconify-icon {
-            transition: transform 0.3s ease;
+        a.stat-card-link {
+            display: block;
+            text-decoration: none;
+            color: inherit;
         }
-
-        .shift-monitoring-card:hover .view-link iconify-icon {
-            transform: translateX(4px);
+        a.stat-card-link:hover {
+            text-decoration: none;
+            color: inherit;
         }
-
-        /* Responsive Design */
-        @media (max-width: 768px) {
-            .shift-monitoring-card .card-header {
-                padding: 1.25rem;
-            }
-
-            .shift-monitoring-card .card-body {
-                padding: 1.25rem;
-            }
-
-            .stats-grid {
-                gap: 0.75rem;
-            }
-
-            .stat-box {
-                padding: 1rem;
-                flex-direction: column;
-                text-align: center;
-            }
-
-            .stat-icon {
-                width: 36px;
-                height: 36px;
-            }
-
-            .stat-icon iconify-icon {
-                font-size: 20px;
-            }
-
-            .stat-value {
-                font-size: 1.5rem;
-            }
-
-            .stat-label {
-                font-size: 0.7rem;
-            }
+        .stat-card-icon {
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 6px;
+            color: #fff;
+            font-size: 20px;
+            margin-bottom: .75rem;
         }
+        .icon-success   { background: #10b981; }
+        .icon-danger    { background: #ef4444; }
+        .icon-info      { background: #3b82f6; }
+        .icon-warning   { background: #f59e0b; }
+        .icon-cyan      { background: #06b6d4; }
+        .icon-secondary { background: #6b7280; }
+        .icon-indigo    { background: #6366f1; }
+        .icon-sky       { background: #0ea5e9; }
 
-        /* Loading Animation (Optional) */
-        @keyframes pulse {
-            0%, 100% {
-                opacity: 1;
-            }
-            50% {
-                opacity: 0.5;
-            }
+        .stat-card-title {
+            margin: 0 0 .5rem;
+            font-size: .75rem;
+            font-weight: 500;
+            color: #6b7280;
+            text-transform: uppercase;
+            letter-spacing: .5px;
         }
-
-        .stat-box.loading {
-            animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        .stat-card-value {
+            font-size: 1.75rem;
+            font-weight: 700;
+            color: #1f2937;
+            line-height: 1;
+            margin-bottom: .35rem;
         }
+        .stat-card-total    { font-size: 1.25rem; color: #9ca3af; font-weight: 400; }
+        .stat-card-subtitle { margin: 0; font-size: .875rem; color: #6b7280; }
 
-        /* Quick Action Box - Matching Your Image Style */
+        /* ── Grade overview panel ── */
+        .grade-overview-panel {
+            background: #fff;
+            border-radius: 14px;
+            padding: 1.25rem 1.5rem;
+            box-shadow: 0 1px 4px rgba(0,0,0,.06);
+        }
+        .grade-overview-panel h6 { font-size: .95rem; font-weight: 700; color: #1e293b; margin-bottom: 1rem; }
+        .grade-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 0;
+            border-bottom: 1px solid #f8fafc;
+        }
+        .grade-row:last-child { border-bottom: none; }
+        .grade-label { width: 72px; font-size: .8rem; font-weight: 600; color: #475569; flex-shrink: 0; }
+        .grade-bar-wrap { flex: 1; height: 7px; background: #f1f5f9; border-radius: 99px; overflow: hidden; }
+        .grade-bar-fill { height: 100%; border-radius: 99px; transition: width .5s ease; }
+        .grade-count { font-size: .82rem; font-weight: 700; width: 60px; text-align: right; flex-shrink: 0; white-space: nowrap; }
+
+        /* ── Shift monitoring ── */
         .quick-action-box {
             display: flex;
             flex-direction: column;
@@ -724,650 +494,753 @@ new class extends Component {
             border: 2px dotted #333;
             border-radius: 8px;
             padding: 15px 10px;
-            transition: all 0.2s ease-in-out;
+            transition: all .2s ease-in-out;
             height: 100%;
         }
+        .quick-action-box:hover { background: #f5f5f5; transform: scale(1.05); cursor: pointer; }
+        .quick-action-value { font-size: 1.75rem; font-weight: 700; line-height: 1; margin-bottom: .25rem; color: #333; }
+        .quick-action-label { font-size: .875rem; font-weight: 500; color: #333; margin: 0; }
 
-        .quick-action-box:hover {
-            background: #f5f5f5;
-            transform: scale(1.05);
-            cursor: pointer;
+        .text-success { color: #22c55e !important; }
+        .text-warning { color: #f59e0b !important; }
+        .text-danger  { color: #ef4444 !important; }
+
+        /* ── Shared labels ── */
+        .department-overview-title, .shift-monitoring-title { font-size: 18px; font-weight: bold; color: #000; }
+        .recent-activity-title, .map-title, .quick-actions-title { font-weight: bold; font-size: 14px; color: #000; }
+
+        .badge-clocked-in, .badge-checked-in {
+            background: #D1F2DC; color: #1E7F45;
+            padding: 6px 14px; border-radius: 999px; font-weight: 500; font-size: .875rem;
+        }
+        .badge-clocked-out, .badge-checked-out {
+            background: #F8D7DA; color: #C82333;
+            padding: 6px 14px; border-radius: 999px; font-weight: 500; font-size: .875rem;
         }
 
-        .quick-action-icon {
-            font-size: 32px;
-            color: #333;
+        .pulse-marker {
+            position: absolute;
+            width: 40px; height: 40px;
+            background: rgba(255,0,0,.4);
+            border-radius: 50%;
+            animation: pulse 1.5s infinite;
+            pointer-events: none;
+        }
+        @keyframes pulse {
+            0%   { transform: scale(.8);  opacity: .6 }
+            50%  { transform: scale(1.5); opacity: .3 }
+            100% { transform: scale(.8);  opacity: .6 }
         }
 
-        .quick-action-icon iconify-icon {
-            display: block;
-        }
+        /* ── Map wrapper ── */
+        .map-wrapper { position: relative; }
 
-        .quick-action-value {
-            font-size: 1.75rem;
-            font-weight: 700;
-            line-height: 1;
-            margin-bottom: 0.25rem;
-            color: #333;
-        }
-
-        .quick-action-label {
-            font-size: 0.875rem;
-            font-weight: 500;
-            color: #333;
-            margin: 0;
-        }
-
-        /* Color variants - only on icons and values */
-        .text-success {
-            color: #22c55e !important;
-        }
-
-        .text-warning {
-            color: #f59e0b !important;
-        }
-
-        .text-danger {
-            color: #ef4444 !important;
-        }
-
-        /* Link styling for View Full Coverage */
-        a.quick-action-box {
-            color: #333;
-        }
-
-        a.quick-action-box:hover {
-            color: #333;
-        }
-
-        /* Responsive adjustments */
-        @media (max-width: 768px) {
-            .quick-action-box {
-                min-height: 90px;
-                padding: 12px 8px;
-            }
-
-            .quick-action-icon {
-                font-size: 28px;
-            }
-
-            .quick-action-value {
-                font-size: 1.5rem;
-            }
-
-            .quick-action-label {
-                font-size: 0.75rem;
-            }
-        }
-
-        .stat-card {
-            cursor: pointer;
-            background: #ffffff;
-            border: none;
-            border-radius: 8px;
-            padding: 1.25rem;
-            height: 100%;
-            transition: all 0.3s ease;
-        }
-
-        .stat-card:hover {
-            transform: translateY(-4px);
-            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
-        }
-
-
-        /* Add a subtle pointer cursor effect */
-        a.stat-card-link {
-            display: block;
+        .view-toggle-btn {
+            display: inline-block;
             text-decoration: none;
-            color: inherit;
+            padding: 6px 20px;
+            border-radius: 99px;
+            font-size: .85rem;
+            font-weight: 600;
+            color: #64748b;
+            transition: all .2s;
         }
-
-        a.stat-card-link:hover {
-            text-decoration: none;
-            color: inherit;
+        .view-toggle-btn.active {
+            background: #fff;
+            color: #1e293b;
+            box-shadow: 0 1px 4px rgba(0,0,0,.12);
         }
-
-        .stat-card-icon {
-            width: 40px;
-            height: 40px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            border-radius: 6px;
-            color: white;
-            font-size: 20px;
-            margin-bottom: 0.75rem;
-        }
-
-        .icon-success {
-            background-color: #10b981;
-        }
-
-        .icon-danger {
-            background-color: #ef4444;
-        }
-
-        .icon-info {
-            background-color: #3b82f6;
-        }
-
-        .icon-warning {
-            background-color: #f59e0b;
-        }
-
-        .icon-cyan {
-            background-color: #06b6d4;
-        }
-
-        .icon-secondary {
-            background-color: #6b7280;
-        }
-
-        .stat-card-title {
-            margin: 0 0 0.5rem 0;
-            font-size: 0.75rem;
-            font-weight: 500;
-            color: #6b7280;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-
-        .stat-card-value {
-            font-size: 1.75rem;
-            font-weight: 700;
-            color: #1f2937;
-            line-height: 1;
-            margin-bottom: 0.35rem;
-        }
-
-        .stat-card-total {
-            font-size: 1.25rem;
-            color: #9ca3af;
-            font-weight: 400;
-        }
-
-        .stat-card-subtitle {
-            margin: 0;
-            font-size: 0.875rem;
-            color: #6b7280;
-            font-weight: 400;
-        }
-
     </style>
 @endpush
 
-
 <div class="row g-3">
 
-    <!-- Dashboard Statistics Cards -->
-    <div style="padding-right:0px;" class="row g-3">
-        <!-- Present Today -->
-        <div class="col-lg-6 col-md-6 col-12">
+    {{-- ══════════════════════════════════════════
+         VIEW TOGGLE  (only shown for school orgs)
+    ══════════════════════════════════════════ --}}
+    @if($isSchoolOrg)
+        <div class="col-12 d-flex align-items-center justify-content-between mb-1">
+            <h5 class="mb-0 fw-bold text-dark">
+                {{ $showStudentView ? 'Student Attendance' : 'Staff Attendance' }}
+            </h5>
+            <div class="view-toggle">
+                <a href="{{ request()->url() }}?view=student"
+                   class="view-toggle-btn {{ $showStudentView ? 'active' : '' }}">
+                    <iconify-icon icon="mdi:school" style="font-size:14px; margin-right:4px;"></iconify-icon>
+                    Students
+                </a>
+                <a href="{{ request()->url() }}?view=staff"
+                   class="view-toggle-btn {{ !$showStudentView ? 'active' : '' }}">
+                    <iconify-icon icon="mdi:briefcase-outline" style="font-size:14px; margin-right:4px;"></iconify-icon>
+                    Staff
+                </a>
+            </div>
+        </div>
+    @endif
+
+    {{-- ══════════════════════════════════════════
+         SCHOOL / STUDENT VIEW
+    ══════════════════════════════════════════ --}}
+    @if($isSchoolOrg && $showStudentView)
+
+        {{-- Row 1: 4 stat cards --}}
+        <div class="col-lg-3 col-md-6 col-12">
             <a href="{{ route('attendance.index', ['filterStatus' => 'present']) }}" class="stat-card-link">
                 <div class="stat-card">
                     <div class="stat-card-icon icon-success">
-                        <iconify-icon icon="mdi:account-check"></iconify-icon>
+                        <iconify-icon icon="mdi:school"></iconify-icon>
                     </div>
-                    <h6 class="stat-card-title">Present Today</h6>
-                    <div class="stat-card-value">{{ $presentToday }} <span
-                            class="stat-card-total">/ {{ $totalEmployees }}</span></div>
-                    <p class="stat-card-subtitle">
-                        {{ number_format(($presentToday / $totalEmployees) * 100, 1) }}%
-                    </p>
-                </div>
-            </a>
-        </div>
-
-        <!-- Absent Today -->
-        <div class="col-lg-6 col-md-6 col-12">
-            <a href="{{ route('attendance.index', ['filterStatus' => 'absent']) }}" class="stat-card-link">
-                <div class="stat-card">
-                    <div class="stat-card-icon icon-danger">
-                        <iconify-icon icon="mdi:account-remove"></iconify-icon>
+                    <h6 class="stat-card-title">On Campus</h6>
+                    <div class="stat-card-value">
+                        {{ $onCampusCount }}
+                        <span class="stat-card-total">/ {{ $totalStudents }}</span>
                     </div>
-                    <h6 class="stat-card-title">Absent Today</h6>
-                    <div class="stat-card-value">{{ $absentToday }} <span
-                            class="stat-card-total">/ {{ $totalEmployees }}</span></div>
-                    <p class="stat-card-subtitle">
-                        Out of {{ $totalEmployees }} Total
-                    </p>
-                </div>
-            </a>
-        </div>
-
-        <!-- Sick Off Today -->
-        <div class="col-lg-3 col-md-6 col-12">
-            <a href="{{ route('attendance.index', ['filterStatus' => 'sick_off']) }}" class="stat-card-link">
-                <div class="stat-card">
-                    <div class="stat-card-icon icon-info">
-                        <iconify-icon icon="mdi:medical-bag"></iconify-icon>
-                    </div>
-                    <h6 class="stat-card-title">Sick Off Today</h6>
-                    <div class="stat-card-value">{{ $sickOffToday }} <span
-                            class="stat-card-total">/ {{ $totalEmployees }}</span></div>
-                    <p class="stat-card-subtitle">
-                        Out of {{ $totalEmployees }} Total
-                    </p>
-                </div>
-            </a>
-        </div>
-
-        <!-- On Leave Today -->
-        <div class="col-lg-3 col-md-6 col-12">
-            <a href="{{ route('attendance.index', ['filterStatus' => 'on_leave']) }}" class="stat-card-link">
-                <div class="stat-card">
-                    <div class="stat-card-icon icon-warning">
-                        <iconify-icon icon="mdi:airplane-takeoff"></iconify-icon>
-                    </div>
-                    <h6 class="stat-card-title">On Leave Today</h6>
-                    <div class="stat-card-value">{{ $leaveToday }} <span
-                            class="stat-card-total">/ {{ $totalEmployees }}</span></div>
-                    <p class="stat-card-subtitle">
-                        Out of {{ $totalEmployees }} Total
-                    </p>
-                </div>
-            </a>
-        </div>
-
-        <!-- Off Shift Today -->
-        <div class="col-lg-3 col-md-6 col-12">
-            <a href="{{ route('attendance.index', ['filterStatus' => 'off_shift']) }}" class="stat-card-link">
-                <div class="stat-card">
-                    <div class="stat-card-icon icon-cyan">
-                        <iconify-icon icon="mdi:clock-remove-outline"></iconify-icon>
-                    </div>
-                    <h6 class="stat-card-title">Off Shift Today</h6>
-                    <div class="stat-card-value">{{ $OffShiftToday }} <span
-                            class="stat-card-total">/ {{ $totalEmployees }}</span></div>
-                    <p class="stat-card-subtitle">
-                        Out of {{ $totalEmployees }} Total
-                    </p>
+                    <p class="stat-card-subtitle">Currently in school</p>
                 </div>
             </a>
         </div>
 
         <div class="col-lg-3 col-md-6 col-12">
-            <a href="{{ route('employees.index', ['active' => '0']) }}" class="stat-card-link">
+            <a href="{{ route('attendance.index', ['filterStatus' => 'clocked_out']) }}" class="stat-card-link">
                 <div class="stat-card">
-                    <div class="stat-card-icon icon-secondary">
-                        <iconify-icon icon="mdi:account-off"></iconify-icon>
+                    <div class="stat-card-icon icon-sky">
+                        <iconify-icon icon="mdi:exit-run"></iconify-icon>
                     </div>
-                    <h6 class="stat-card-title">Inactive {{ $entityLabel }}s</h6>
-                    <div class="stat-card-value">{{ $inactiveEmployees }} <span
-                            class="stat-card-total">/ {{ $totalEmployees }}</span></div>
-                    <p class="stat-card-subtitle">
-                        Out of {{ $totalEmployees }} Total
-                    </p>
+                    <h6 class="stat-card-title">Off Campus</h6>
+                    <div class="stat-card-value">
+                        {{ $offCampusCount }}
+                        <span class="stat-card-total">/ {{ $totalStudents }}</span>
+                    </div>
+                    <p class="stat-card-subtitle">Left school</p>
                 </div>
             </a>
         </div>
 
-    </div>
-
-
-    <!-- Live Map + Quick Actions -->
-    <div class="col-lg-8">
-        <div class="card shadow-sm">
-            <div class="card-header map-title fw-semibold">Live Map</div>
-            <div class="card-body p-0">
-                <div id="map" wire:ignore style="height: 300px; width:100%;"></div>
+        <div class="col-lg-3 col-md-6 col-12">
+            <div class="stat-card">
+                <div class="stat-card-icon icon-indigo">
+                    <iconify-icon icon="mdi:login"></iconify-icon>
+                </div>
+                <h6 class="stat-card-title">Checked In Today</h6>
+                <div class="stat-card-value">
+                    {{ $checkedInTodayCount }}
+                    <span class="stat-card-total">/ {{ $totalStudents }}</span>
+                </div>
+                <p class="stat-card-subtitle">Scanned in today</p>
             </div>
         </div>
-    </div>
 
-    <div class="col-lg-4">
-        <div class="card">
-            <div class="card-body">
-                <h4 class="card-title">Attendance Snapshot</h4>
-                <div id="daily-attendance"></div>
+        <div class="col-lg-3 col-md-6 col-12">
+            <div class="stat-card">
+                <div class="stat-card-icon icon-warning">
+                    <iconify-icon icon="mdi:logout"></iconify-icon>
+                </div>
+                <h6 class="stat-card-title">Checked Out Today</h6>
+                <div class="stat-card-value">
+                    {{ $checkedOutTodayCount }}
+                    <span class="stat-card-total">/ {{ $totalStudents }}</span>
+                </div>
+                <p class="stat-card-subtitle">Scanned out today</p>
             </div>
         </div>
-    </div>
 
-    <!-- Department Overview -->
-    <div style="margin-top:5px;" class="col-lg-8">
-        <div class="card shadow-sm h-100">
-            <div class="card-header department-overview-title fw-semibold">
-                Department Overview
-            </div>
-            <div class="card-body">
-                @foreach ($departmentStats as $dept)
-                    @php
-                        $perc = $dept['total'] ? round(($dept['clocked_in'] / $dept['total']) * 100) : 0;
-                    @endphp
-                    <div class="mb-3">
-                        <div class="d-flex justify-content-between small fw-semibold">
-                            <span>{{ $dept['name'] }}</span>
-                            <span>{{ $dept['clocked_in'] }}/{{ $dept['total'] }} ({{ $perc }}%)</span>
-                        </div>
-                        <div class="progress" style="height:6px;">
-                            <div class="progress-bar bg-primary" style="width: {{ $perc }}%"></div>
-                        </div>
-                    </div>
-                @endforeach
-            </div>
-        </div>
-    </div>
-
-    <!-- Shift Monitoring -->
-    <div style="margin-top:5px;" class="col-lg-4">
-        <div class="card shadow-sm h-100">
-            <div class="card-header shift-monitoring-title fw-semibold">
-                Shift Monitoring
-            </div>
-            <div class="card-body">
-                <div class="row g-3">
-                    <!-- Total Shifts -->
-                    <div class="col-6">
-                        <div class="quick-action-box text-center">
-                            <div class="quick-action-value">{{ $shiftStats['total'] }}</div>
-                            <div class="quick-action-label">Total Shifts</div>
-                        </div>
-                    </div>
-
-                    <!-- Fully Staffed -->
-                    <div class="col-6">
-                        <div class="quick-action-box text-center">
-                            <div class="quick-action-value text-success">{{ $shiftStats['full'] }}</div>
-                            <div class="quick-action-label">Fully Staffed</div>
-                        </div>
-                    </div>
-
-                    <!-- Partial Coverage -->
-                    <div class="col-6">
-                        <div class="quick-action-box text-center">
-                            <div class="quick-action-value text-warning">{{ $shiftStats['partial'] }}</div>
-                            <div class="quick-action-label">Partial Coverage</div>
-                        </div>
-                    </div>
-
-                    <!-- Critical Gaps -->
-                    <div class="col-6">
-                        <div class="quick-action-box text-center">
-                            <div class="quick-action-value text-danger">{{ $shiftStats['critical'] }}</div>
-                            <div class="quick-action-label">Critical Gaps</div>
-                        </div>
-                    </div>
-
-                    <!-- View Full Coverage -->
-                    <div class="col-12">
-                        <a href="{{ route('shifts.coverage') }}"
-                           class="quick-action-box text-center text-decoration-none d-block">
-                            <span class="me-2">View Full Coverage</span>
-                            <iconify-icon icon="mdi:arrow-right"></iconify-icon>
-                        </a>
-                    </div>
+        {{-- Row 2: Map (full width) --}}
+        <div class="col-12">
+            <div class="card shadow-sm">
+                <div class="card-header map-title fw-semibold">Live Map</div>
+                <div class="card-body p-0 map-wrapper">
+                    <div id="map" wire:ignore style="height:300px; width:100%;"></div>
                 </div>
             </div>
         </div>
-    </div>
 
+        {{-- Row 3: Grade Overview + Attendance Snapshot --}}
+        <div class="col-lg-8 col-12">
+            <div class="grade-overview-panel h-100">
+                <h6>Student Attendance Overview — by Grade</h6>
 
-    <!-- Recent Activity Entries -->
-    <div class="col-12">
-        <div class="card shadow-sm">
-            <div class="card-header fw-semibold">Recent Activity Entries</div>
-            <div class="card-body p-0">
-                <table class="table mb-0 align-middle">
-                    <thead class="table-light">
-                    <tr>
-                        <th>{{ $entityLabel }} Name</th>
-                        <th>Activity</th>
-                        <th>Date/Time</th>
-                        <th>Location</th>
-                        <th>Details</th>
-                    </tr>
-                    </thead>
-                    <tbody>
-                    @foreach($currentEmployeeStatus as $emp)
-                        <tr>
-                            <!-- Name + Department -->
-                            <td>
-                                <div class="d-flex flex-column">
-                                    <span class="fw-semibold">{{ $emp['name'] }}</span>
-                                    <span class="badge bg-light text-primary fw-normal mt-1"
-                                          style="width: fit-content;">
-                                    {{ $emp['department'] }}
-                                </span>
-                                </div>
-                            </td>
-
-                            <!-- Clocked In / Out -->
-                            <td>
-                                @if ($emp['status'] === 'Clocked In')
-                                    <span class="badge-clocked-in">{{ $emp['status'] }}</span>
-                                @elseif ($emp['status'] === 'Clocked Out')
-                                    <span class="badge-clocked-out">{{ $emp['status'] }}</span>
-                                @else
-                                    <span class="badge bg-secondary text-white px-3 py-2 rounded-pill">
-                                {{ $emp['status'] }}
-                                   </span>
-                                @endif
-                            </td>
-
-                            <!-- Date and Time -->
-                            <td>
-                                @if ($emp['datetime'])
-                                    <div class="d-flex flex-column">
-                                        <span>{{ \Carbon\Carbon::parse($emp['datetime'])->format('g:i A') }}</span>
-                                        <small class="text-muted">
-                                            {{ \Carbon\Carbon::parse($emp['datetime'])->format('M d, Y') }}
-                                        </small>
-                                    </div>
-                                @else
-                                    <span class="text-muted">N/A</span>
-                                @endif
-                            </td>
-
-                            <!-- Location -->
-                            <td>
-                                <div class="d-flex flex-column">
-                                    <span>{{ $emp['location'] ? \Illuminate\Support\Str::ucfirst(strtolower($emp['location'])) : 'N/A' }}</span>
-                                </div>
-                            </td>
-
-                            <!-- View Button -->
-                            <td>
-                                <a href="{{ route('attendance.employee-detailed-attendance', ['employeeId' => $emp['id']]) }}"
-                                   class="btn btn-sm btn-primary">View Details</a>
-                            </td>
-                        </tr>
+                @if(count($gradeStats) > 0)
+                    <div class="d-flex mb-2" style="padding:0 0 0 80px;">
+                        <span style="flex:1; font-size:.7rem; font-weight:700; color:#94a3b8; text-transform:uppercase; letter-spacing:.5px;">Today's Check-ins</span>
+                        <span style="width:80px; text-align:right; font-size:.7rem; font-weight:700; color:var(--primary-color) !important; text-transform:uppercase; letter-spacing:.5px;">On Campus</span>
+                    </div>
+                    @foreach($gradeStats as $row)
+                        <div class="grade-row">
+                            <span class="grade-label">{{ $row['grade'] }}</span>
+                            <div class="grade-bar-wrap">
+                                <div class="grade-bar-fill"
+                                     style="width:{{ $row['rate'] }}%; background:var(--primary-color) !important;"></div>
+                            </div>
+                            <span class="grade-count" style="color:var(--primary-color) !important;">
+                                {{ $row['checkedInToday'] }}/{{ $row['total'] }}
+                            </span>
+                            <span style="width:70px; text-align:right; font-size:.8rem; font-weight:600; color:#16a34a; flex-shrink:0;">
+                                <iconify-icon icon="mdi:account-check" style="font-size:14px;"></iconify-icon>
+                                {{ $row['onCampus'] }}
+                            </span>
+                        </div>
                     @endforeach
-                    </tbody>
-                </table>
+                @else
+                    <p class="text-muted small">No grade data available.</p>
+                @endif
             </div>
         </div>
-    </div>
+
+        <div class="col-lg-4 col-12">
+            <div class="card h-100">
+                <div class="card-body">
+                    <h4 class="card-title">Attendance Snapshot</h4>
+                    <div id="daily-attendance"></div>
+                </div>
+            </div>
+        </div>
+
+        {{-- Row 4: Recent Activity --}}
+        <div class="col-12">
+            <div class="card shadow-sm">
+                <div class="card-header fw-semibold">Recent Activity</div>
+                <div class="card-body p-0">
+                    <table class="table mb-0 align-middle">
+                        <thead class="table-light">
+                        <tr>
+                            <th>Student Name</th>
+                            <th>Grade</th>
+                            <th>Activity</th>
+                            <th>Date / Time</th>
+                            <th>Location</th>
+                            <th>Details</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        @forelse($currentEmployeeStatus as $emp)
+                            <tr>
+                                <td><span class="fw-semibold">{{ $emp['name'] }}</span></td>
+                                <td>
+                                    <span class="badge bg-light text-primary fw-normal">{{ $emp['department'] }}</span>
+                                </td>
+                                <td>
+                                    @if($emp['status'] === 'Checked In')
+                                        <span class="badge-checked-in">{{ $emp['status'] }}</span>
+                                    @elseif($emp['status'] === 'Checked Out')
+                                        <span class="badge-checked-out">{{ $emp['status'] }}</span>
+                                    @else
+                                        <span class="badge bg-secondary text-white px-3 py-2 rounded-pill">{{ $emp['status'] }}</span>
+                                    @endif
+                                </td>
+                                <td>
+                                    @if($emp['datetime'])
+                                        <div class="d-flex flex-column">
+                                            <span>{{ \Carbon\Carbon::parse($emp['datetime'])->format('g:i A') }}</span>
+                                            <small class="text-muted">{{ \Carbon\Carbon::parse($emp['datetime'])->format('M d, Y') }}</small>
+                                        </div>
+                                    @else
+                                        <span class="text-muted">N/A</span>
+                                    @endif
+                                </td>
+                                <td>{{ $emp['location'] ? \Illuminate\Support\Str::ucfirst(strtolower($emp['location'])) : 'N/A' }}</td>
+                                <td>
+                                    <a href="{{ route('attendance.index') }}" class="btn btn-sm btn-primary">View Details</a>
+                                </td>
+                            </tr>
+                        @empty
+                            <tr>
+                                <td colspan="6" class="text-center text-muted py-3">No activity recorded today.</td>
+                            </tr>
+                        @endforelse
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+    @else
+        {{-- ══════════════════════════════════════════
+             STAFF VIEW
+        ══════════════════════════════════════════ --}}
+
+        <div style="padding-right:0px;" class="row g-3">
+
+            <div class="col-lg-6 col-md-6 col-12">
+                <a href="{{ route('attendance.index', ['filterStatus' => 'present']) }}" class="stat-card-link">
+                    <div class="stat-card">
+                        <div class="stat-card-icon icon-success">
+                            <iconify-icon icon="mdi:account-check"></iconify-icon>
+                        </div>
+                        <h6 class="stat-card-title">Present Today</h6>
+                        <div class="stat-card-value">
+                            {{ $presentToday }}
+                            <span class="stat-card-total">/ {{ $totalEmployees }}</span>
+                        </div>
+                        <p class="stat-card-subtitle">{{ number_format(($presentToday / max($totalEmployees, 1)) * 100, 1) }}%</p>
+                    </div>
+                </a>
+            </div>
+
+            <div class="col-lg-6 col-md-6 col-12">
+                <a href="{{ route('attendance.index', ['filterStatus' => 'absent']) }}" class="stat-card-link">
+                    <div class="stat-card">
+                        <div class="stat-card-icon icon-danger">
+                            <iconify-icon icon="mdi:account-remove"></iconify-icon>
+                        </div>
+                        <h6 class="stat-card-title">Absent Today</h6>
+                        <div class="stat-card-value">
+                            {{ $absentToday }}
+                            <span class="stat-card-total">/ {{ $totalEmployees }}</span>
+                        </div>
+                        <p class="stat-card-subtitle">Out of {{ $totalEmployees }} Total</p>
+                    </div>
+                </a>
+            </div>
+
+            <div class="col-lg-3 col-md-6 col-12">
+                <a href="{{ route('attendance.index', ['filterStatus' => 'sick_off']) }}" class="stat-card-link">
+                    <div class="stat-card">
+                        <div class="stat-card-icon icon-info">
+                            <iconify-icon icon="mdi:medical-bag"></iconify-icon>
+                        </div>
+                        <h6 class="stat-card-title">Sick Off Today</h6>
+                        <div class="stat-card-value">
+                            {{ $sickOffToday }}
+                            <span class="stat-card-total">/ {{ $totalEmployees }}</span>
+                        </div>
+                        <p class="stat-card-subtitle">Out of {{ $totalEmployees }} Total</p>
+                    </div>
+                </a>
+            </div>
+
+            <div class="col-lg-3 col-md-6 col-12">
+                <a href="{{ route('attendance.index', ['filterStatus' => 'on_leave']) }}" class="stat-card-link">
+                    <div class="stat-card">
+                        <div class="stat-card-icon icon-warning">
+                            <iconify-icon icon="mdi:airplane-takeoff"></iconify-icon>
+                        </div>
+                        <h6 class="stat-card-title">On Leave Today</h6>
+                        <div class="stat-card-value">
+                            {{ $leaveToday }}
+                            <span class="stat-card-total">/ {{ $totalEmployees }}</span>
+                        </div>
+                        <p class="stat-card-subtitle">Out of {{ $totalEmployees }} Total</p>
+                    </div>
+                </a>
+            </div>
+
+            <div class="col-lg-3 col-md-6 col-12">
+                <a href="{{ route('attendance.index', ['filterStatus' => 'off_shift']) }}" class="stat-card-link">
+                    <div class="stat-card">
+                        <div class="stat-card-icon icon-cyan">
+                            <iconify-icon icon="mdi:clock-remove-outline"></iconify-icon>
+                        </div>
+                        <h6 class="stat-card-title">Off Shift Today</h6>
+                        <div class="stat-card-value">
+                            {{ $OffShiftToday }}
+                            <span class="stat-card-total">/ {{ $totalEmployees }}</span>
+                        </div>
+                        <p class="stat-card-subtitle">Out of {{ $totalEmployees }} Total</p>
+                    </div>
+                </a>
+            </div>
+
+            <div class="col-lg-3 col-md-6 col-12">
+                <a href="{{ route('employees.index', ['active' => '0']) }}" class="stat-card-link">
+                    <div class="stat-card">
+                        <div class="stat-card-icon icon-secondary">
+                            <iconify-icon icon="mdi:account-off"></iconify-icon>
+                        </div>
+                        <h6 class="stat-card-title">Inactive {{ $entityLabel }}s</h6>
+                        <div class="stat-card-value">
+                            {{ $inactiveEmployees }}
+                            <span class="stat-card-total">/ {{ $totalEmployees }}</span>
+                        </div>
+                        <p class="stat-card-subtitle">Out of {{ $totalEmployees }} Total</p>
+                    </div>
+                </a>
+            </div>
+
+        </div>
+
+        {{-- Map + Snapshot --}}
+        <div class="col-lg-8">
+            <div class="card shadow-sm">
+                <div class="card-header map-title fw-semibold">Live Map</div>
+                <div class="card-body p-0 map-wrapper">
+                    <div id="map" wire:ignore style="height:300px; width:100%;"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-4">
+            <div class="card">
+                <div class="card-body">
+                    <h4 class="card-title">Attendance Snapshot</h4>
+                    <div id="daily-attendance"></div>
+                </div>
+            </div>
+        </div>
+
+        {{-- Department Overview --}}
+        <div style="margin-top:5px;" class="col-lg-8">
+            <div class="card shadow-sm h-100">
+                <div class="card-header department-overview-title fw-semibold">Department Overview</div>
+                <div class="card-body">
+                    @foreach ($departmentStats as $dept)
+                        @php $perc = $dept['total'] ? round(($dept['clocked_in'] / $dept['total']) * 100) : 0; @endphp
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between small fw-semibold">
+                                <span>{{ $dept['name'] }}</span>
+                                <span>{{ $dept['clocked_in'] }}/{{ $dept['total'] }} ({{ $perc }}%)</span>
+                            </div>
+                            <div class="progress" style="height:6px;">
+                                <div class="progress-bar bg-primary" style="width:{{ $perc }}%"></div>
+                            </div>
+                        </div>
+                    @endforeach
+                </div>
+            </div>
+        </div>
+
+        {{-- Shift Monitoring --}}
+        <div style="margin-top:5px;" class="col-lg-4">
+            <div class="card shadow-sm h-100">
+                <div class="card-header shift-monitoring-title fw-semibold">Shift Monitoring</div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-6">
+                            <div class="quick-action-box text-center">
+                                <div class="quick-action-value">{{ $shiftStats['total'] }}</div>
+                                <div class="quick-action-label">Total Shifts</div>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="quick-action-box text-center">
+                                <div class="quick-action-value text-success">{{ $shiftStats['full'] }}</div>
+                                <div class="quick-action-label">Fully Staffed</div>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="quick-action-box text-center">
+                                <div class="quick-action-value text-warning">{{ $shiftStats['partial'] }}</div>
+                                <div class="quick-action-label">Partial Coverage</div>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="quick-action-box text-center">
+                                <div class="quick-action-value text-danger">{{ $shiftStats['critical'] }}</div>
+                                <div class="quick-action-label">Critical Gaps</div>
+                            </div>
+                        </div>
+                        <div class="col-12">
+                            <a href="{{ route('shifts.coverage') }}"
+                               class="quick-action-box text-center text-decoration-none d-block">
+                                <span class="me-2">View Full Coverage</span>
+                                <iconify-icon icon="mdi:arrow-right"></iconify-icon>
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        {{-- Recent Activity --}}
+        <div class="col-12">
+            <div class="card shadow-sm">
+                <div class="card-header fw-semibold">Recent Activity Entries</div>
+                <div class="card-body p-0">
+                    <table class="table mb-0 align-middle">
+                        <thead class="table-light">
+                        <tr>
+                            <th>{{ $entityLabel }} Name</th>
+                            <th>Activity</th>
+                            <th>Date / Time</th>
+                            <th>Location</th>
+                            <th>Details</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        @foreach($currentEmployeeStatus as $emp)
+                            <tr>
+                                <td>
+                                    <div class="d-flex flex-column">
+                                        <span class="fw-semibold">{{ $emp['name'] }}</span>
+                                        <span class="badge bg-light text-primary fw-normal mt-1"
+                                              style="width:fit-content;">{{ $emp['department'] }}</span>
+                                    </div>
+                                </td>
+                                <td>
+                                    @if($emp['status'] === 'Clocked In')
+                                        <span class="badge-clocked-in">{{ $emp['status'] }}</span>
+                                    @elseif($emp['status'] === 'Clocked Out')
+                                        <span class="badge-clocked-out">{{ $emp['status'] }}</span>
+                                    @else
+                                        <span class="badge bg-secondary text-white px-3 py-2 rounded-pill">{{ $emp['status'] }}</span>
+                                    @endif
+                                </td>
+                                <td>
+                                    @if($emp['datetime'])
+                                        <div class="d-flex flex-column">
+                                            <span>{{ \Carbon\Carbon::parse($emp['datetime'])->format('g:i A') }}</span>
+                                            <small class="text-muted">{{ \Carbon\Carbon::parse($emp['datetime'])->format('M d, Y') }}</small>
+                                        </div>
+                                    @else
+                                        <span class="text-muted">N/A</span>
+                                    @endif
+                                </td>
+                                <td>{{ $emp['location'] ? \Illuminate\Support\Str::ucfirst(strtolower($emp['location'])) : 'N/A' }}</td>
+                                <td>
+                                    <a href="{{ route('attendance.employee-detailed-attendance', ['employeeId' => $emp['id']]) }}"
+                                       class="btn btn-sm btn-primary">View Details</a>
+                                </td>
+                            </tr>
+                        @endforeach
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+    @endif
 
 </div>
 
-
 @push('scripts')
     <script src="https://code.iconify.design/3/3.1.0/iconify.min.js"></script>
-
     <script>
-        const workLocations = @json($workLocations);
+        // ── Blade-rendered PHP data ──────────────────────────────────────
+        const workLocations     = @json($workLocations);
         const employeeLocations = @json($employeeLocations);
+        const isSchoolOrg       = @json($isSchoolOrg);
+        const showStudentView   = @json($showStudentView);
+        const dailyStatusData   = @json($statusData);
 
+        // ── Chart instance ───────────────────────────────────────────────
+        let chartInstance = null;
+
+        // ── Map ──────────────────────────────────────────────────────────
+        // Called automatically by the Google Maps script tag via callback=initMap.
+        // Because we do a full page reload on toggle, this always fires fresh.
         function initMap() {
-            // --- Find default location for initial center ---
+            const mapEl = document.getElementById('map');
+            if (!mapEl) return;
+
             const defaultLocation = workLocations.find(loc => loc.is_default === 1);
-
-            // Set initial center: use default location if exists, otherwise Nairobi fallback
-            const initialCenter = defaultLocation
+            const initialCenter   = defaultLocation
                 ? { lat: parseFloat(defaultLocation.lat), lng: parseFloat(defaultLocation.lng) }
-                : { lat: -1.2921, lng: 36.8219 }; // Nairobi fallback
+                : { lat: -1.2921, lng: 36.8219 };
 
-            const map = new google.maps.Map(document.getElementById("map"), {
-                zoom: 15,
-                center: initialCenter,
-            });
+            const mapInstance    = new google.maps.Map(mapEl, { zoom: 15, center: initialCenter });
+            const bounds         = new google.maps.LatLngBounds();
+            let   activeInfoWindow = null;
 
-            const bounds = new google.maps.LatLngBounds();
-            let activeInfoWindow = null;
-
-            // --- Draw red geofence ---
+            // Draw geofence circle
             function drawGeofence(position, radius) {
                 new google.maps.Circle({
-                    strokeColor: "#FF0000",
-                    strokeOpacity: 0.8,
-                    strokeWeight: 2,
-                    fillColor: "#FF0000",
-                    fillOpacity: 0.15,
-                    map,
-                    center: position,
-                    radius: radius,
+                    strokeColor: '#FF0000', strokeOpacity: .8, strokeWeight: 2,
+                    fillColor: '#FF0000', fillOpacity: .15,
+                    map: mapInstance, center: position, radius,
                 });
             }
 
-
-            // --- Add marker with info window ---
+            // Add marker with pulse animation and info window
             function addMarker(position, infoContent) {
                 const marker = new google.maps.Marker({
                     position,
-                    map,
+                    map: mapInstance,
                     icon: {
-                        url: "/images/map_marker.png",  // custom icon path
-                        scaledSize: new google.maps.Size(30, 30), // resize (width, height)
-                        anchor: new google.maps.Point(15, 15) // ⬅️ center of 30x30 icon
-                    }
+                        url: '/images/map_marker.png',
+                        scaledSize: new google.maps.Size(30, 30),
+                        anchor: new google.maps.Point(15, 15),
+                    },
                 });
 
-                // --- Add pulsing overlay ---
-                const pulse = document.createElement("div");
-                pulse.className = "pulse-marker";
-
+                // Pulse overlay
+                const pulse   = document.createElement('div');
+                pulse.className = 'pulse-marker';
                 const overlay = new google.maps.OverlayView();
                 overlay.onAdd = function () {
-                    const panes = this.getPanes();
-                    panes.overlayImage.appendChild(pulse);
-
+                    this.getPanes().overlayImage.appendChild(pulse);
                     this.draw = function () {
-                        const projection = this.getProjection();
-                        const point = projection.fromLatLngToDivPixel(position);
-                        if (point) {
-                            // ⬅️ pulse is 40x40, so offset by half (20) to keep centered
-                            pulse.style.left = point.x - 20 + "px";
-                            pulse.style.top = point.y - 20 + "px";
+                        const pt = this.getProjection().fromLatLngToDivPixel(position);
+                        if (pt) {
+                            pulse.style.left = (pt.x - 20) + 'px';
+                            pulse.style.top  = (pt.y - 20) + 'px';
                         }
                     };
                 };
-                overlay.setMap(map);
+                overlay.setMap(mapInstance);
 
-                // --- Info window support ---
+                // Info window on click
                 if (infoContent) {
-                    const infoWindow = new google.maps.InfoWindow({content: infoContent});
-                    marker.addListener("click", () => {
+                    const iw = new google.maps.InfoWindow({ content: infoContent });
+                    marker.addListener('click', () => {
                         if (activeInfoWindow) activeInfoWindow.close();
-                        infoWindow.open(map, marker);
-                        activeInfoWindow = infoWindow;
+                        iw.open(mapInstance, marker);
+                        activeInfoWindow = iw;
                     });
                 }
 
                 return marker;
             }
 
-
-            // --- Group employees by work_location_id ---
-            const groupedEmployees = {};
+            // ── Group employees by work_location_id ───────────────────────
+            const grouped = {};
             employeeLocations.forEach(emp => {
-                if (emp.work_location_id) {
-                    if (!groupedEmployees[emp.work_location_id]) {
-                        groupedEmployees[emp.work_location_id] = [];
-                    }
-                    groupedEmployees[emp.work_location_id].push(emp);
-                }
+                const key = emp.work_location_id != null ? emp.work_location_id : 'unassigned';
+                if (!grouped[key]) grouped[key] = [];
+                grouped[key].push(emp);
             });
 
-            // --- Process each work location ---
+            const label = (isSchoolOrg && showStudentView) ? 'Student' : 'Employee';
+
+            // ── Render each work location ─────────────────────────────────
             workLocations.forEach(loc => {
-                if (loc.lat && loc.lng) {
-                    const position = {lat: parseFloat(loc.lat), lng: parseFloat(loc.lng)};
-                    bounds.extend(position);
-                    drawGeofence(position, loc.radius_m);
+                if (!loc.lat || !loc.lng) return;
 
-                    const emps = groupedEmployees[loc.id] || [];
+                const pos = { lat: parseFloat(loc.lat), lng: parseFloat(loc.lng) };
+                bounds.extend(pos);
+                drawGeofence(pos, loc.radius_m);
 
-                    let infoContent = `
-                   <div style="background:#fff; padding:12px; border-radius:6px;
-                               box-shadow:0 2px 6px rgba(0,0,0,0.15); min-width:220px;">
-                       <div style="font-weight:700; font-size:16px; color:#333;">
-                           ${loc.name.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
-                       </div>
-                       <div style="font-size:13px; color:#555; margin-bottom:8px;">
-                           ${loc.address || 'No address provided'}
-                       </div>`;
-
-                    if (emps.length > 0) {
-                        infoContent += `<div style="font-size:14px; color:#222; margin-bottom:6px;">
-                        <b>${emps.length} Employee${emps.length > 1 ? 's' : ''}</b> checked in:
-                    </div>`;
-                        emps.forEach(e => {
-                            infoContent += `<div style="font-size:13px; color:#444; margin-bottom:3px;">
-                            <b>${e.name}</b> (${e.department}) - Clock In: ${e.clock_in}
-                        </div>`;
-                        });
-                    }
-
-                    infoContent += `</div>`;
-
-                    addMarker(position, infoContent);
+                // Merge employees for this location + unassigned → default location
+                let emps = [...(grouped[loc.id] || [])];
+                if (loc.is_default && grouped['unassigned']) {
+                    emps = emps.concat(grouped['unassigned']);
                 }
+
+                // ── Build info window HTML ────────────────────────────────
+                const locName = loc.name
+                    .replace(/_/g, ' ')
+                    .replace(/\b\w/g, c => c.toUpperCase());
+
+                let info = `
+                <div style="
+                    background:#fff;
+                    padding:14px 16px;
+                    border-radius:10px;
+                    box-shadow:0 4px 16px rgba(0,0,0,.12);
+                    min-width:260px;
+                    max-width:320px;
+                    max-height:340px;
+                    overflow-y:auto;
+                    font-family:inherit;
+                ">
+                    <div style="font-weight:700;font-size:15px;color:#1e293b;margin-bottom:2px;">
+                        ${locName}
+                    </div>
+                    <div style="font-size:12px;color:#94a3b8;margin-bottom:12px;">
+                        ${loc.address || 'No address provided'}
+                    </div>`;
+
+                if (emps.length > 0) {
+                    info += `
+                    <div style="
+                        font-size:12px;font-weight:700;color:#64748b;
+                        text-transform:uppercase;letter-spacing:.5px;
+                        margin-bottom:8px;
+                    ">
+                        ${emps.length} ${label}${emps.length !== 1 ? 's' : ''} checked in
+                    </div>`;
+
+                    emps.forEach(e => {
+                        const initial = e.name ? e.name.charAt(0).toUpperCase() : '?';
+                        info += `
+                        <div style="
+                            display:flex;align-items:center;gap:10px;
+                            padding:8px 0;border-bottom:1px solid #f1f5f9;
+                        ">
+                            <div style="
+                                width:32px;height:32px;border-radius:50%;
+                                background:#e0e7ff;
+                                display:flex;align-items:center;justify-content:center;
+                                font-size:13px;font-weight:700;color:#4f46e5;
+                                flex-shrink:0;
+                            ">${initial}</div>
+                            <div>
+                                <div style="font-size:13px;font-weight:600;color:#1e293b;line-height:1.3;">
+                                    ${e.name}
+                                </div>
+                                <div style="font-size:11px;color:#64748b;margin-top:1px;">
+                                    ${e.department}
+                                    &nbsp;&bull;&nbsp;
+                                    <span style="color:#10b981;font-weight:600;">In: ${e.clock_in}</span>
+                                </div>
+                            </div>
+                        </div>`;
+                    });
+                } else {
+                    info += `
+                    <div style="font-size:13px;color:#94a3b8;font-style:italic;padding:8px 0;">
+                        No check-ins at this location yet.
+                    </div>`;
+                }
+
+                info += `</div>`;
+                addMarker(pos, info);
             });
 
-            // --- Fit map bounds only if no default location ---
+            // Fit map to bounds when no default centre is set
             if (!defaultLocation && !bounds.isEmpty()) {
-                map.fitBounds(bounds);
-
-                // 👇 cap zoom (don't let it zoom out too far)
-                google.maps.event.addListenerOnce(map, "bounds_changed", function () {
-                    if (map.getZoom() > 16) map.setZoom(16);  // street level
-                    if (map.getZoom() < 14) map.setZoom(14);  // prevent zooming out too much
+                mapInstance.fitBounds(bounds);
+                google.maps.event.addListenerOnce(mapInstance, 'bounds_changed', () => {
+                    if (mapInstance.getZoom() > 16) mapInstance.setZoom(16);
+                    if (mapInstance.getZoom() < 14) mapInstance.setZoom(14);
                 });
             }
-            // If default location exists, map is already centered on it with zoom 15
-
         }
 
-        const dailydata = @json($statusData);
+        // ── Chart ────────────────────────────────────────────────────────
+        function initChart() {
+            const chartEl = document.querySelector('#daily-attendance');
+            if (!chartEl) return;
 
-        const seriesData = Object.values(dailydata);
-        const labels = Object.keys(dailydata);
+            if (chartInstance) {
+                try { chartInstance.destroy(); } catch (_) {}
+                chartInstance = null;
+            }
+            chartEl.innerHTML = '';
 
-        const options_simple = {
-            series: seriesData,
-            chart: {
-                fontFamily: "inherit",
-                type: "pie",
-                height: 300,
-            },
-            colors: ["#28a745", "#dc3545"], // Green for present, Red for absent
-            labels: labels,
-            legend: {
-                position: "bottom",
-                horizontalAlign: "center",
-                fontSize: "12px",
-                labels: {
-                    colors: "#a1aab2"
+            const chartColors = (isSchoolOrg && showStudentView)
+                ? ['#22c55e', '#0ea5e9']
+                : ['#28a745', '#dc3545'];
+
+            chartInstance = new ApexCharts(chartEl, {
+                series: Object.values(dailyStatusData),
+                chart: {
+                    fontFamily: 'inherit',
+                    type: 'pie',
+                    height: 300,
                 },
-            },
-            dataLabels: {
-                enabled: true,
-                formatter: function (val) {
-                    return val.toFixed(0) + "%"; // show clean percentages
-                }
-            },
-        };
+                colors: chartColors,
+                labels: Object.keys(dailyStatusData),
+                legend: {
+                    position: 'bottom',
+                    horizontalAlign: 'center',
+                    fontSize: '12px',
+                    labels: { colors: '#a1aab2' },
+                },
+                dataLabels: {
+                    enabled: true,
+                    formatter: val => val.toFixed(0) + '%',
+                },
+            });
+            chartInstance.render();
+        }
 
-        const chart_pie_simple = new ApexCharts(
-            document.querySelector("#daily-attendance"),
-            options_simple
-        );
-        chart_pie_simple.render();
+        // ── Boot on page load ────────────────────────────────────────────
+        // initMap() is called by the Google Maps script tag via callback=initMap.
+        // We only need to boot the chart here manually.
+        document.addEventListener('DOMContentLoaded', () => {
+            initChart();
+        });
 
+        // ── No livewire:update map re-init needed ────────────────────────
+        // The toggle now does a full page redirect, so the Maps API script
+        // fires initMap() fresh on every load — no manual re-init required.
+        // We only re-init the chart here in case other Livewire interactions
+        // on this page cause a re-render.
+        document.addEventListener('livewire:update', () => {
+            setTimeout(() => initChart(), 150);
+        });
     </script>
 
+    {{-- Google Maps — callback=initMap fires automatically after script loads --}}
     <script async defer
             src="https://maps.googleapis.com/maps/api/js?key={{ $googleMapsApiKey }}&callback=initMap">
     </script>

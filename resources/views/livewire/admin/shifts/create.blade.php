@@ -850,7 +850,7 @@ new class extends Component {
                 break;
 
             case 'assign_employee':
-                $this->tabTitle = 'Assign'.' '.$entityLabel;
+                $this->tabTitle = 'Assign'.' '.$this->entityLabel;
                 $this->tabIcon = '<iconify-icon icon="mdi:account-multiple-check-outline" class="fs-5"></iconify-icon>';
                 $this->getAssignedStaff();
                 break;

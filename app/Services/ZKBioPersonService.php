@@ -35,8 +35,25 @@ class ZKBioPersonService
 
     public function syncPerson(Employee $employee): bool
     {
-        if (!$this->isEnabled()) return false;
-        if (!$employee->zkbio_pin) return false;
+        Log::info('ZKBio syncPerson called', [
+            'employee'  => $employee->name,
+            'zkbio_pin' => $employee->zkbio_pin,
+            'isEnabled' => $this->isEnabled(),
+            'baseUrl'   => $this->baseUrl,
+            'hasToken'  => !empty($this->accessToken),
+        ]);
+
+        if (!$this->isEnabled()) {
+            Log::warning('ZKBio syncPerson: not enabled, returning false');
+            return false;
+        }
+
+        if (!$employee->zkbio_pin) {
+            Log::warning('ZKBio syncPerson: no zkbio_pin, returning false', [
+                'employee' => $employee->name,
+            ]);
+            return false;
+        }
 
         $nameParts = $this->splitName($employee->name);
 
@@ -45,25 +62,30 @@ class ZKBioPersonService
                 'pin'         => (string) $employee->zkbio_pin,
                 'name'        => $nameParts['first'],
                 'lastName'    => $nameParts['last'],
-                'mobilePhone' => $employee->phone ?? '',
+                'mobilePhone' => $phone = ($employee->is_student)
+                    ? '2547' . str_pad($employee->zkbio_pin, 8, '0', STR_PAD_LEFT)
+                    : ($employee->phone ?? ''),
                 'ssn'         => $employee->id_number ?? '',
             ]);
 
         $body = $response->json();
 
+        Log::info('ZKBio API response', [
+            'employee' => $employee->name,
+            'pin'      => $employee->zkbio_pin,
+            'status'   => $response->status(),
+            'body'     => $body,
+        ]);
+
         if (($body['code'] ?? -1) === 0) {
-            Log::info("ZKBio person synced", [
-                'employee' => $employee->name,
-                'pin'      => $employee->zkbio_pin,
-                'org'      => $this->organization?->name,
-            ]);
             return true;
         }
 
-        Log::error("ZKBio person sync failed", [
+        dd('ZKBio person sync failed', [
             'employee' => $employee->name,
             'response' => $body,
         ]);
+
         return false;
     }
 

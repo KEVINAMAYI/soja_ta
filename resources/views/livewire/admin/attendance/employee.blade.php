@@ -1,7 +1,7 @@
 <!-- ORIGINAL CODE (Keep as is): -->
 <div class="d-flex align-items-start">
     <!-- Employee Icon -->
-    <iconify-icon icon="tabler:user" class="me-2 text-primary" width="20"></iconify-icon>
+    <iconify-icon style="color:var(--primary-color) !important;" icon="tabler:user" class="me-2" width="20"></iconify-icon>
 
     <!-- Employee Details -->
     <div class="d-flex flex-column">

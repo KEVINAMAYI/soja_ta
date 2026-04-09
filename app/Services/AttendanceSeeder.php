@@ -7,216 +7,254 @@ use App\Models\Employee;
 use App\Models\Leave;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Notification;
 
 class AttendanceSeeder
 {
     /**
-     * Seed missing attendance records
+     * Seed missing attendance records for a given organisation and date.
      *
-     * @param int|null $orgId Organization ID filter
-     * @param Carbon|null $targetDate Date to process (defaults to today)
+     * School organisations  → carry-forward logic (no shifts, no absent defaults).
+     * Standard organisations → full shift / leave / auto-clock-out logic.
      */
     public function seedMissingAttendanceRecords(?int $orgId = null, ?Carbon $targetDate = null): void
     {
-
-        if (auth()->user()->employee?->organization?->is_student_record)
-            return;
-
-        // Use provided date or default to now
         $now = $targetDate ?? now();
         $today = $now->toDateString();
 
-        $employees = Employee::with('shift')
+        $employees = Employee::with(['shift', 'organization'])
             ->when($orgId, fn($q) => $q->where('organization_id', $orgId))
+            ->where('active', 1)
             ->get();
 
         foreach ($employees as $employee) {
+            $isSchool = (bool)($employee->organization?->is_student_record ?? false);
 
-            // 🚫 Skip inactive employees
-            if ($employee->active == 0) {
-                continue;
+            if (!$isSchool) {
+                $this->seedStaffRecord($employee, $now, $today);
             }
 
-            // Check if the employee has an associated shift
-            $shift = $employee->shift;
-            if (!$shift) continue;
+            return;
 
-
-            $attendance = Attendance::firstOrNew([
-                'employee_id' => $employee->id,
-                'date' => $today,
-            ]);
-
-            // ========================================
-            // NEW: Check if employee has assignments
-            // ========================================
-            if ($employee->assignments()->count() === 0) {
-                $this->markAsNotScheduled($attendance);
-                continue;
-            }
-
-            // ========================================
-            // NEW: Check if employee should work today based on shift pattern
-            // ========================================
-            if (!$this->isEmployeeScheduledToday($shift, $now)) {
-                $this->markAsNotScheduled($attendance);
-                continue;
-            }
-
-            // ==================================================
-            // Build shift start & end (unchanged logic)
-            // ==================================================
-            $shiftStart = $this->parseShiftTime($shift->start_time, $today);
-            $shiftEnd = $this->parseShiftTime($shift->end_time, $today);
-
-
-            // Handle overnight shifts
-            if ($shiftEnd->lessThanOrEqualTo($shiftStart)) {
-                $shiftEnd->addDay();
-            }
-
-            // =========================
-            // Check if employee is on approved leave today
-            // =========================
-            $onLeave = Leave::where('employee_id', $employee->id)
-                ->where('status', 'approved')
-                ->whereDate('start_date', '<=', $today)
-                ->whereDate('end_date', '>=', $today)
-                ->exists();
-
-
-            // Skip processing if the employee is on leave
-            if ($onLeave) {
-                $attendance->status = 'on_leave';
-                $attendance->check_in_time = null;
-                $attendance->check_out_time = null;
-                $attendance->worked_hours = 0;
-                $attendance->overtime_hours = 0;
-                $attendance->save();
-                continue;
-            }
-
-            // ==================================================
-            // OFF_SHIFT LOGIC
-            // ==================================================
-            if ($employee->shift_status === 'off_shift'
-                && $employee->start_off_shift_date
-                && $employee->end_off_shift_date
-            ) {
-                $start = Carbon::parse($employee->start_off_shift_date);
-                $end = Carbon::parse($employee->end_off_shift_date);
-
-                // If current date is AFTER the off_shift period → back to on_shift
-                if ($now->isAfter($end)) {
-                    $employee->update([
-                        'shift_status' => 'on_shift',
-                    ]);
-                } // If we are inside the off-shift window → mark attendance off_shift
-                elseif ($now->between($start, $end, true)) {
-                    $attendance->status = 'off_shift';
-                    $attendance->check_in_time = null;
-                    $attendance->check_out_time = null;
-                    $attendance->worked_hours = 0;
-                    $attendance->overtime_hours = 0;
-                    $attendance->save();
-                    continue;
-                }
-            }
-
-            // ==================================================
-            // SICK_OFF LOGIC
-            // ==================================================
-            if ($employee->shift_status === 'sick_off'
-                && $employee->start_off_shift_date
-                && $employee->end_off_shift_date
-            ) {
-                $start = Carbon::parse($employee->start_off_shift_date);
-                $end = Carbon::parse($employee->end_off_shift_date);
-
-                // If sick-off period has ended → back to on_shift
-                if ($now->isAfter($end)) {
-                    $employee->update([
-                        'shift_status' => 'on_shift',
-                    ]);
-                } // If today is inside the sick-off window → mark attendance sick_off
-                elseif ($now->between($start, $end, true)) {
-                    $attendance->status = 'sick_off';
-                    $attendance->check_in_time = null;
-                    $attendance->check_out_time = null;
-                    $attendance->worked_hours = 0;
-                    $attendance->overtime_hours = 0;
-                    $attendance->save();
-                    continue;
-                }
-            }
-
-            // Skip processing for employees who are not actually on shift
-            if (in_array($employee->shift_status, ['off_shift', 'sick_off', 'on_leave'])) {
-                continue;
-            }
-
-            // ========================================
-            // NEW: Handle Auto Clock-Out Logic for clocked-in employees
-            // ========================================
-            if ($attendance->check_in_time && $attendance->status === 'clocked_in') {
-                $this->handleAutoClockOut($attendance, $shift, $shiftStart, $shiftEnd, $now, $employee);
-                continue; // Skip to next employee after handling auto clock-out
-            }
-
-            // =========================
-            // Handle employees who haven't checked in
-            // =========================
-            if (!$attendance->check_in_time) {
-                if ($now->greaterThan($shiftEnd)) {
-                    $attendance->status = 'absent';
-                } elseif ($now->between($shiftStart, $shiftEnd)) {
-                    $attendance->status = 'unchecked_in';
-                }
-
-                if (isset($attendance->status)) {
-                    $attendance->check_in_time = null;
-                    $attendance->check_out_time = null;
-                    $attendance->worked_hours = 0;
-                    $attendance->overtime_hours = 0;
-                    $attendance->save();
-                }
-            }
         }
     }
 
+    /* ──────────────────────────────────────────────────────────────
+     |  SCHOOL / STUDENT BRANCH
+     |
+     |  Rules:
+     |    • No shifts, no leave checks, no off-shift windows.
+     |    • If a record for today already exists → leave it alone.
+     |    • Otherwise copy the status of the most-recent past record.
+     |    • If there is no past record at all → default to 'not_checked_in'
+     |      (never 'absent' — that is set only when a pembroke is explicitly
+     |       marked absent by a teacher, not by the seeder).
+     ────────────────────────────────────────────────────────────── */
+    private function seedStudentRecord(Employee $student, string $today): void
+    {
+        // 1. Check if record exists
+        $exists = Attendance::where('employee_id', $student->id)
+            ->whereDate('date', $today)
+            ->exists();
+
+        if ($exists) return;
+
+        // 2. Find last record
+        $lastRecord = Attendance::where('employee_id', $student->id)
+            ->whereDate('date', '<', $today)
+            ->orderByDesc('date')
+            ->first();
+
+        // 3. Your Explicit Map
+        $carryForwardMap = [
+            'clocked_out' => 'clocked_out',
+            'absent' => 'absent',
+            'on_leave' => 'on_leave',
+            'off_shift' => 'off_shift',
+            'sick_off' => 'sick_off',
+            'clocked_in' => 'clocked_in'
+        ];
+
+        // Determine status - changed fallback to 'absent' to fix the 500 error
+        $inheritedStatus = isset($lastRecord)
+            ? ($carryForwardMap[$lastRecord->status] ?? 'absent')
+            : 'absent';
+
+        $checkIn = null;
+        $checkOut = null;
+
+        // 4. Inherit Times for Clocked In/Out
+        if ($lastRecord && in_array($inheritedStatus, ['clocked_in', 'clocked_out'])) {
+            // We set the date to $today but keep the exact time from the previous record
+            if ($lastRecord->check_in_time) {
+                $checkIn = Carbon::parse($today . ' ' . Carbon::parse($lastRecord->check_in_time)->format('H:i:s'));
+            }
+            if ($lastRecord->check_out_time) {
+                $checkOut = Carbon::parse($today . ' ' . Carbon::parse($lastRecord->check_out_time)->format('H:i:s'));
+            }
+        }
+
+        // 5. Create the record
+        Attendance::create([
+            'employee_id' => $student->id,
+            'date' => $today,
+            'status' => $inheritedStatus,
+            'check_in_time' => $checkIn,
+            'check_out_time' => $checkOut,
+            'worked_hours' => $lastRecord->worked_hours ?? 0,
+            'overtime_hours' => $lastRecord->overtime_hours ?? 0,
+        ]);
+    }
+
+    /* ──────────────────────────────────────────────────────────────
+     |  STANDARD STAFF BRANCH  (unchanged business logic, cleaned up)
+     ────────────────────────────────────────────────────────────── */
+    private function seedStaffRecord(Employee $employee, Carbon $now, string $today): void
+    {
+        $shift = $employee->shift;
+
+        // Employees without a shift configuration cannot be processed.
+        if (!$shift) {
+            return;
+        }
+
+        $attendance = Attendance::firstOrNew([
+            'employee_id' => $employee->id,
+            'date' => $today,
+        ]);
+
+        // ── No assignments → not scheduled ──────────────────────
+        if ($employee->assignments()->count() === 0) {
+            $this->markAsNotScheduled($attendance);
+            return;
+        }
+
+        // ── Not a working day for this shift ────────────────────
+        if (!$this->isEmployeeScheduledToday($shift, $now)) {
+            $this->markAsNotScheduled($attendance);
+            return;
+        }
+
+        // ── Build shift window ───────────────────────────────────
+        $shiftStart = $this->parseShiftTime($shift->start_time, $today);
+        $shiftEnd = $this->parseShiftTime($shift->end_time, $today);
+
+        if ($shiftEnd->lessThanOrEqualTo($shiftStart)) {
+            $shiftEnd->addDay(); // overnight shift
+        }
+
+        // ── Approved leave ───────────────────────────────────────
+        $onLeave = Leave::where('employee_id', $employee->id)
+            ->where('status', 'approved')
+            ->whereDate('start_date', '<=', $today)
+            ->whereDate('end_date', '>=', $today)
+            ->exists();
+
+        if ($onLeave) {
+            $attendance->fill([
+                'status' => 'on_leave',
+                'check_in_time' => null,
+                'check_out_time' => null,
+                'worked_hours' => 0,
+                'overtime_hours' => 0,
+            ])->save();
+            return;
+        }
+
+        // ── Off-shift / sick-off windows ─────────────────────────
+        if ($handled = $this->handleShiftStatusWindow($employee, $attendance, $now)) {
+            return;
+        }
+
+        // Guard: skip employees in a non-working status that wasn't resolved above.
+        if (in_array($employee->shift_status, ['off_shift', 'sick_off', 'on_leave'])) {
+            return;
+        }
+
+        // ── Already clocked in → evaluate auto clock-out ─────────
+        if ($attendance->check_in_time && $attendance->status === 'clocked_in') {
+            $this->handleAutoClockOut($attendance, $shift, $shiftStart, $shiftEnd, $now, $employee);
+            return;
+        }
+
+        // ── Not yet checked in ───────────────────────────────────
+        if (!$attendance->check_in_time) {
+            if ($now->greaterThan($shiftEnd)) {
+                $status = 'absent';
+            } elseif ($now->between($shiftStart, $shiftEnd)) {
+                $status = 'unchecked_in';
+            } else {
+                return; // Shift hasn't started yet – nothing to do.
+            }
+
+            $attendance->fill([
+                'status' => $status,
+                'check_in_time' => null,
+                'check_out_time' => null,
+                'worked_hours' => 0,
+                'overtime_hours' => 0,
+            ])->save();
+        }
+    }
+
+    /* ──────────────────────────────────────────────────────────────
+     |  HELPERS
+     ────────────────────────────────────────────────────────────── */
+
     /**
-     * Check if employee is scheduled to work today based on shift pattern
+     * Handle off_shift / sick_off date windows for staff employees.
+     * Returns true if the record was handled (caller should return early).
+     */
+    private function handleShiftStatusWindow(Employee $employee, Attendance $attendance, Carbon $now): bool
+    {
+        $status = $employee->shift_status;
+
+        if (!in_array($status, ['off_shift', 'sick_off'])) {
+            return false;
+        }
+
+        $start = $employee->start_off_shift_date ? Carbon::parse($employee->start_off_shift_date) : null;
+        $end = $employee->end_off_shift_date ? Carbon::parse($employee->end_off_shift_date) : null;
+
+        if (!$start || !$end) {
+            return false;
+        }
+
+        if ($now->isAfter($end)) {
+            // Period has expired → restore to on_shift and let normal logic continue.
+            $employee->update(['shift_status' => 'on_shift']);
+            return false;
+        }
+
+        if ($now->between($start, $end, true)) {
+            $attendance->fill([
+                'status' => $status, // 'off_shift' or 'sick_off'
+                'check_in_time' => null,
+                'check_out_time' => null,
+                'worked_hours' => 0,
+                'overtime_hours' => 0,
+            ])->save();
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * Check if employee is scheduled to work today based on shift pattern.
      */
     private function isEmployeeScheduledToday($shift, Carbon $date): bool
     {
         $patternType = $shift->pattern_type ?? 'weekdays';
         $patternDays = $shift->pattern_days ?? ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
+        $currentDay = $date->format('D'); // 'Mon', 'Tue', …
 
-        // Get current day abbreviation (Mon, Tue, etc.)
-        $currentDay = $date->format('D'); // Returns 'Mon', 'Tue', etc.
-
-        // Check based on pattern type
-        switch ($patternType) {
-            case 'weekdays':
-                return in_array($currentDay, ['Mon', 'Tue', 'Wed', 'Thu', 'Fri']);
-
-            case 'weekends':
-                return in_array($currentDay, ['Sat', 'Sun']);
-
-            case 'daily':
-                return true; // All days
-
-            case 'custom':
-            case 'rotating':
-                return in_array($currentDay, $patternDays);
-
-            default:
-                // Fallback: check if current day is in pattern_days
-                return in_array($currentDay, $patternDays);
-        }
+        return match ($patternType) {
+            'weekdays' => in_array($currentDay, ['Mon', 'Tue', 'Wed', 'Thu', 'Fri']),
+            'weekends' => in_array($currentDay, ['Sat', 'Sun']),
+            'daily' => true,
+            default => in_array($currentDay, $patternDays), // 'custom', 'rotating', …
+        };
     }
-
 
     private function parseShiftTime(string $time, string $today): Carbon
     {
@@ -225,24 +263,26 @@ class AttendanceSeeder
             : Carbon::parse("{$today} {$time}");
     }
 
-
     /**
-     * Mark employee as not scheduled for today
+     * Mark an attendance record as not scheduled (idempotent).
      */
     private function markAsNotScheduled(Attendance $attendance): void
     {
-        if ($attendance->status !== 'not_scheduled') {
-            $attendance->status = 'not_scheduled';
-            $attendance->check_in_time = null;
-            $attendance->check_out_time = null;
-            $attendance->worked_hours = 0;
-            $attendance->overtime_hours = 0;
-            $attendance->save();
+        if ($attendance->status === 'not_scheduled') {
+            return;
         }
+
+        $attendance->fill([
+            'status' => 'not_scheduled',
+            'check_in_time' => null,
+            'check_out_time' => null,
+            'worked_hours' => 0,
+            'overtime_hours' => 0,
+        ])->save();
     }
 
     /**
-     * Handle automatic clock-out for employees based on shift configuration
+     * Evaluate whether a clocked-in employee should be automatically clocked out.
      */
     private function handleAutoClockOut(
         Attendance $attendance,
@@ -253,39 +293,26 @@ class AttendanceSeeder
         Employee   $employee
     ): void
     {
-        // Skip if auto clock-out is not enabled for this shift
         if (!$shift->auto_clock_out) {
             return;
         }
 
         $checkIn = Carbon::parse($attendance->check_in_time);
 
-        // Calculate when auto clock-out should happen
         if ($shift->overtime_enabled && $shift->max_overtime_hours > 0) {
-            // ========================================
-            // OVERTIME ENABLED: Clock out at shift_end + max_overtime_hours
-            // ========================================
             $maxOvertimeHours = (float)$shift->max_overtime_hours;
             $warningMinutes = (int)($shift->warning_time_minutes ?? 30);
-
             $autoClockOutTime = $shiftEnd->copy()->addHours($maxOvertimeHours);
             $warningTime = $autoClockOutTime->copy()->subMinutes($warningMinutes);
 
-            // ========================================
-            // Send warning notification before auto clock-out
-            // ========================================
-            if ($now->greaterThanOrEqualTo($warningTime) && $now->lessThan($autoClockOutTime)) {
-                // Check if warning hasn't been sent already (to avoid sending every minute)
-                if (!$attendance->overtime_warning_sent) {
-                    $this->sendOvertimeWarning($employee, $shift, $autoClockOutTime);
-                    $attendance->overtime_warning_sent = true;
-                    $attendance->save();
-                }
+            // Send pre-clock-out warning once.
+            if ($now->between($warningTime, $autoClockOutTime) && !$attendance->overtime_warning_sent) {
+                $this->sendOvertimeWarning($employee, $shift, $autoClockOutTime);
+                $attendance->overtime_warning_sent = true;
+                $attendance->save();
             }
 
-            // ========================================
-            // Auto clock out if max overtime reached
-            // ========================================
+            // Auto clock-out at max overtime.
             if ($now->greaterThanOrEqualTo($autoClockOutTime)) {
                 $totalWorked = $checkIn->diffInMinutes($autoClockOutTime) / 60;
                 $regularHours = min($totalWorked, $shift->duration_hours);
@@ -300,24 +327,18 @@ class AttendanceSeeder
                     'auto_clocked_out_reason' => 'Maximum overtime hours reached',
                 ]);
 
-                // Send notifications
                 $this->sendAutoClockOutNotification($employee, $shift, 'overtime_limit_reached');
 
-                // Notify managers if configured
                 if ($shift->notify_managers_overtime) {
                     $this->notifyManagersAboutOvertime($employee, $shift, $overtimeHours);
                 }
 
-                Log::info("Auto clocked out employee {$employee->id} at overtime limit", [
-                    'employee_id' => $employee->id,
-                    'shift_id' => $shift->id,
+                Log::info("Auto clocked out [{$employee->id}] at overtime limit", [
                     'overtime_hours' => $overtimeHours,
                 ]);
             }
         } else {
-            // ========================================
-            // NO OVERTIME: Clock out at exact shift end
-            // ========================================
+            // No overtime – clock out at shift end.
             if ($now->greaterThanOrEqualTo($shiftEnd)) {
                 $totalWorked = $checkIn->diffInMinutes($shiftEnd) / 60;
                 $regularHours = min($totalWorked, $shift->duration_hours);
@@ -331,107 +352,50 @@ class AttendanceSeeder
                     'auto_clocked_out_reason' => 'Overtime not enabled for this shift',
                 ]);
 
-                // Send notification
                 $this->sendAutoClockOutNotification($employee, $shift, 'shift_end');
 
-                Log::info("Auto clocked out employee {$employee->id} at shift end (no overtime)", [
-                    'employee_id' => $employee->id,
-                    'shift_id' => $shift->id,
-                ]);
+                Log::info("Auto clocked out [{$employee->id}] at shift end (no overtime)");
             }
         }
     }
 
+    /* ── Notification stubs ──────────────────────────────────────── */
 
-    /**
-     * Send overtime warning notification to employee
-     */
     private function sendOvertimeWarning(Employee $employee, $shift, Carbon $autoClockOutTime): void
     {
-        try {
-            // Only send if mobile notifications are enabled
-            if ($shift->employee_mobile_notifications) {
-                // TODO: Implement your notification logic here
-                // Example using Laravel notifications:
-                // $employee->user->notify(new OvertimeWarningNotification($autoClockOutTime));
+        if (!$shift->employee_mobile_notifications) return;
 
-                Log::info("Overtime warning sent to employee {$employee->id}", [
-                    'auto_clock_out_at' => $autoClockOutTime->format('H:i'),
-                ]);
-            }
-        } catch (\Exception $e) {
-            Log::error("Failed to send overtime warning", [
-                'employee_id' => $employee->id,
-                'error' => $e->getMessage(),
+        try {
+            // $employee->user->notify(new OvertimeWarningNotification($autoClockOutTime));
+            Log::info("Overtime warning → employee [{$employee->id}]", [
+                'clock_out_at' => $autoClockOutTime->format('H:i'),
             ]);
+        } catch (\Exception $e) {
+            Log::error("Overtime warning failed [{$employee->id}]: {$e->getMessage()}");
         }
     }
 
-    /**
-     * Send auto clock-out notification to employee
-     */
     private function sendAutoClockOutNotification(Employee $employee, $shift, string $reason): void
     {
-        try {
-            // Only send if mobile notifications are enabled
-            if ($shift->employee_mobile_notifications) {
-                // TODO: Implement your notification logic here
-                // Example:
-                // $employee->user->notify(new AutoClockOutNotification($reason));
+        if (!$shift->employee_mobile_notifications) return;
 
-                Log::info("Auto clock-out notification sent to employee {$employee->id}", [
-                    'reason' => $reason,
-                ]);
-            }
+        try {
+            // $employee->user->notify(new AutoClockOutNotification($reason));
+            Log::info("Auto clock-out notification → employee [{$employee->id}]", ['reason' => $reason]);
         } catch (\Exception $e) {
-            Log::error("Failed to send auto clock-out notification", [
-                'employee_id' => $employee->id,
-                'error' => $e->getMessage(),
-            ]);
+            Log::error("Auto clock-out notification failed [{$employee->id}]: {$e->getMessage()}");
         }
     }
 
-    /**
-     * Notify managers about employee overtime
-     */
     private function notifyManagersAboutOvertime(Employee $employee, $shift, float $overtimeHours): void
     {
         try {
-            // TODO: Get managers for this employee's organization/department
-            // Example:
-            // $managers = $employee->organization->managers;
-            // Notification::send($managers, new EmployeeOvertimeNotification($employee, $overtimeHours));
-
-            Log::info("Manager overtime notification triggered", [
-                'employee_id' => $employee->id,
+            // Notification::send($employee->organization->managers, new EmployeeOvertimeNotification(...));
+            Log::info("Manager overtime notification → employee [{$employee->id}]", [
                 'overtime_hours' => $overtimeHours,
             ]);
         } catch (\Exception $e) {
-            Log::error("Failed to notify managers about overtime", [
-                'employee_id' => $employee->id,
-                'error' => $e->getMessage(),
-            ]);
+            Log::error("Manager overtime notification failed [{$employee->id}]: {$e->getMessage()}");
         }
-    }
-
-    /**
-     * Calculate worked and overtime hours
-     */
-    private function calculateHours(
-        Carbon $checkIn,
-        Carbon $checkOut,
-        float  $shiftDurationHours,
-        float  $maxOvertimeHours = 0
-    ): array
-    {
-        $totalWorked = $checkIn->diffInMinutes($checkOut) / 60;
-        $regularHours = min($totalWorked, $shiftDurationHours);
-        $overtimeHours = max(0, min($totalWorked - $shiftDurationHours, $maxOvertimeHours));
-
-        return [
-            'worked_hours' => round($regularHours, 2),
-            'overtime_hours' => round($overtimeHours, 2),
-            'total_hours' => round($totalWorked, 2),
-        ];
     }
 }

@@ -24,7 +24,7 @@ new class extends Component {
     // dynamic dropdown data
     public $availableEmails = [];
     public $availableFrequencies = ['daily', 'weekly', 'monthly'];
-    public $reportTypes = ['attendance', 'timesheets', 'department','break'];
+    public $reportTypes = ['attendance', 'timesheets', 'department', 'break'];
     public $availableDays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
     public $availableTimezones = [];
     public $startDate;
@@ -36,7 +36,6 @@ new class extends Component {
     public $departments = [];
     public $department_id;
     public $reportSettings;
-
 
 
     protected function rules()
@@ -434,7 +433,7 @@ new class extends Component {
     <style>
 
         #table-bulkActionsDropdown {
-            background-color: #e14326;
+            background-color: var(--primary-color) !important;
             border: none;
             color: #fff;
             font-weight: 600;
@@ -442,7 +441,7 @@ new class extends Component {
         }
 
         #table-bulkActionsDropdown:hover {
-            background-color: #c2361d; /* darker shade for hover */
+            background-color: var(--primary-color) !important; /* darker shade for hover */
             transform: translateY(-1px);
             box-shadow: 0 4px 8px rgba(225, 67, 38, 0.4);
         }
@@ -613,7 +612,6 @@ new class extends Component {
                         <span class="d-none d-md-block">Department Report</span>
                     </button>
                 </li>
-
 
 
                 <!-- Leave -->

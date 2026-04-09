@@ -20,6 +20,8 @@ class AttendanceDailyTable extends DataTableComponent
     public $status;
     public $startDate;
     public $endDate;
+    public $filterGrade;
+
     protected AttendanceSeeder $seeder;
 
 
@@ -28,22 +30,22 @@ class AttendanceDailyTable extends DataTableComponent
         $this->status = $status;
         $this->startDate = now()->toDateString();
         $this->endDate = now()->toDateString();
+
     }
 
 
     #[On('date-range-updated')]
-    public function filterByDateRange($startDate, $endDate, $status)
+    public function filterByDateRange($startDate, $endDate, $status, $grade = null)
     {
         $this->startDate = $startDate;
         $this->endDate = $endDate;
         $this->status = $status;
+        $this->filterGrade = $grade;
 
         $orgId = auth()->user()->employee->organization_id ?? null;
 
         if (in_array($this->status, ['unchecked_in', 'absent', 'on_leave', 'off_shift', 'sick_off'])) {
-            if(!auth()->user()->employee?->organization?->is_student_record){
-                app(AttendanceSeeder::class)->seedMissingAttendanceRecords($orgId);
-            }
+            app(AttendanceSeeder::class)->seedMissingAttendanceRecords($orgId);
         }
 
         $this->dispatch('refreshDatatable');
@@ -55,27 +57,29 @@ class AttendanceDailyTable extends DataTableComponent
         $this->setPrimaryKey('id');
     }
 
+
     public function builder(): \Illuminate\Database\Eloquent\Builder
     {
         $orgId = auth()->user()->employee->organization_id ?? null;
 
         $startDate = $this->startDate ?: now()->toDateString();
         $endDate = $this->endDate ?: $startDate;
-
         $status = $this->status;
         $search = $this->search;
+        $grade = $this->filterGrade ?? null;   // ← capture once
 
-        // Handle inactive employees differently
+        // Handle inactive employees
         if ($status === 'inactive') {
-
-            // Get inactive employees and their latest attendance records
             $query = Attendance::query()
                 ->select('attendances.*')
                 ->with(['employee', 'employee.shift'])
                 ->whereBetween('date', [$startDate, $endDate])
-                ->whereHas('employee', function ($q) use ($orgId) {
+                ->whereHas('employee', function ($q) use ($orgId, $grade) {
                     $q->where('organization_id', $orgId)
                         ->where('active', 0);
+                    if ($grade) {
+                        $q->where('grade', $grade);   // ← inside same closure
+                    }
                 });
 
             if ($search) {
@@ -85,11 +89,9 @@ class AttendanceDailyTable extends DataTableComponent
                 });
             }
 
-            $query->orderByDesc('date')
+            return $query->orderByDesc('date')
                 ->orderByRaw('check_in_time IS NULL')
                 ->orderByDesc(DB::raw('COALESCE(check_in_time, updated_at)'));
-
-            return $query;
         }
 
         // Normal filtering for active employees
@@ -97,15 +99,18 @@ class AttendanceDailyTable extends DataTableComponent
             ->select('attendances.*')
             ->with(['employee', 'employee.shift'])
             ->whereBetween('date', [$startDate, $endDate])
-            ->whereHas('employee', function ($q) use ($orgId) {
+            ->whereHas('employee', function ($q) use ($orgId, $grade) {
                 $q->where('organization_id', $orgId)
-                    ->where('active', 1); // Only active employees for normal filters
+                    ->where('active', 1);
+                if ($grade) {
+                    $q->where('grade', $grade);       // ← inside same closure
+                }
             });
 
         if (!empty($status)) {
             if ($status === 'absent') {
                 $query->whereIn('status', ['absent', 'unchecked_in']);
-            } else if ($status === 'present') {
+            } elseif ($status === 'present') {
                 $query->whereIn('status', ['clocked_in', 'clocked_out']);
             } else {
                 $query->where('status', $status);
@@ -119,11 +124,9 @@ class AttendanceDailyTable extends DataTableComponent
             });
         }
 
-        $query->orderByDesc('date')
+        return $query->orderByDesc('date')
             ->orderByRaw('check_in_time IS NULL')
             ->orderByDesc(DB::raw('COALESCE(check_in_time, updated_at)'));
-
-        return $query;
     }
 
 
@@ -177,8 +180,15 @@ class AttendanceDailyTable extends DataTableComponent
             Column::make(auth()->user()->employee?->organization?->is_student_record ? "Student" : "Employee")
                 ->label(fn($row) => view('livewire.admin.attendance.employee', ['attendance' => $row])),
 
-            Column::make(auth()->user()->employee?->organization?->is_student_record ? "Session" : "Shift")
+            Column::make(auth()->user()->employee?->organization?->is_student_record ? "Grade" : "Shift")
                 ->label(function ($row) {
+                    if (auth()->user()->employee?->organization?->is_student_record) {
+                        $grade = $row->employee->grade ?? null;
+                        return $grade
+                            ? "<strong>{$grade}</strong>"
+                            : '<span class="text-muted">-</span>';
+                    }
+
                     if (!$row->employee->shift) {
                         return '<span class="text-muted">-</span>';
                     }
@@ -273,7 +283,7 @@ class AttendanceDailyTable extends DataTableComponent
                 ->html(),
 
             // Worked Hours
-            Column::make("Work Summary")
+            Column::make(auth()->user()->employee?->organization?->is_student_record ? "Status" : "Work Summary")
                 ->label(fn($row) => view('livewire.admin.attendance.hours', ['attendance' => $row])),
 
         ];

@@ -1,3 +1,3 @@
 @foreach ($employee->user->getRoleNames() as $role)
-    <span class="badge bg-primary me-2 mb-1">{{ $role }}</span>
+    <span style="background:var(--primary-color) !important; color:white;" class="badge me-2 mb-1">{{ $role }}</span>
 @endforeach

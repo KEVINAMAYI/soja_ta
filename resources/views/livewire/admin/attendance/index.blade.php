@@ -18,6 +18,9 @@ new class extends Component {
     #[Url]
     public $filterStatus;
 
+    #[Url]
+    public $filterGrade;
+
     public $startDate;
     public $endDate;
 
@@ -30,6 +33,12 @@ new class extends Component {
     public $offShiftCount = 0;
     public $inactiveCount = 0;
 
+    // School-specific
+    public bool $isSchoolOrg = false;
+    public array $gradeStats = [];   // [['grade'=>'Grade 1','present'=>22,'total'=>26], ...]
+    public array $recentActivity = [];  // last 10 attendance events today
+    public array $availableGrades = [];
+
     public bool $zkbioEnabled = false;
     public bool $syncing = false;
 
@@ -39,18 +48,52 @@ new class extends Component {
         $today = now()->toDateString();
         $this->startDate = $today;
         $this->endDate = $today;
-        $this->loadSummaryStats();
-        $this->zkbioEnabled = auth()->user()->employee->organization->zkbio_enabled ?? false;
 
+        $org = auth()->user()->employee->organization;
+        $this->isSchoolOrg = (bool)($org->is_student_record ?? false);
+        $this->zkbioEnabled = $org->zkbio_enabled ?? false;
+
+        $this->loadSummaryStats();
+
+        if ($this->isSchoolOrg) {
+            $this->loadGradeStats();
+            $this->loadRecentActivity();
+            $this->loadAvailableGrades();
+        }
+    }
+
+    public function prevDay(): void
+    {
+        $this->startDate = \Carbon\Carbon::parse($this->startDate)->subDay()->toDateString();
+        $this->endDate = $this->startDate;
+        $this->loadSummaryStats();
+        $this->loadGradeStats();
+        $this->loadRecentActivity();
+        $this->dispatch('date-range-updated', startDate: $this->startDate, endDate: $this->endDate, status: $this->filterStatus, grade: $this->filterGrade);
+    }
+
+    public function nextDay(): void
+    {
+        $this->startDate = \Carbon\Carbon::parse($this->startDate)->addDay()->toDateString();
+        $this->endDate = $this->startDate;
+        $this->loadSummaryStats();
+        $this->loadGradeStats();
+        $this->loadRecentActivity();
+        $this->dispatch('date-range-updated', startDate: $this->startDate, endDate: $this->endDate, status: $this->filterStatus, grade: $this->filterGrade);
     }
 
     public function refresh(): void
     {
         $this->loadSummaryStats();
+        if ($this->isSchoolOrg) {
+            $this->loadGradeStats();
+            $this->loadRecentActivity();
+        }
         $this->dispatch('date-range-updated',
             startDate: $this->startDate,
             endDate: $this->endDate,
-            status: $this->filterStatus
+            status: $this->filterStatus,
+            grade: $this->filterGrade,
         );
     }
 
@@ -81,7 +124,6 @@ new class extends Component {
 
                 if (empty($transactions)) continue;
 
-                // DB dedup
                 $incomingLogIds = array_filter(array_column($transactions, 'logId'));
                 $alreadyProcessed = \App\Models\ZkbioProcessedLog::whereIn('log_id', $incomingLogIds)
                     ->pluck('log_id')->toArray();
@@ -91,10 +133,8 @@ new class extends Component {
                     fn($tx) => !empty($tx['logId']) && !in_array($tx['logId'], $alreadyProcessed)
                 ));
 
-
                 if (empty($newTransactions)) continue;
 
-                // Mark processed
                 \App\Models\ZkbioProcessedLog::insert(
                     array_map(fn($tx) => [
                         'log_id' => $tx['logId'],
@@ -105,7 +145,6 @@ new class extends Component {
                     ], $newTransactions)
                 );
 
-                // Sort + process synchronously — no queue
                 usort($newTransactions, fn($a, $b) => strcmp($a['eventTime'], $b['eventTime']));
 
                 $grouped = collect($newTransactions)->groupBy('pin');
@@ -119,10 +158,15 @@ new class extends Component {
             }
 
             $this->loadSummaryStats();
+            if ($this->isSchoolOrg) {
+                $this->loadGradeStats();
+                $this->loadRecentActivity();
+            }
             $this->dispatch('date-range-updated',
                 startDate: $this->startDate,
                 endDate: $this->endDate,
-                status: $this->filterStatus
+                status: $this->filterStatus,
+                grade: $this->filterGrade,
             );
 
             LivewireAlert::title('Synced!')
@@ -137,162 +181,413 @@ new class extends Component {
         }
     }
 
+    public $leftSchoolCount = 0; // Add this property at the top of your class
 
-    public function loadSummaryStats()
+    public function loadSummaryStats(): void
     {
-        // Get organization ID
         $employeeRecord = Employee::where('user_id', auth()->id())->first();
         $orgId = $employeeRecord->organization_id ?? null;
-
         if (!$orgId) return;
 
-        // Get all employees in organization
-        $employees = Employee::where('organization_id', $orgId)->where('active', 1)->get();
-        $this->totalEmployees = $employees->count();
-        $employeeIds = $employees->pluck('id');
+        // 1. Get total active students
+        $students = Employee::where('organization_id', $orgId)
+            ->where('active', 1)
+            ->where('is_student', 1)
+            ->get();
 
-        // Get attendances for date range
-        $attendances = Attendance::whereIn('employee_id', $employeeIds)
+        $this->totalEmployees = $students->count();
+        $studentIds = $students->pluck('id');
+
+        // 2. Get attendance for the selected date range
+        $attendances = Attendance::whereIn('employee_id', $studentIds)
             ->whereBetween('date', [$this->startDate, $this->endDate])
             ->get();
 
-        // Get employees who actually showed up (clocked in or out)
-        $presentEmployeeIds = $attendances
+        // 3. Logic: Who is "In School" vs "Left School"
+        // Present = Currently Clocked In (on site)
+        $this->presentCount = $attendances->where('status', 'clocked_in')->pluck('employee_id')->unique()->count();
+
+        // Left School = They clocked out (gone home)
+        $this->leftSchoolCount = $attendances->where('status', 'clocked_out')->pluck('employee_id')->unique()->count();
+
+        // 4. Not Reported = Total - (Present + Left)
+        $reportedIds = $attendances->whereIn('status', ['clocked_in', 'clocked_out'])->pluck('employee_id')->unique();
+        $this->absentCount = max(0, $this->totalEmployees - $reportedIds->count());
+    }
+
+    public function loadAvailableGrades(): void
+    {
+        $orgId = auth()->user()->employee->organization_id;
+        $this->availableGrades = Employee::where('organization_id', $orgId)
+            ->where('active', 1)
+            ->where('is_student', 1)
+            ->whereNotNull('grade')
+            ->distinct()
+            ->orderBy('grade')
+            ->pluck('grade')
+            ->toArray();
+    }
+
+    public function loadGradeStats(): void
+    {
+        $orgId = auth()->user()->employee->organization_id;
+
+        // Get all active students grouped by grade
+        $students = Employee::where('organization_id', $orgId)
+            ->where('active', 1)
+            ->where('is_student', 1)
+            ->whereNotNull('grade')
+            ->get()
+            ->groupBy('grade');
+
+        $today = $this->startDate;
+        $stats = [];
+
+        foreach ($students as $grade => $gradeStudents) {
+            $ids = $gradeStudents->pluck('id');
+            $present = Attendance::whereIn('employee_id', $ids)
+                ->whereDate('date', $today)
+                ->whereIn('status', ['clocked_in', 'clocked_out'])
+                ->distinct('employee_id')
+                ->count('employee_id');
+
+            $total = $ids->count();
+            $rate = $total > 0 ? round(($present / $total) * 100) : 0;
+
+            $stats[] = [
+                'grade' => $grade,
+                'present' => $present,
+                'total' => $total,
+                'rate' => $rate,
+                'color' => $rate >= 80 ? '#22c55e' : ($rate >= 60 ? '#f59e0b' : '#ef4444'),
+            ];
+        }
+
+        // Add staff row
+        $this->gradeStats = $stats;
+
+    }
+
+    public function loadRecentActivity(): void
+    {
+        $orgId = auth()->user()->employee->organization_id;
+        $employeeIds = Employee::where('organization_id', $orgId)->pluck('id');
+
+        $records = Attendance::with('employee')
+            ->whereIn('employee_id', $employeeIds)
+            ->whereDate('date', $this->startDate)
             ->whereIn('status', ['clocked_in', 'clocked_out'])
-            ->pluck('employee_id')
-            ->unique();
+            ->whereNotNull('check_in_time')
+            ->orderByDesc('check_in_time')
+            ->limit(10)
+            ->get();
 
-        // Get employees marked absent BUT exclude those who showed up
-        $absentEmployeeIds = $attendances
-            ->whereIn('status', ['absent', 'unchecked_in'])
-            ->pluck('employee_id')
-            ->unique()
-            ->reject(fn($id) => $presentEmployeeIds->contains($id));
+        $this->recentActivity = $records->map(function ($a) {
+            $emp = $a->employee;
+            $isStaff = !$emp->is_student;
+            $status = $a->status;
 
+            $icon = match ($status) {
+                'clocked_in' => ['icon' => 'mdi:check-circle', 'color' => '#22c55e', 'bg' => '#dcfce7'],
+                'clocked_out' => ['icon' => 'mdi:exit-run', 'color' => '#ef4444', 'bg' => '#fee2e2'],
+                'absent' => ['icon' => 'mdi:close-circle', 'color' => '#ef4444', 'bg' => '#fee2e2'],
+                default => ['icon' => 'mdi:clock-outline', 'color' => '#f59e0b', 'bg' => '#fef9c3'],
+            };
 
-        $this->presentCount = $presentEmployeeIds->count();
-        $this->absentCount = $absentEmployeeIds->count();
+            $label = match ($status) {
+                'clocked_in' => 'checked in',
+                'clocked_out' => 'checked out',
+                default => $status,
+            };
 
-        $this->sickOffCount = $attendances
-            ->where('status', 'sick_off')
-            ->pluck('employee_id')
-            ->unique()
-            ->count();
+            $sub = $isStaff
+                ? 'Staff · ' . ($emp->employee_title ?? 'Staff')
+                : ($emp->grade ?? '') . ($emp->employee_title ? ' · ' . $emp->employee_title : '');
 
-        $this->onLeaveCount = $attendances
-            ->where('status', 'on_leave')
-            ->pluck('employee_id')
-            ->unique()
-            ->count();
-
-        $this->offShiftCount = $attendances
-            ->where('status', 'off_shift')
-            ->pluck('employee_id')
-            ->unique()
-            ->count();
-
-        $this->inactiveCount = Employee::where('organization_id', $orgId)
-            ->where('active', 0)
-            ->count();
-
-        $this->inactiveCount = Employee::where('organization_id', $orgId)
-            ->where('active', 0)
-            ->count();
+            return [
+                'name' => $emp->name,
+                'sub' => trim($sub, ' · '),
+                'label' => $label,
+                'time' => $a->check_in_time ? \Carbon\Carbon::parse($a->check_in_time)->format('h:i A') : ($a->check_out_time ? \Carbon\Carbon::parse($a->check_out_time)->format('h:i A') : ''),
+                'icon' => $icon,
+            ];
+        })->toArray();
     }
 
     #[On('filter-updated')]
-    public function dateChanged()
+    public function dateChanged(): void
     {
         $this->loadSummaryStats();
-        $this->dispatch('date-range-updated', startDate: $this->startDate, endDate: $this->endDate, status: $this->filterStatus);
+        if ($this->isSchoolOrg) {
+            $this->loadGradeStats();
+            $this->loadRecentActivity();
+        }
+        $this->dispatch('date-range-updated',
+            startDate: $this->startDate,
+            endDate: $this->endDate,
+            status: $this->filterStatus,
+            grade: $this->filterGrade,
+        );
     }
 
 }; ?>
 
 @push('styles')
     <style>
-        .summary-stats-row {
-            margin-bottom: 2rem;
-        }
-
+        /* ── Shared summary card ── */
         .summary-card {
-            background: #ffffff;
-            border: none;
-            border-radius: 8px;
-            padding: 1.25rem;
+            background: #fff;
+            border: 1px solid rgba(0, 0, 0, 0.06);
+            border-radius: 14px;
+            padding: 1.4rem 1.5rem 1.2rem;
             height: 100%;
-            transition: all 0.3s ease;
+            transition: transform 0.25s ease, box-shadow 0.25s ease;
+            position: relative;
+            overflow: hidden;
         }
 
         .summary-card:hover {
-            transform: translateY(-4px);
-            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
+            transform: translateY(-3px);
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.09);
         }
 
         .summary-card-icon {
-            width: 40px;
-            height: 40px;
+            width: 42px;
+            height: 42px;
+            border-radius: 10px;
             display: flex;
             align-items: center;
             justify-content: center;
-            border-radius: 6px;
-            color: white;
-            font-size: 20px;
-            margin-bottom: 0.75rem;
-        }
-
-        .icon-success {
-            background-color: #10b981;
-        }
-
-        .icon-danger {
-            background-color: #ef4444;
-        }
-
-        .icon-info {
-            background-color: #3b82f6;
-        }
-
-        .icon-warning {
-            background-color: #f59e0b;
-        }
-
-        .icon-cyan {
-            background-color: #06b6d4;
-        }
-
-        .icon-secondary {
-            background-color: #6b7280;
+            font-size: 22px;
+            margin-bottom: 0.9rem;
         }
 
         .summary-card-title {
-            margin: 0 0 0.5rem 0;
-            font-size: 0.75rem;
-            font-weight: 500;
-            color: #6b7280;
+            font-size: 0.72rem;
+            font-weight: 600;
+            color: #94a3b8;
             text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-
-        .summary-card-value {
-            font-size: 1.75rem;
-            font-weight: 700;
-            color: #1f2937;
-            line-height: 1;
+            letter-spacing: 0.6px;
             margin-bottom: 0.35rem;
         }
 
-        .summary-card-total {
-            font-size: 1.25rem;
-            color: #9ca3af;
+        .summary-card-value {
+            font-size: 2rem;
+            font-weight: 700;
+            line-height: 1;
+            color: #1e293b;
+            margin-bottom: 0.3rem;
+        }
+
+        .summary-card-value .of-total {
+            font-size: 1.1rem;
             font-weight: 400;
+            color: #94a3b8;
         }
 
         .summary-card-subtitle {
+            font-size: 0.8rem;
+            color: #64748b;
             margin: 0;
-            font-size: 0.875rem;
-            color: #6b7280;
-            font-weight: 400;
+        }
+
+        .summary-card-bar {
+            height: 4px;
+            border-radius: 99px;
+            background: #f1f5f9;
+            margin-top: 0.85rem;
+            overflow: hidden;
+        }
+
+        .summary-card-bar-fill {
+            height: 100%;
+            border-radius: 99px;
+            transition: width 0.6s ease;
+        }
+
+        /* ── School panel cards ── */
+        .school-panel {
+            background: #fff;
+            border: 1px solid rgba(0, 0, 0, 0.06);
+            border-radius: 14px;
+            padding: 1.25rem 1.5rem;
+            height: 100%;
+        }
+
+        .school-panel-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 1rem;
+        }
+
+        .school-panel-title {
+            font-size: 0.95rem;
+            font-weight: 700;
+            color: #1e293b;
+            margin: 0;
+        }
+
+        .school-panel-link {
+            font-size: 0.8rem;
+            color: #6366f1;
+            text-decoration: none;
+            font-weight: 500;
+        }
+
+        .school-panel-link:hover {
+            text-decoration: underline;
+        }
+
+        /* Grade rows */
+        .grade-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 7px 0;
+            border-bottom: 1px solid #f8fafc;
+        }
+
+        .grade-row:last-child {
+            border-bottom: none;
+        }
+
+        .grade-label {
+            width: 64px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: #475569;
+            flex-shrink: 0;
+        }
+
+        .grade-bar-wrap {
+            flex: 1;
+            height: 7px;
+            background: #f1f5f9;
+            border-radius: 99px;
+            overflow: hidden;
+        }
+
+        .grade-bar-fill {
+            height: 100%;
+            border-radius: 99px;
+            transition: width 0.5s ease;
+        }
+
+        .grade-count {
+            font-size: 0.82rem;
+            font-weight: 700;
+            width: 52px;
+            text-align: right;
+            flex-shrink: 0;
+        }
+
+        /* Activity feed */
+        .activity-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            padding: 9px 0;
+            border-bottom: 1px solid #f8fafc;
+        }
+
+        .activity-item:last-child {
+            border-bottom: none;
+        }
+
+        .activity-icon-wrap {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            font-size: 15px;
+        }
+
+        .activity-name {
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: #1e293b;
+        }
+
+        .activity-sub {
+            font-size: 0.75rem;
+            color: #94a3b8;
+            margin-top: 1px;
+        }
+
+        .activity-time {
+            font-size: 0.75rem;
+            color: #94a3b8;
+            margin-left: auto;
+            flex-shrink: 0;
+            padding-left: 8px;
+            white-space: nowrap;
+        }
+
+        /* Filter bar */
+        .attendance-filter-bar {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            align-items: flex-end;
+            margin-bottom: 1.25rem;
+        }
+
+        .attendance-filter-bar .form-label {
+            font-size: 0.78rem;
+            font-weight: 600;
+            color: #64748b;
+            margin-bottom: 4px;
+            text-transform: uppercase;
+            letter-spacing: 0.4px;
+        }
+
+        .attendance-filter-bar .form-control, .attendance-filter-bar .form-select {
+            font-size: 0.85rem;
+            border-radius: 8px;
+            border: 1px solid #e2e8f0;
+            height: 36px;
+            padding: 0 10px;
+        }
+
+        /* Date nav (school) */
+        .date-nav {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 1.5rem;
+        }
+
+        .date-nav-btn {
+            width: 30px;
+            height: 30px;
+            border-radius: 8px;
+            border: 1px solid #e2e8f0;
+            background: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            color: #475569;
+            transition: all 0.15s;
+        }
+
+        .date-nav-btn:hover {
+            background: #f1f5f9;
+        }
+
+        .date-nav-label {
+            font-size: 1.05rem;
+            font-weight: 700;
+            color: #1e293b;
+        }
+
+        .date-nav-sub {
+            font-size: 0.78rem;
+            color: #94a3b8;
         }
     </style>
 @endpush
@@ -303,251 +598,408 @@ new class extends Component {
         @php
             $statusLabel = auth()->user()->employee?->organization?->is_student_record ? 'Student Logs' : 'Attendance';
             $breadcrumbItems = [
-                [
-                    'label' => 'Dashboard',
-                    'url' => route('dashboard'),
-                    'icon' => '<iconify-icon icon="solar:home-2-line-duotone" class="fs-5"></iconify-icon>',
-                ],
+                ['label' => 'Dashboard', 'url' => route('dashboard'), 'icon' => '<iconify-icon icon="solar:home-2-line-duotone" class="fs-5"></iconify-icon>'],
                 [
                     'label' => $statusLabel,
-                    'url' => Route::currentRouteName() === 'timesheets.index'
-                        ? route('timesheets.index')
-                        : route('attendance.index'),
-                    'icon' => Route::currentRouteName() === 'timesheets.index'
+                    'url'   => Route::currentRouteName() === 'timesheets.index' ? route('timesheets.index') : route('attendance.index'),
+                    'icon'  => Route::currentRouteName() === 'timesheets.index'
                         ? '<iconify-icon icon="mdi:calendar-clock" class="fs-5 text-primary"></iconify-icon>'
                         : '<iconify-icon icon="mdi:clipboard-text-check-outline" class="fs-5"></iconify-icon>',
                 ],
             ];
         @endphp
 
-        <livewire:admin.system-settings.bread-crumb
-            :title="$statusLabel"
-            :items="$breadcrumbItems"
-        />
+        <livewire:admin.system-settings.bread-crumb :title="$statusLabel" :items="$breadcrumbItems"/>
 
-        <!-- Summary Stats -->
-        <div class="row g-3 mb-4 summary-stats-row">
-            <!-- Present Today -->
-            <div class="col-lg-6 col-md-6 col-12">
-                <div class="summary-card">
-                    <a href="{{ route('attendance.index', ['filterStatus' => 'present']) }}" class="stat-card-link">
-                        <div class="summary-card-icon icon-success">
+        {{-- ============================================================
+             SCHOOL ORG VIEW
+        ============================================================ --}}
+        @if($isSchoolOrg)
+
+            {{-- Date nav --}}
+            <div class="date-nav">
+                <button class="date-nav-btn" wire:click="prevDay" title="Previous day">
+                    <iconify-icon icon="mdi:chevron-left"></iconify-icon>
+                </button>
+                <div>
+                    <div class="date-nav-label">{{ \Carbon\Carbon::parse($startDate)->format('l, d F Y') }}</div>
+                    <div class="date-nav-sub">Week {{ \Carbon\Carbon::parse($startDate)->weekOfYear }}</div>
+                </div>
+                <button class="date-nav-btn" wire:click="nextDay" title="Next day">
+                    <iconify-icon icon="mdi:chevron-right"></iconify-icon>
+                </button>
+            </div>
+
+            {{-- 3 summary cards --}}
+            <div class="row g-3 mb-4">
+                {{-- Total Enrolled --}}
+                <div class="col-lg-3 col-md-6 col-12">
+                    <div class="summary-card">
+                        <div class="summary-card-icon" style="background:#ede9fe; color:#7c3aed;">
+                            <iconify-icon icon="mdi:account-group"></iconify-icon>
+                        </div>
+                        <p class="summary-card-title">Total Enrolled</p>
+                        <div class="summary-card-value">{{ $totalEmployees }}</div>
+                        <p class="summary-card-subtitle">Active students</p>
+                    </div>
+                </div>
+
+                {{-- Present (In School) --}}
+                <div class="col-lg-3 col-md-6 col-12">
+                    <div class="summary-card">
+                        <div class="summary-card-icon" style="background:#dcfce7; color:#16a34a;">
                             <iconify-icon icon="mdi:account-check"></iconify-icon>
                         </div>
-                        <h6 class="summary-card-title">Present Today</h6>
-                        <div class="summary-card-value">{{ $presentCount }} <span
-                                class="summary-card-total">/ {{ $totalEmployees }}</span></div>
-                        <p class="summary-card-subtitle">
-                            {{ $totalEmployees > 0 ? number_format(($presentCount / $totalEmployees) * 100, 1) : 0 }}%
-                        </p>
-                    </a>
-                </div>
-            </div>
-
-            <!-- Absent Today -->
-            <div class="col-lg-6 col-md-6 col-12">
-                <div class="summary-card">
-                    <a href="{{ route('attendance.index', ['filterStatus' => 'absent']) }}" class="stat-card-link">
-                        <div class="summary-card-icon icon-danger">
-                            <iconify-icon icon="mdi:account-remove"></iconify-icon>
+                        <p class="summary-card-title">On Campus</p>
+                        <div class="summary-card-value">
+                            {{ $presentCount }}
                         </div>
-                        <h6 class="summary-card-title">Absent Today</h6>
-                        <div class="summary-card-value">{{ $absentCount }} <span
-                                class="summary-card-total">/ {{ $totalEmployees }}</span></div>
-                        <p class="summary-card-subtitle">
-                            {{ $totalEmployees > 0 ? number_format(($absentCount / $totalEmployees) * 100, 1) : 0 }}%
-                        </p>
-                    </a>
-                </div>
-            </div>
-
-            <!-- Sick Off Today -->
-            <div class="col-lg-3 col-md-6 col-12">
-                <div class="summary-card">
-                    <a href="{{ route('attendance.index', ['filterStatus' => 'sick_off']) }}" class="stat-card-link">
-                        <div class="summary-card-icon icon-info">
-                            <iconify-icon icon="mdi:medical-bag"></iconify-icon>
+                        <p class="summary-card-subtitle">Currently in school</p>
+                        <div class="summary-card-bar">
+                            <div class="summary-card-bar-fill" style="width:{{ $totalEmployees > 0 ? ($presentCount/$totalEmployees)*100 : 0 }}%; background:#22c55e;"></div>
                         </div>
-                        <h6 class="summary-card-title">Sick Off Today</h6>
-                        <div class="summary-card-value">{{ $sickOffCount }} <span
-                                class="summary-card-total">/ {{ $totalEmployees }}</span></div>
-                        <p class="summary-card-subtitle">
-                            {{ $totalEmployees > 0 ? number_format(($sickOffCount / $totalEmployees) * 100, 1) : 0 }}%
-                        </p>
-                    </a>
+                    </div>
                 </div>
-            </div>
 
-            <!-- On Leave Today -->
-            <div class="col-lg-3 col-md-6 col-12">
-                <div class="summary-card">
-                    <a href="{{ route('attendance.index', ['filterStatus' => 'on_leave']) }}" class="stat-card-link">
-                        <div class="summary-card-icon icon-warning">
-                            <iconify-icon icon="mdi:airplane-takeoff"></iconify-icon>
+                {{-- Left School --}}
+                <div class="col-lg-3 col-md-6 col-12">
+                    <div class="summary-card">
+                        <div class="summary-card-icon" style="background:#e0f2fe; color:#0284c7;">
+                            <iconify-icon icon="mdi:exit-run"></iconify-icon>
                         </div>
-                        <h6 class="summary-card-title">On Leave</h6>
-                        <div class="summary-card-value">{{ $onLeaveCount }} <span
-                                class="summary-card-total">/ {{ $totalEmployees }}</span></div>
-                        <p class="summary-card-subtitle">
-                            {{ $totalEmployees > 0 ? number_format(($onLeaveCount / $totalEmployees) * 100, 1) : 0 }}%
-                        </p>
-                    </a>
-                </div>
-            </div>
-
-            <!-- Off Shift Today -->
-            <div class="col-lg-3 col-md-6 col-12">
-                <div class="summary-card">
-                    <a href="{{ route('attendance.index', ['filterStatus' => 'off_shift']) }}" class="stat-card-link">
-                        <div class="summary-card-icon icon-cyan">
-                            <iconify-icon icon="mdi:clock-remove-outline"></iconify-icon>
+                        <p class="summary-card-title">Off Campus</p>
+                        <div class="summary-card-value">
+                            {{ $leftSchoolCount }}
                         </div>
-                        <h6 class="summary-card-title">Off Shift</h6>
-                        <div class="summary-card-value">{{ $offShiftCount }} <span
-                                class="summary-card-total">/ {{ $totalEmployees }}</span></div>
-                        <p class="summary-card-subtitle">
-                            {{ $totalEmployees > 0 ? number_format(($offShiftCount / $totalEmployees) * 100, 1) : 0 }}%
-                        </p>
-                    </a>
-                </div>
-            </div>
-
-            <!-- Inactive Employees -->
-            <div class="col-lg-3 col-md-6 col-12">
-                <div class="summary-card">
-                    <a href="{{ route('employees.index', ['active' => '0']) }}" class="stat-card-link">
-                        <div class="summary-card-icon icon-secondary">
-                            <iconify-icon icon="mdi:account-off"></iconify-icon>
+                        <p class="summary-card-subtitle">Clocked out today</p>
+                        <div class="summary-card-bar">
+                            <div class="summary-card-bar-fill" style="width:{{ $totalEmployees > 0 ? ($leftSchoolCount/$totalEmployees)*100 : 0 }}%; background:#0ea5e9;"></div>
                         </div>
-                        <h6 class="summary-card-title">Inactive</h6>
-                        <div class="summary-card-value">{{ $inactiveCount }} <span
-                                class="summary-card-total">/ {{ $totalEmployees }}</span></div>
-                        <p class="summary-card-subtitle">
-                            {{ $totalEmployees > 0 ? number_format(($inactiveCount / $totalEmployees) * 100, 1) : 0 }}%
-                        </p>
-                    </a>
+                    </div>
+                </div>
+
+                {{-- Not Reported --}}
+                <div class="col-lg-3 col-md-6 col-12">
+                    <div class="summary-card">
+                        <div class="summary-card-icon" style="background:#fee2e2; color:#dc2626;">
+                            <iconify-icon icon="mdi:account-alert"></iconify-icon>
+                        </div>
+                        <p class="summary-card-title">Unscanned</p>
+                        <div class="summary-card-value">
+                            {{ $absentCount }}
+                        </div>
+                        <p class="summary-card-subtitle">No logs yet today</p>
+                        <div class="summary-card-bar">
+                            <div class="summary-card-bar-fill" style="width:{{ $totalEmployees > 0 ? ($absentCount/$totalEmployees)*100 : 0 }}%; background:#ef4444;"></div>
+                        </div>
+                    </div>
                 </div>
             </div>
-        </div>
 
-        <div class="card card-body">
 
-            <div class="row align-items-end mb-4 justify-content-end">
-                <div class="col-12 d-flex align-items-center justify-content-end gap-2 flex-wrap">
+            {{-- Grade breakdown + Recent Activity --}}
+            <div class="row g-3 mb-4">
 
-                    @if($zkbioEnabled)
-                        <button
-                            wire:click="syncNow"
-                            wire:loading.attr="disabled"
-                            wire:target="syncNow"
-                            class="btn btn-warning btn-sm d-flex align-items-center gap-2"
-                            style="height: 38px;">
+                {{-- Attendance by Grade --}}
+                <div class="col-lg-7 col-12">
+                    <div class="school-panel">
+                        <div class="school-panel-header">
+                            <h6 class="school-panel-title">Attendance by Grade</h6>
+                            <a href="{{ route('attendance.index', ['filterGrade' => '']) }}" class="school-panel-link">View
+                                All →</a>
+                        </div>
 
-                            {{-- Default state --}}
-                            <span wire:loading.class="d-none" wire:target="syncNow" class="d-flex align-items-center gap-2">
-                                <iconify-icon icon="mdi:refresh" style="font-size:16px; line-height:1;"></iconify-icon>
-                                     Sync Now
-                                </span>
+                        {{-- Grade filter --}}
+                        @if(count($availableGrades))
+                            <div class="mb-3">
+                                <select class="form-select form-select-sm" wire:model="filterGrade"
+                                        wire:change="$dispatch('filter-updated')"
+                                        style="width:160px; border-radius:8px; font-size:0.82rem;">
+                                    <option value="">All Grades</option>
+                                    @foreach($availableGrades as $g)
+                                        <option value="{{ $g }}">{{ $g }}</option>
+                                    @endforeach
+                                </select>
+                            </div>
+                        @endif
 
-                            {{-- Loading state --}}
-                            <span wire:loading.class.remove="d-none" wire:target="syncNow" class="d-none d-flex align-items-center gap-2">
-                                 <span class="spinner-border spinner-border-sm"></span>
-                                      Syncing...
-                                 </span>
+                        @forelse($gradeStats as $row)
+                            @if(empty($filterGrade) || $row['grade'] === $filterGrade || $row['grade'] === 'Staff')
+                                <div class="grade-row">
+                                    <span class="grade-label">{{ $row['grade'] }}</span>
+                                    <div class="grade-bar-wrap">
+                                        <div class="grade-bar-fill"
+                                             style="width:{{ $row['rate'] }}%; background:var(--primary-color) !important;"></div>
+                                    </div>
+                                    <span class="grade-count"
+                                          style="color:var(--primary-color) !important;">{{ $row['present'] }}/{{ $row['total'] }}</span>
+                                </div>
+                            @endif
+                        @empty
+                            <p class="text-muted small">No grade data available.</p>
+                        @endforelse
+                    </div>
+                </div>
 
-                        </button>
-                    @endif
+                {{-- Recent Activity --}}
+                <div class="col-lg-5 col-12">
+                    <div class="school-panel">
+                        <div class="school-panel-header">
+                            <h6 class="school-panel-title">Recent Activity</h6>
+                            <a href="{{ route('attendance.index') }}" class="school-panel-link">View All →</a>
+                        </div>
 
-                    @if (str_contains($filterStatus ?? '', 'sick_off'))
-                        <a href="{{ route('leaves.create') }}" class="btn btn-primary btn-sm"
-                           style="height: 38px; display:flex; align-items:center;">
-                            + Create Sick Off
+                        @forelse($recentActivity as $item)
+                            <div class="activity-item">
+                                <div class="activity-icon-wrap"
+                                     style="background:{{ $item['icon']['bg'] }}; color:{{ $item['icon']['color'] }};">
+                                    <iconify-icon icon="{{ $item['icon']['icon'] }}"></iconify-icon>
+                                </div>
+                                <div style="flex:1; min-width:0;">
+                                    <div class="activity-name">{{ $item['name'] }} <span
+                                            style="font-weight:400; color:#64748b;">{{ $item['label'] }}</span></div>
+                                    <div class="activity-sub">{{ $item['sub'] }}</div>
+                                </div>
+                                <span class="activity-time">{{ $item['time'] }}</span>
+                            </div>
+                        @empty
+                            <p class="text-muted small">No activity recorded today.</p>
+                        @endforelse
+                    </div>
+                </div>
+            </div>
+
+            {{-- Attendance table with sync + filters --}}
+            <div class="card card-body">
+                <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
+                    <h6 class="mb-0 fw-bold" style="color:#1e293b;">Attendance Records</h6>
+                    <div class="d-flex gap-2 align-items-center">
+                        @if($zkbioEnabled)
+                            <button wire:click="syncNow" wire:loading.attr="disabled" wire:target="syncNow"
+                                    class="btn btn-warning btn-sm d-flex align-items-center gap-2" style="height:36px;">
+                            <span wire:loading.class="d-none" wire:target="syncNow"
+                                  class="d-flex align-items-center gap-2">
+                                <iconify-icon icon="mdi:refresh" style="font-size:15px;"></iconify-icon> Sync Now
+                            </span>
+                                <span wire:loading.class.remove="d-none" wire:target="syncNow"
+                                      class="d-none d-flex align-items-center gap-2">
+                                <span class="spinner-border spinner-border-sm"></span> Syncing...
+                            </span>
+                            </button>
+                        @endif
+                    </div>
+                </div>
+
+                <div class="row align-items-end mb-4">
+                    <div class="col-md-3">
+                        <label class="form-label">Start Date</label>
+                        <input type="date" class="form-control" wire:model="startDate"
+                               wire:change="$dispatch('filter-updated')"/>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">End Date</label>
+                        <input type="date" class="form-control" wire:model="endDate"
+                               wire:change="$dispatch('filter-updated')"/>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Grade</label>
+                        <select class="form-control" wire:model="filterGrade" wire:change="$dispatch('filter-updated')">
+                            <option value="">All Grades</option>
+                            @foreach($availableGrades as $g)
+                                <option value="{{ $g }}">{{ $g }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Attendance Status</label>
+                        <select class="form-control" wire:model="filterStatus"
+                                wire:change="$dispatch('filter-updated')">
+                            @if($isSchoolOrg)
+                                {{-- Simplified School Filters --}}
+                                <option value="present">On Campus [Clocked In]</option>
+                                <option value="clocked_out">Off Campus [Clocked Out]</option>
+                                <option value="absent">UnScanned</option>
+                            @else
+                                {{-- Standard Employee Filters --}}
+                                <option value="present">Present [Clocked In + Clocked Out]</option>
+                                <option value="clocked_in">Clocked In</option>
+                                <option value="clocked_out">Clocked Out</option>
+                                <option value="absent">Absent</option>
+                                <option value="on_leave">On Leave</option>
+                                <option value="off_shift">Off Shift</option>
+                                <option value="sick_off">Sick Off</option>
+                                <option value="on_break">On Break</option>
+                            @endif
+                        </select>
+                    </div>
+                </div>
+
+                <livewire:attendance-daily-table :status="$status ?? null" theme="bootstrap-4"/>
+            </div>
+
+            {{-- ============================================================
+                 NON-SCHOOL ORG VIEW  (unchanged from original)
+            ============================================================ --}}
+        @else
+
+            {{-- Summary Stats --}}
+            <div class="row g-3 mb-4">
+                <div class="col-lg-6 col-md-6 col-12">
+                    <div class="summary-card">
+                        <a href="{{ route('attendance.index', ['filterStatus' => 'present']) }}" class="stat-card-link"
+                           style="text-decoration:none;">
+                            <div class="summary-card-icon" style="background:#dcfce7; color:#16a34a;">
+                                <iconify-icon icon="mdi:account-check"></iconify-icon>
+                            </div>
+                            <p class="summary-card-title">Present Today</p>
+                            <div class="summary-card-value">{{ $presentCount }} <span
+                                    class="of-total">/ {{ $totalEmployees }}</span></div>
+                            <p class="summary-card-subtitle">{{ $totalEmployees > 0 ? number_format(($presentCount/$totalEmployees)*100,1) : 0 }}
+                                %</p>
                         </a>
-                    @elseif (str_contains($filterStatus ?? '', 'off_shift'))
-                        <a href="{{ route('leaves.create') }}" class="btn btn-primary btn-sm"
-                           style="height: 38px; display:flex; align-items:center;">
-                            + Create Off Shifts
+                    </div>
+                </div>
+                <div class="col-lg-6 col-md-6 col-12">
+                    <div class="summary-card">
+                        <a href="{{ route('attendance.index', ['filterStatus' => 'absent']) }}" class="stat-card-link"
+                           style="text-decoration:none;">
+                            <div class="summary-card-icon" style="background:#fee2e2; color:#dc2626;">
+                                <iconify-icon icon="mdi:account-remove"></iconify-icon>
+                            </div>
+                            <p class="summary-card-title">Absent Today</p>
+                            <div class="summary-card-value">{{ $absentCount }} <span
+                                    class="of-total">/ {{ $totalEmployees }}</span></div>
+                            <p class="summary-card-subtitle">{{ $totalEmployees > 0 ? number_format(($absentCount/$totalEmployees)*100,1) : 0 }}
+                                %</p>
                         </a>
-                    @elseif (str_contains($filterStatus ?? '', 'on_leave'))
-                        <a href="{{ route('leaves.create') }}" class="btn btn-primary btn-sm"
-                           style="height: 38px; display:flex; align-items:center;">
-                            + Create Leave Request
+                    </div>
+                </div>
+                <div class="col-lg-3 col-md-6 col-12">
+                    <div class="summary-card">
+                        <a href="{{ route('attendance.index', ['filterStatus' => 'sick_off']) }}" class="stat-card-link"
+                           style="text-decoration:none;">
+                            <div class="summary-card-icon" style="background:#dbeafe; color:#2563eb;">
+                                <iconify-icon icon="mdi:medical-bag"></iconify-icon>
+                            </div>
+                            <p class="summary-card-title">Sick Off Today</p>
+                            <div class="summary-card-value">{{ $sickOffCount }} <span
+                                    class="of-total">/ {{ $totalEmployees }}</span></div>
+                            <p class="summary-card-subtitle">{{ $totalEmployees > 0 ? number_format(($sickOffCount/$totalEmployees)*100,1) : 0 }}
+                                %</p>
                         </a>
-                    @endif
-
+                    </div>
+                </div>
+                <div class="col-lg-3 col-md-6 col-12">
+                    <div class="summary-card">
+                        <a href="{{ route('attendance.index', ['filterStatus' => 'on_leave']) }}" class="stat-card-link"
+                           style="text-decoration:none;">
+                            <div class="summary-card-icon" style="background:#fef9c3; color:#d97706;">
+                                <iconify-icon icon="mdi:airplane-takeoff"></iconify-icon>
+                            </div>
+                            <p class="summary-card-title">On Leave</p>
+                            <div class="summary-card-value">{{ $onLeaveCount }} <span
+                                    class="of-total">/ {{ $totalEmployees }}</span></div>
+                            <p class="summary-card-subtitle">{{ $totalEmployees > 0 ? number_format(($onLeaveCount/$totalEmployees)*100,1) : 0 }}
+                                %</p>
+                        </a>
+                    </div>
+                </div>
+                <div class="col-lg-3 col-md-6 col-12">
+                    <div class="summary-card">
+                        <a href="{{ route('attendance.index', ['filterStatus' => 'off_shift']) }}"
+                           class="stat-card-link" style="text-decoration:none;">
+                            <div class="summary-card-icon" style="background:#cffafe; color:#0891b2;">
+                                <iconify-icon icon="mdi:clock-remove-outline"></iconify-icon>
+                            </div>
+                            <p class="summary-card-title">Off Shift</p>
+                            <div class="summary-card-value">{{ $offShiftCount }} <span
+                                    class="of-total">/ {{ $totalEmployees }}</span></div>
+                            <p class="summary-card-subtitle">{{ $totalEmployees > 0 ? number_format(($offShiftCount/$totalEmployees)*100,1) : 0 }}
+                                %</p>
+                        </a>
+                    </div>
+                </div>
+                <div class="col-lg-3 col-md-6 col-12">
+                    <div class="summary-card">
+                        <a href="{{ route('employees.index', ['active' => '0']) }}" class="stat-card-link"
+                           style="text-decoration:none;">
+                            <div class="summary-card-icon" style="background:#f1f5f9; color:#64748b;">
+                                <iconify-icon icon="mdi:account-off"></iconify-icon>
+                            </div>
+                            <p class="summary-card-title">Inactive</p>
+                            <div class="summary-card-value">{{ $inactiveCount }} <span
+                                    class="of-total">/ {{ $totalEmployees }}</span></div>
+                            <p class="summary-card-subtitle">{{ $totalEmployees > 0 ? number_format(($inactiveCount/$totalEmployees)*100,1) : 0 }}
+                                %</p>
+                        </a>
+                    </div>
                 </div>
             </div>
 
-            {{-- Filters row below --}}
-            <div class="row align-items-end mb-4">
-                ...
+            <div class="card card-body">
+                <div class="row align-items-end mb-4 justify-content-end">
+                    <div class="col-12 d-flex align-items-center justify-content-end gap-2 flex-wrap">
+                        @if($zkbioEnabled)
+                            <button wire:click="syncNow" wire:loading.attr="disabled" wire:target="syncNow"
+                                    class="btn btn-warning btn-sm d-flex align-items-center gap-2"
+                                    style="height: 38px;">
+                            <span wire:loading.class="d-none" wire:target="syncNow"
+                                  class="d-flex align-items-center gap-2">
+                                <iconify-icon icon="mdi:refresh" style="font-size:16px;"></iconify-icon> Sync Now
+                            </span>
+                                <span wire:loading.class.remove="d-none" wire:target="syncNow"
+                                      class="d-none d-flex align-items-center gap-2">
+                                <span class="spinner-border spinner-border-sm"></span> Syncing...
+                            </span>
+                            </button>
+                        @endif
+                        @if (str_contains($filterStatus ?? '', 'sick_off'))
+                            <a href="{{ route('leaves.create') }}" class="btn btn-primary btn-sm"
+                               style="height:38px;display:flex;align-items:center;">+ Create Sick Off</a>
+                        @elseif (str_contains($filterStatus ?? '', 'off_shift'))
+                            <a href="{{ route('leaves.create') }}" class="btn btn-primary btn-sm"
+                               style="height:38px;display:flex;align-items:center;">+ Create Off Shifts</a>
+                        @elseif (str_contains($filterStatus ?? '', 'on_leave'))
+                            <a href="{{ route('leaves.create') }}" class="btn btn-primary btn-sm"
+                               style="height:38px;display:flex;align-items:center;">+ Create Leave Request</a>
+                        @endif
+                    </div>
+                </div>
+
+                <div class="row align-items-end mb-4">
+                    <div class="col-md-4">
+                        <label class="form-label">Start Date</label>
+                        <input type="date" class="form-control" wire:model="startDate"
+                               wire:change="$dispatch('filter-updated')"/>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">End Date</label>
+                        <input type="date" class="form-control" wire:model="endDate"
+                               wire:change="$dispatch('filter-updated')"/>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Attendance Status</label>
+                        <select class="form-control" wire:model="filterStatus"
+                                wire:change="$dispatch('filter-updated')">
+                            <option value="">All</option>
+                            <option value="present">Present [Clocked In + Clocked Out]</option>
+                            <option value="clocked_in">Clocked In</option>
+                            <option value="clocked_out">Clocked Out</option>
+                            <option value="absent">Absent</option>
+                            <option value="on_leave">On Leave</option>
+                            <option value="off_shift">Off Shift</option>
+                            <option value="sick_off">Sick Off</option>
+                            <option value="on_break">On Break</option>
+                        </select>
+                    </div>
+                </div>
+
+                <livewire:attendance-daily-table :status="$status ?? null" theme="bootstrap-4"/>
             </div>
 
-            <div class="row align-items-end mb-4">
-                <div class="col-md-4">
-                    <label class="form-label">Start Date</label>
-                    <input
-                        type="date"
-                        id="attendance-start-date"
-                        class="form-control"
-                        wire:model="startDate"
-                        wire:change="$dispatch('filter-updated')"
-                    />
-                </div>
+        @endif
 
-                <div class="col-md-4">
-                    <label class="form-label">End Date</label>
-                    <input
-                        type="date"
-                        id="attendance-end-date"
-                        class="form-control"
-                        wire:model="endDate"
-                        wire:change="$dispatch('filter-updated')"
-                    />
-                </div>
-
-                <div class="col-md-4">
-                    <label class="form-label">Attendance Status</label>
-                    <select
-                        class="form-control"
-                        wire:model="filterStatus"
-                        wire:change="$dispatch('filter-updated')">
-                        <option value="">All</option>
-                        <option value="present">Present [Clocked In + Clocked Out]</option>
-                        <option value="clocked_in">Clocked In</option>
-                        <option value="clocked_out">Clocked Out</option>
-                        <option value="absent">Absent</option>
-                        <option value="on_leave">On Leave</option>
-                        <option value="off_shift">Off Shift</option>
-                        <option value="sick_off">Sick Off</option>
-                        <option value="on_break">On Break</option>
-                    </select>
-                </div>
-
-
-            </div>
-
-            <livewire:attendance-daily-table :status="$status ?? null" theme="bootstrap-4"/>
-        </div>
     </div>
 </div>
 
-@push('scripts')
-    <script>
-        window.addEventListener('replace-url', event => {
-            window.history.replaceState({}, '', event.detail.url);
-        });
 
-        // Listen for ZKBio sync completion and refresh table instantly
-        window.addEventListener('load', () => {
-            if (typeof Echo !== 'undefined') {
-                Echo.channel('attendance')
-                    .listen('.sync.completed', (data) => {
-                        console.log('ZKBio sync completed — refreshing table');
-                    @this.call('refresh')
-                        ;
-                    });
-            }
-        });
-    </script>
-@endpush

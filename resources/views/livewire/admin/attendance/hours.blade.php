@@ -1,52 +1,45 @@
-<div class="d-flex align-items-center gap-4 p-2 border rounded shadow-sm">
+<div class="d-flex align-items-center gap-4 p-2 border rounded shadow-sm bg-white">
+    @php
+        $isSchool = auth()->user()->employee?->organization?->is_student_record ?? false;
 
-    <!-- Worked Hours -->
-    <div class="d-flex flex-column align-items-center text-center">
-        <i class="ti ti-clock text-success fs-5 mb-1"></i>
-        <small class="text-muted">Worked</small>
-        <span class="fw-bold text-success">
-            {{ $attendance->worked_hours !== null ? number_format($attendance->worked_hours, 2) . ' h' : '-' }}
-        </span>
+        // Status Mapping for Schools
+        $statusConfig = [
+            'clocked_in'  => ['label' => 'Present', 'color' => 'success', 'icon' => 'ti-circle-check'],
+            'clocked_out' => ['label' => 'Left School', 'color' => 'info', 'icon' => 'ti-logout'],
+            'absent'      => ['label' => 'Unscanned', 'color' => 'danger', 'icon' => 'ti-alert-circle'],
+            'on_leave'    => ['label' => 'On Leave', 'color' => 'warning', 'icon' => 'ti-plane-departure'],
+            'sick_off'    => ['label' => 'Sick Off', 'color' => 'warning', 'icon' => 'ti-first-aid-kit'],
+        ];
+
+        $currentStatus = $attendance->status === 'unchecked_in' ? 'absent' : $attendance->status;
+        $config = $statusConfig[$currentStatus] ?? ['label' => ucfirst($currentStatus), 'color' => 'secondary', 'icon' => 'ti-info-circle'];
+    @endphp
+
+    @if(!$isSchool)
+        <div class="d-flex flex-column align-items-center text-center">
+            <i class="ti ti-clock text-success fs-5 mb-1"></i>
+            <small class="text-muted">Worked</small>
+            <span class="fw-bold text-success">
+                {{ $attendance->worked_hours !== null ? number_format($attendance->worked_hours, 2) . ' h' : '-' }}
+            </span>
+        </div>
+
+        <div class="d-flex flex-column align-items-center text-center">
+            <i class="ti ti-star text-primary fs-5 mb-1"></i>
+            <small class="text-muted">Overtime</small>
+            <span class="fw-bold text-primary">
+                {{ $attendance->overtime_hours !== null ? number_format($attendance->overtime_hours, 2) . ' h' : '-' }}
+            </span>
+        </div>
+    @endif
+
+    <div class="d-flex align-items-center gap-3">
+        <div class="bg-{{ $config['color'] }} bg-opacity-10 p-2 rounded-circle d-flex align-items-center justify-content-center" style="width: 40px; height: 40px;">
+            <i class="ti {{ $config['icon'] }} text-{{ $config['color'] }} fs-4"></i>
+        </div>
+        <div class="d-flex flex-column">
+            <small class="text-muted" style="font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.5px;">Current Status</small>
+            <span class="fw-bold text-{{ $config['color'] }}">{{ $config['label'] }}</span>
+        </div>
     </div>
-
-    <!-- Overtime -->
-    <div class="d-flex flex-column align-items-center text-center">
-        <i class="ti ti-star text-primary fs-5 mb-1"></i>
-        <small class="text-muted">Overtime</small>
-        <span class="fw-bold text-primary">
-            {{ $attendance->overtime_hours !== null ? number_format($attendance->overtime_hours, 2) . ' h' : '-' }}
-        </span>
-    </div>
-
-    <!-- Status -->
-    <div class="d-flex flex-column align-items-center text-center">
-        <i class="ti ti-info-circle text-secondary fs-5 mb-1"></i>
-        <small class="text-muted">Status</small>
-        @php
-            $statusLabel = $attendance->status;
-
-            // Map colors
-            $colors = [
-                'clocked_in' => 'success',
-                'clocked_out' => 'primary',
-                'absent' => 'danger',
-                'on_leave' => 'warning',
-                'off_shift' => 'secondary',
-                'sick_off' => 'info',
-            ];
-
-            // Handle unchecked_in as Absent
-            if ($statusLabel === 'unchecked_in') {
-                $statusLabel = 'absent';
-                $color = 'primary'; // override color
-                $label = 'Absent';
-            } else {
-                $color = $colors[$statusLabel] ?? 'secondary';
-                $label = ucfirst(str_replace('_', ' ', $statusLabel));
-            }
-        @endphp
-        <span class="badge bg-{{ $color }} px-2 py-1 mt-1">{{ $label }}</span>
-    </div>
-
-
 </div>

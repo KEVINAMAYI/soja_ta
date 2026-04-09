@@ -40,6 +40,7 @@ Route::middleware(['auth'])->prefix('admin')->group(function () {
     //Routes to manage Reports
     Volt::route('reports/detailed', 'admin.reports.employees')->name('reports.detailed');
     Volt::route('reports/summary', 'admin.reports.summary')->name('reports.summary');
+    Volt::route('reports/school-summary', 'admin.reports.school-summary')->name('reports.school-summary');
     Volt::route('reports/scheduled', 'admin.reports.schedule')->name('reports.scheduled');
     Volt::route('reports/organization', 'admin.reports.organization')->name('analytics');
 
@@ -53,6 +54,9 @@ Route::middleware(['auth'])->prefix('admin')->group(function () {
     //shifts
     Volt::route('shifts/create', 'admin.shifts.create')->name('shifts.create');
     Volt::route('shifts/coverage', 'admin.shifts.coverage')->name('shifts.coverage');
+
+    Volt::route('boarding', 'admin.school.boarding.index')->name('boarding.index');
+    Volt::route('special-activities', 'admin.special-activities.index')->name('special-activities.index');
 
 
 });
