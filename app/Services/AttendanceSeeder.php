@@ -1,401 +1,393 @@
 <?php
 
-namespace App\Services;
+namespace App\Livewire;
 
+use App\Exports\AttendanceDailyExcelExport;
+use App\Exports\AttendancePivotDailyExcelExport;
+use Carbon\Carbon;
+use Livewire\Attributes\On;
+use Maatwebsite\Excel\Facades\Excel;
+use Rappasoft\LaravelLivewireTables\DataTableComponent;
+use Rappasoft\LaravelLivewireTables\Views\Column;
 use App\Models\Attendance;
 use App\Models\Employee;
-use App\Models\Leave;
-use Carbon\Carbon;
-use Illuminate\Support\Facades\Log;
+use App\Services\AttendanceSeeder;
+use Illuminate\Support\Facades\DB;
 
-class AttendanceSeeder
+class AttendanceDailyTable extends DataTableComponent
 {
-    /**
-     * Seed missing attendance records for a given organisation and date.
-     *
-     * School organisations  → carry-forward logic (no shifts, no absent defaults).
-     * Standard organisations → full shift / leave / auto-clock-out logic.
-     */
-    public function seedMissingAttendanceRecords(?int $orgId = null, ?Carbon $targetDate = null): void
+    protected $model = Attendance::class;
+    public $status;
+    public $startDate;
+    public $endDate;
+    public $filterGrade;
+
+    public function mount($status = null): void
     {
-        $now = $targetDate ?? now();
-        $today = $now->toDateString();
+        $this->status    = $status;
+        $this->startDate = now()->toDateString();
+        $this->endDate   = now()->toDateString();
 
-        $employees = Employee::with(['shift', 'organization'])
-            ->when($orgId, fn($q) => $q->where('organization_id', $orgId))
-            ->where('active', 1)
-            ->get();
+        $this->maybeSeed();
+    }
 
-        foreach ($employees as $employee) {
-            $isSchool = (bool)($employee->organization?->is_student_record ?? false);
+    #[On('date-range-updated')]
+    public function filterByDateRange($startDate, $endDate, $status, $grade = null): void
+    {
+        $this->startDate   = $startDate;
+        $this->endDate     = $endDate;
+        $this->status      = $status;
+        $this->filterGrade = $grade;
 
-            if (!$isSchool) {
-                $this->seedStaffRecord($employee, $now, $today);
-            }
+        $this->maybeSeed();
+        $this->dispatch('refreshDatatable');
+    }
 
-            return;
+    /**
+     * Seed missing attendance records for staff orgs only.
+     * School orgs don't use seeded absent records — they query employees directly.
+     */
+    private function maybeSeed(): void
+    {
+        $isSchool = (bool)(auth()->user()->employee?->organization?->is_student_record ?? false);
+        $orgId    = auth()->user()->employee->organization_id ?? null;
 
+        if (!$orgId || $isSchool) return;
+
+        if (in_array($this->status, ['unchecked_in', 'absent', 'on_leave', 'off_shift', 'sick_off'])) {
+            app(AttendanceSeeder::class)->seedMissingAttendanceRecords($orgId);
         }
     }
 
-    /* ──────────────────────────────────────────────────────────────
-     |  SCHOOL / STUDENT BRANCH
-     |
-     |  Rules:
-     |    • No shifts, no leave checks, no off-shift windows.
-     |    • If a record for today already exists → leave it alone.
-     |    • Otherwise copy the status of the most-recent past record.
-     |    • If there is no past record at all → default to 'not_checked_in'
-     |      (never 'absent' — that is set only when a pembroke is explicitly
-     |       marked absent by a teacher, not by the seeder).
-     ────────────────────────────────────────────────────────────── */
-    private function seedStudentRecord(Employee $student, string $today): void
+    public function configure(): void
     {
-        // 1. Check if record exists
-        $exists = Attendance::where('employee_id', $student->id)
-            ->whereDate('date', $today)
-            ->exists();
+        $this->setPrimaryKey('id');
+    }
 
-        if ($exists) return;
+    public function builder(): \Illuminate\Database\Eloquent\Builder
+    {
+        $orgId    = auth()->user()->employee->organization_id ?? null;
+        $isSchool = (bool)(auth()->user()->employee?->organization?->is_student_record ?? false);
 
-        // 2. Find last record
-        $lastRecord = Attendance::where('employee_id', $student->id)
-            ->whereDate('date', '<', $today)
+        $startDate = $this->startDate ?: now()->toDateString();
+        $endDate   = $this->endDate   ?: $startDate;
+        $status    = $this->status;
+        $search    = $this->search;
+        $grade     = $this->filterGrade ?? null;
+
+        // ── School org: absent = students with NO scan on selected date ──
+        // We fake an attendance-like query by querying employees directly
+        // and returning their last attendance record (or a dummy placeholder).
+        // Actually the cleanest approach: return attendance records for the
+        // date range and let school absent be handled via a LEFT JOIN approach.
+        if ($isSchool && $status === 'absent') {
+            return $this->buildSchoolAbsentQuery($orgId, $startDate, $grade, $search);
+        }
+
+        // ── Inactive ─────────────────────────────────────────────────────
+        if ($status === 'inactive') {
+            $query = Attendance::query()
+                ->select('attendances.*')
+                ->with(['employee', 'employee.shift'])
+                ->whereBetween('date', [$startDate, $endDate])
+                ->whereHas('employee', function ($q) use ($orgId, $grade, $isSchool) {
+                    $q->where('organization_id', $orgId)
+                        ->where('active', 0)
+                        ->where('is_student', $isSchool ? 1 : 0);
+                    if ($grade) $q->where('grade', $grade);
+                });
+
+            if ($search) {
+                $query->where(function ($q) use ($search) {
+                    $q->where('status', 'like', "%$search%")
+                        ->orWhereHas('employee', fn($q) => $q->where('name', 'like', "%$search%"));
+                });
+            }
+
+            return $query->orderByDesc('date')
+                ->orderByRaw('check_in_time IS NULL')
+                ->orderByDesc(DB::raw('COALESCE(check_in_time, updated_at)'));
+        }
+
+        // ── Normal active query ───────────────────────────────────────────
+        $query = Attendance::query()
+            ->select('attendances.*')
+            ->with(['employee', 'employee.shift'])
+            ->whereBetween('date', [$startDate, $endDate])
+            ->whereHas('employee', function ($q) use ($orgId, $grade, $isSchool) {
+                $q->where('organization_id', $orgId)
+                    ->where('active', 1)
+                    ->where('is_student', $isSchool ? 1 : 0);
+                if ($grade) $q->where('grade', $grade);
+            });
+
+        if (!empty($status)) {
+            match ($status) {
+                'absent'  => $query->whereIn('status', ['absent', 'unchecked_in']),
+                'present' => $query->whereIn('status', ['clocked_in', 'clocked_out']),
+                default   => $query->where('status', $status),
+            };
+        }
+
+        if ($search) {
+            $query->where(function ($q) use ($search) {
+                $q->where('status', 'like', "%$search%")
+                    ->orWhereHas('employee', fn($q) => $q->where('name', 'like', "%$search%"));
+            });
+        }
+
+        return $query->orderByDesc('date')
+            ->orderByRaw('check_in_time IS NULL')
+            ->orderByDesc(DB::raw('COALESCE(check_in_time, updated_at)'));
+    }
+
+    /**
+     * For school orgs, "absent" = students who have NO clocked_in or clocked_out
+     * record on the selected date. We find those students and return their most
+     * recent attendance record (any date) so the table row still has context,
+     * OR return a minimal attendance stub if they've never been scanned.
+     *
+     * Strategy: query attendances using a subquery exclusion — much simpler
+     * than a left join with Rappasoft's builder constraint.
+     */
+    private function buildSchoolAbsentQuery(
+        ?int $orgId,
+        string $date,
+        ?string $grade,
+        ?string $search
+    ): \Illuminate\Database\Eloquent\Builder {
+
+        // Step 1: find student IDs who DID scan on this date
+        $scannedIds = Attendance::whereHas('employee', fn($q) => $q->where('organization_id', $orgId)
+            ->where('active', 1)
+            ->where('is_student', 1))
+            ->whereDate('date', $date)
+            ->whereIn('status', ['clocked_in', 'clocked_out'])
+            ->pluck('employee_id')
+            ->unique()
+            ->toArray();
+
+        // Step 2: get unscanned students
+        $unscannedQuery = Employee::where('organization_id', $orgId)
+            ->where('active', 1)
+            ->where('is_student', 1)
+            ->whereNotIn('id', $scannedIds);
+
+        if ($grade) $unscannedQuery->where('grade', $grade);
+        if ($search) $unscannedQuery->where('name', 'like', "%$search%");
+
+        $unscannedIds = $unscannedQuery->pluck('id')->toArray();
+
+        // Step 3: return their most recent attendance record (any date),
+        // filtered to one per employee using a subquery.
+        // If they have no attendance at all, we need a fallback —
+        // so we also seed a stub absent record for today for those employees.
+        $this->seedAbsentRecordsForStudents($unscannedIds, $date, $orgId);
+
+        // Step 4: now query today's absent records for those students
+        return Attendance::query()
+            ->select('attendances.*')
+            ->with(['employee', 'employee.shift'])
+            ->whereIn('employee_id', $unscannedIds)
+            ->whereDate('date', $date)
+            ->whereHas('employee', function ($q) use ($orgId, $grade) {
+                $q->where('organization_id', $orgId)
+                    ->where('active', 1)
+                    ->where('is_student', 1);
+                if ($grade) $q->where('grade', $grade);
+            })
+            ->orderByDesc(DB::raw('COALESCE(check_in_time, updated_at)'));
+    }
+
+    /**
+     * Seed a minimal absent record for students who have no record today.
+     * This ensures the datatable has a row to display for each unscanned student.
+     */
+    private function seedAbsentRecordsForStudents(array $studentIds, string $date, ?int $orgId): void
+    {
+        if (empty($studentIds)) return;
+
+        // Find which ones already have ANY record today
+        $alreadyHaveRecord = Attendance::whereIn('employee_id', $studentIds)
+            ->whereDate('date', $date)
+            ->pluck('employee_id')
+            ->unique()
+            ->toArray();
+
+        $needsRecord = array_diff($studentIds, $alreadyHaveRecord);
+
+        foreach ($needsRecord as $studentId) {
+            Attendance::firstOrCreate(
+                ['employee_id' => $studentId, 'date' => $date],
+                [
+                    'status'         => 'absent',
+                    'check_in_time'  => null,
+                    'check_out_time' => null,
+                    'organization_id'=> $orgId,
+                ]
+            );
+        }
+    }
+
+    /**
+     * Get the last known attendance record for an employee before the target date.
+     */
+    protected function getLastAttendance($employeeId, $targetDate)
+    {
+        if (!$employeeId) return null;
+
+        return Attendance::where('employee_id', $employeeId)
+            ->where('date', '<', $targetDate)
+            ->where(function ($q) {
+                $q->whereNotNull('check_in_time')
+                    ->orWhereNotNull('check_out_time');
+            })
             ->orderByDesc('date')
             ->first();
+    }
 
-        // 3. Your Explicit Map
-        $carryForwardMap = [
-            'clocked_out' => 'clocked_out',
-            'absent' => 'absent',
-            'on_leave' => 'on_leave',
-            'off_shift' => 'off_shift',
-            'sick_off' => 'sick_off',
-            'clocked_in' => 'clocked_in'
+    public function formatMinutes($minutes): string
+    {
+        $minutes = max(0, $minutes);
+        if ($minutes < 60) return $minutes . 'm';
+        $hours = floor($minutes / 60);
+        $mins  = $minutes % 60;
+        return $mins === 0 ? "{$hours}h" : "{$hours}h {$mins}m";
+    }
+
+    public function columns(): array
+    {
+        $isSchool   = (bool)(auth()->user()->employee?->organization?->is_student_record ?? false);
+        $targetDate = $this->startDate ?: now()->toDateString();
+
+        return [
+
+            Column::make($isSchool ? 'Student' : 'Employee')
+                ->label(fn($row) => view('livewire.admin.attendance.employee', ['attendance' => $row])),
+
+            Column::make($isSchool ? 'Grade' : 'Shift')
+                ->label(function ($row) use ($isSchool) {
+                    if ($isSchool) {
+                        $grade = $row->employee->grade ?? null;
+                        return $grade
+                            ? "<strong>{$grade}</strong>"
+                            : '<span class="text-muted">-</span>';
+                    }
+                    if (!$row->employee->shift) return '<span class="text-muted">-</span>';
+                    $shift = $row->employee->shift;
+                    $start = Carbon::parse($shift->start_time)->format('g:i A');
+                    $end   = Carbon::parse($shift->end_time)->format('g:i A');
+                    return "<strong>{$shift->name}</strong><br><small>{$start} - {$end}</small>";
+                })
+                ->html(),
+
+            Column::make('Clock In', 'check_in_time')
+                ->format(function ($value, $row) use ($targetDate, $isSchool) {
+                    $label = '';
+                    $badge = '';
+
+                    if (in_array($row->status, ['absent', 'unchecked_in'])) {
+                        $last  = $this->getLastAttendance($row->employee_id, $targetDate);
+                        $value = $last?->check_in_time;
+                        if ($value) $label = "<br><small class='text-muted'>(Last Clock-In)</small>";
+                    }
+
+                    if (empty($value)) {
+                        $formatted = "<span class='fw-semibold text-primary'>Didn't Clock In</span>";
+                    } else {
+                        $formatted = "<span class='fw-semibold text-success'>"
+                            . Carbon::parse($value)->format('M d, Y g:i A')
+                            . "</span>";
+
+                        // Only show late badges for staff with shifts
+                        if (!$isSchool && $row->employee->shift) {
+                            if ($row->is_late_checkin && $row->employee->shift->track_late_checkin) {
+                                $badge = $row->within_grace_period
+                                    ? "<br><span style='background:#ffc107;color:#000;padding:2px 8px;border-radius:12px;font-size:.7rem;font-weight:500;'>⏰ {$this->formatMinutes($row->minutes_late)} Late (Grace)</span>"
+                                    : "<br><span style='background:#dc3545;color:#fff;padding:2px 8px;border-radius:12px;font-size:.7rem;font-weight:500;'>🔴 {$this->formatMinutes($row->minutes_late)} Late</span>";
+                            } elseif ($row->within_grace_period && $row->minutes_late > 0) {
+                                $badge = "<span style='background:#17a2b8;color:#fff;padding:2px 8px;border-radius:12px;font-size:.7rem;font-weight:500;'>✓ On time</span>";
+                            }
+                        }
+                    }
+
+                    return "{$formatted}{$badge}{$label}";
+                })
+                ->html(),
+
+            Column::make('Clock Out', 'check_out_time')
+                ->format(function ($value, $row) use ($targetDate, $isSchool) {
+                    $label = '';
+                    $badge = '';
+
+                    if (in_array($row->status, ['absent', 'unchecked_in'])) {
+                        $last  = $this->getLastAttendance($row->employee_id, $targetDate);
+                        $value = $last?->check_out_time;
+                        if ($value) $label = "<br><small class='text-muted'>(Last Clock-Out)</small>";
+                    }
+
+                    if ($row->status === 'clocked_in' && $row->check_in_time && !$row->check_out_time) {
+                        return "<span style='background:green;color:#fff;padding:4px 12px;border-radius:4px;font-size:.75rem;'>Still In</span>";
+                    }
+
+                    $formatted = $row->check_out_time
+                        ? "<span class='fw-semibold text-success'>" . Carbon::parse($row->check_out_time)->format('M d, Y g:i A') . "</span>"
+                        : (empty($value)
+                            ? "<span class='fw-semibold text-primary'>Didn't Clock Out</span>"
+                            : "<span class='fw-semibold text-success'>" . Carbon::parse($value)->format('M d, Y g:i A') . "</span>");
+
+                    // Early checkout badge — staff with shifts only
+                    if (!$isSchool && $row->employee->shift && $row->is_early_checkout && $row->employee->shift->track_early_checkout) {
+                        $badge = "<br><span style='background:#ff6b6b;color:#fff;padding:2px 8px;border-radius:12px;font-size:.7rem;font-weight:500;'>⚠️ {$this->formatMinutes($row->minutes_early)} Early</span>";
+                    }
+
+                    return "{$formatted}{$badge}{$label}";
+                })
+                ->html(),
+
+            Column::make($isSchool ? 'Status' : 'Work Summary')
+                ->label(fn($row) => view('livewire.admin.attendance.hours', ['attendance' => $row])),
         ];
-
-        // Determine status - changed fallback to 'absent' to fix the 500 error
-        $inheritedStatus = isset($lastRecord)
-            ? ($carryForwardMap[$lastRecord->status] ?? 'absent')
-            : 'absent';
-
-        $checkIn = null;
-        $checkOut = null;
-
-        // 4. Inherit Times for Clocked In/Out
-        if ($lastRecord && in_array($inheritedStatus, ['clocked_in', 'clocked_out'])) {
-            // We set the date to $today but keep the exact time from the previous record
-            if ($lastRecord->check_in_time) {
-                $checkIn = Carbon::parse($today . ' ' . Carbon::parse($lastRecord->check_in_time)->format('H:i:s'));
-            }
-            if ($lastRecord->check_out_time) {
-                $checkOut = Carbon::parse($today . ' ' . Carbon::parse($lastRecord->check_out_time)->format('H:i:s'));
-            }
-        }
-
-        // 5. Create the record
-        Attendance::create([
-            'employee_id' => $student->id,
-            'date' => $today,
-            'status' => $inheritedStatus,
-            'check_in_time' => $checkIn,
-            'check_out_time' => $checkOut,
-            'worked_hours' => $lastRecord->worked_hours ?? 0,
-            'overtime_hours' => $lastRecord->overtime_hours ?? 0,
-        ]);
     }
 
-    /* ──────────────────────────────────────────────────────────────
-     |  STANDARD STAFF BRANCH  (unchanged business logic, cleaned up)
-     ────────────────────────────────────────────────────────────── */
-    private function seedStaffRecord(Employee $employee, Carbon $now, string $today): void
+    #[On('export-daily-excel')]
+    public function exportExcel()
     {
-        $shift = $employee->shift;
+        return Excel::download(
+            new AttendanceDailyExcelExport(
+                selectedIds: $this->getSelected(),
+                startDate: $this->startDate,
+                endDate: $this->endDate,
+                status: $this->status
+            ),
+            'attendance.xlsx'
+        );
+    }
 
-        // Employees without a shift configuration cannot be processed.
-        if (!$shift) {
-            return;
-        }
+    #[On('export-pivot-daily-excel')]
+    public function exportPivotExcel()
+    {
+        return Excel::download(
+            new AttendancePivotDailyExcelExport(
+                selectedIds: $this->getSelected(),
+                startDate: $this->startDate,
+                endDate: $this->endDate,
+                status: $this->status
+            ),
+            'attendance.xlsx'
+        );
+    }
 
-        $attendance = Attendance::firstOrNew([
-            'employee_id' => $employee->id,
-            'date' => $today,
+    #[On('export-daily-pdf')]
+    public function exportPdf()
+    {
+        $url = route('attendance-daily.export.pdf', [
+            'ids'        => $this->getSelected(),
+            'start_date' => $this->startDate,
+            'end_date'   => $this->endDate,
+            'status'     => $this->status,
         ]);
 
-        // ── No assignments → not scheduled ──────────────────────
-        if ($employee->assignments()->count() === 0) {
-            $this->markAsNotScheduled($attendance);
-            return;
-        }
-
-        // ── Not a working day for this shift ────────────────────
-        if (!$this->isEmployeeScheduledToday($shift, $now)) {
-            $this->markAsNotScheduled($attendance);
-            return;
-        }
-
-        // ── Build shift window ───────────────────────────────────
-        $shiftStart = $this->parseShiftTime($shift->start_time, $today);
-        $shiftEnd = $this->parseShiftTime($shift->end_time, $today);
-
-        if ($shiftEnd->lessThanOrEqualTo($shiftStart)) {
-            $shiftEnd->addDay(); // overnight shift
-        }
-
-        // ── Approved leave ───────────────────────────────────────
-        $onLeave = Leave::where('employee_id', $employee->id)
-            ->where('status', 'approved')
-            ->whereDate('start_date', '<=', $today)
-            ->whereDate('end_date', '>=', $today)
-            ->exists();
-
-        if ($onLeave) {
-            $attendance->fill([
-                'status' => 'on_leave',
-                'check_in_time' => null,
-                'check_out_time' => null,
-                'worked_hours' => 0,
-                'overtime_hours' => 0,
-            ])->save();
-            return;
-        }
-
-        // ── Off-shift / sick-off windows ─────────────────────────
-        if ($handled = $this->handleShiftStatusWindow($employee, $attendance, $now)) {
-            return;
-        }
-
-        // Guard: skip employees in a non-working status that wasn't resolved above.
-        if (in_array($employee->shift_status, ['off_shift', 'sick_off', 'on_leave'])) {
-            return;
-        }
-
-        // ── Already clocked in → evaluate auto clock-out ─────────
-        if ($attendance->check_in_time && $attendance->status === 'clocked_in') {
-            $this->handleAutoClockOut($attendance, $shift, $shiftStart, $shiftEnd, $now, $employee);
-            return;
-        }
-
-        // ── Not yet checked in ───────────────────────────────────
-        if (!$attendance->check_in_time) {
-            if ($now->greaterThan($shiftEnd)) {
-                $status = 'absent';
-            } elseif ($now->between($shiftStart, $shiftEnd)) {
-                $status = 'unchecked_in';
-            } else {
-                return; // Shift hasn't started yet – nothing to do.
-            }
-
-            $attendance->fill([
-                'status' => $status,
-                'check_in_time' => null,
-                'check_out_time' => null,
-                'worked_hours' => 0,
-                'overtime_hours' => 0,
-            ])->save();
-        }
-    }
-
-    /* ──────────────────────────────────────────────────────────────
-     |  HELPERS
-     ────────────────────────────────────────────────────────────── */
-
-    /**
-     * Handle off_shift / sick_off date windows for staff employees.
-     * Returns true if the record was handled (caller should return early).
-     */
-    private function handleShiftStatusWindow(Employee $employee, Attendance $attendance, Carbon $now): bool
-    {
-        $status = $employee->shift_status;
-
-        if (!in_array($status, ['off_shift', 'sick_off'])) {
-            return false;
-        }
-
-        $start = $employee->start_off_shift_date ? Carbon::parse($employee->start_off_shift_date) : null;
-        $end = $employee->end_off_shift_date ? Carbon::parse($employee->end_off_shift_date) : null;
-
-        if (!$start || !$end) {
-            return false;
-        }
-
-        if ($now->isAfter($end)) {
-            // Period has expired → restore to on_shift and let normal logic continue.
-            $employee->update(['shift_status' => 'on_shift']);
-            return false;
-        }
-
-        if ($now->between($start, $end, true)) {
-            $attendance->fill([
-                'status' => $status, // 'off_shift' or 'sick_off'
-                'check_in_time' => null,
-                'check_out_time' => null,
-                'worked_hours' => 0,
-                'overtime_hours' => 0,
-            ])->save();
-            return true;
-        }
-
-        return false;
-    }
-
-    /**
-     * Check if employee is scheduled to work today based on shift pattern.
-     */
-    private function isEmployeeScheduledToday($shift, Carbon $date): bool
-    {
-        $patternType = $shift->pattern_type ?? 'weekdays';
-        $patternDays = $shift->pattern_days ?? ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
-        $currentDay = $date->format('D'); // 'Mon', 'Tue', …
-
-        return match ($patternType) {
-            'weekdays' => in_array($currentDay, ['Mon', 'Tue', 'Wed', 'Thu', 'Fri']),
-            'weekends' => in_array($currentDay, ['Sat', 'Sun']),
-            'daily' => true,
-            default => in_array($currentDay, $patternDays), // 'custom', 'rotating', …
-        };
-    }
-
-    private function parseShiftTime(string $time, string $today): Carbon
-    {
-        return preg_match('/\d{4}-\d{2}-\d{2}/', $time)
-            ? Carbon::parse($time)
-            : Carbon::parse("{$today} {$time}");
-    }
-
-    /**
-     * Mark an attendance record as not scheduled (idempotent).
-     */
-    private function markAsNotScheduled(Attendance $attendance): void
-    {
-        if ($attendance->status === 'not_scheduled') {
-            return;
-        }
-
-        $attendance->fill([
-            'status' => 'not_scheduled',
-            'check_in_time' => null,
-            'check_out_time' => null,
-            'worked_hours' => 0,
-            'overtime_hours' => 0,
-        ])->save();
-    }
-
-    /**
-     * Evaluate whether a clocked-in employee should be automatically clocked out.
-     */
-    private function handleAutoClockOut(
-        Attendance $attendance,
-                   $shift,
-        Carbon     $shiftStart,
-        Carbon     $shiftEnd,
-        Carbon     $now,
-        Employee   $employee
-    ): void
-    {
-        if (!$shift->auto_clock_out) {
-            return;
-        }
-
-        $checkIn = Carbon::parse($attendance->check_in_time);
-
-        if ($shift->overtime_enabled && $shift->max_overtime_hours > 0) {
-            $maxOvertimeHours = (float)$shift->max_overtime_hours;
-            $warningMinutes = (int)($shift->warning_time_minutes ?? 30);
-            $autoClockOutTime = $shiftEnd->copy()->addHours($maxOvertimeHours);
-            $warningTime = $autoClockOutTime->copy()->subMinutes($warningMinutes);
-
-            // Send pre-clock-out warning once.
-            if ($now->between($warningTime, $autoClockOutTime) && !$attendance->overtime_warning_sent) {
-                $this->sendOvertimeWarning($employee, $shift, $autoClockOutTime);
-                $attendance->overtime_warning_sent = true;
-                $attendance->save();
-            }
-
-            // Auto clock-out at max overtime.
-            if ($now->greaterThanOrEqualTo($autoClockOutTime)) {
-                $totalWorked = $checkIn->diffInMinutes($autoClockOutTime) / 60;
-                $regularHours = min($totalWorked, $shift->duration_hours);
-                $overtimeHours = max(0, $totalWorked - $shift->duration_hours);
-
-                $attendance->update([
-                    'status' => 'clocked_out',
-                    'check_out_time' => $autoClockOutTime,
-                    'worked_hours' => round($regularHours, 2),
-                    'overtime_hours' => round($overtimeHours, 2),
-                    'auto_clocked_out' => true,
-                    'auto_clocked_out_reason' => 'Maximum overtime hours reached',
-                ]);
-
-                $this->sendAutoClockOutNotification($employee, $shift, 'overtime_limit_reached');
-
-                if ($shift->notify_managers_overtime) {
-                    $this->notifyManagersAboutOvertime($employee, $shift, $overtimeHours);
-                }
-
-                Log::info("Auto clocked out [{$employee->id}] at overtime limit", [
-                    'overtime_hours' => $overtimeHours,
-                ]);
-            }
-        } else {
-            // No overtime – clock out at shift end.
-            if ($now->greaterThanOrEqualTo($shiftEnd)) {
-                $totalWorked = $checkIn->diffInMinutes($shiftEnd) / 60;
-                $regularHours = min($totalWorked, $shift->duration_hours);
-
-                $attendance->update([
-                    'status' => 'clocked_out',
-                    'check_out_time' => $shiftEnd,
-                    'worked_hours' => round($regularHours, 2),
-                    'overtime_hours' => 0,
-                    'auto_clocked_out' => true,
-                    'auto_clocked_out_reason' => 'Overtime not enabled for this shift',
-                ]);
-
-                $this->sendAutoClockOutNotification($employee, $shift, 'shift_end');
-
-                Log::info("Auto clocked out [{$employee->id}] at shift end (no overtime)");
-            }
-        }
-    }
-
-    /* ── Notification stubs ──────────────────────────────────────── */
-
-    private function sendOvertimeWarning(Employee $employee, $shift, Carbon $autoClockOutTime): void
-    {
-        if (!$shift->employee_mobile_notifications) return;
-
-        try {
-            // $employee->user->notify(new OvertimeWarningNotification($autoClockOutTime));
-            Log::info("Overtime warning → employee [{$employee->id}]", [
-                'clock_out_at' => $autoClockOutTime->format('H:i'),
-            ]);
-        } catch (\Exception $e) {
-            Log::error("Overtime warning failed [{$employee->id}]: {$e->getMessage()}");
-        }
-    }
-
-    private function sendAutoClockOutNotification(Employee $employee, $shift, string $reason): void
-    {
-        if (!$shift->employee_mobile_notifications) return;
-
-        try {
-            // $employee->user->notify(new AutoClockOutNotification($reason));
-            Log::info("Auto clock-out notification → employee [{$employee->id}]", ['reason' => $reason]);
-        } catch (\Exception $e) {
-            Log::error("Auto clock-out notification failed [{$employee->id}]: {$e->getMessage()}");
-        }
-    }
-
-    private function notifyManagersAboutOvertime(Employee $employee, $shift, float $overtimeHours): void
-    {
-        try {
-            // Notification::send($employee->organization->managers, new EmployeeOvertimeNotification(...));
-            Log::info("Manager overtime notification → employee [{$employee->id}]", [
-                'overtime_hours' => $overtimeHours,
-            ]);
-        } catch (\Exception $e) {
-            Log::error("Manager overtime notification failed [{$employee->id}]: {$e->getMessage()}");
-        }
+        return redirect()->to($url);
     }
 }
