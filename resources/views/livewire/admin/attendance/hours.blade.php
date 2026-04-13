@@ -2,17 +2,28 @@
     @php
         $isSchool = auth()->user()->employee?->organization?->is_student_record ?? false;
 
-        // Status Mapping for Schools
-        $statusConfig = [
-            'clocked_in'  => ['label' => 'Present', 'color' => 'success', 'icon' => 'ti-circle-check'],
-            'clocked_out' => ['label' => 'Left School', 'color' => 'info', 'icon' => 'ti-logout'],
-            'absent'      => ['label' => 'Unscanned', 'color' => 'danger', 'icon' => 'ti-alert-circle'],
-            'on_leave'    => ['label' => 'On Leave', 'color' => 'warning', 'icon' => 'ti-plane-departure'],
-            'sick_off'    => ['label' => 'Sick Off', 'color' => 'warning', 'icon' => 'ti-first-aid-kit'],
+        $statusConfig = $isSchool ? [
+            'clocked_in'  => ['label' => 'Present',    'color' => 'success',   'icon' => 'ti-circle-check'],
+            'clocked_out' => ['label' => 'Left School', 'color' => 'info',      'icon' => 'ti-logout'],
+            'absent'      => ['label' => 'Unscanned',   'color' => 'danger',    'icon' => 'ti-alert-circle'],
+            'on_leave'    => ['label' => 'On Leave',    'color' => 'warning',   'icon' => 'ti-plane-departure'],
+            'sick_off'    => ['label' => 'Sick Off',    'color' => 'warning',   'icon' => 'ti-first-aid-kit'],
+        ] : [
+            'clocked_in'    => ['label' => 'Clocked In',    'color' => 'success',   'icon' => 'ti-circle-check'],
+            'clocked_out'   => ['label' => 'Clocked Out',   'color' => 'info',      'icon' => 'ti-logout'],
+            'absent'        => ['label' => 'Absent',        'color' => 'danger',    'icon' => 'ti-alert-circle'],
+            'unchecked_in'  => ['label' => 'Not Checked In','color' => 'danger',    'icon' => 'ti-alert-circle'],
+            'on_leave'      => ['label' => 'On Leave',      'color' => 'warning',   'icon' => 'ti-plane-departure'],
+            'sick_off'      => ['label' => 'Sick Off',      'color' => 'warning',   'icon' => 'ti-first-aid-kit'],
+            'off_shift'     => ['label' => 'Off Shift',     'color' => 'secondary', 'icon' => 'ti-calendar-off'],
+            'not_scheduled' => ['label' => 'Not Scheduled', 'color' => 'secondary', 'icon' => 'ti-calendar-off'],
         ];
 
-        $currentStatus = $attendance->status === 'unchecked_in' ? 'absent' : $attendance->status;
-        $config = $statusConfig[$currentStatus] ?? ['label' => ucfirst($currentStatus), 'color' => 'secondary', 'icon' => 'ti-info-circle'];
+        $currentStatus = (!$isSchool && $attendance->status === 'unchecked_in')
+            ? 'unchecked_in'
+            : ($attendance->status === 'unchecked_in' ? 'absent' : $attendance->status);
+
+        $config = $statusConfig[$currentStatus] ?? ['label' => ucfirst(str_replace('_', ' ', $currentStatus)), 'color' => 'secondary', 'icon' => 'ti-info-circle'];
     @endphp
 
     @if(!$isSchool)
