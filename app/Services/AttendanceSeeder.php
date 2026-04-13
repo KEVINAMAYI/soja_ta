@@ -33,8 +33,6 @@ class AttendanceSeeder
                 $this->seedStaffRecord($employee, $now, $today);
             }
 
-            return;
-
         }
     }
 

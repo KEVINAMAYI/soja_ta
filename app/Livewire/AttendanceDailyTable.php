@@ -286,7 +286,8 @@ class AttendanceDailyTable extends DataTableComponent
                     $label = '';
                     $badge = '';
 
-                    if (in_array($row->status, ['absent', 'unchecked_in'])) {
+                    // Last-record fallback: SCHOOL ORGS ONLY
+                    if ($isSchool && in_array($row->status, ['absent', 'unchecked_in'])) {
                         $last  = $this->getLastAttendance($row->employee_id, $targetDate);
                         $value = $last?->check_in_time;
                         if ($value) $label = "<br><small class='text-muted'>(Last Clock-In)</small>";
@@ -299,7 +300,6 @@ class AttendanceDailyTable extends DataTableComponent
                             . Carbon::parse($value)->format('M d, Y g:i A')
                             . "</span>";
 
-                        // Only show late badges for staff with shifts
                         if (!$isSchool && $row->employee->shift) {
                             if ($row->is_late_checkin && $row->employee->shift->track_late_checkin) {
                                 $badge = $row->within_grace_period
@@ -320,7 +320,8 @@ class AttendanceDailyTable extends DataTableComponent
                     $label = '';
                     $badge = '';
 
-                    if (in_array($row->status, ['absent', 'unchecked_in'])) {
+                    // Last-record fallback: SCHOOL ORGS ONLY
+                    if ($isSchool && in_array($row->status, ['absent', 'unchecked_in'])) {
                         $last  = $this->getLastAttendance($row->employee_id, $targetDate);
                         $value = $last?->check_out_time;
                         if ($value) $label = "<br><small class='text-muted'>(Last Clock-Out)</small>";
@@ -336,7 +337,6 @@ class AttendanceDailyTable extends DataTableComponent
                             ? "<span class='fw-semibold text-primary'>Didn't Clock Out</span>"
                             : "<span class='fw-semibold text-success'>" . Carbon::parse($value)->format('M d, Y g:i A') . "</span>");
 
-                    // Early checkout badge — staff with shifts only
                     if (!$isSchool && $row->employee->shift && $row->is_early_checkout && $row->employee->shift->track_early_checkout) {
                         $badge = "<br><span style='background:#ff6b6b;color:#fff;padding:2px 8px;border-radius:12px;font-size:.7rem;font-weight:500;'>⚠️ {$this->formatMinutes($row->minutes_early)} Early</span>";
                     }
