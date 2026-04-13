@@ -176,52 +176,66 @@ new class extends Component {
     ───────────────────────────────────────────── */
     private function loadStaffStats(int $orgId, Carbon $today): void
     {
-        $employees   = Employee::where('organization_id', $orgId)->where('active', 1)->get();
-        $this->totalEmployees = $employees->count();
+        // Only non-student active employees
+        $employees = Employee::where('organization_id', $orgId)
+            ->where('active', 1)
+            ->where('is_student', 0)
+            ->get();
+
+        $this->totalEmployees    = $employees->count();
+        $this->inactiveEmployees = Employee::where('organization_id', $orgId)
+            ->where('active', 0)
+            ->where('is_student', 0)
+            ->count();
+
         $employeeIds = $employees->pluck('id');
 
         $attendancesToday = Attendance::whereIn('employee_id', $employeeIds)
             ->whereDate('date', $today)
             ->get();
 
-        $presentEmployeeIds = $attendancesToday
+        // Present = has ANY clocked_in or clocked_out record today
+        $presentIds = $attendancesToday
             ->whereIn('status', ['clocked_in', 'clocked_out'])
             ->pluck('employee_id')
             ->unique();
 
-        $absentEmployeeIds = $attendancesToday
-            ->whereIn('status', ['absent', 'unchecked_in'])
+        $this->presentToday  = $presentIds->count();
+        $this->leaveToday    = $attendancesToday->where('status', 'on_leave')->pluck('employee_id')->unique()->count();
+        $this->sickOffToday  = $attendancesToday->where('status', 'sick_off')->pluck('employee_id')->unique()->count();
+        $this->OffShiftToday = $attendancesToday->where('status', 'off_shift')->pluck('employee_id')->unique()->count();
+
+        // Accounted for = present OR has some other status record
+        $accountedForIds = $attendancesToday
+            ->whereIn('status', ['clocked_in', 'clocked_out', 'on_leave', 'sick_off', 'off_shift', 'on_break'])
             ->pluck('employee_id')
-            ->unique()
-            ->reject(fn($id) => $presentEmployeeIds->contains($id));
+            ->unique();
 
-        $this->presentToday     = $presentEmployeeIds->count();
-        $this->absentToday      = $absentEmployeeIds->count();
-        $this->leaveToday       = $attendancesToday->where('status', 'on_leave')->pluck('employee_id')->unique()->count();
-        $this->sickOffToday     = $attendancesToday->whereIn('status', ['sick_off'])->pluck('employee_id')->unique()->count();
-        $this->OffShiftToday    = $attendancesToday->where('status', 'off_shift')->pluck('employee_id')->unique()->count();
-        $this->inactiveEmployees = Employee::where('organization_id', $orgId)->where('active', 0)->count();
+        // Absent = active staff with NO attendance record at all today
+        // (not present, not on leave, not sick, not off shift)
+        $this->absentToday = max(0, $this->totalEmployees - $accountedForIds->count());
 
-        $weekStart = Carbon::now()->startOfWeek();
-        $weekEnd   = Carbon::now()->endOfWeek();
+        // Overtime — week scope
         $this->overtimeHours = Attendance::whereIn('employee_id', $employeeIds)
-            ->whereBetween('date', [$weekStart, $weekEnd])
+            ->whereBetween('date', [Carbon::now()->startOfWeek(), Carbon::now()->endOfWeek()])
             ->sum('overtime_hours');
 
-        $this->departmentStats = $employees->groupBy('department_id')->map(function ($group) {
+        // Department breakdown — also filter is_student = 0
+        $this->departmentStats = $employees->groupBy('department_id')->map(function ($group) use ($today) {
             $clockedIn = Attendance::whereIn('employee_id', $group->pluck('id'))
-                ->whereDate('date', Carbon::today())
-                ->whereNotNull('check_in_time')
-                ->count();
+                ->whereDate('date', $today)
+                ->whereIn('status', ['clocked_in', 'clocked_out'])
+                ->distinct('employee_id')
+                ->count('employee_id');
+
             return [
-                'name'       => $group[0]->department->name ?? 'Unknown',
+                'name'       => $group->first()->department->name ?? 'Unknown',
                 'clocked_in' => $clockedIn,
                 'total'      => $group->count(),
             ];
-        });
+        })->values()->toArray();
 
-        $this->recentActivities = $attendancesToday->sortByDesc('created_at')->take(5);
-
+        // Recent activity — only staff
         $this->currentEmployeeStatus = Attendance::with('employee.department', 'location')
             ->whereIn('employee_id', $employeeIds)
             ->whereDate('date', $today)
@@ -233,10 +247,10 @@ new class extends Component {
                 'id'               => $att->employee->id,
                 'department'       => $att->employee->department->name ?? 'N/A',
                 'status'           => match ($att->status) {
-                    'clocked_in'              => 'Clocked In',
-                    'clocked_out'             => 'Clocked Out',
-                    'absent', 'unchecked_in'  => 'Absent',
-                    default                   => ucfirst(str_replace('_', ' ', $att->status)),
+                    'clocked_in'             => 'Clocked In',
+                    'clocked_out'            => 'Clocked Out',
+                    'absent', 'unchecked_in' => 'Absent',
+                    default                  => ucfirst(str_replace('_', ' ', $att->status)),
                 },
                 'datetime'         => $att->check_in_time ?? $att->check_out_time,
                 'location'         => $att->location->name ?? 'Unknown',
@@ -244,10 +258,11 @@ new class extends Component {
                 'view_link'        => route('attendance.employee-detailed-attendance', ['employeeId' => $att->employee->id]),
             ]);
 
-        $this->dailyAttendancePercentage();
+        $this->dailyAttendancePercentage($employeeIds);
         $this->shiftStats = $this->getShiftStats();
         $this->loadMapData($orgId, $today);
     }
+
 
     /* ─────────────────────────────────────────────
        MAP DATA  (shared)
@@ -340,21 +355,34 @@ new class extends Component {
     /* ─────────────────────────────────────────────
        DAILY ATTENDANCE PERCENTAGE
     ───────────────────────────────────────────── */
-    public function dailyAttendancePercentage(): void
+    public function dailyAttendancePercentage($employeeIds = null): void
     {
-        $organizationId = auth()->user()->employee->organization_id;
-        $totalEmployees = Employee::where('organization_id', $organizationId)->count();
-        $present        = Attendance::whereHas('employee', fn($q) => $q->where('organization_id', $organizationId))
+        $orgId = auth()->user()->employee->organization_id;
+
+        // Use passed IDs (already filtered to non-students) or fall back
+        if (!$employeeIds) {
+            $employeeIds = Employee::where('organization_id', $orgId)
+                ->where('active', 1)
+                ->where('is_student', 0)
+                ->pluck('id');
+        }
+
+        $total = $employeeIds->count();
+
+        $present = Attendance::whereIn('employee_id', $employeeIds)
             ->whereDate('date', now()->toDateString())
             ->whereIn('status', ['clocked_in', 'clocked_out'])
-            ->count();
-        $absent = max($totalEmployees - $present, 0);
+            ->distinct('employee_id')
+            ->count('employee_id');
 
-        $this->statusData = $totalEmployees > 0 ? [
-            'Present' => round(($present / $totalEmployees) * 100, 2),
-            'Absent'  => round(($absent  / $totalEmployees) * 100, 2),
+        $absent = max(0, $total - $present);
+
+        $this->statusData = $total > 0 ? [
+            'Present' => round(($present / $total) * 100, 2),
+            'Absent'  => round(($absent  / $total) * 100, 2),
         ] : ['Present' => 0, 'Absent' => 0];
     }
+
 }; ?>
 
 @push('styles')

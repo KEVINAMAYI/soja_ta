@@ -38,6 +38,7 @@ new class extends Component {
     public array $gradeStats = [];   // [['grade'=>'Grade 1','present'=>22,'total'=>26], ...]
     public array $recentActivity = [];  // last 10 attendance events today
     public array $availableGrades = [];
+    public $leftSchoolCount = 0; // Add this property at the top of your class
 
     public bool $zkbioEnabled = false;
     public bool $syncing = false;
@@ -181,39 +182,58 @@ new class extends Component {
         }
     }
 
-    public $leftSchoolCount = 0; // Add this property at the top of your class
 
     public function loadSummaryStats(): void
     {
-        $employeeRecord = Employee::where('user_id', auth()->id())->first();
-        $orgId = $employeeRecord->organization_id ?? null;
+        $orgId = auth()->user()->employee?->organization_id;
         if (!$orgId) return;
 
-        // 1. Get total active students
-        $students = Employee::where('organization_id', $orgId)
+        if ($this->isSchoolOrg) {
+            $this->loadSchoolSummary($orgId);
+        } else {
+            $this->loadStaffSummary($orgId);
+        }
+    }
+
+
+    private function loadStaffSummary(int $orgId): void
+    {
+        // All active NON-student employees
+        $employees = Employee::where('organization_id', $orgId)
             ->where('active', 1)
-            ->where('is_student', 1)
+            ->where('is_student', 0)
             ->get();
 
-        $this->totalEmployees = $students->count();
-        $studentIds = $students->pluck('id');
+        $this->totalEmployees = $employees->count();
+        $employeeIds = $employees->pluck('id');
 
-        // 2. Get attendance for the selected date range
-        $attendances = Attendance::whereIn('employee_id', $studentIds)
+        $attendances = Attendance::whereIn('employee_id', $employeeIds)
             ->whereBetween('date', [$this->startDate, $this->endDate])
             ->get();
 
-        // 3. Logic: Who is "In School" vs "Left School"
-        // Present = Currently Clocked In (on site)
-        $this->presentCount = $attendances->where('status', 'clocked_in')->pluck('employee_id')->unique()->count();
+        $presentIds = $attendances
+            ->whereIn('status', ['clocked_in', 'clocked_out'])
+            ->pluck('employee_id')->unique();
 
-        // Left School = They clocked out (gone home)
-        $this->leftSchoolCount = $attendances->where('status', 'clocked_out')->pluck('employee_id')->unique()->count();
+        $this->presentCount = $presentIds->count();
+        $this->leftSchoolCount = 0; // not used for staff
 
-        // 4. Not Reported = Total - (Present + Left)
-        $reportedIds = $attendances->whereIn('status', ['clocked_in', 'clocked_out'])->pluck('employee_id')->unique();
-        $this->absentCount = max(0, $this->totalEmployees - $reportedIds->count());
+        $this->sickOffCount = $attendances->where('status', 'sick_off')->pluck('employee_id')->unique()->count();
+        $this->onLeaveCount = $attendances->where('status', 'on_leave')->pluck('employee_id')->unique()->count();
+        $this->offShiftCount = $attendances->where('status', 'off_shift')->pluck('employee_id')->unique()->count();
+        $this->inactiveCount = Employee::where('organization_id', $orgId)
+            ->where('active', 0)
+            ->where('is_student', 0)
+            ->count();
+
+        // Absent = not present AND no other status record
+        $accountedForIds = $attendances
+            ->whereIn('status', ['clocked_in', 'clocked_out', 'on_leave', 'sick_off', 'off_shift', 'on_break'])
+            ->pluck('employee_id')->unique();
+
+        $this->absentCount = max(0, $this->totalEmployees - $accountedForIds->count());
     }
+
 
     public function loadAvailableGrades(): void
     {
@@ -232,40 +252,45 @@ new class extends Component {
     {
         $orgId = auth()->user()->employee->organization_id;
 
-        // Get all active students grouped by grade
         $students = Employee::where('organization_id', $orgId)
             ->where('active', 1)
             ->where('is_student', 1)
             ->whereNotNull('grade')
+            ->with('lastAttendance')  // for current physical state
             ->get()
             ->groupBy('grade');
 
-        $today = $this->startDate;
         $stats = [];
 
         foreach ($students as $grade => $gradeStudents) {
             $ids = $gradeStudents->pluck('id');
-            $present = Attendance::whereIn('employee_id', $ids)
-                ->whereDate('date', $today)
+
+            // Currently on campus right now (lastAttendance state)
+            $onCampusNow = $gradeStudents->filter(
+                fn($s) => $s->lastAttendance?->status === 'clocked_in'
+            )->count();
+
+            // Scanned at any point on selected date (for the progress bar)
+            $scannedToday = Attendance::whereIn('employee_id', $ids)
+                ->whereDate('date', $this->startDate)
                 ->whereIn('status', ['clocked_in', 'clocked_out'])
                 ->distinct('employee_id')
                 ->count('employee_id');
 
             $total = $ids->count();
-            $rate = $total > 0 ? round(($present / $total) * 100) : 0;
+            $rate = $total > 0 ? round(($scannedToday / $total) * 100) : 0;
 
             $stats[] = [
                 'grade' => $grade,
-                'present' => $present,
+                'present' => $onCampusNow,   // currently inside
+                'scannedToday' => $scannedToday,  // attended at any point today
                 'total' => $total,
                 'rate' => $rate,
                 'color' => $rate >= 80 ? '#22c55e' : ($rate >= 60 ? '#f59e0b' : '#ef4444'),
             ];
         }
 
-        // Add staff row
         $this->gradeStats = $stats;
-
     }
 
     public function loadRecentActivity(): void
@@ -656,7 +681,8 @@ new class extends Component {
                         </div>
                         <p class="summary-card-subtitle">Currently in school</p>
                         <div class="summary-card-bar">
-                            <div class="summary-card-bar-fill" style="width:{{ $totalEmployees > 0 ? ($presentCount/$totalEmployees)*100 : 0 }}%; background:#22c55e;"></div>
+                            <div class="summary-card-bar-fill"
+                                 style="width:{{ $totalEmployees > 0 ? ($presentCount/$totalEmployees)*100 : 0 }}%; background:#22c55e;"></div>
                         </div>
                     </div>
                 </div>
@@ -673,7 +699,8 @@ new class extends Component {
                         </div>
                         <p class="summary-card-subtitle">Clocked out today</p>
                         <div class="summary-card-bar">
-                            <div class="summary-card-bar-fill" style="width:{{ $totalEmployees > 0 ? ($leftSchoolCount/$totalEmployees)*100 : 0 }}%; background:#0ea5e9;"></div>
+                            <div class="summary-card-bar-fill"
+                                 style="width:{{ $totalEmployees > 0 ? ($leftSchoolCount/$totalEmployees)*100 : 0 }}%; background:#0ea5e9;"></div>
                         </div>
                     </div>
                 </div>
@@ -690,7 +717,8 @@ new class extends Component {
                         </div>
                         <p class="summary-card-subtitle">No logs yet today</p>
                         <div class="summary-card-bar">
-                            <div class="summary-card-bar-fill" style="width:{{ $totalEmployees > 0 ? ($absentCount/$totalEmployees)*100 : 0 }}%; background:#ef4444;"></div>
+                            <div class="summary-card-bar-fill"
+                                 style="width:{{ $totalEmployees > 0 ? ($absentCount/$totalEmployees)*100 : 0 }}%; background:#ef4444;"></div>
                         </div>
                     </div>
                 </div>
@@ -731,8 +759,9 @@ new class extends Component {
                                         <div class="grade-bar-fill"
                                              style="width:{{ $row['rate'] }}%; background:var(--primary-color) !important;"></div>
                                     </div>
-                                    <span class="grade-count"
-                                          style="color:var(--primary-color) !important;">{{ $row['present'] }}/{{ $row['total'] }}</span>
+                                    <span class="grade-count" style="color:var(--primary-color) !important;">
+    {{ $row['present'] }} on campus · {{ $row['scannedToday'] }}/{{ $row['total'] }} today
+</span>
                                 </div>
                             @endif
                         @empty
