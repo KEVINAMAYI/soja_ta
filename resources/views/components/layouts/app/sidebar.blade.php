@@ -157,7 +157,7 @@
             </div>
         </header>
 
-        <div {{ $sidebarBg ? "style=background-color:{$sidebarBg};" : '' }}  class="body-wrapper">
+        <div {{ $pageBg ? "style=background-color:{$pageBg};" : '' }}  class="body-wrapper">
             <div class="container-fluid">
                 {{ $slot }}
             </div>

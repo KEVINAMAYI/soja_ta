@@ -1,3 +1,4 @@
+
 <nav {{ $sidebarBg ? "style=background-color:{$sidebarBg};" : '' }} class="navbar navbar-expand-lg p-0">
 <ul class="navbar-nav">
         <li class="nav-item nav-icon-hover-bg rounded-circle d-flex">

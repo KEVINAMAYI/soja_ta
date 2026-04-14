@@ -607,7 +607,7 @@ new class extends Component {
 
 @push('styles')
     <style>
-        .rp-page { font-family: 'DM Sans', 'Nunito', sans-serif; background: var(--page-bg, #fefcfb); min-height: 100vh; padding: 1.5rem; }
+        .rp-page { font-family: 'DM Sans', 'Nunito', sans-serif; min-height: 100vh; padding: 1.5rem; }
         .rp-heading { font-size: 1.75rem; font-weight: 800; color: #0f172a; letter-spacing: -0.5px; margin-bottom: 0.2rem; }
         .rp-sub { font-size: 0.9rem; color: #64748b; margin-bottom: 1.5rem; }
 
@@ -700,9 +700,14 @@ new class extends Component {
         'sliders'            => '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 16 16"><path d="M11.5 2a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3zM9.05 3a2.5 2.5 0 0 1 4.9 0H16v1h-2.05a2.5 2.5 0 0 1-4.9 0H0V3h9.05zM4.5 7a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3zM2.05 8a2.5 2.5 0 0 1 4.9 0H16v1H6.95a2.5 2.5 0 0 1-4.9 0H0V8h2.05zm9.45 4a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3zm-2.45 1a2.5 2.5 0 0 1 4.9 0H16v1h-2.05a2.5 2.5 0 0 1-4.9 0H0v-1h9.05z"/></svg>',
         'exclamation-circle' => '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 16 16"><path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14zm0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16z"/><path d="M7.002 11a1 1 0 1 1 2 0 1 1 0 0 1-2 0zM7.1 4.995a.905.905 0 1 1 1.8 0l-.35 3.507a.552.552 0 0 1-1.1 0L7.1 4.995z"/></svg>',
     ];
+
+    $org = auth()->check() && auth()->user()->employee
+        ? \App\Models\Organization::find(auth()->user()->employee->organization_id)
+        : null;
+    $pageBg = $org?->page_bg_color ?? null;
 @endphp
 
-<div class="rp-page">
+<div class="rp-page" {{ $pageBg ? "style=background-color:{$pageBg};" : '' }}>
 
     <h1 class="rp-heading">Reports</h1>
     <p class="rp-sub">Click Preview to view live data, then export as PDF, Excel, or CSV.</p>
