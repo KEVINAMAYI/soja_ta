@@ -21,7 +21,9 @@ class Organization extends Model
         'break_tracking_enabled',
         'primary_color',
         'logo_height',
-        'logo_width'
+        'logo_width',
+        'sidebar_bg_color',
+        'page_bg_color'
     ];
 
     public function employees()
