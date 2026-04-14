@@ -24,7 +24,7 @@
     }
 </style>
 
-<aside class="left-sidebar with-vertical">
+<aside {{ $sidebarBg ? "style=background-color:{$sidebarBg};" : '' }} class="left-sidebar with-vertical">
     <div>
         <div>
 

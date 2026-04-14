@@ -607,7 +607,7 @@ new class extends Component {
 
 @push('styles')
     <style>
-        .rp-page { font-family: 'DM Sans', 'Nunito', sans-serif; background: #f0f4f8; min-height: 100vh; padding: 1.5rem; }
+        .rp-page { font-family: 'DM Sans', 'Nunito', sans-serif; background: var(--page-bg, #fefcfb); min-height: 100vh; padding: 1.5rem; }
         .rp-heading { font-size: 1.75rem; font-weight: 800; color: #0f172a; letter-spacing: -0.5px; margin-bottom: 0.2rem; }
         .rp-sub { font-size: 0.9rem; color: #64748b; margin-bottom: 1.5rem; }
 

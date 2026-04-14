@@ -29,7 +29,8 @@ new class extends Component {
     public $primary_color;
     public $logo_height;
     public $logo_width;
-
+    public $sidebar_bg_color;
+    public $page_bg_color;
 
     public function mount($id)
     {
@@ -57,6 +58,8 @@ new class extends Component {
             'primary_color' => 'nullable|string|max:7',
             'logo_height'   => 'nullable|integer|min:20|max:300',
             'logo_width'    => 'nullable|integer|min:20|max:600',
+            'sidebar_bg_color' => 'nullable|string|max:7',
+            'page_bg_color'    => 'nullable|string|max:7',
         ];
     }
 
@@ -75,6 +78,8 @@ new class extends Component {
         $this->logo_height   = $org->logo_height   ?? 60;
         $this->logo_width    = $org->logo_width     ?? 200;
         $this->newLogo       = null;
+        $this->sidebar_bg_color = $org->sidebar_bg_color;
+        $this->page_bg_color    = $org->page_bg_color;
     }
 
 
@@ -107,6 +112,8 @@ new class extends Component {
                 'primary_color' => $this->primary_color,
                 'logo_height'   => $this->logo_height,
                 'logo_width'    => $this->logo_width,
+                'sidebar_bg_color' => $this->sidebar_bg_color,
+                'page_bg_color'    => $this->page_bg_color,
             ]);
 
             // --- Geofence Logic ---
@@ -306,6 +313,27 @@ new class extends Component {
                         <input type="color" wire:model.defer="primary_color" class="form-control form-control-color" style="width: 60px; height: 38px;">
                         <input type="text" wire:model.defer="primary_color" class="form-control" placeholder="#072639" style="max-width: 120px;">
                         @error('primary_color') <span class="text-danger">{{ $message }}</span> @enderror
+                    </div>
+                </div>
+                <div class="mb-3 row align-items-center">
+                    <label class="col-sm-3 col-form-label fw-semibold">Sidebar / Nav Background</label>
+                    <div class="col-sm-9 d-flex align-items-center gap-3">
+                        <input type="color" wire:model.defer="sidebar_bg_color"
+                               class="form-control form-control-color" style="width:60px; height:38px;">
+                        <input type="text" wire:model.defer="sidebar_bg_color"
+                               class="form-control" placeholder="#f7eee8" style="max-width:120px;">
+                        @error('sidebar_bg_color') <span class="text-danger">{{ $message }}</span> @enderror
+                    </div>
+                </div>
+
+                <div class="mb-3 row align-items-center">
+                    <label class="col-sm-3 col-form-label fw-semibold">Page / Body Background</label>
+                    <div class="col-sm-9 d-flex align-items-center gap-3">
+                        <input type="color" wire:model.defer="page_bg_color"
+                               class="form-control form-control-color" style="width:60px; height:38px;">
+                        <input type="text" wire:model.defer="page_bg_color"
+                               class="form-control" placeholder="#fefcfb" style="max-width:120px;">
+                        @error('page_bg_color') <span class="text-danger">{{ $message }}</span> @enderror
                     </div>
                 </div>
 

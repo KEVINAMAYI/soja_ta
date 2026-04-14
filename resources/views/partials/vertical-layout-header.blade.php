@@ -1,5 +1,5 @@
-<nav class="navbar navbar-expand-lg p-0">
-    <ul class="navbar-nav">
+<nav {{ $sidebarBg ? "style=background-color:{$sidebarBg};" : '' }} class="navbar navbar-expand-lg p-0">
+<ul class="navbar-nav">
         <li class="nav-item nav-icon-hover-bg rounded-circle d-flex">
             <a class="nav-link  sidebartoggler" id="headerCollapse" href="javascript:void(0)">
                 <iconify-icon icon="solar:hamburger-menu-line-duotone" class="fs-6"></iconify-icon>

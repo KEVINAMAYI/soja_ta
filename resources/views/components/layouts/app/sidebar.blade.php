@@ -6,6 +6,8 @@
     $primaryColor = $org?->primary_color ?? '#072639';
     $logoHeight   = $org?->logo_height   ?? 60;
     $logoWidth    = $org?->logo_width    ?? 200;
+    $sidebarBg = $org?->sidebar_bg_color ?? '';
+    $pageBg    = $org?->page_bg_color    ?? '';
 @endphp
     <!DOCTYPE html>
 <html lang="en" dir="ltr" data-bs-theme="light" data-color-theme="Blue_Theme" data-layout="vertical">
@@ -33,6 +35,9 @@
             --muted-text: #666666;
             --dark-bg: #1A1A1A;
             --white: #ffffff;
+            --primary-color: {{ $primaryColor }};
+            @if($sidebarBg) --sidebar-bg: {{ $sidebarBg }}; @endif
+            @if($pageBg)    --page-bg:    {{ $pageBg }};    @endif
         }
 
         [data-bs-theme=light][data-color-theme=Blue_Theme]:root {
@@ -46,6 +51,8 @@
             background-color: var(--primary-color) !important;
             border-color: var(--primary-color) !important;
         }
+
+
 
         .btn-outline-primary {
             border-color: var(--accent-color) !important;
@@ -96,11 +103,11 @@
 
 <body class="link-sidebar">
 
-<div id="main-wrapper">
+<div id="main-wrapper" {{ $sidebarBg ? "style=background-color:{$sidebarBg};" : '' }}>
     @include('partials.aside')
     <div class="page-wrapper">
-        <header class="topbar">
-            <div class="with-vertical">
+        <header {{ $sidebarBg ? "style=background-color:{$sidebarBg};" : '' }} class="topbar">
+            <div {{ $sidebarBg ? "style=background-color:{$sidebarBg};" : '' }} class="with-vertical">
                 @include('partials.vertical-layout-header')
             </div>
             <div class="app-header with-horizontal">
@@ -115,10 +122,12 @@
                         <li class="nav-item d-none d-xl-flex align-items-center">
                             <a href="horizontal/index.html" class="text-nowrap nav-link">
                                 @if($org?->logo_path)
-                                    <img src="{{ asset('storage/' . $org->logo_path) }}" class="org-logo" alt="{{ $org->name }}"/>
+                                    <img src="{{ asset('storage/' . $org->logo_path) }}" class="org-logo"
+                                         alt="{{ $org->name }}"/>
                                 @else
-                                    <div class="org-logo d-flex align-items-center justify-content-center fw-bold text-white"
-                                         style="background-color: {{ $primaryColor }}; font-size: 1.2rem;">
+                                    <div
+                                        class="org-logo d-flex align-items-center justify-content-center fw-bold text-white"
+                                        style="background-color: {{ $primaryColor }}; font-size: 1.2rem;">
                                         {{ strtoupper(substr($org?->name ?? 'ORG', 0, 2)) }}
                                     </div>
                                 @endif
@@ -128,10 +137,12 @@
                     <div class="d-block d-xl-none">
                         <a href="default-sidebar/index.html" class="text-nowrap nav-link">
                             @if($org?->logo_path)
-                                <img src="{{ asset('storage/' . $org->logo_path) }}" class="org-logo" alt="{{ $org->name }}"/>
+                                <img src="{{ asset('storage/' . $org->logo_path) }}" class="org-logo"
+                                     alt="{{ $org->name }}"/>
                             @else
-                                <div class="org-logo d-flex align-items-center justify-content-center fw-bold text-white"
-                                     style="background-color: {{ $primaryColor }}; font-size: 1.2rem;">
+                                <div
+                                    class="org-logo d-flex align-items-center justify-content-center fw-bold text-white"
+                                    style="background-color: {{ $primaryColor }}; font-size: 1.2rem;">
                                     {{ strtoupper(substr($org?->name ?? 'ORG', 0, 2)) }}
                                 </div>
                             @endif
@@ -146,7 +157,7 @@
             </div>
         </header>
 
-        <div class="body-wrapper">
+        <div style="background-color: #fefcfb;" class="body-wrapper">
             <div class="container-fluid">
                 {{ $slot }}
             </div>
