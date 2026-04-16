@@ -29,10 +29,20 @@ class RolesAndPermissionsSeeder extends Seeder
             ['name' => 'delete-departments', 'category' => 'Departments'],
 
             // Employees
+            // Employees
             ['name' => 'view-employees', 'category' => 'Employees'],
             ['name' => 'add-employees', 'category' => 'Employees'],
             ['name' => 'edit-employees', 'category' => 'Employees'],
             ['name' => 'delete-employees', 'category' => 'Employees'],
+            ['name' => 'activate-employees', 'category' => 'Employees'],
+            ['name' => 'deactivate-employees', 'category' => 'Employees'],
+            ['name' => 'manage-zkbio-areas', 'category' => 'Employees'],
+            ['name' => 'sync-to-zkbio', 'category' => 'Employees'],
+
+            // Locations
+            ['name' => 'manage-work-locations', 'category' => 'Locations'],
+            ['name' => 'assign-locations', 'category' => 'Locations'],
+            ['name' => 'unassign-locations', 'category' => 'Locations'],
 
             // Roles
             ['name' => 'view-roles', 'category' => 'Roles'],
