@@ -23,10 +23,11 @@ class EmployeeTable extends DataTableComponent
 
     public function mount($type = 'student'): void
     {
-        $this->activePersonType = $type ?? 'student'; // ← guard against null
+        $isStudentOrg = Auth::user()->employee?->organization?->is_student_record ?? false;
 
-        $isStudentRecord = Auth::user()->employee?->organization?->is_student_record ?? false;
-        $this->entityLabel = $isStudentRecord ? 'Student' : 'Employee';
+        $this->activePersonType = $isStudentOrg ? ($type ?? 'student') : '';
+
+        $this->entityLabel = $isStudentOrg ? 'Student' : 'Employee';
 
         if (request()->has('active')) {
             $this->setFilter('active', request()->query('active'));
