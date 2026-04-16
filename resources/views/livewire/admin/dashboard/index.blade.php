@@ -276,7 +276,7 @@ new class extends Component {
             ->whereDate('date', $today)
             ->whereNotNull('latitude')
             ->whereNotNull('longitude')
-            ->orderByRaw("FIELD(status, 'clocked_in', 'clocked_out', 'late') ASC")
+            ->whereIn('status', ['clocked_in', 'clocked_out']) // ← ADD THIS
             ->orderBy('check_in_time', 'desc')
             ->get()
             ->groupBy('employee_id')
