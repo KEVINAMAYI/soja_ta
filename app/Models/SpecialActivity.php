@@ -12,7 +12,7 @@ class SpecialActivity extends Model
         'organization_id', 'name', 'type', 'destination',
         'activity_date', 'departure_time', 'return_time',
         'emergency_contact', 'eligible_grades', 'lead_staff',
-        'transport', 'notes', 'created_by',
+        'transport', 'notes', 'created_by','end_date'
     ];
 
     protected $casts = [

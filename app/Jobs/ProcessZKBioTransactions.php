@@ -4,6 +4,7 @@ namespace App\Jobs;
 
 use App\Models\Attendance;
 use App\Models\Employee;
+use App\Models\SpecialActivityParticipant;
 use App\Models\User;
 use App\Models\EmployeeAssignment;
 use App\Models\WorkLocation;
@@ -268,6 +269,15 @@ class ProcessZKBioTransactions implements ShouldQueue
             'time'     => $time->toDateTimeString(),
         ]);
 
+
+        if ($employee->is_student) {
+            SpecialActivityParticipant::handleBiometricScan(
+                $employee->id,
+                $employee->organization_id,
+                'clocked_in'
+            );
+        }
+
         return $attendance;
     }
 
@@ -298,5 +308,14 @@ class ProcessZKBioTransactions implements ShouldQueue
             'time'         => $checkOutTime->toDateTimeString(),
             'hours_worked' => $hoursWorked,
         ]);
+
+
+        if ($employee->is_student) {
+            SpecialActivityParticipant::handleBiometricScan(
+                $employee->id,
+                $employee->organization_id,
+                'clocked_out'
+            );
+        }
     }
 }

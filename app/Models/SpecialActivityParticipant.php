@@ -90,4 +90,6 @@ class SpecialActivityParticipant extends Model
 
         return true; // Student is on activity, swallow the scan
     }
+
+
 }

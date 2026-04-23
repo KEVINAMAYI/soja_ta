@@ -68,6 +68,10 @@ new class extends Component {
 
     public bool $showModal = false;
 
+    public string $endDate = '';   // ← add this line
+    public ?int $selectedActivityId = null;
+
+
     public function openModal(): void
     {
         $this->resetWizard();
@@ -88,6 +92,8 @@ new class extends Component {
             ->toArray();
 
         $this->activityDate = now()->toDateString();
+        $this->endDate = now()->toDateString();  // ← add alongside activityDate
+
         $this->loadStats();
         $this->loadActivities();
     }
@@ -117,16 +123,28 @@ new class extends Component {
 
         // Students currently off-campus on a live activity
         $liveIds = SpecialActivity::where('organization_id', $orgId)
-            ->where('activity_date', $now->toDateString())
+            ->where('activity_date', '<=', $now->toDateString())
+            ->where(function ($q) use ($now) {
+                $q->where(function ($q2) use ($now) {
+                    // Single-day: must be today
+                    $q2->whereNull('end_date')
+                        ->where('activity_date', $now->toDateString());
+                })->orWhere(function ($q2) use ($now) {
+                    // Multi-day: today falls within range
+                    $q2->whereNotNull('end_date')
+                        ->where('end_date', '>=', $now->toDateString());
+                });
+            })
             ->where('departure_time', '<=', $now->format('H:i'))
             ->where('return_time', '>=', $now->format('H:i'))
             ->pluck('id');
 
         $this->studentsOut = SpecialActivityParticipant::whereIn('special_activity_id', $liveIds)
-            ->whereIn('status', ['confirmed', 'departed'])
+            ->where('status', 'departed')  // ← only actually off-campus
             ->count();
     }
 
+    // Replace loadActivities() — just add selectedActivityId defaulting logic at the end
     public function loadActivities(): void
     {
         $orgId = auth()->user()->employee->organization_id;
@@ -153,30 +171,73 @@ new class extends Component {
         }
 
         $all = $query->get();
-
         $this->activities = $all->map(fn($a) => $this->mapActivity($a))->toArray();
 
-        // Featured = first live, else first upcoming
-        $featured = $all->first(fn($a) => $this->resolveStatus($a) === 'live')
-            ?? $all->first(fn($a) => $this->resolveStatus($a) === 'upcoming');
-        $this->featuredActivity = $featured ? $this->mapActivity($featured) : null;
+        // Auto-select: prefer live, then upcoming, then first in list
+        // But don't override if user already picked one that still exists
+        $existingIds = $all->pluck('id')->toArray();
+        if (!$this->selectedActivityId || !in_array($this->selectedActivityId, $existingIds)) {
+            $featured = $all->first(fn($a) => $this->resolveStatus($a) === 'live')
+                ?? $all->first(fn($a) => $this->resolveStatus($a) === 'upcoming')
+                ?? $all->first();
+            $this->selectedActivityId = $featured?->id;
+        }
+
+        // Build featuredActivity from selectedActivityId
+        $selected = $all->firstWhere('id', $this->selectedActivityId);
+        $this->featuredActivity = $selected ? $this->mapActivity($selected) : null;
+    }
+
+
+    // Add this new method
+    public function selectActivity(int $id): void
+    {
+        $this->selectedActivityId = $id;
+        $orgId = auth()->user()->employee->organization_id;
+
+        $activity = SpecialActivity::with(['participants.employee'])
+            ->where('organization_id', $orgId)
+            ->find($id);
+
+        $this->featuredActivity = $activity ? $this->mapActivity($activity) : null;
     }
 
     private function resolveStatus(SpecialActivity $a): string
     {
         $now = now();
-        $dateString = \Carbon\Carbon::parse($a->activity_date)->toDateString(); // "2026-03-27"
+        $startDate = \Carbon\Carbon::parse($a->activity_date)->toDateString();
+        $endDate = $a->end_date
+            ? \Carbon\Carbon::parse($a->end_date)->toDateString()
+            : $startDate;
 
-        if ($dateString === $now->toDateString()) {
-            $dep = \Carbon\Carbon::parse($dateString . ' ' . $a->departure_time);
-            $ret = \Carbon\Carbon::parse($dateString . ' ' . $a->return_time);
-            if ($now->between($dep, $ret)) return 'live';
-            if ($now->lt($dep)) return 'upcoming';  // ← before 08:00 = upcoming ✓
-            return 'completed';
+        $todayStr = $now->toDateString();
+
+        // Before start
+        if ($todayStr < $startDate) return 'upcoming';
+
+        // After end
+        if ($todayStr > $endDate) return 'completed';
+
+        // Within date range — check time window on first and last day
+        if ($todayStr === $startDate) {
+            $dep = \Carbon\Carbon::parse($startDate . ' ' . $a->departure_time);
+            if ($now->lt($dep)) return 'upcoming';
         }
 
-        if ($dateString > $now->toDateString()) return 'upcoming';
-        return 'completed';
+        if ($todayStr === $endDate) {
+            $ret = \Carbon\Carbon::parse($endDate . ' ' . $a->return_time);
+            if ($now->gt($ret)) return 'completed';
+        }
+
+        return 'live';
+    }
+
+
+    private function initials(string $name): string
+    {
+        $words = array_filter(explode(' ', trim($name))); // filter removes empty segments
+        $words = array_slice(array_values($words), 0, 2);
+        return strtoupper(implode('', array_map(fn($w) => $w[0], $words)));
     }
 
     private function mapActivity(SpecialActivity $a): array
@@ -192,7 +253,10 @@ new class extends Component {
             'typeLabel' => $this->activityTypes[$a->type]['label'] ?? ucfirst($a->type),
             'typeEmoji' => $this->activityTypes[$a->type]['emoji'] ?? '📌',
             'destination' => $a->destination,
-            'date' => \Carbon\Carbon::parse($a->activity_date)->format('D d M Y'),
+            'date' => \Carbon\Carbon::parse($a->activity_date)->format('D d M Y')
+                . ($a->end_date && $a->end_date !== $a->activity_date
+                    ? ' → ' . \Carbon\Carbon::parse($a->end_date)->format('D d M Y')
+                    : ''),
             'dateRaw' => $a->activity_date,
             'timeRange' => \Carbon\Carbon::parse($a->departure_time)->format('h:i A') . ' — ' . \Carbon\Carbon::parse($a->return_time)->format('h:i A'),
             'transport' => $a->transport ?? null,
@@ -210,7 +274,7 @@ new class extends Component {
                 'departed' => $p->departed_at ? \Carbon\Carbon::parse($p->departed_at)->format('h:i A') : null,
                 'returned' => $p->returned_at ? \Carbon\Carbon::parse($p->returned_at)->format('h:i A') : null,
                 'expected' => \Carbon\Carbon::parse($a->return_time)->format('h:i A'),
-                'initials' => strtoupper(implode('', array_map(fn($w) => $w[0], array_slice(explode(' ', $p->employee?->name ?? 'NA'), 0, 2)))),
+                'initials' => $this->initials($p->employee?->name ?? 'NA'),
                 'color' => $this->avatarColor($p->employee?->name ?? ''),
             ])->toArray(),
         ];
@@ -262,6 +326,7 @@ new class extends Component {
     {
         $this->validate([
             'activityDate' => 'required|date',
+            'endDate' => 'required|date|after_or_equal:activityDate', // ← add
             'departureTime' => 'required',
             'returnTime' => 'required',
             'eligibleGrades' => 'required|array|min:1',
@@ -299,7 +364,7 @@ new class extends Component {
             'name' => $e->name,
             'grade' => $e->grade,
             'id_number' => $e->id_number,
-            'initials' => strtoupper(implode('', array_map(fn($w) => $w[0], array_slice(explode(' ', $e->name), 0, 2)))),
+            'initials' => $this->initials($e->name),
             'color' => $this->avatarColor($e->name),
         ])->toArray();
     }
@@ -342,7 +407,7 @@ new class extends Component {
                 'name' => $s->name,
                 'grade' => $s->grade,
                 'id_number' => $s->id_number,
-                'initials' => strtoupper(implode('', array_map(fn($w) => $w[0], array_slice(explode(' ', $s->name), 0, 2)))),
+                'initials' => $this->initials($s->name),
                 'color' => $this->avatarColor($s->name),
             ];
         }
@@ -372,6 +437,7 @@ new class extends Component {
                 'type' => $this->activityType,
                 'destination' => $this->destination,
                 'activity_date' => $this->activityDate,
+                'end_date' => $this->endDate !== $this->activityDate ? $this->endDate : null, // ← add
                 'departure_time' => $this->departureTime,
                 'return_time' => $this->returnTime,
                 'emergency_contact' => $this->emergencyContact ?: null,
@@ -424,6 +490,8 @@ new class extends Component {
         $this->searchResults = [];
         $this->bulkGrade = '';
         $this->editId = null;
+        $this->endDate = now()->toDateString();  // ← add alongside activityDate reset
+
     }
 
     public function discardModal(): void
@@ -1258,6 +1326,11 @@ new class extends Component {
             opacity: .7;
         }
 
+        .sa-view-btn-active {
+            color: #15803d;
+            font-weight: 700;
+        }
+
     </style>
 @endpush
 
@@ -1419,12 +1492,20 @@ new class extends Component {
                                     <iconify-icon icon="mdi:account-group"></iconify-icon>
                                     {{ $act['participants'] }} students
                                 </span>
-                                    <button class="sa-delete-btn"
-                                            wire:click="deleteActivity({{ $act['id'] }})"
-                                            wire:confirm="Delete '{{ $act['name'] }}'? This will also remove all {{ $act['participants'] }} participant records.">
-                                        <iconify-icon icon="mdi:trash-can-outline" style="font-size:14px;"></iconify-icon>
-                                        Delete
-                                    </button>
+                                    <div class="d-flex align-items-center gap-2">
+                                        <button
+                                            class="sa-view-btn {{ $selectedActivityId === $act['id'] ? 'sa-view-btn-active' : '' }}"
+                                            wire:click="selectActivity({{ $act['id'] }})">
+                                            {{ $selectedActivityId === $act['id'] ? '👁 Viewing' : 'View Students' }}
+                                        </button>
+                                        <button class="sa-delete-btn"
+                                                wire:click="deleteActivity({{ $act['id'] }})"
+                                                wire:confirm="Delete '{{ $act['name'] }}'? This will also remove all {{ $act['participants'] }} participant records.">
+                                            <iconify-icon icon="mdi:trash-can-outline"
+                                                          style="font-size:14px;"></iconify-icon>
+                                            Delete
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
                         @endforeach
@@ -1444,6 +1525,35 @@ new class extends Component {
                             {{ ucfirst($featuredActivity['status']) }}
                         </span>
                             </h6>
+                            {{-- Activity meta line --}}
+                            <p style="font-size:.75rem; color:#94a3b8; margin:4px 0 0;">
+                                <iconify-icon icon="mdi:map-marker" style="font-size:13px;"></iconify-icon>
+                                {{ $featuredActivity['destination'] }}
+                                &nbsp;·&nbsp;
+                                <iconify-icon icon="mdi:calendar" style="font-size:13px;"></iconify-icon>
+                                {{ $featuredActivity['date'] }}
+                                &nbsp;·&nbsp;
+                                <iconify-icon icon="mdi:clock-outline" style="font-size:13px;"></iconify-icon>
+                                {{ $featuredActivity['timeRange'] }}
+                            </p>
+                        </div>
+                        {{-- Participant status summary --}}
+                        <div class="d-flex gap-2">
+                            @php
+                                $pList = $featuredActivity['participantList'];
+                                $confirmedCount = count(array_filter($pList, fn($p) => $p['status'] === 'confirmed'));
+                                $departedCount  = count(array_filter($pList, fn($p) => $p['status'] === 'departed'));
+                                $returnedCount  = count(array_filter($pList, fn($p) => $p['status'] === 'returned'));
+                            @endphp
+                            @if($confirmedCount)
+                                <span class="sa-p-status confirmed">{{ $confirmedCount }} Confirmed</span>
+                            @endif
+                            @if($departedCount)
+                                <span class="sa-p-status departed">{{ $departedCount }} Out</span>
+                            @endif
+                            @if($returnedCount)
+                                <span class="sa-p-status returned">{{ $returnedCount }} Returned</span>
+                            @endif
                         </div>
                     </div>
 
@@ -1591,9 +1701,14 @@ new class extends Component {
 
                         <div class="row mb-3">
                             <div class="col-md-6 mb-3">
-                                <label class="wi-form-label">Date <span style="color:#ef4444;">*</span></label>
+                                <label class="wi-form-label">Start Date <span style="color:#ef4444;">*</span></label>
                                 <input type="date" wire:model="activityDate" class="wi-form-control"/>
                                 @error('activityDate') <p class="wi-error">{{ $message }}</p> @enderror
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="wi-form-label">End Date <span style="color:#ef4444;">*</span></label>
+                                <input type="date" wire:model="endDate" class="wi-form-control"/>
+                                @error('endDate') <p class="wi-error">{{ $message }}</p> @enderror
                             </div>
                             <div class="col-md-6 mb-3">
                                 <label class="wi-form-label">Departure Time <span
@@ -1605,7 +1720,7 @@ new class extends Component {
                                         style="color:#ef4444;">*</span></label>
                                 <input type="time" wire:model="returnTime" class="wi-form-control"/>
                             </div>
-                            <div class="col-md-6 mb-3">
+                            <div class="col-md-12 mb-3">
                                 <label class="wi-form-label">Emergency Contact (on-trip)</label>
                                 <input type="text" wire:model="emergencyContact" class="wi-form-control"
                                        placeholder="+254 7XX XXX XXX"/>
@@ -1637,7 +1752,8 @@ new class extends Component {
 
                         <div class="p-search-wrap mb-3">
                             <div class="d-flex gap-2">
-                                <input type="text" wire:keyup="$dispatch('participant-search')" wire:model.live.debounce.300ms="participantSearch"
+                                <input type="text" wire:keyup="$dispatch('participant-search')"
+                                       wire:model.live.debounce.300ms="participantSearch"
                                        class="p-search-input" placeholder="Search student by name or ID..."/>
                                 <button class="add-btn" wire:click="updatedParticipantSearch">
                                     + Add
