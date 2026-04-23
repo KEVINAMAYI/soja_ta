@@ -130,7 +130,6 @@ new class extends Component {
     }
 
 
-    #[Livewire\Attributes\Rule(['importFile' => 'required|file|mimes:xlsx,csv,xls|max:5120'])]
     public $importFile;
 
     public function toggleImportPanel(): void
@@ -640,6 +639,7 @@ new class extends Component {
     {
 
         $this->validate();
+
         try {
             DB::beginTransaction();
 
@@ -688,6 +688,7 @@ new class extends Component {
             $this->loadSummaryStats();
         } catch (\Exception $e) {
             DB::rollBack();
+
 
             report($e);
             LivewireAlert::title('Error!')->text($e->getMessage())->error()->toast()->position('top-end')->show();
@@ -1941,6 +1942,10 @@ new class extends Component {
                 </div>
                 <form wire:submit.prevent="{{ $editId ? 'updateEmployee' : 'createEmployee' }}">
                     <div class="modal-body">
+
+                        {{-- Hidden shift resolver --}}
+                        <input type="hidden" wire:model="shift_id"/>
+
                         <div class="row">
 
                             @if($isStudentOrg)
@@ -2048,13 +2053,15 @@ new class extends Component {
                                 </div>
                             @endif
 
-                            <div class="col-12 mb-3">
-                                <div class="form-check">
-                                    <input type="checkbox" wire:model="active" class="form-check-input"
-                                           id="activeToggle"/>
-                                    <label for="activeToggle" class="form-check-label">Active</label>
+                            @if(!$isStudent)
+                                <div class="col-12 mb-3">
+                                    <div class="form-check">
+                                        <input type="checkbox" wire:model="active" class="form-check-input"
+                                               id="activeToggle"/>
+                                        <label for="activeToggle" class="form-check-label">Active</label>
+                                    </div>
                                 </div>
-                            </div>
+                            @endif
 
                         </div>
                     </div>

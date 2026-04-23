@@ -72,46 +72,30 @@ class FetchZKBioTransactions implements ShouldQueue
             );
 
             if (empty($transactions)) {
-                Log::info('ZKBio no transactions in window', [
-                    'org'    => $org->name,
-                    'device' => $deviceSn,
-                ]);
+                Log::info('ZKBio no transactions in window', ['org' => $org->name, 'device' => $deviceSn]);
                 return;
             }
 
-            // ── DB dedup — filter out logIds we've already processed ──
+            // ── Filter out already processed logIds ──
             $incomingLogIds = array_filter(array_column($transactions, 'logId'));
-
             $alreadyProcessed = ZkbioProcessedLog::whereIn('log_id', $incomingLogIds)
-                ->pluck('log_id')
-                ->toArray();
+                ->pluck('log_id')->toArray();
 
             $newTransactions = array_values(array_filter(
                 $transactions,
-                fn($tx) => !empty($tx['logId']) && !in_array($tx['logId'], $alreadyProcessed)
+                fn($tx) => !empty($tx['logId'])
+                    && ($tx['logId'] ?? -1) !== -1          // ← skip disconnect events
+                    && ($tx['eventNo'] ?? -1) === 0         // ← only Normal Verify Open
+                    && !empty($tx['pin'])                   // ← skip events with no pin
+                    && !in_array($tx['logId'], $alreadyProcessed)
             ));
 
             if (empty($newTransactions)) {
-                Log::info('ZKBio all transactions already processed', [
-                    'org'    => $org->name,
-                    'device' => $deviceSn,
-                ]);
+                Log::info('ZKBio all transactions already processed', ['org' => $org->name, 'device' => $deviceSn]);
                 return;
             }
 
-            // ── Mark as processed immediately before dispatching ──
-            // This prevents duplicate processing if queue retries
-            ZkbioProcessedLog::insert(
-                array_map(fn($tx) => [
-                    'log_id'          => $tx['logId'],
-                    'device_sn'       => $deviceSn,
-                    'pin'             => $tx['pin'] ?? null,
-                    'organization_id' => $org->id,
-                    'processed_at'    => now(),
-                ], $newTransactions)
-            );
-
-            // Sort oldest → newest so toggle logic is correct
+            // Sort oldest → newest
             usort($newTransactions, fn($a, $b) => strcmp($a['eventTime'], $b['eventTime']));
 
             Log::info('ZKBio new transactions to process', [
@@ -121,16 +105,38 @@ class FetchZKBioTransactions implements ShouldQueue
                 'logIds' => array_column($newTransactions, 'logId'),
             ]);
 
-            // One job per person
+            // ── One job per person, mark as processed ONLY after job succeeds ──
             $grouped = collect($newTransactions)->groupBy('pin');
 
             foreach ($grouped as $pin => $pinTransactions) {
                 if (!$pin) continue;
 
-                ProcessZKBioTransactions::dispatch(
-                    $pinTransactions->values()->all(),
-                    $org->id
-                );
+                try {
+                    ProcessZKBioTransactions::dispatchSync(
+                        $pinTransactions->values()->all(),
+                        $org->id
+                    );
+
+                    // ✅ Only mark as processed AFTER successful job execution
+                    ZkbioProcessedLog::insert(
+                        $pinTransactions->map(fn($tx) => [
+                            'log_id'          => $tx['logId'],
+                            'device_sn'       => $deviceSn,
+                            'pin'             => $tx['pin'] ?? null,
+                            'organization_id' => $org->id,
+                            'processed_at'    => now(),
+                        ])->all()
+                    );
+
+                } catch (\Throwable $e) {
+                    // ❌ Job failed — do NOT mark as processed so it retries next cycle
+                    Log::error('ZKBio job failed — will retry next cycle', [
+                        'pin'    => $pin,
+                        'org'    => $org->name,
+                        'device' => $deviceSn,
+                        'error'  => $e->getMessage(),
+                    ]);
+                }
             }
 
         } catch (\Throwable $e) {
@@ -139,7 +145,6 @@ class FetchZKBioTransactions implements ShouldQueue
                 'device' => $deviceSn,
                 'error'  => $e->getMessage(),
             ]);
-            // Don't rethrow — let other devices continue
         }
     }
 }

@@ -102,59 +102,78 @@ new class extends Component {
     {
         try {
             $org = auth()->user()->employee->organization;
-
             if (!$org->zkbio_enabled || !$org->zkbio_device_sn) return;
 
-            $zkbio = app(\App\Services\ZKBioService::class);
-
-            $startDate = now()->subMinutes(5)->format('Y-m-d H:i:s');
-            $endDate = now()->format('Y-m-d H:i:s');
+            $zkbio     = app(\App\Services\ZKBioService::class);
+            $startDate = now()->subDays(1)->format('Y-m-d H:i:s'); // manual sync looks back 1 day
+            $endDate   = now()->format('Y-m-d H:i:s');
 
             $deviceSns = array_filter(array_map('trim', explode(',', $org->zkbio_device_sn)));
 
             foreach ($deviceSns as $deviceSn) {
+
                 $transactions = $zkbio->getTransactions(
-                    deviceSn: $deviceSn,
-                    pageNo: 1,
-                    pageSize: 50,
-                    startDate: $startDate,
-                    endDate: $endDate,
-                    baseUrl: $org->zkbio_base_url,
+                    deviceSn:    $deviceSn,
+                    pageNo:      1,
+                    pageSize:    100,
+                    startDate:   $startDate,
+                    endDate:     $endDate,
+                    baseUrl:     $org->zkbio_base_url,
                     accessToken: $org->zkbio_access_token,
                 );
 
                 if (empty($transactions)) continue;
 
-                $incomingLogIds = array_filter(array_column($transactions, 'logId'));
+                // ── Filter to only real scan events ──
+                $incomingLogIds   = array_filter(array_column($transactions, 'logId'));
                 $alreadyProcessed = \App\Models\ZkbioProcessedLog::whereIn('log_id', $incomingLogIds)
                     ->pluck('log_id')->toArray();
 
                 $newTransactions = array_values(array_filter(
                     $transactions,
-                    fn($tx) => !empty($tx['logId']) && !in_array($tx['logId'], $alreadyProcessed)
+                    fn($tx) =>
+                        !empty($tx['pin'])               // must have a person
+                        && ($tx['logId'] ?? -1) !== -1   // skip disconnect events
+                        && ($tx['eventNo'] ?? -1) === 0  // only Normal Verify Open
+                        && !in_array($tx['logId'], $alreadyProcessed) // not already done
                 ));
 
                 if (empty($newTransactions)) continue;
 
-                \App\Models\ZkbioProcessedLog::insert(
-                    array_map(fn($tx) => [
-                        'log_id' => $tx['logId'],
-                        'device_sn' => $deviceSn,
-                        'pin' => $tx['pin'] ?? null,
-                        'organization_id' => $org->id,
-                        'processed_at' => now(),
-                    ], $newTransactions)
-                );
-
+                // Sort oldest → newest so toggle logic is correct
                 usort($newTransactions, fn($a, $b) => strcmp($a['eventTime'], $b['eventTime']));
 
+                // ── One job per person ──
                 $grouped = collect($newTransactions)->groupBy('pin');
+
                 foreach ($grouped as $pin => $pinTransactions) {
                     if (!$pin) continue;
-                    \App\Jobs\ProcessZKBioTransactions::dispatchSync(
-                        $pinTransactions->values()->all(),
-                        $org->id
-                    );
+
+                    try {
+                        \App\Jobs\ProcessZKBioTransactions::dispatchSync(
+                            $pinTransactions->values()->all(),
+                            $org->id
+                        );
+
+                        // ✅ Only mark as processed AFTER job succeeds
+                        \App\Models\ZkbioProcessedLog::insert(
+                            $pinTransactions->map(fn($tx) => [
+                                'log_id'          => $tx['logId'],
+                                'device_sn'       => $deviceSn,
+                                'pin'             => $tx['pin'] ?? null,
+                                'organization_id' => $org->id,
+                                'processed_at'    => now(),
+                            ])->all()
+                        );
+
+                    } catch (\Throwable $e) {
+                        // ❌ Job failed — NOT marked as processed so it retries next sync
+                        \Illuminate\Support\Facades\Log::error('syncNow job failed for pin', [
+                            'pin'    => $pin,
+                            'device' => $deviceSn,
+                            'error'  => $e->getMessage(),
+                        ]);
+                    }
                 }
             }
 
@@ -165,9 +184,9 @@ new class extends Component {
             }
             $this->dispatch('date-range-updated',
                 startDate: $this->startDate,
-                endDate: $this->endDate,
-                status: $this->filterStatus,
-                grade: $this->filterGrade,
+                endDate:   $this->endDate,
+                status:    $this->filterStatus,
+                grade:     $this->filterGrade,
             );
 
             LivewireAlert::title('Synced!')

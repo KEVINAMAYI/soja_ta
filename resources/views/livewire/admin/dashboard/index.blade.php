@@ -44,7 +44,7 @@ new class extends Component {
         $this->isSchoolOrg = (bool)(auth()->user()->employee?->organization?->is_student_record ?? false);
 
         // Read ?view= query param to determine which view to show on load
-        $viewParam = request()->query('view', 'staff');
+        $viewParam = request()->query('view', $this->isSchoolOrg ? 'student' : 'staff');
         $this->showStudentView = $this->isSchoolOrg && ($viewParam === 'student');
 
         $this->googleMapsApiKey = env('GOOGLE_MAPS_API_KEY');
