@@ -80,6 +80,7 @@ new class extends Component {
     public int $importSuccessCount = 0;
     public int $importErrorCount = 0;
     public ?string $importError = null;
+    public $importFile;
 
     public function mount($roleId = null): void
     {
@@ -125,12 +126,13 @@ new class extends Component {
         }
 
 
-        $this->shift_id = $this->shifts->firstWhere('name', 'Day Shift')?->id ?? '';
+        $this->shift_id = $this->shifts->firstWhere('name', 'Day Shift')?->id
+            ?? $this->shifts->firstWhere('name', 'Day')?->id
+            ?? $this->shifts->first()?->id
+            ?? null;
 
     }
 
-
-    public $importFile;
 
     public function toggleImportPanel(): void
     {
