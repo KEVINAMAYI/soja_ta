@@ -211,7 +211,7 @@ new class extends Component {
 
             // Friendly display names for headers
             $displayHeaders = $isStudent
-                ? ['Full Name', 'ID / Admission No.', 'Grade', 'Stream']
+                ? ['Full Name', 'ID / Admission No.', 'Year Group', 'Stream']
                 : ['Full Name', 'Email Address', 'Phone Number', 'ID Number', 'Department', 'Role', 'Title'];
 
             $sheet->fromArray([$displayHeaders], null, 'A1');
@@ -310,6 +310,8 @@ new class extends Component {
             'mobile' => 'phone',
             'class' => 'grade',
             'year' => 'grade',
+            'year_group' => 'grade',   // ← add this
+            'year group' => 'grade',
         ];
 
         $this->importPreview = array_map(function ($row) use ($headerMap) {
