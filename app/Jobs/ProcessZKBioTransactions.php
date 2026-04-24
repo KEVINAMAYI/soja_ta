@@ -28,7 +28,7 @@ class ProcessZKBioTransactions implements ShouldQueue
     public int $tries = 3;
 
     // Minimum seconds between scans to count as a new action (duplicate tap protection)
-    const MIN_GAP_SECONDS = 60;
+    const MIN_GAP_SECONDS = 600;
 
     public function __construct(
         protected array $transactions,
