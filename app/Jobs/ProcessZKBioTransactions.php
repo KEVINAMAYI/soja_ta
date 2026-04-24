@@ -119,6 +119,15 @@ class ProcessZKBioTransactions implements ShouldQueue
                     'early_checkout_threshold_time' => $shift?->getEarlyCheckoutThreshold()?->format('H:i:s'),
                 ]);
 
+                // ✅ ADD THIS
+                if ($employee->is_student) {
+                    SpecialActivityParticipant::handleBiometricScan(
+                        $employee->id,
+                        $employee->organization_id,
+                        'clocked_in'
+                    );
+                }
+
                 Log::info('ZKBio check-in (was ' . $attendance->status . ')', [
                     'employee' => $employee->name,
                     'time'     => $eventTime->toDateTimeString(),
