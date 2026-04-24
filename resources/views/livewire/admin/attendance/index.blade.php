@@ -98,6 +98,156 @@ new class extends Component {
         );
     }
 
+
+    public function downloadAttendanceExcel(): mixed
+    {
+        $records  = $this->getExportRecords();
+        $rows     = $this->buildSchoolExportRows($records);
+        $filename = 'attendance_' . $this->startDate . '_to_' . $this->endDate . '.xlsx';
+
+        $export = new class($rows) implements
+            \Maatwebsite\Excel\Concerns\FromArray,
+            \Maatwebsite\Excel\Concerns\ShouldAutoSize,
+            \Maatwebsite\Excel\Concerns\WithStyles,
+            \Maatwebsite\Excel\Concerns\WithTitle {
+
+            public function __construct(private readonly array $rows) {}
+            public function array(): array { return $this->rows; }
+            public function title(): string { return 'Attendance'; }
+
+            public function styles(\PhpOffice\PhpSpreadsheet\Worksheet\Worksheet $sheet)
+            {
+                $lastCol = $sheet->getHighestColumn();
+                $lastRow = $sheet->getHighestRow();
+                $sheet->getStyle('A1:' . $lastCol . '1')->applyFromArray([
+                    'font' => ['bold' => true, 'color' => ['argb' => 'FFFFFFFF']],
+                    'fill' => ['fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID,
+                        'startColor' => ['argb' => 'FF0F172A']],
+                    'alignment' => ['horizontal' => \PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_LEFT,
+                        'vertical'   => \PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_CENTER],
+                ]);
+                $sheet->getRowDimension(1)->setRowHeight(26);
+                $sheet->getStyle('A1:' . $lastCol . $lastRow)
+                    ->getAlignment()
+                    ->setVertical(\PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_CENTER);
+                $sheet->getDefaultRowDimension()->setRowHeight(20);
+            }
+        };
+
+        return \Maatwebsite\Excel\Facades\Excel::download($export, $filename);
+    }
+
+    public function downloadAttendancePdf(): mixed
+    {
+        $records  = $this->getExportRecords();
+        $rows     = $this->buildSchoolExportRows($records);
+        $headers  = array_shift($rows);
+
+        $data = [
+            'rows'        => $rows,
+            'headers'     => $headers,
+            'startDate'   => $this->startDate,
+            'endDate'     => $this->endDate,
+            'filterStatus'=> $this->filterStatus,
+            'filterGrade' => $this->filterGrade,
+        ];
+
+        $pdf      = \Barryvdh\DomPDF\Facade\Pdf::loadView('exports.attendance.records', compact('data'))
+            ->setPaper('a4', 'landscape');
+        $filename = 'attendance_' . $this->startDate . '_to_' . $this->endDate . '.pdf';
+
+        return response()->streamDownload(
+            fn() => print($pdf->output()),
+            $filename,
+            ['Content-Type' => 'application/pdf']
+        );
+    }
+
+    /**
+     * Mirrors exactly what the attendance table view shows —
+     * same date range, same filterStatus, same filterGrade.
+     */
+    private function getExportRecords(): \Illuminate\Support\Collection
+    {
+        $orgId = auth()->user()->employee?->organization_id;
+
+        $studentIds = Employee::where('organization_id', $orgId)
+            ->where('active', 1)
+            ->where('is_student', 1)
+            ->when($this->filterGrade, fn($q) => $q->where('grade', $this->filterGrade))
+            ->pluck('id');
+
+        return match ($this->filterStatus) {
+
+            // On Campus — last attendance status is clocked_in
+            'present' => Attendance::with('employee')
+                ->whereIn('employee_id', $studentIds)
+                ->whereDate('date', $this->startDate)
+                ->where('status', 'clocked_in')
+                ->orderBy('check_in_time')
+                ->get(),
+
+            // Off Campus — last attendance status is clocked_out
+            'clocked_out' => Attendance::with('employee')
+                ->whereIn('employee_id', $studentIds)
+                ->whereDate('date', $this->startDate)
+                ->where('status', 'clocked_out')
+                ->orderBy('check_out_time')
+                ->get(),
+
+            // Unscanned — no record today at all
+            'absent' => Employee::with(['lastAttendance'])
+                ->whereIn('id', $studentIds)
+                ->whereDoesntHave('attendances', fn($q) =>
+                $q->whereDate('date', $this->startDate)
+                    ->whereIn('status', ['clocked_in', 'clocked_out'])
+                )
+                ->orderBy('grade')
+                ->orderBy('name')
+                ->get()
+                ->map(fn($e) => (object)[
+                    'employee'       => $e,
+                    'status'         => 'absent',
+                    'check_in_time'  => null,
+                    'check_out_time' => null,
+                    'date'           => $this->startDate,
+                ]),
+
+            // No filter — everything for the date range
+            default => Attendance::with('employee')
+                ->whereIn('employee_id', $studentIds)
+                ->whereBetween('date', [$this->startDate, $this->endDate])
+                ->orderBy('date')
+                ->orderBy('check_in_time')
+                ->get(),
+        };
+    }
+
+    private function buildSchoolExportRows(\Illuminate\Support\Collection $records): array
+    {
+        $statusLabel = [
+            'clocked_in'  => 'On Campus',
+            'clocked_out' => 'Off Campus',
+            'absent'      => 'Unscanned',
+        ];
+
+        $rows = [['Student', 'Grade', 'Date', 'Status', 'Check In', 'Check Out']];
+
+        foreach ($records as $a) {
+            $emp    = $a->employee;
+            $rows[] = [
+                $emp->name                ?? '—',
+                $emp->grade               ?? '—',
+                $a->date,
+                $statusLabel[$a->status]  ?? ucfirst(str_replace('_', ' ', $a->status)),
+                $a->check_in_time  ? \Carbon\Carbon::parse($a->check_in_time)->format('h:i A')  : '—',
+                $a->check_out_time ? \Carbon\Carbon::parse($a->check_out_time)->format('h:i A') : '—',
+            ];
+        }
+
+        return $rows;
+    }
+
     public function syncNow(): void
     {
         try {
@@ -866,19 +1016,46 @@ new class extends Component {
                 <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
                     <h6 class="mb-0 fw-bold" style="color:#1e293b;">Attendance Records</h6>
                     <div class="d-flex gap-2 align-items-center">
+
+                        <div class="dropdown">
+                            <button class="btn btn-sm dropdown-toggle d-flex align-items-center gap-2"
+                                    type="button" data-bs-toggle="dropdown" aria-expanded="false"
+                                    style="height:36px; background-color:#072639; color:#fff; border-color:#072639;">
+                                <iconify-icon icon="mdi:download" style="font-size:15px;"></iconify-icon>
+                                Export
+                            </button>
+                            <ul class="dropdown-menu dropdown-menu-end shadow-sm" style="min-width:160px;">
+                                <li>
+                                    <button class="dropdown-item d-flex align-items-center gap-2"
+                                            wire:click="downloadAttendanceExcel">
+                                        <iconify-icon icon="mdi:microsoft-excel" style="color:#16a34a;font-size:16px;"></iconify-icon>
+                                        Export Excel
+                                    </button>
+                                </li>
+                                <li>
+                                    <button class="dropdown-item d-flex align-items-center gap-2"
+                                            wire:click="downloadAttendancePdf">
+                                        <iconify-icon icon="mdi:file-pdf-box" style="color:#dc2626;font-size:16px;"></iconify-icon>
+                                        Export PDF
+                                    </button>
+                                </li>
+                            </ul>
+                        </div>
+
                         @if($zkbioEnabled)
                             <button wire:click="syncNow" wire:loading.attr="disabled" wire:target="syncNow"
                                     class="btn btn-warning btn-sm d-flex align-items-center gap-2" style="height:36px;">
-                            <span wire:loading.class="d-none" wire:target="syncNow"
-                                  class="d-flex align-items-center gap-2">
-                                <iconify-icon icon="mdi:refresh" style="font-size:15px;"></iconify-icon> Sync Now
-                            </span>
+                <span wire:loading.class="d-none" wire:target="syncNow"
+                      class="d-flex align-items-center gap-2">
+                    <iconify-icon icon="mdi:refresh" style="font-size:15px;"></iconify-icon> Sync Now
+                </span>
                                 <span wire:loading.class.remove="d-none" wire:target="syncNow"
                                       class="d-none d-flex align-items-center gap-2">
-                                <span class="spinner-border spinner-border-sm"></span> Syncing...
-                            </span>
+                    <span class="spinner-border spinner-border-sm"></span> Syncing...
+                </span>
                             </button>
                         @endif
+
                     </div>
                 </div>
 
