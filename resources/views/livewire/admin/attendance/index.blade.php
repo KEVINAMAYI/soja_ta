@@ -1013,7 +1013,7 @@ new class extends Component {
 
             {{-- Attendance table with sync + filters --}}
             <div class="card card-body">
-                <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
+                <div   class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
                     <h6 class="mb-0 fw-bold" style="color:#1e293b;">Attendance Records</h6>
                     <div class="d-flex gap-2 align-items-center">
 
@@ -1059,7 +1059,7 @@ new class extends Component {
                     </div>
                 </div>
 
-                <div class="row align-items-end mb-4">
+                <div class="row align-items-end mb-4 mt-4">
                     <div class="col-md-3">
                         <label class="form-label">Start Date</label>
                         <input type="date" class="form-control" wire:model="startDate"
