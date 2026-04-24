@@ -265,7 +265,7 @@ class AttendanceDailyTable extends DataTableComponent
             Column::make($isSchool ? 'Student' : 'Employee')
                 ->label(fn($row) => view('livewire.admin.attendance.employee', ['attendance' => $row])),
 
-            Column::make($isSchool ? 'Grade' : 'Shift')
+            Column::make($isSchool ? 'Year Group' : 'Shift')
                 ->label(function ($row) use ($isSchool) {
                     if ($isSchool) {
                         $grade = $row->employee->grade ?? null;

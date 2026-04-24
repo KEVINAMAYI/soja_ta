@@ -101,8 +101,8 @@ new class extends Component {
 
     public function downloadAttendanceExcel(): mixed
     {
-        $records  = $this->getExportRecords();
-        $rows     = $this->buildSchoolExportRows($records);
+        $records = $this->getExportRecords();
+        $rows = $this->buildSchoolExportRows($records);
         $filename = 'attendance_' . $this->startDate . '_to_' . $this->endDate . '.xlsx';
 
         $export = new class($rows) implements
@@ -111,9 +111,19 @@ new class extends Component {
             \Maatwebsite\Excel\Concerns\WithStyles,
             \Maatwebsite\Excel\Concerns\WithTitle {
 
-            public function __construct(private readonly array $rows) {}
-            public function array(): array { return $this->rows; }
-            public function title(): string { return 'Attendance'; }
+            public function __construct(private readonly array $rows)
+            {
+            }
+
+            public function array(): array
+            {
+                return $this->rows;
+            }
+
+            public function title(): string
+            {
+                return 'Attendance';
+            }
 
             public function styles(\PhpOffice\PhpSpreadsheet\Worksheet\Worksheet $sheet)
             {
@@ -124,7 +134,7 @@ new class extends Component {
                     'fill' => ['fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID,
                         'startColor' => ['argb' => 'FF0F172A']],
                     'alignment' => ['horizontal' => \PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_LEFT,
-                        'vertical'   => \PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_CENTER],
+                        'vertical' => \PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_CENTER],
                 ]);
                 $sheet->getRowDimension(1)->setRowHeight(26);
                 $sheet->getStyle('A1:' . $lastCol . $lastRow)
@@ -139,20 +149,20 @@ new class extends Component {
 
     public function downloadAttendancePdf(): mixed
     {
-        $records  = $this->getExportRecords();
-        $rows     = $this->buildSchoolExportRows($records);
-        $headers  = array_shift($rows);
+        $records = $this->getExportRecords();
+        $rows = $this->buildSchoolExportRows($records);
+        $headers = array_shift($rows);
 
         $data = [
-            'rows'        => $rows,
-            'headers'     => $headers,
-            'startDate'   => $this->startDate,
-            'endDate'     => $this->endDate,
-            'filterStatus'=> $this->filterStatus,
+            'rows' => $rows,
+            'headers' => $headers,
+            'startDate' => $this->startDate,
+            'endDate' => $this->endDate,
+            'filterStatus' => $this->filterStatus,
             'filterGrade' => $this->filterGrade,
         ];
 
-        $pdf      = \Barryvdh\DomPDF\Facade\Pdf::loadView('exports.attendance.records', compact('data'))
+        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('exports.attendance.records', compact('data'))
             ->setPaper('a4', 'landscape');
         $filename = 'attendance_' . $this->startDate . '_to_' . $this->endDate . '.pdf';
 
@@ -198,19 +208,18 @@ new class extends Component {
             // Unscanned — no record today at all
             'absent' => Employee::with(['lastAttendance'])
                 ->whereIn('id', $studentIds)
-                ->whereDoesntHave('attendances', fn($q) =>
-                $q->whereDate('date', $this->startDate)
+                ->whereDoesntHave('attendances', fn($q) => $q->whereDate('date', $this->startDate)
                     ->whereIn('status', ['clocked_in', 'clocked_out'])
                 )
                 ->orderBy('grade')
                 ->orderBy('name')
                 ->get()
                 ->map(fn($e) => (object)[
-                    'employee'       => $e,
-                    'status'         => 'absent',
-                    'check_in_time'  => null,
+                    'employee' => $e,
+                    'status' => 'absent',
+                    'check_in_time' => null,
                     'check_out_time' => null,
-                    'date'           => $this->startDate,
+                    'date' => $this->startDate,
                 ]),
 
             // No filter — everything for the date range
@@ -226,21 +235,21 @@ new class extends Component {
     private function buildSchoolExportRows(\Illuminate\Support\Collection $records): array
     {
         $statusLabel = [
-            'clocked_in'  => 'On Campus',
+            'clocked_in' => 'On Campus',
             'clocked_out' => 'Off Campus',
-            'absent'      => 'Unscanned',
+            'absent' => 'Unscanned',
         ];
 
         $rows = [['Student', 'Grade', 'Date', 'Status', 'Check In', 'Check Out']];
 
         foreach ($records as $a) {
-            $emp    = $a->employee;
+            $emp = $a->employee;
             $rows[] = [
-                $emp->name                ?? '—',
-                $emp->grade               ?? '—',
+                $emp->name ?? '—',
+                $emp->grade ?? '—',
                 $a->date,
-                $statusLabel[$a->status]  ?? ucfirst(str_replace('_', ' ', $a->status)),
-                $a->check_in_time  ? \Carbon\Carbon::parse($a->check_in_time)->format('h:i A')  : '—',
+                $statusLabel[$a->status] ?? ucfirst(str_replace('_', ' ', $a->status)),
+                $a->check_in_time ? \Carbon\Carbon::parse($a->check_in_time)->format('h:i A') : '—',
                 $a->check_out_time ? \Carbon\Carbon::parse($a->check_out_time)->format('h:i A') : '—',
             ];
         }
@@ -254,35 +263,34 @@ new class extends Component {
             $org = auth()->user()->employee->organization;
             if (!$org->zkbio_enabled || !$org->zkbio_device_sn) return;
 
-            $zkbio     = app(\App\Services\ZKBioService::class);
+            $zkbio = app(\App\Services\ZKBioService::class);
             $startDate = now()->subDays(1)->format('Y-m-d H:i:s'); // manual sync looks back 1 day
-            $endDate   = now()->format('Y-m-d H:i:s');
+            $endDate = now()->format('Y-m-d H:i:s');
 
             $deviceSns = array_filter(array_map('trim', explode(',', $org->zkbio_device_sn)));
 
             foreach ($deviceSns as $deviceSn) {
 
                 $transactions = $zkbio->getTransactions(
-                    deviceSn:    $deviceSn,
-                    pageNo:      1,
-                    pageSize:    100,
-                    startDate:   $startDate,
-                    endDate:     $endDate,
-                    baseUrl:     $org->zkbio_base_url,
+                    deviceSn: $deviceSn,
+                    pageNo: 1,
+                    pageSize: 100,
+                    startDate: $startDate,
+                    endDate: $endDate,
+                    baseUrl: $org->zkbio_base_url,
                     accessToken: $org->zkbio_access_token,
                 );
 
                 if (empty($transactions)) continue;
 
                 // ── Filter to only real scan events ──
-                $incomingLogIds   = array_filter(array_column($transactions, 'logId'));
+                $incomingLogIds = array_filter(array_column($transactions, 'logId'));
                 $alreadyProcessed = \App\Models\ZkbioProcessedLog::whereIn('log_id', $incomingLogIds)
                     ->pluck('log_id')->toArray();
 
                 $newTransactions = array_values(array_filter(
                     $transactions,
-                    fn($tx) =>
-                        !empty($tx['pin'])               // must have a person
+                    fn($tx) => !empty($tx['pin'])               // must have a person
                         && ($tx['logId'] ?? -1) !== -1   // skip disconnect events
                         && ($tx['eventNo'] ?? -1) === 0  // only Normal Verify Open
                         && !in_array($tx['logId'], $alreadyProcessed) // not already done
@@ -308,20 +316,20 @@ new class extends Component {
                         // ✅ Only mark as processed AFTER job succeeds
                         \App\Models\ZkbioProcessedLog::insert(
                             $pinTransactions->map(fn($tx) => [
-                                'log_id'          => $tx['logId'],
-                                'device_sn'       => $deviceSn,
-                                'pin'             => $tx['pin'] ?? null,
+                                'log_id' => $tx['logId'],
+                                'device_sn' => $deviceSn,
+                                'pin' => $tx['pin'] ?? null,
                                 'organization_id' => $org->id,
-                                'processed_at'    => now(),
+                                'processed_at' => now(),
                             ])->all()
                         );
 
                     } catch (\Throwable $e) {
                         // ❌ Job failed — NOT marked as processed so it retries next sync
                         \Illuminate\Support\Facades\Log::error('syncNow job failed for pin', [
-                            'pin'    => $pin,
+                            'pin' => $pin,
                             'device' => $deviceSn,
-                            'error'  => $e->getMessage(),
+                            'error' => $e->getMessage(),
                         ]);
                     }
                 }
@@ -334,9 +342,9 @@ new class extends Component {
             }
             $this->dispatch('date-range-updated',
                 startDate: $this->startDate,
-                endDate:   $this->endDate,
-                status:    $this->filterStatus,
-                grade:     $this->filterGrade,
+                endDate: $this->endDate,
+                status: $this->filterStatus,
+                grade: $this->filterGrade,
             );
 
             LivewireAlert::title('Synced!')
@@ -399,8 +407,8 @@ new class extends Component {
         $this->absentCount = max(0, $this->totalEmployees - $scannedIds->count());
 
         // Not used in school view but reset to avoid stale data
-        $this->sickOffCount  = 0;
-        $this->onLeaveCount  = 0;
+        $this->sickOffCount = 0;
+        $this->onLeaveCount = 0;
         $this->offShiftCount = 0;
         $this->inactiveCount = Employee::where('organization_id', $orgId)
             ->where('active', 0)
@@ -1013,7 +1021,7 @@ new class extends Component {
 
             {{-- Attendance table with sync + filters --}}
             <div class="card card-body">
-                <div   class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
+                <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
                     <h6 class="mb-0 fw-bold" style="color:#1e293b;">Attendance Records</h6>
                     <div class="d-flex gap-2 align-items-center">
 
@@ -1028,14 +1036,16 @@ new class extends Component {
                                 <li>
                                     <button class="dropdown-item d-flex align-items-center gap-2"
                                             wire:click="downloadAttendanceExcel">
-                                        <iconify-icon icon="mdi:microsoft-excel" style="color:#16a34a;font-size:16px;"></iconify-icon>
+                                        <iconify-icon icon="mdi:microsoft-excel"
+                                                      style="color:#16a34a;font-size:16px;"></iconify-icon>
                                         Export Excel
                                     </button>
                                 </li>
                                 <li>
                                     <button class="dropdown-item d-flex align-items-center gap-2"
                                             wire:click="downloadAttendancePdf">
-                                        <iconify-icon icon="mdi:file-pdf-box" style="color:#dc2626;font-size:16px;"></iconify-icon>
+                                        <iconify-icon icon="mdi:file-pdf-box"
+                                                      style="color:#dc2626;font-size:16px;"></iconify-icon>
                                         Export PDF
                                     </button>
                                 </li>
@@ -1085,9 +1095,9 @@ new class extends Component {
                                 wire:change="$dispatch('filter-updated')">
                             @if($isSchoolOrg)
                                 {{-- Simplified School Filters --}}
-                                <option value="present">On Campus [Clocked In]</option>
+                                <option value="clocked_in">On Campus [Clocked In]</option>
                                 <option value="clocked_out">Off Campus [Clocked Out]</option>
-                                <option value="absent">UnScanned</option>
+                                <option value="absent">Not Enrolled</option>
                             @else
                                 {{-- Standard Employee Filters --}}
                                 <option value="present">Present [Clocked In + Clocked Out]</option>

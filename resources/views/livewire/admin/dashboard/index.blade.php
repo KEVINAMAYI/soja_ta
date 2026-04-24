@@ -685,7 +685,7 @@ new class extends Component {
         {{-- Row 3: Grade Overview + Attendance Snapshot --}}
         <div class="col-lg-8 col-12">
             <div class="grade-overview-panel h-100">
-                <h6>Student Attendance Overview — by Grade</h6>
+                <h6>Student Attendance Overview — by Year Group</h6>
 
                 @if(count($gradeStats) > 0)
                     <div class="d-flex mb-2" style="padding:0 0 0 80px;">
@@ -732,7 +732,7 @@ new class extends Component {
                         <thead class="table-light">
                         <tr>
                             <th>Student Name</th>
-                            <th>Grade</th>
+                            <th>Year Group</th>
                             <th>Activity</th>
                             <th>Date / Time</th>
                             <th>Location</th>

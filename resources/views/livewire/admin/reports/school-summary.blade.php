@@ -525,7 +525,17 @@ new class extends Component {
     public function downloadPdf(string $type): mixed
     {
         $data = $this->resolveData($type);
-        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView("exports.pembroke.{$type}", compact('data'));
+
+        // ✅ Inject the logo data URI so the blade template can embed it
+        $org = auth()->user()->employee->organization ?? null;
+        $data['orgName']     = $org?->name ?? 'School';
+        $data['logoDataUri'] = $this->resolveLogoDataUri($org?->logo_path);
+
+        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView(
+            "exports.pembroke.{$type}",
+            compact('data')
+        );
+
         $filename = $type . '_report_' . now()->format('Ymd') . '.pdf';
 
         return response()->streamDownload(
@@ -533,6 +543,25 @@ new class extends Component {
             $filename,
             ['Content-Type' => 'application/pdf']
         );
+    }
+
+// ── ADD this new private helper below downloadPdf() ───────────
+    private function resolveLogoDataUri(?string $logoPath): ?string
+    {
+        if (!$logoPath) {
+            return null;
+        }
+
+        $absPath = storage_path('app/public/' . $logoPath);
+
+        if (!file_exists($absPath)) {
+            return null;
+        }
+
+        $ext  = strtolower(pathinfo($absPath, PATHINFO_EXTENSION));
+        $mime = 'image/' . ($ext === 'svg' ? 'svg+xml' : $ext);
+
+        return 'data:' . $mime . ';base64,' . base64_encode(file_get_contents($absPath));
     }
 
     private function resolveData(string $type): array
@@ -1214,7 +1243,7 @@ new class extends Component {
                     {{-- Filters --}}
                     <div class="rp-filter-row">
                         <div class="rp-filter-group">
-                            <label>Grade</label>
+                            <label>Year Group</label>
                             <select wire:model.live="statusGradeFilter" wire:change="refreshStudentStatus()">
                                 <option value="">All Grades</option>
                                 @foreach($previewData['grades'] as $g)
@@ -1228,7 +1257,7 @@ new class extends Component {
                                 <option value="">All</option>
                                 <option value="present">On Campus (In School)</option>
                                 <option value="left">Off Campus</option>
-                                <option value="not_reported">Inactive</option>
+                                <option value="not_reported">Not Enrolled</option>
                             </select>
                         </div>
                     </div>
@@ -1245,11 +1274,11 @@ new class extends Component {
                         </div>
                         <div class="status-summary-card" style="background:#fee2e2;">
                             <div class="count" style="color:#dc2626;">{{ $previewData['totalNotReported'] }}</div>
-                            <div class="label" style="color:#dc2626;">Inactive</div>
+                            <div class="label" style="color:#dc2626;">Not Enrolled</div>
                         </div>
                         <div class="status-summary-card" style="background:#f1f5f9;">
                             <div class="count" style="color:#475569;">{{ $previewData['totalEnrolled'] }}</div>
-                            <div class="label" style="color:#475569;">Total Enrolled</div>
+                            <div class="label" style="color:#475569;">Total Students</div>
                         </div>
                     </div>
 
@@ -1257,7 +1286,7 @@ new class extends Component {
                         <thead>
                         <tr>
                             <th>Student</th>
-                            <th>Grade</th>
+                            <th>Year Group</th>
                             <th>Status</th>
                             <th>Time</th>
                             <th>Date of Last Record</th>
@@ -1275,7 +1304,7 @@ new class extends Component {
                                         <span class="status-badge" style="background:#e0f2fe; color:#0284c7;">↩ Off Campus</span>
                                     @else
                                         <span class="status-badge"
-                                              style="background:#fee2e2; color:#dc2626;">✕ Inactive</span>
+                                              style="background:#fee2e2; color:#dc2626;">✕ Not Enrolled</span>
                                     @endif
                                 </td>
                                 <td style="color:#64748b;">{{ $row['time'] ?? '—' }}</td>
@@ -1316,17 +1345,17 @@ new class extends Component {
                     <div class="rp-legend">
                         <span class="rp-legend-item"><span class="stat-dot" style="background:#22c55e;"></span> In School</span>
                         <span class="rp-legend-item"><span class="stat-dot" style="background:#f59e0b;"></span> Left School</span>
-                        <span class="rp-legend-item"><span class="stat-dot" style="background:#ef4444;"></span> Inactive</span>
+                        <span class="rp-legend-item"><span class="stat-dot" style="background:#ef4444;"></span> Not Enrolled</span>
                         <span class="rp-legend-item" style="margin-left:auto; font-style:italic; font-size:0.75rem;">Rate = (In + Left) ÷ Enrolled</span>
                     </div>
                     <table class="rp-table">
                         <thead>
                         <tr>
-                            <th>Grade</th>
+                            <th>Year Group</th>
                             <th>In School</th>
                             <th>Left School</th>
-                            <th>Inactive</th>
-                            <th>Enrolled</th>
+                            <th>Not Enrolled</th>
+                            <th>Total Students</th>
                             <th>Rate</th>
                         </tr>
                         </thead>
@@ -1394,8 +1423,8 @@ new class extends Component {
                             <th>Date</th>
                             <th>In School</th>
                             <th>Left School</th>
-                            <th>Not Reported</th>
-                            <th>Enrolled</th>
+                            <th>Not Enroled</th>
+                            <th>Total Students</th>
                             <th>Rate</th>
                         </tr>
                         </thead>
@@ -1449,11 +1478,11 @@ new class extends Component {
                     <table class="rp-table">
                         <thead>
                         <tr>
-                            <th>Grade</th>
+                            <th>Year Group</th>
                             <th>Days In</th>
                             <th>Days Left</th>
                             <th>Days Not Reported</th>
-                            <th>Enrolled</th>
+                            <th>Total Students</th>
                             <th>School Days</th>
                             <th>Rate</th>
                         </tr>
@@ -1515,11 +1544,11 @@ new class extends Component {
                     <table class="rp-table">
                         <thead>
                         <tr>
-                            <th>Grade</th>
+                            <th>Year  Group</th>
                             <th>Days In</th>
                             <th>Days Left</th>
                             <th>Days Not Reported</th>
-                            <th>Enrolled</th>
+                            <th>Total Student</th>
                             <th>School Days</th>
                             <th>Rate</th>
                         </tr>

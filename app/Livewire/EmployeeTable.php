@@ -128,7 +128,7 @@ class EmployeeTable extends DataTableComponent
 
                 $gradeOrDept = $row->is_student
                     ? ($row->grade
-                        ? "<small class='text-muted d-block'><i class='ti ti-school me-1 text-primary'></i>Grade: {$row->grade}</small>"
+                        ? "<small class='text-muted d-block'><i class='ti ti-school me-1 text-primary'></i>Year Group: {$row->grade}</small>"
                         : '')
                     : ($row->department
                         ? "<small class='text-muted d-block'><i class='ti ti-building me-1'></i>Dept: {$row->department->name}</small>"
@@ -164,7 +164,7 @@ class EmployeeTable extends DataTableComponent
             ->sortable();
 
         // ── Grade / Department column ──
-        $columns[] = Column::make($isStudent ? "Grade" : "Department", "id")
+        $columns[] = Column::make($isStudent ? "Year Group" : "Department", "id")
             ->format(function ($value, $row) {
                 if ($row->is_student) {
                     return $row->grade
@@ -197,7 +197,7 @@ class EmployeeTable extends DataTableComponent
                         // No attendance record at all
                         return "
                             <span class='badge' style='background:var(--primary-color) !important; color:white; padding:5px 10px; border-radius:8px; font-size:0.75rem; font-weight:600;'>
-                                <i class='ti ti-circle-x me-1'></i>Unscanned
+                                <i class='ti ti-circle-x me-1'></i>Not Enrolled
                             </span>
                         ";
                     }
@@ -229,7 +229,7 @@ class EmployeeTable extends DataTableComponent
                     // Any other status (absent, on_leave, etc.) — treat as not reported
                     return "
                         <span class='badge' style='background:var(--primary-color) !important; color:#white; padding:5px 10px; border-radius:8px; font-size:0.75rem; font-weight:600;'>
-                            <i class='ti ti-circle-x me-1'></i>Unscanned
+                            <i class='ti ti-circle-x me-1'></i>Not Enrolled
                         </span>
                     ";
                 })

@@ -1563,7 +1563,7 @@ new class extends Component {
                         <div style="width:24px; color:#cbd5e1;">#</div>
                         <div style="width:34px;"></div>
                         <div style="flex:2;">Student</div>
-                        <div style="flex:1;">Grade</div>
+                        <div style="flex:1;">Year Group</div>
                         <div style="flex:1;">Status</div>
                         <div style="flex:1;">Departed</div>
                         <div style="flex:1;">Expected Return</div>
@@ -1727,7 +1727,7 @@ new class extends Component {
                             </div>
                         </div>
 
-                        <p class="wizard-section-label">Eligible Grades <span style="color:#ef4444;">*</span></p>
+                        <p class="wizard-section-label">Eligible Year Groups <span style="color:#ef4444;">*</span></p>
                         <div class="grade-check-grid mb-3">
                             @foreach($availableGrades as $g)
                                 <label class="grade-check-item">
@@ -1808,10 +1808,10 @@ new class extends Component {
                             </div>
                         @endif
 
-                        <p class="wizard-section-label">Bulk Add by Grade</p>
+                        <p class="wizard-section-label">Bulk Add by Year Groups</p>
                         <div class="d-flex gap-2">
                             <select wire:model="bulkGrade" class="wi-form-control" style="flex:1;">
-                                <option value="">Select a grade to add all</option>
+                                <option value="">Select Year Group to add all</option>
                                 @foreach($eligibleGrades as $g)
                                     <option value="{{ $g }}">{{ $g }}</option>
                                 @endforeach

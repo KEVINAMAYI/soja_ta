@@ -21,12 +21,8 @@ new class extends Component {
 
     use WithFileUploads;
 
-    public array $grades = [
-        'PP1', 'PP2',
-        'Grade 1', 'Grade 2', 'Grade 3', 'Grade 4',
-        'Grade 5', 'Grade 6', 'Grade 7', 'Grade 8', 'Grade 9',
-        'Form 1', 'Form 2', 'Form 3', 'Form 4',
-        'Year 1', 'Year 2', 'Year 3', 'Year 4',
+    public array $grades =[
+        'Year 1', 'Year 2', 'Year 3', 'Year 4','Year 5','Year 6','Year 7','Year 8'
     ];
 
     public ?string $grade = null;
@@ -1477,7 +1473,7 @@ new class extends Component {
                         <div class="summary-card-icon" style="background:#fee2e2; color:#dc2626;">
                             <iconify-icon icon="mdi:account-alert"></iconify-icon>
                         </div>
-                        <p class="summary-card-title">Unscanned</p>
+                        <p class="summary-card-title">Not Enrolled</p>
                         <div class="summary-card-value">{{ $missing }}</div>
                         <p class="summary-card-subtitle">No logs today</p>
                         <div class="summary-card-bar">
@@ -2012,9 +2008,9 @@ new class extends Component {
 
                             @if($isStudent)
                                 <div class="col-md-6 mb-3">
-                                    <label class="form-label">Grade <span class="text-danger">*</span></label>
+                                    <label class="form-label">Year Group<span class="text-danger">*</span></label>
                                     <select wire:model="grade" class="form-control">
-                                        <option value="">Select Grade</option>
+                                        <option value="">Select Year Group</option>
                                         @foreach ($grades as $g)
                                             <option value="{{ $g }}">{{ $g }}</option>
                                         @endforeach
