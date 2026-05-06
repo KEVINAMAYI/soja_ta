@@ -216,6 +216,18 @@ class AttendanceDailyTable extends DataTableComponent
 
         $needsRecord = array_diff($studentIds, $alreadyHaveRecord);
 
+        if (empty($needsRecord)) return;
+
+        // Never create absent records for students still on campus (clocked_in from a previous day).
+        $stillOnCampus = Attendance::whereIn('employee_id', $needsRecord)
+            ->where('status', 'clocked_in')
+            ->whereDate('date', '<', $date)
+            ->pluck('employee_id')
+            ->unique()
+            ->toArray();
+
+        $needsRecord = array_diff($needsRecord, $stillOnCampus);
+
         foreach ($needsRecord as $studentId) {
             Attendance::firstOrCreate(
                 ['employee_id' => $studentId, 'date' => $date],

@@ -31,8 +31,9 @@ class AttendanceSeeder
 
             if (!$isSchool) {
                 $this->seedStaffRecord($employee, $now, $today);
+            } else {
+                $this->seedStudentRecord($employee, $today);
             }
-
         }
     }
 
@@ -49,57 +50,34 @@ class AttendanceSeeder
      ────────────────────────────────────────────────────────────── */
     private function seedStudentRecord(Employee $student, string $today): void
     {
-        // 1. Check if record exists
+        // If a record already exists for today, leave it alone.
         $exists = Attendance::where('employee_id', $student->id)
             ->whereDate('date', $today)
             ->exists();
 
         if ($exists) return;
 
-        // 2. Find last record
+        // Find the most recent record from a previous day.
         $lastRecord = Attendance::where('employee_id', $student->id)
             ->whereDate('date', '<', $today)
             ->orderByDesc('date')
+            ->orderByDesc('id')
             ->first();
 
-        // 3. Your Explicit Map
-        $carryForwardMap = [
-            'clocked_out' => 'clocked_out',
-            'absent' => 'absent',
-            'on_leave' => 'on_leave',
-            'off_shift' => 'off_shift',
-            'sick_off' => 'sick_off',
-            'clocked_in' => 'clocked_in'
-        ];
-
-        // Determine status - changed fallback to 'absent' to fix the 500 error
-        $inheritedStatus = isset($lastRecord)
-            ? ($carryForwardMap[$lastRecord->status] ?? 'absent')
-            : 'absent';
-
-        $checkIn = null;
-        $checkOut = null;
-
-        // 4. Inherit Times for Clocked In/Out
-        if ($lastRecord && in_array($inheritedStatus, ['clocked_in', 'clocked_out'])) {
-            // We set the date to $today but keep the exact time from the previous record
-            if ($lastRecord->check_in_time) {
-                $checkIn = Carbon::parse($today . ' ' . Carbon::parse($lastRecord->check_in_time)->format('H:i:s'));
-            }
-            if ($lastRecord->check_out_time) {
-                $checkOut = Carbon::parse($today . ' ' . Carbon::parse($lastRecord->check_out_time)->format('H:i:s'));
-            }
+        // Only carry forward statuses that mean the student is still actively engaged.
+        // absent / clocked_out / no record → do nothing (student simply has no record today).
+        if (!$lastRecord || !in_array($lastRecord->status, ['clocked_in', 'on_leave', 'off_shift', 'sick_off'])) {
+            return;
         }
 
-        // 5. Create the record
         Attendance::create([
-            'employee_id' => $student->id,
-            'date' => $today,
-            'status' => $inheritedStatus,
-            'check_in_time' => $checkIn,
-            'check_out_time' => $checkOut,
-            'worked_hours' => $lastRecord->worked_hours ?? 0,
-            'overtime_hours' => $lastRecord->overtime_hours ?? 0,
+            'employee_id'    => $student->id,
+            'date'           => $today,
+            'status'         => $lastRecord->status,
+            'check_in_time'  => $lastRecord->status === 'clocked_in' ? $lastRecord->check_in_time : null,
+            'check_out_time' => null,
+            'worked_hours'   => 0,
+            'overtime_hours' => 0,
         ]);
     }
 
