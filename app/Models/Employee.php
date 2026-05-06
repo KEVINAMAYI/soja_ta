@@ -243,7 +243,9 @@ class Employee extends Model
 
     public function lastAttendance()
     {
-        return $this->hasOne(Attendance::class)->latestOfMany('date');
+        // 'date' max picks the most recent day; 'id' max breaks same-day ties
+        // so a check-out always wins over an earlier check-in on the same day.
+        return $this->hasOne(Attendance::class)->ofMany(['date' => 'max', 'id' => 'max']);
     }
 
 }

@@ -77,7 +77,7 @@ new class extends Component {
         $students = Employee::where('organization_id', $orgId)
             ->where('active', 1)
             ->where('is_student', 1)
-            ->with('lastAttendance')
+            ->with(['lastAttendance.location'])
             ->get();
 
         $this->totalStudents = $students->count();
@@ -105,26 +105,31 @@ new class extends Component {
             'Off Campus' => $this->totalStudents > 0 ? round(($this->offCampusCount / $this->totalStudents) * 100, 1) : 0,
         ];
 
-        $this->currentEmployeeStatus = Attendance::with('employee', 'location')
-            ->whereIn('employee_id', $studentIds)
-            ->whereDate('date', $today)
-            ->orderBy('updated_at', 'desc')
+        // Show students with an active attendance state regardless of which day
+        // they checked in — so students on campus since yesterday still appear.
+        $this->currentEmployeeStatus = $students
+            ->filter(fn($s) => $s->lastAttendance !== null
+                && in_array($s->lastAttendance->status, ['clocked_in', 'clocked_out'])
+            )
+            ->sortByDesc(fn($s) => $s->lastAttendance->updated_at)
             ->take(5)
-            ->get()
-            ->map(fn($att) => [
-                'name'             => $att->employee->name,
-                'id'               => $att->employee->id,
-                'department'       => $att->employee->grade ?? 'N/A',
-                'status'           => match ($att->status) {
+            ->map(fn($s) => [
+                'name'             => $s->name,
+                'id'               => $s->id,
+                'department'       => $s->grade ?? 'N/A',
+                'status'           => match ($s->lastAttendance->status) {
                     'clocked_in'  => 'Checked In',
                     'clocked_out' => 'Checked Out',
-                    default       => ucfirst(str_replace('_', ' ', $att->status)),
+                    default       => ucfirst(str_replace('_', ' ', $s->lastAttendance->status)),
                 },
-                'datetime'         => $att->check_in_time ?? $att->check_out_time ?? $att->updated_at,
-                'location'         => $att->location->name ?? 'Unknown',
-                'location_details' => $att->location_details ?? null,
-                'view_link'        => route('attendance.employee-detailed-attendance', ['employeeId' => $att->employee->id]),
-            ]);
+                'datetime'         => $s->lastAttendance->check_in_time
+                                   ?? $s->lastAttendance->check_out_time
+                                   ?? $s->lastAttendance->updated_at,
+                'location'         => $s->lastAttendance->location?->name ?? 'Unknown',
+                'location_details' => null,
+                'view_link'        => route('attendance.employee-detailed-attendance', ['employeeId' => $s->id]),
+            ])
+            ->values();
 
         $this->loadMapData($orgId, $today);
     }
@@ -149,22 +154,24 @@ new class extends Component {
                 fn($s) => $s->lastAttendance?->status === 'clocked_in'
             )->count();
 
-            $checkedInToday = Attendance::whereIn('employee_id', $ids)
+            // scannedToday = students who physically scanned today (informational)
+            $scannedToday = Attendance::whereIn('employee_id', $ids)
                 ->whereDate('date', $todayStr)
                 ->whereIn('status', ['clocked_in', 'clocked_out'])
                 ->distinct('employee_id')
                 ->count('employee_id');
 
             $total = $ids->count();
-            $rate  = $total > 0 ? round(($checkedInToday / $total) * 100) : 0;
+            // Rate reflects current occupancy (cross-day), not just today's scans
+            $rate  = $total > 0 ? round(($onCampus / $total) * 100) : 0;
 
             $stats[] = [
-                'grade'          => $grade,
-                'onCampus'       => $onCampus,
-                'checkedInToday' => $checkedInToday,
-                'total'          => $total,
-                'rate'           => $rate,
-                'color'          => $rate >= 80 ? '#22c55e' : ($rate >= 60 ? '#f59e0b' : '#ef4444'),
+                'grade'        => $grade,
+                'onCampus'     => $onCampus,
+                'scannedToday' => $scannedToday,
+                'total'        => $total,
+                'rate'         => $rate,
+                'color'        => $rate >= 80 ? '#22c55e' : ($rate >= 60 ? '#f59e0b' : '#ef4444'),
             ];
         }
 
@@ -689,8 +696,8 @@ new class extends Component {
 
                 @if(count($gradeStats) > 0)
                     <div class="d-flex mb-2" style="padding:0 0 0 80px;">
-                        <span style="flex:1; font-size:.7rem; font-weight:700; color:#94a3b8; text-transform:uppercase; letter-spacing:.5px;">Today's Check-ins</span>
-                        <span style="width:80px; text-align:right; font-size:.7rem; font-weight:700; color:var(--primary-color) !important; text-transform:uppercase; letter-spacing:.5px;">On Campus</span>
+                        <span style="flex:1; font-size:.7rem; font-weight:700; color:#94a3b8; text-transform:uppercase; letter-spacing:.5px;">On Campus</span>
+                        <span style="width:80px; text-align:right; font-size:.7rem; font-weight:700; color:#94a3b8; text-transform:uppercase; letter-spacing:.5px;">Today</span>
                     </div>
                     @foreach($gradeStats as $row)
                         <div class="grade-row">
@@ -700,11 +707,11 @@ new class extends Component {
                                      style="width:{{ $row['rate'] }}%; background:var(--primary-color) !important;"></div>
                             </div>
                             <span class="grade-count" style="color:var(--primary-color) !important;">
-                                {{ $row['checkedInToday'] }}/{{ $row['total'] }}
+                                {{ $row['onCampus'] }}/{{ $row['total'] }}
                             </span>
                             <span style="width:70px; text-align:right; font-size:.8rem; font-weight:600; color:#16a34a; flex-shrink:0;">
-                                <iconify-icon icon="mdi:account-check" style="font-size:14px;"></iconify-icon>
-                                {{ $row['onCampus'] }}
+                                <iconify-icon icon="mdi:login" style="font-size:14px;"></iconify-icon>
+                                {{ $row['scannedToday'] }}
                             </span>
                         </div>
                     @endforeach

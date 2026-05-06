@@ -69,10 +69,7 @@ class ProcessZKBioTransactions implements ShouldQueue
 
             DB::commit();
 
-            broadcast(new ZKBioSyncCompleted(
-                Carbon::today()->toDateString(),
-                Carbon::today()->toDateString()
-            ));
+            broadcast(new ZKBioSyncCompleted($date, $date));
 
         } catch (\Throwable $e) {
             DB::rollBack();
@@ -88,10 +85,10 @@ class ProcessZKBioTransactions implements ShouldQueue
 
     /**
      * Core toggle logic:
-     * - No record today           → check-in
-     * - Any status + gap < 60s    → ignore (duplicate tap)
-     * - Clocked in  + gap >= 60s  → checkout
-     * - Clocked out + gap >= 60s  → new check-in (new record)
+     * - No record today               → check-in
+     * - Any status + gap < 10 min     → ignore (duplicate tap)
+     * - Clocked in  + gap >= 10 min   → checkout
+     * - Clocked out + gap >= 10 min   → new check-in (new record)
      */
     private function processScan(Employee $employee, Carbon $eventTime, string $date): void
     {
