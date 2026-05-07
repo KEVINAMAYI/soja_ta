@@ -80,7 +80,18 @@ new class extends Component {
         $leftDays = 0;
 
         foreach ($students as $student) {
-            $byDate = $byEmployee->get($student->id, collect())->groupBy('date');
+
+            // Group by the actual scan date, not the rolled 'date' column
+            $studentAtts = $byEmployee->get($student->id, collect());
+
+            $byDate = $studentAtts->groupBy(function ($att) {
+                return $att->check_in_time
+                    ? Carbon::parse($att->check_in_time)->toDateString()
+                    : ($att->check_out_time
+                        ? Carbon::parse($att->check_out_time)->toDateString()
+                        : $att->date); // fallback for records with no timestamps
+            });
+
             foreach ($byDate as $dayAtts) {
                 if ($dayAtts->where('status', 'clocked_out')->isNotEmpty()) {
                     $leftDays++;
@@ -147,7 +158,14 @@ new class extends Component {
 
         foreach ($students as $grade => $gradeStudents) {
             $ids = $gradeStudents->pluck('id');
-            $atts = Attendance::whereIn('employee_id', $ids)->whereDate('date', $date)->get();
+
+            $atts = Attendance::whereIn('employee_id', $ids)
+                ->where(function ($q) use ($date) {
+                    $q->whereDate('check_in_time', $date)
+                        ->orWhereDate('check_out_time', $date);
+                })
+                ->get();
+
             $rows[] = array_merge(['grade' => $grade], $this->summarise($atts, $ids));
         }
 
@@ -172,14 +190,25 @@ new class extends Component {
         $students = $this->studentQuery()->get();
         $ids = $students->pluck('id');
 
+        // AFTER
         $atts = Attendance::whereIn('employee_id', $ids)
-            ->whereBetween('date', [$start->toDateString(), $end->toDateString()])
+            ->where(function ($q) use ($start, $end) {
+                $q->whereBetween(DB::raw('DATE(check_in_time)'), [$start->toDateString(), $end->toDateString()])
+                    ->orWhereBetween(DB::raw('DATE(check_out_time)'), [$start->toDateString(), $end->toDateString()]);
+            })
             ->get();
+
 
         $rows = [];
         for ($d = $start->copy(); $d->lte($end); $d->addDay()) {
             $dayStr = $d->toDateString();
-            $dayAtts = $atts->where('date', $dayStr);
+
+            $dayAtts = $atts->filter(function ($att) use ($dayStr) {
+                $cinDate = $att->check_in_time ? Carbon::parse($att->check_in_time)->toDateString() : null;
+                $coutDate = $att->check_out_time ? Carbon::parse($att->check_out_time)->toDateString() : null;
+                return $cinDate === $dayStr || $coutDate === $dayStr;
+            });
+
             $s = $this->summarise($dayAtts, $ids);
             $rows[] = array_merge($s, [
                 'day' => $d->format('D'),
@@ -206,9 +235,14 @@ new class extends Component {
 
         foreach ($byGrade as $grade => $gradeStudents) {
             $ids = $gradeStudents->pluck('id');
+
             $atts = Attendance::whereIn('employee_id', $ids)
-                ->whereBetween('date', [$start->toDateString(), $end->toDateString()])
+                ->where(function ($q) use ($start, $end) {
+                    $q->whereBetween(DB::raw('DATE(check_in_time)'), [$start->toDateString(), $end->toDateString()])
+                        ->orWhereBetween(DB::raw('DATE(check_out_time)'), [$start->toDateString(), $end->toDateString()]);
+                })
                 ->get();
+
             $rows[] = array_merge(['grade' => $grade], $this->summariseRange($atts, $gradeStudents, $totalDays));
         }
 
@@ -264,13 +298,24 @@ new class extends Component {
         $students = $this->studentQuery()->get();
         $ids = $students->pluck('id');
         $atts = Attendance::whereIn('employee_id', $ids)
-            ->whereBetween('date', [$termStart, $termEnd])
+            ->where(function ($q) use ($termStart, $termEnd) {
+                $q->whereBetween(DB::raw('DATE(check_in_time)'), [$termStart, $termEnd])
+                    ->orWhereBetween(DB::raw('DATE(check_out_time)'), [$termStart, $termEnd]);
+            })
             ->get()
             ->groupBy('employee_id');
 
         $flagged = [];
         foreach ($students as $student) {
-            $byDate = $atts->get($student->id, collect())->groupBy('date');
+
+            $byDate = $atts->get($student->id, collect())->groupBy(function ($att) {
+                return $att->check_in_time
+                    ? Carbon::parse($att->check_in_time)->toDateString()
+                    : ($att->check_out_time
+                        ? Carbon::parse($att->check_out_time)->toDateString()
+                        : $att->date);
+            });
+
             $present = $left = 0;
 
             foreach ($byDate as $dayAtts) {
@@ -528,7 +573,7 @@ new class extends Component {
 
         // ✅ Inject the logo data URI so the blade template can embed it
         $org = auth()->user()->employee->organization ?? null;
-        $data['orgName']     = $org?->name ?? 'School';
+        $data['orgName'] = $org?->name ?? 'School';
         $data['logoDataUri'] = $this->resolveLogoDataUri($org?->logo_path);
 
         $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView(
@@ -558,7 +603,7 @@ new class extends Component {
             return null;
         }
 
-        $ext  = strtolower(pathinfo($absPath, PATHINFO_EXTENSION));
+        $ext = strtolower(pathinfo($absPath, PATHINFO_EXTENSION));
         $mime = 'image/' . ($ext === 'svg' ? 'svg+xml' : $ext);
 
         return 'data:' . $mime . ';base64,' . base64_encode(file_get_contents($absPath));
@@ -1544,7 +1589,7 @@ new class extends Component {
                     <table class="rp-table">
                         <thead>
                         <tr>
-                            <th>Year  Group</th>
+                            <th>Year Group</th>
                             <th>Days In</th>
                             <th>Days Left</th>
                             <th>Days Not Reported</th>
