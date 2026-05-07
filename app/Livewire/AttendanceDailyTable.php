@@ -24,9 +24,9 @@ class AttendanceDailyTable extends DataTableComponent
 
     public function mount($status = null): void
     {
-        $this->status    = $status;
+        $this->status = $status;
         $this->startDate = now()->toDateString();
-        $this->endDate   = now()->toDateString();
+        $this->endDate = now()->toDateString();
 
         $this->maybeSeed();
     }
@@ -34,9 +34,9 @@ class AttendanceDailyTable extends DataTableComponent
     #[On('date-range-updated')]
     public function filterByDateRange($startDate, $endDate, $status, $grade = null): void
     {
-        $this->startDate   = $startDate;
-        $this->endDate     = $endDate;
-        $this->status      = $status;
+        $this->startDate = $startDate;
+        $this->endDate = $endDate;
+        $this->status = $status;
         $this->filterGrade = $grade;
 
         $this->maybeSeed();
@@ -50,7 +50,7 @@ class AttendanceDailyTable extends DataTableComponent
     private function maybeSeed(): void
     {
         $isSchool = (bool)(auth()->user()->employee?->organization?->is_student_record ?? false);
-        $orgId    = auth()->user()->employee->organization_id ?? null;
+        $orgId = auth()->user()->employee->organization_id ?? null;
 
         if (!$orgId || $isSchool) return;
 
@@ -66,14 +66,14 @@ class AttendanceDailyTable extends DataTableComponent
 
     public function builder(): \Illuminate\Database\Eloquent\Builder
     {
-        $orgId    = auth()->user()->employee->organization_id ?? null;
+        $orgId = auth()->user()->employee->organization_id ?? null;
         $isSchool = (bool)(auth()->user()->employee?->organization?->is_student_record ?? false);
 
         $startDate = $this->startDate ?: now()->toDateString();
-        $endDate   = $this->endDate   ?: $startDate;
-        $status    = $this->status;
-        $search    = $this->search;
-        $grade     = $this->filterGrade ?? null;
+        $endDate = $this->endDate ?: $startDate;
+        $status = $this->status;
+        $search = $this->search;
+        $grade = $this->filterGrade ?? null;
 
         // ── School org: absent = students with NO scan on selected date ──
         // We fake an attendance-like query by querying employees directly
@@ -89,13 +89,22 @@ class AttendanceDailyTable extends DataTableComponent
             $query = Attendance::query()
                 ->select('attendances.*')
                 ->with(['employee', 'employee.shift'])
-                ->whereBetween('date', [$startDate, $endDate])
                 ->whereHas('employee', function ($q) use ($orgId, $grade, $isSchool) {
                     $q->where('organization_id', $orgId)
                         ->where('active', 0)
                         ->where('is_student', $isSchool ? 1 : 0);
                     if ($grade) $q->where('grade', $grade);
                 });
+
+            // Same date logic
+            if ($isSchool) {
+                $query->where(function ($q) use ($startDate, $endDate) {
+                    $q->whereBetween(DB::raw('DATE(check_in_time)'), [$startDate, $endDate])
+                        ->orWhereBetween(DB::raw('DATE(check_out_time)'), [$startDate, $endDate]);
+                });
+            } else {
+                $query->whereBetween('date', [$startDate, $endDate]);
+            }
 
             if ($search) {
                 $query->where(function ($q) use ($search) {
@@ -113,7 +122,6 @@ class AttendanceDailyTable extends DataTableComponent
         $query = Attendance::query()
             ->select('attendances.*')
             ->with(['employee', 'employee.shift'])
-            ->whereBetween('date', [$startDate, $endDate])
             ->whereHas('employee', function ($q) use ($orgId, $grade, $isSchool) {
                 $q->where('organization_id', $orgId)
                     ->where('active', 1)
@@ -121,11 +129,21 @@ class AttendanceDailyTable extends DataTableComponent
                 if ($grade) $q->where('grade', $grade);
             });
 
+        // ── Date filtering — school uses actual scan timestamps, staff uses date column ──
+        if ($isSchool) {
+            $query->where(function ($q) use ($startDate, $endDate) {
+                $q->whereBetween(DB::raw('DATE(check_in_time)'), [$startDate, $endDate])
+                    ->orWhereBetween(DB::raw('DATE(check_out_time)'), [$startDate, $endDate]);
+            });
+        } else {
+            $query->whereBetween('date', [$startDate, $endDate]);
+        }
+
         if (!empty($status)) {
             match ($status) {
-                'absent'  => $query->whereIn('status', ['absent', 'unchecked_in']),
+                'absent' => $query->whereIn('status', ['absent', 'unchecked_in']),
                 'present' => $query->whereIn('status', ['clocked_in', 'clocked_out']),
-                default   => $query->where('status', $status),
+                default => $query->where('status', $status),
             };
         }
 
@@ -151,17 +169,21 @@ class AttendanceDailyTable extends DataTableComponent
      * than a left join with Rappasoft's builder constraint.
      */
     private function buildSchoolAbsentQuery(
-        ?int $orgId,
-        string $date,
+        ?int    $orgId,
+        string  $date,
         ?string $grade,
         ?string $search
-    ): \Illuminate\Database\Eloquent\Builder {
+    ): \Illuminate\Database\Eloquent\Builder
+    {
 
         // Step 1: find student IDs who DID scan on this date
         $scannedIds = Attendance::whereHas('employee', fn($q) => $q->where('organization_id', $orgId)
             ->where('active', 1)
             ->where('is_student', 1))
-            ->whereDate('date', $date)
+            ->where(function ($q) use ($date) {
+                $q->whereDate('check_in_time', $date)
+                    ->orWhereDate('check_out_time', $date);
+            })
             ->whereIn('status', ['clocked_in', 'clocked_out'])
             ->pluck('employee_id')
             ->unique()
@@ -221,7 +243,7 @@ class AttendanceDailyTable extends DataTableComponent
         // Never create absent records for students still on campus (clocked_in from a previous day).
         $stillOnCampus = Attendance::whereIn('employee_id', $needsRecord)
             ->where('status', 'clocked_in')
-            ->whereDate('date', '<', $date)
+            ->whereDate('check_in_time', '<', $date)  // use actual scan time, not rolled date
             ->pluck('employee_id')
             ->unique()
             ->toArray();
@@ -232,10 +254,10 @@ class AttendanceDailyTable extends DataTableComponent
             Attendance::firstOrCreate(
                 ['employee_id' => $studentId, 'date' => $date],
                 [
-                    'status'         => 'absent',
-                    'check_in_time'  => null,
+                    'status' => 'absent',
+                    'check_in_time' => null,
                     'check_out_time' => null,
-                    'organization_id'=> $orgId,
+                    'organization_id' => $orgId,
                 ]
             );
         }
@@ -263,13 +285,13 @@ class AttendanceDailyTable extends DataTableComponent
         $minutes = max(0, $minutes);
         if ($minutes < 60) return $minutes . 'm';
         $hours = floor($minutes / 60);
-        $mins  = $minutes % 60;
+        $mins = $minutes % 60;
         return $mins === 0 ? "{$hours}h" : "{$hours}h {$mins}m";
     }
 
     public function columns(): array
     {
-        $isSchool   = (bool)(auth()->user()->employee?->organization?->is_student_record ?? false);
+        $isSchool = (bool)(auth()->user()->employee?->organization?->is_student_record ?? false);
         $targetDate = $this->startDate ?: now()->toDateString();
 
         return [
@@ -288,7 +310,7 @@ class AttendanceDailyTable extends DataTableComponent
                     if (!$row->employee->shift) return '<span class="text-muted">-</span>';
                     $shift = $row->employee->shift;
                     $start = Carbon::parse($shift->start_time)->format('g:i A');
-                    $end   = Carbon::parse($shift->end_time)->format('g:i A');
+                    $end = Carbon::parse($shift->end_time)->format('g:i A');
                     return "<strong>{$shift->name}</strong><br><small>{$start} - {$end}</small>";
                 })
                 ->html(),
@@ -300,7 +322,7 @@ class AttendanceDailyTable extends DataTableComponent
 
                     // Last-record fallback: SCHOOL ORGS ONLY
                     if ($isSchool && in_array($row->status, ['absent', 'unchecked_in'])) {
-                        $last  = $this->getLastAttendance($row->employee_id, $targetDate);
+                        $last = $this->getLastAttendance($row->employee_id, $targetDate);
                         $value = $last?->check_in_time;
                         if ($value) $label = "<br><small class='text-muted'>(Last Clock-In)</small>";
                     }
@@ -334,7 +356,7 @@ class AttendanceDailyTable extends DataTableComponent
 
                     // Last-record fallback: SCHOOL ORGS ONLY
                     if ($isSchool && in_array($row->status, ['absent', 'unchecked_in'])) {
-                        $last  = $this->getLastAttendance($row->employee_id, $targetDate);
+                        $last = $this->getLastAttendance($row->employee_id, $targetDate);
                         $value = $last?->check_out_time;
                         if ($value) $label = "<br><small class='text-muted'>(Last Clock-Out)</small>";
                     }
@@ -394,10 +416,10 @@ class AttendanceDailyTable extends DataTableComponent
     public function exportPdf()
     {
         $url = route('attendance-daily.export.pdf', [
-            'ids'        => $this->getSelected(),
+            'ids' => $this->getSelected(),
             'start_date' => $this->startDate,
-            'end_date'   => $this->endDate,
-            'status'     => $this->status,
+            'end_date' => $this->endDate,
+            'status' => $this->status,
         ]);
 
         return redirect()->to($url);
