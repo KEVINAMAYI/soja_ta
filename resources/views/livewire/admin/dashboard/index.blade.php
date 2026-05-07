@@ -95,13 +95,23 @@ new class extends Component {
             ->whereDate('date', $today)
             ->get();
 
-        $this->checkedInTodayCount  = $todayAttendances->where('status', 'clocked_in')->pluck('employee_id')->unique()->count();
-        $this->checkedOutTodayCount = $todayAttendances->where('status', 'clocked_out')->pluck('employee_id')->unique()->count();
+        // AFTER
+        $this->checkedInTodayCount = Attendance::whereIn('employee_id', $studentIds)
+            ->whereDate('check_in_time', $today)
+            ->where('status', 'clocked_in')
+            ->distinct('employee_id')
+            ->count('employee_id');
+
+        $this->checkedOutTodayCount = Attendance::whereIn('employee_id', $studentIds)
+            ->whereDate('check_out_time', $today)
+            ->where('status', 'clocked_out')
+            ->distinct('employee_id')
+            ->count('employee_id');
 
         $this->gradeStats = $this->loadGradeStats($orgId, $today, $studentIds);
 
         $this->statusData = [
-            'On Campus'  => $this->totalStudents > 0 ? round(($this->onCampusCount  / $this->totalStudents) * 100, 1) : 0,
+            'On Campus' => $this->totalStudents > 0 ? round(($this->onCampusCount / $this->totalStudents) * 100, 1) : 0,
             'Off Campus' => $this->totalStudents > 0 ? round(($this->offCampusCount / $this->totalStudents) * 100, 1) : 0,
         ];
 
@@ -114,20 +124,20 @@ new class extends Component {
             ->sortByDesc(fn($s) => $s->lastAttendance->updated_at)
             ->take(5)
             ->map(fn($s) => [
-                'name'             => $s->name,
-                'id'               => $s->id,
-                'department'       => $s->grade ?? 'N/A',
-                'status'           => match ($s->lastAttendance->status) {
-                    'clocked_in'  => 'Checked In',
+                'name' => $s->name,
+                'id' => $s->id,
+                'department' => $s->grade ?? 'N/A',
+                'status' => match ($s->lastAttendance->status) {
+                    'clocked_in' => 'Checked In',
                     'clocked_out' => 'Checked Out',
-                    default       => ucfirst(str_replace('_', ' ', $s->lastAttendance->status)),
+                    default => ucfirst(str_replace('_', ' ', $s->lastAttendance->status)),
                 },
-                'datetime'         => $s->lastAttendance->check_in_time
-                                   ?? $s->lastAttendance->check_out_time
-                                   ?? $s->lastAttendance->updated_at,
-                'location'         => $s->lastAttendance->location?->name ?? 'Unknown',
+                'datetime' => $s->lastAttendance->check_in_time
+                    ?? $s->lastAttendance->check_out_time
+                        ?? $s->lastAttendance->updated_at,
+                'location' => $s->lastAttendance->location?->name ?? 'Unknown',
                 'location_details' => null,
-                'view_link'        => route('attendance.employee-detailed-attendance', ['employeeId' => $s->id]),
+                'view_link' => route('attendance.employee-detailed-attendance', ['employeeId' => $s->id]),
             ])
             ->values();
 
@@ -145,7 +155,7 @@ new class extends Component {
             ->groupBy('grade');
 
         $todayStr = $today->toDateString();
-        $stats    = [];
+        $stats = [];
 
         foreach ($byGrade as $grade => $gradeStudents) {
             $ids = $gradeStudents->pluck('id');
@@ -156,22 +166,25 @@ new class extends Component {
 
             // scannedToday = students who physically scanned today (informational)
             $scannedToday = Attendance::whereIn('employee_id', $ids)
-                ->whereDate('date', $todayStr)
+                ->where(function ($q) use ($todayStr) {
+                    $q->whereDate('check_in_time', $todayStr)
+                        ->orWhereDate('check_out_time', $todayStr);
+                })
                 ->whereIn('status', ['clocked_in', 'clocked_out'])
                 ->distinct('employee_id')
                 ->count('employee_id');
 
             $total = $ids->count();
             // Rate reflects current occupancy (cross-day), not just today's scans
-            $rate  = $total > 0 ? round(($onCampus / $total) * 100) : 0;
+            $rate = $total > 0 ? round(($onCampus / $total) * 100) : 0;
 
             $stats[] = [
-                'grade'        => $grade,
-                'onCampus'     => $onCampus,
+                'grade' => $grade,
+                'onCampus' => $onCampus,
                 'scannedToday' => $scannedToday,
-                'total'        => $total,
-                'rate'         => $rate,
-                'color'        => $rate >= 80 ? '#22c55e' : ($rate >= 60 ? '#f59e0b' : '#ef4444'),
+                'total' => $total,
+                'rate' => $rate,
+                'color' => $rate >= 80 ? '#22c55e' : ($rate >= 60 ? '#f59e0b' : '#ef4444'),
             ];
         }
 
@@ -189,7 +202,7 @@ new class extends Component {
             ->where('is_student', 0)
             ->get();
 
-        $this->totalEmployees    = $employees->count();
+        $this->totalEmployees = $employees->count();
         $this->inactiveEmployees = Employee::where('organization_id', $orgId)
             ->where('active', 0)
             ->where('is_student', 0)
@@ -207,9 +220,9 @@ new class extends Component {
             ->pluck('employee_id')
             ->unique();
 
-        $this->presentToday  = $presentIds->count();
-        $this->leaveToday    = $attendancesToday->where('status', 'on_leave')->pluck('employee_id')->unique()->count();
-        $this->sickOffToday  = $attendancesToday->where('status', 'sick_off')->pluck('employee_id')->unique()->count();
+        $this->presentToday = $presentIds->count();
+        $this->leaveToday = $attendancesToday->where('status', 'on_leave')->pluck('employee_id')->unique()->count();
+        $this->sickOffToday = $attendancesToday->where('status', 'sick_off')->pluck('employee_id')->unique()->count();
         $this->OffShiftToday = $attendancesToday->where('status', 'off_shift')->pluck('employee_id')->unique()->count();
 
         // Accounted for = present OR has some other status record
@@ -236,9 +249,9 @@ new class extends Component {
                 ->count('employee_id');
 
             return [
-                'name'       => $group->first()->department->name ?? 'Unknown',
+                'name' => $group->first()->department->name ?? 'Unknown',
                 'clocked_in' => $clockedIn,
-                'total'      => $group->count(),
+                'total' => $group->count(),
             ];
         })->values()->toArray();
 
@@ -250,19 +263,19 @@ new class extends Component {
             ->take(5)
             ->get()
             ->map(fn($att) => [
-                'name'             => $att->employee->name,
-                'id'               => $att->employee->id,
-                'department'       => $att->employee->department->name ?? 'N/A',
-                'status'           => match ($att->status) {
-                    'clocked_in'             => 'Clocked In',
-                    'clocked_out'            => 'Clocked Out',
+                'name' => $att->employee->name,
+                'id' => $att->employee->id,
+                'department' => $att->employee->department->name ?? 'N/A',
+                'status' => match ($att->status) {
+                    'clocked_in' => 'Clocked In',
+                    'clocked_out' => 'Clocked Out',
                     'absent', 'unchecked_in' => 'Absent',
-                    default                  => ucfirst(str_replace('_', ' ', $att->status)),
+                    default => ucfirst(str_replace('_', ' ', $att->status)),
                 },
-                'datetime'         => $att->check_in_time ?? $att->check_out_time,
-                'location'         => $att->location->name ?? 'Unknown',
+                'datetime' => $att->check_in_time ?? $att->check_out_time,
+                'location' => $att->location->name ?? 'Unknown',
                 'location_details' => $att->location_details ?? null,
-                'view_link'        => route('attendance.employee-detailed-attendance', ['employeeId' => $att->employee->id]),
+                'view_link' => route('attendance.employee-detailed-attendance', ['employeeId' => $att->employee->id]),
             ]);
 
         $this->dailyAttendancePercentage($employeeIds);
@@ -289,11 +302,11 @@ new class extends Component {
             ->groupBy('employee_id')
             ->map(fn($group) => $group->first())
             ->map(fn($att) => [
-                'name'             => $att->employee->name,
-                'department'       => $att->employee->department->name ?? 'N/A',
-                'clock_in'         => Carbon::parse($att->check_in_time)->format('h:i A'),
-                'lat'              => $att->latitude,
-                'lng'              => $att->longitude,
+                'name' => $att->employee->name,
+                'department' => $att->employee->department->name ?? 'N/A',
+                'clock_in' => Carbon::parse($att->check_in_time)->format('h:i A'),
+                'lat' => $att->latitude,
+                'lng' => $att->longitude,
                 'work_location_id' => $att->work_location_id,
             ])
             ->values()
@@ -303,12 +316,12 @@ new class extends Component {
             ->where('active', true)
             ->get()
             ->map(fn($loc) => [
-                'id'         => $loc->id,
-                'name'       => $loc->name,
-                'lat'        => $loc->latitude,
-                'lng'        => $loc->longitude,
-                'radius_m'   => $loc->radius_m,
-                'address'    => $loc->address,
+                'id' => $loc->id,
+                'name' => $loc->name,
+                'lat' => $loc->latitude,
+                'lng' => $loc->longitude,
+                'radius_m' => $loc->radius_m,
+                'address' => $loc->address,
                 'is_default' => $loc->is_default ?? 0,
             ])
             ->toArray();
@@ -320,18 +333,18 @@ new class extends Component {
     private function getShiftStats(): array
     {
         $organizationId = auth()->user()->employee->organization_id;
-        $today          = Carbon::today();
-        $todayString    = $today->toDateString();
-        $dayOfWeek      = $today->format('D');
+        $today = Carbon::today();
+        $todayString = $today->toDateString();
+        $dayOfWeek = $today->format('D');
 
-        $shifts    = DB::table('shifts')->where('status', 'active')->where('organization_id', $organizationId)->get();
+        $shifts = DB::table('shifts')->where('status', 'active')->where('organization_id', $organizationId)->get();
         $allShifts = [];
 
         foreach ($shifts as $shift) {
             $patternDays = json_decode($shift->pattern_days, true) ?? [];
             if (!in_array($dayOfWeek, $patternDays)) continue;
 
-            $employees     = DB::table('employees')->where('shift_id', $shift->id)->where('organization_id', $organizationId)->where('active', 1)->get(['id']);
+            $employees = DB::table('employees')->where('shift_id', $shift->id)->where('organization_id', $organizationId)->where('active', 1)->get(['id']);
             $totalEmployees = $employees->count();
 
             if ($totalEmployees === 0) {
@@ -345,16 +358,16 @@ new class extends Component {
                 ->whereIn('status', ['clocked_in', 'clocked_out'])
                 ->distinct()->count('employee_id');
 
-            $status      = $presentCount === $totalEmployees ? 'full' : ($presentCount > ($totalEmployees / 2) ? 'partial' : 'critical');
+            $status = $presentCount === $totalEmployees ? 'full' : ($presentCount > ($totalEmployees / 2) ? 'partial' : 'critical');
             $allShifts[] = ['status' => $status];
         }
 
         $c = collect($allShifts);
         return [
-            'total'     => $c->count(),
-            'full'      => $c->where('status', 'full')->count(),
-            'partial'   => $c->where('status', 'partial')->count(),
-            'critical'  => $c->where('status', 'critical')->count(),
+            'total' => $c->count(),
+            'full' => $c->where('status', 'full')->count(),
+            'partial' => $c->where('status', 'partial')->count(),
+            'critical' => $c->where('status', 'critical')->count(),
             'scheduled' => 0,
         ];
     }
@@ -386,7 +399,7 @@ new class extends Component {
 
         $this->statusData = $total > 0 ? [
             'Present' => round(($present / $total) * 100, 2),
-            'Absent'  => round(($absent  / $total) * 100, 2),
+            'Absent' => round(($absent / $total) * 100, 2),
         ] : ['Present' => 0, 'Absent' => 0];
     }
 
@@ -402,6 +415,7 @@ new class extends Component {
             padding: 4px;
             gap: 2px;
         }
+
         .view-toggle button {
             border: none;
             background: transparent;
@@ -413,11 +427,13 @@ new class extends Component {
             cursor: pointer;
             transition: all .2s;
         }
+
         .view-toggle button.active {
             background: #fff;
             color: #1e293b;
-            box-shadow: 0 1px 4px rgba(0,0,0,.12);
+            box-shadow: 0 1px 4px rgba(0, 0, 0, .12);
         }
+
         .view-toggle button:disabled {
             opacity: .6;
             cursor: not-allowed;
@@ -435,7 +451,12 @@ new class extends Component {
             margin-right: 4px;
             vertical-align: middle;
         }
-        @keyframes spin { to { transform: rotate(360deg); } }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
 
         /* ── Stat cards ── */
         .stat-card {
@@ -447,19 +468,23 @@ new class extends Component {
             height: 100%;
             transition: all 0.3s ease;
         }
+
         .stat-card:hover {
             transform: translateY(-4px);
-            box-shadow: 0 8px 16px rgba(0,0,0,.1);
+            box-shadow: 0 8px 16px rgba(0, 0, 0, .1);
         }
+
         a.stat-card-link {
             display: block;
             text-decoration: none;
             color: inherit;
         }
+
         a.stat-card-link:hover {
             text-decoration: none;
             color: inherit;
         }
+
         .stat-card-icon {
             width: 40px;
             height: 40px;
@@ -471,14 +496,38 @@ new class extends Component {
             font-size: 20px;
             margin-bottom: .75rem;
         }
-        .icon-success   { background: #10b981; }
-        .icon-danger    { background: #ef4444; }
-        .icon-info      { background: #3b82f6; }
-        .icon-warning   { background: #f59e0b; }
-        .icon-cyan      { background: #06b6d4; }
-        .icon-secondary { background: #6b7280; }
-        .icon-indigo    { background: #6366f1; }
-        .icon-sky       { background: #0ea5e9; }
+
+        .icon-success {
+            background: #10b981;
+        }
+
+        .icon-danger {
+            background: #ef4444;
+        }
+
+        .icon-info {
+            background: #3b82f6;
+        }
+
+        .icon-warning {
+            background: #f59e0b;
+        }
+
+        .icon-cyan {
+            background: #06b6d4;
+        }
+
+        .icon-secondary {
+            background: #6b7280;
+        }
+
+        .icon-indigo {
+            background: #6366f1;
+        }
+
+        .icon-sky {
+            background: #0ea5e9;
+        }
 
         .stat-card-title {
             margin: 0 0 .5rem;
@@ -488,6 +537,7 @@ new class extends Component {
             text-transform: uppercase;
             letter-spacing: .5px;
         }
+
         .stat-card-value {
             font-size: 1.75rem;
             font-weight: 700;
@@ -495,17 +545,34 @@ new class extends Component {
             line-height: 1;
             margin-bottom: .35rem;
         }
-        .stat-card-total    { font-size: 1.25rem; color: #9ca3af; font-weight: 400; }
-        .stat-card-subtitle { margin: 0; font-size: .875rem; color: #6b7280; }
+
+        .stat-card-total {
+            font-size: 1.25rem;
+            color: #9ca3af;
+            font-weight: 400;
+        }
+
+        .stat-card-subtitle {
+            margin: 0;
+            font-size: .875rem;
+            color: #6b7280;
+        }
 
         /* ── Grade overview panel ── */
         .grade-overview-panel {
             background: #fff;
             border-radius: 14px;
             padding: 1.25rem 1.5rem;
-            box-shadow: 0 1px 4px rgba(0,0,0,.06);
+            box-shadow: 0 1px 4px rgba(0, 0, 0, .06);
         }
-        .grade-overview-panel h6 { font-size: .95rem; font-weight: 700; color: #1e293b; margin-bottom: 1rem; }
+
+        .grade-overview-panel h6 {
+            font-size: .95rem;
+            font-weight: 700;
+            color: #1e293b;
+            margin-bottom: 1rem;
+        }
+
         .grade-row {
             display: flex;
             align-items: center;
@@ -513,11 +580,41 @@ new class extends Component {
             padding: 8px 0;
             border-bottom: 1px solid #f8fafc;
         }
-        .grade-row:last-child { border-bottom: none; }
-        .grade-label { width: 72px; font-size: .8rem; font-weight: 600; color: #475569; flex-shrink: 0; }
-        .grade-bar-wrap { flex: 1; height: 7px; background: #f1f5f9; border-radius: 99px; overflow: hidden; }
-        .grade-bar-fill { height: 100%; border-radius: 99px; transition: width .5s ease; }
-        .grade-count { font-size: .82rem; font-weight: 700; width: 60px; text-align: right; flex-shrink: 0; white-space: nowrap; }
+
+        .grade-row:last-child {
+            border-bottom: none;
+        }
+
+        .grade-label {
+            width: 72px;
+            font-size: .8rem;
+            font-weight: 600;
+            color: #475569;
+            flex-shrink: 0;
+        }
+
+        .grade-bar-wrap {
+            flex: 1;
+            height: 7px;
+            background: #f1f5f9;
+            border-radius: 99px;
+            overflow: hidden;
+        }
+
+        .grade-bar-fill {
+            height: 100%;
+            border-radius: 99px;
+            transition: width .5s ease;
+        }
+
+        .grade-count {
+            font-size: .82rem;
+            font-weight: 700;
+            width: 60px;
+            text-align: right;
+            flex-shrink: 0;
+            white-space: nowrap;
+        }
 
         /* ── Shift monitoring ── */
         .quick-action-box {
@@ -532,43 +629,100 @@ new class extends Component {
             transition: all .2s ease-in-out;
             height: 100%;
         }
-        .quick-action-box:hover { background: #f5f5f5; transform: scale(1.05); cursor: pointer; }
-        .quick-action-value { font-size: 1.75rem; font-weight: 700; line-height: 1; margin-bottom: .25rem; color: #333; }
-        .quick-action-label { font-size: .875rem; font-weight: 500; color: #333; margin: 0; }
 
-        .text-success { color: #22c55e !important; }
-        .text-warning { color: #f59e0b !important; }
-        .text-danger  { color: #ef4444 !important; }
+        .quick-action-box:hover {
+            background: #f5f5f5;
+            transform: scale(1.05);
+            cursor: pointer;
+        }
+
+        .quick-action-value {
+            font-size: 1.75rem;
+            font-weight: 700;
+            line-height: 1;
+            margin-bottom: .25rem;
+            color: #333;
+        }
+
+        .quick-action-label {
+            font-size: .875rem;
+            font-weight: 500;
+            color: #333;
+            margin: 0;
+        }
+
+        .text-success {
+            color: #22c55e !important;
+        }
+
+        .text-warning {
+            color: #f59e0b !important;
+        }
+
+        .text-danger {
+            color: #ef4444 !important;
+        }
 
         /* ── Shared labels ── */
-        .department-overview-title, .shift-monitoring-title { font-size: 18px; font-weight: bold; color: #000; }
-        .recent-activity-title, .map-title, .quick-actions-title { font-weight: bold; font-size: 14px; color: #000; }
+        .department-overview-title, .shift-monitoring-title {
+            font-size: 18px;
+            font-weight: bold;
+            color: #000;
+        }
+
+        .recent-activity-title, .map-title, .quick-actions-title {
+            font-weight: bold;
+            font-size: 14px;
+            color: #000;
+        }
 
         .badge-clocked-in, .badge-checked-in {
-            background: #D1F2DC; color: #1E7F45;
-            padding: 6px 14px; border-radius: 999px; font-weight: 500; font-size: .875rem;
+            background: #D1F2DC;
+            color: #1E7F45;
+            padding: 6px 14px;
+            border-radius: 999px;
+            font-weight: 500;
+            font-size: .875rem;
         }
+
         .badge-clocked-out, .badge-checked-out {
-            background: #F8D7DA; color: #C82333;
-            padding: 6px 14px; border-radius: 999px; font-weight: 500; font-size: .875rem;
+            background: #F8D7DA;
+            color: #C82333;
+            padding: 6px 14px;
+            border-radius: 999px;
+            font-weight: 500;
+            font-size: .875rem;
         }
 
         .pulse-marker {
             position: absolute;
-            width: 40px; height: 40px;
-            background: rgba(255,0,0,.4);
+            width: 40px;
+            height: 40px;
+            background: rgba(255, 0, 0, .4);
             border-radius: 50%;
             animation: pulse 1.5s infinite;
             pointer-events: none;
         }
+
         @keyframes pulse {
-            0%   { transform: scale(.8);  opacity: .6 }
-            50%  { transform: scale(1.5); opacity: .3 }
-            100% { transform: scale(.8);  opacity: .6 }
+            0% {
+                transform: scale(.8);
+                opacity: .6
+            }
+            50% {
+                transform: scale(1.5);
+                opacity: .3
+            }
+            100% {
+                transform: scale(.8);
+                opacity: .6
+            }
         }
 
         /* ── Map wrapper ── */
-        .map-wrapper { position: relative; }
+        .map-wrapper {
+            position: relative;
+        }
 
         .view-toggle-btn {
             display: inline-block;
@@ -580,10 +734,11 @@ new class extends Component {
             color: #64748b;
             transition: all .2s;
         }
+
         .view-toggle-btn.active {
             background: #fff;
             color: #1e293b;
-            box-shadow: 0 1px 4px rgba(0,0,0,.12);
+            box-shadow: 0 1px 4px rgba(0, 0, 0, .12);
         }
     </style>
 @endpush
@@ -696,8 +851,10 @@ new class extends Component {
 
                 @if(count($gradeStats) > 0)
                     <div class="d-flex mb-2" style="padding:0 0 0 80px;">
-                        <span style="flex:1; font-size:.7rem; font-weight:700; color:#94a3b8; text-transform:uppercase; letter-spacing:.5px;">On Campus</span>
-                        <span style="width:80px; text-align:right; font-size:.7rem; font-weight:700; color:#94a3b8; text-transform:uppercase; letter-spacing:.5px;">Today</span>
+                        <span
+                            style="flex:1; font-size:.7rem; font-weight:700; color:#94a3b8; text-transform:uppercase; letter-spacing:.5px;">On Campus</span>
+                        <span
+                            style="width:80px; text-align:right; font-size:.7rem; font-weight:700; color:#94a3b8; text-transform:uppercase; letter-spacing:.5px;">Today</span>
                     </div>
                     @foreach($gradeStats as $row)
                         <div class="grade-row">
@@ -709,7 +866,8 @@ new class extends Component {
                             <span class="grade-count" style="color:var(--primary-color) !important;">
                                 {{ $row['onCampus'] }}/{{ $row['total'] }}
                             </span>
-                            <span style="width:70px; text-align:right; font-size:.8rem; font-weight:600; color:#16a34a; flex-shrink:0;">
+                            <span
+                                style="width:70px; text-align:right; font-size:.8rem; font-weight:600; color:#16a34a; flex-shrink:0;">
                                 <iconify-icon icon="mdi:login" style="font-size:14px;"></iconify-icon>
                                 {{ $row['scannedToday'] }}
                             </span>
@@ -759,14 +917,16 @@ new class extends Component {
                                     @elseif($emp['status'] === 'Checked Out')
                                         <span class="badge-checked-out">{{ $emp['status'] }}</span>
                                     @else
-                                        <span class="badge bg-secondary text-white px-3 py-2 rounded-pill">{{ $emp['status'] }}</span>
+                                        <span
+                                            class="badge bg-secondary text-white px-3 py-2 rounded-pill">{{ $emp['status'] }}</span>
                                     @endif
                                 </td>
                                 <td>
                                     @if($emp['datetime'])
                                         <div class="d-flex flex-column">
                                             <span>{{ \Carbon\Carbon::parse($emp['datetime'])->format('g:i A') }}</span>
-                                            <small class="text-muted">{{ \Carbon\Carbon::parse($emp['datetime'])->format('M d, Y') }}</small>
+                                            <small
+                                                class="text-muted">{{ \Carbon\Carbon::parse($emp['datetime'])->format('M d, Y') }}</small>
                                         </div>
                                     @else
                                         <span class="text-muted">N/A</span>
@@ -774,7 +934,8 @@ new class extends Component {
                                 </td>
                                 <td>{{ $emp['location'] ? \Illuminate\Support\Str::ucfirst(strtolower($emp['location'])) : 'N/A' }}</td>
                                 <td>
-                                    <a href="{{ route('attendance.index') }}" class="btn btn-sm btn-primary">View Details</a>
+                                    <a href="{{ route('attendance.index') }}" class="btn btn-sm btn-primary">View
+                                        Details</a>
                                 </td>
                             </tr>
                         @empty
@@ -806,7 +967,8 @@ new class extends Component {
                             {{ $presentToday }}
                             <span class="stat-card-total">/ {{ $totalEmployees }}</span>
                         </div>
-                        <p class="stat-card-subtitle">{{ number_format(($presentToday / max($totalEmployees, 1)) * 100, 1) }}%</p>
+                        <p class="stat-card-subtitle">{{ number_format(($presentToday / max($totalEmployees, 1)) * 100, 1) }}
+                            %</p>
                     </div>
                 </a>
             </div>
@@ -1006,14 +1168,16 @@ new class extends Component {
                                     @elseif($emp['status'] === 'Clocked Out')
                                         <span class="badge-clocked-out">{{ $emp['status'] }}</span>
                                     @else
-                                        <span class="badge bg-secondary text-white px-3 py-2 rounded-pill">{{ $emp['status'] }}</span>
+                                        <span
+                                            class="badge bg-secondary text-white px-3 py-2 rounded-pill">{{ $emp['status'] }}</span>
                                     @endif
                                 </td>
                                 <td>
                                     @if($emp['datetime'])
                                         <div class="d-flex flex-column">
                                             <span>{{ \Carbon\Carbon::parse($emp['datetime'])->format('g:i A') }}</span>
-                                            <small class="text-muted">{{ \Carbon\Carbon::parse($emp['datetime'])->format('M d, Y') }}</small>
+                                            <small
+                                                class="text-muted">{{ \Carbon\Carbon::parse($emp['datetime'])->format('M d, Y') }}</small>
                                         </div>
                                     @else
                                         <span class="text-muted">N/A</span>
@@ -1040,11 +1204,11 @@ new class extends Component {
     <script src="https://code.iconify.design/3/3.1.0/iconify.min.js"></script>
     <script>
         // ── Blade-rendered PHP data ──────────────────────────────────────
-        const workLocations     = @json($workLocations);
+        const workLocations = @json($workLocations);
         const employeeLocations = @json($employeeLocations);
-        const isSchoolOrg       = @json($isSchoolOrg);
-        const showStudentView   = @json($showStudentView);
-        const dailyStatusData   = @json($statusData);
+        const isSchoolOrg = @json($isSchoolOrg);
+        const showStudentView = @json($showStudentView);
+        const dailyStatusData = @json($statusData);
 
         // ── Chart instance ───────────────────────────────────────────────
         let chartInstance = null;
@@ -1057,13 +1221,13 @@ new class extends Component {
             if (!mapEl) return;
 
             const defaultLocation = workLocations.find(loc => loc.is_default === 1);
-            const initialCenter   = defaultLocation
-                ? { lat: parseFloat(defaultLocation.lat), lng: parseFloat(defaultLocation.lng) }
-                : { lat: -1.2921, lng: 36.8219 };
+            const initialCenter = defaultLocation
+                ? {lat: parseFloat(defaultLocation.lat), lng: parseFloat(defaultLocation.lng)}
+                : {lat: -1.2921, lng: 36.8219};
 
-            const mapInstance    = new google.maps.Map(mapEl, { zoom: 15, center: initialCenter });
-            const bounds         = new google.maps.LatLngBounds();
-            let   activeInfoWindow = null;
+            const mapInstance = new google.maps.Map(mapEl, {zoom: 15, center: initialCenter});
+            const bounds = new google.maps.LatLngBounds();
+            let activeInfoWindow = null;
 
             // Draw geofence circle
             function drawGeofence(position, radius) {
@@ -1087,7 +1251,7 @@ new class extends Component {
                 });
 
                 // Pulse overlay
-                const pulse   = document.createElement('div');
+                const pulse = document.createElement('div');
                 pulse.className = 'pulse-marker';
                 const overlay = new google.maps.OverlayView();
                 overlay.onAdd = function () {
@@ -1096,7 +1260,7 @@ new class extends Component {
                         const pt = this.getProjection().fromLatLngToDivPixel(position);
                         if (pt) {
                             pulse.style.left = (pt.x - 20) + 'px';
-                            pulse.style.top  = (pt.y - 20) + 'px';
+                            pulse.style.top = (pt.y - 20) + 'px';
                         }
                     };
                 };
@@ -1104,7 +1268,7 @@ new class extends Component {
 
                 // Info window on click
                 if (infoContent) {
-                    const iw = new google.maps.InfoWindow({ content: infoContent });
+                    const iw = new google.maps.InfoWindow({content: infoContent});
                     marker.addListener('click', () => {
                         if (activeInfoWindow) activeInfoWindow.close();
                         iw.open(mapInstance, marker);
@@ -1129,7 +1293,7 @@ new class extends Component {
             workLocations.forEach(loc => {
                 if (!loc.lat || !loc.lng) return;
 
-                const pos = { lat: parseFloat(loc.lat), lng: parseFloat(loc.lng) };
+                const pos = {lat: parseFloat(loc.lat), lng: parseFloat(loc.lng)};
                 bounds.extend(pos);
                 drawGeofence(pos, loc.radius_m);
 
@@ -1226,7 +1390,10 @@ new class extends Component {
             if (!chartEl) return;
 
             if (chartInstance) {
-                try { chartInstance.destroy(); } catch (_) {}
+                try {
+                    chartInstance.destroy();
+                } catch (_) {
+                }
                 chartInstance = null;
             }
             chartEl.innerHTML = '';
@@ -1248,7 +1415,7 @@ new class extends Component {
                     position: 'bottom',
                     horizontalAlign: 'center',
                     fontSize: '12px',
-                    labels: { colors: '#a1aab2' },
+                    labels: {colors: '#a1aab2'},
                 },
                 dataLabels: {
                     enabled: true,
