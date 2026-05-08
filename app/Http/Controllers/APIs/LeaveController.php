@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\APIs;
 
 use App\Http\Controllers\Controller;
+use App\Jobs\SendLeaveNotificationJob;
 use App\Models\Employee;
 use App\Models\Leave;
 use Carbon\Carbon;
@@ -137,6 +138,9 @@ class LeaveController extends Controller
                 ]);
 
                 DB::commit();
+
+                // Dispatch email notification job
+                SendLeaveNotificationJob::dispatch($leave->id);
 
                 return response()->json([
                     'code' => 1000,
