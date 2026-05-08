@@ -57,7 +57,7 @@ class LeaveNotificationMail extends Mailable
         return Employee::where('organization_id', $employee->organization_id)
             ->whereHas('user', function ($q) {
                 $q->whereHas('roles', function ($r) {
-                    $r->whereIn('name', ['supervisor', 'manager']);
+                    $r->whereIn('name', ['admin','supervisor','manager']);
                 });
             })
             ->first();
