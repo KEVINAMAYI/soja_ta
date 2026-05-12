@@ -16,13 +16,14 @@ use App\Helpers\PhoneSanitizer;
 use App\Services\ZKBioPersonService;
 use Spatie\Permission\Models\Role as SpatieRole;
 use Livewire\WithFileUploads;
+use App\Services\MicrosoftAdService;
 
 new class extends Component {
 
     use WithFileUploads;
 
-    public array $grades =[
-        'Year 1', 'Year 2', 'Year 3', 'Year 4','Year 5','Year 6','Year 7','Year 8'
+    public array $grades = [
+        'Year 1', 'Year 2', 'Year 3', 'Year 4', 'Year 5', 'Year 6', 'Year 7', 'Year 8'
     ];
 
     public ?string $grade = null;
@@ -78,6 +79,19 @@ new class extends Component {
     public ?string $importError = null;
     public $importFile;
 
+    // ── AD SYNC STATE ─────────────────────────────────────────────────────────
+    public bool $showAdSyncPanel = false;
+    public bool $adSyncPreviewed = false;
+    public bool $adSyncProcessed = false;
+    public array $adPreview = [];
+    public array $adResults = [];
+    public int $adImportedCount = 0;
+    public int $adUpdatedCount = 0;
+    public int $adErrorCount = 0;
+    public ?string $adSyncError = null;
+    public bool $adSyncing = false;
+    public ?string $adLastSynced = null;
+
     public function mount($roleId = null): void
     {
 
@@ -127,6 +141,217 @@ new class extends Component {
             ?? $this->shifts->first()?->id
             ?? null;
 
+    }
+
+    public function toggleAdSyncPanel(): void
+    {
+        $this->showAdSyncPanel = !$this->showAdSyncPanel;
+        if (!$this->showAdSyncPanel) {
+            $this->resetAdSync();
+        }
+    }
+
+    public function resetAdSync(): void
+    {
+        $this->reset([
+            'adPreview', 'adResults', 'adSyncPreviewed',
+            'adSyncProcessed', 'adSyncError',
+            'adImportedCount', 'adUpdatedCount', 'adErrorCount',
+        ]);
+        $this->adSyncing = false;
+    }
+
+    public function previewAdSync(): void
+    {
+        $this->adSyncing = true;
+        $this->adSyncError = null;
+
+        try {
+            $ad = app(MicrosoftAdService::class);
+            $users = $ad->filterValidUsers($ad->getAllUsers());
+
+            $org = auth()->user()->employee->organization;
+
+            // Pre-load existing employees for fast lookup
+            $existingByAdId = Employee::where('organization_id', $org->id)
+                ->whereNotNull('ad_object_id')
+                ->pluck('ad_object_id')
+                ->flip(); // id => true
+
+            $existingByEmail = Employee::where('organization_id', $org->id)
+                ->pluck('email')                 // ← remove whereNotNull, check ALL emails
+                ->filter()                       // drop nulls after pluck
+                ->flip();
+
+            $defaultShift = $org->shifts->firstWhere('name', 'Day Shift')
+                ?? $org->shifts->firstWhere('name', 'Day')
+                ?? $org->shifts->first();
+
+            $this->adPreview = [];
+
+            foreach ($users as $user) {
+                $phone = $user['mobilePhone'] ?? ($user['businessPhones'][0] ?? null);
+                if (in_array($phone, ['0000000000', '-', ''])) $phone = null;
+
+                $adEmail = $user['mail'] ?? $user['userPrincipalName'] ?? '';
+
+                $isNew = !isset($existingByAdId[$user['id']])
+                    && ($adEmail === '' || !isset($existingByEmail[$adEmail]));
+
+                $this->adPreview[] = [
+                    'ad_id' => $user['id'],
+                    'name' => $user['displayName'],
+                    'email' => $user['mail'] ?? $user['userPrincipalName'],
+                    'phone' => $phone ?? '—',
+                    'job_title' => $user['jobTitle'] ?? '—',
+                    'upn' => $user['userPrincipalName'],
+                    'shift' => $defaultShift?->name ?? '—',
+                    'isNew' => $isNew,
+                ];
+            }
+
+            $this->adSyncPreviewed = true;
+
+        } catch (\Throwable $e) {
+            $this->adSyncError = 'Failed to fetch from AD: ' . $e->getMessage();
+        }
+
+        $this->adSyncing = false;
+    }
+
+    public function commitAdSync(): void
+    {
+        if (empty($this->adPreview)) return;
+
+        $org = auth()->user()->employee->organization;
+
+        $defaultShift = $org->shifts->firstWhere('name', 'Day Shift')
+            ?? $org->shifts->firstWhere('name', 'Day')
+            ?? $org->shifts->first();
+
+        $defaultDept = $org->departments->first();
+
+        $defaultLocation = WorkLocation::where('organization_id', $org->id)
+            ->where('is_default', true)->first();
+
+        $results = [];
+        $imported = 0;
+        $updated = 0;
+        $errors = 0;
+
+        foreach ($this->adPreview as $row) {
+            try {
+                DB::beginTransaction();
+
+                $phone = $row['phone'] === '—' ? null : $row['phone'];
+
+                $existing = Employee::where('organization_id', $org->id)
+                    ->where(function ($q) use ($row) {
+                        $q->where('ad_object_id', $row['ad_id'])
+                            ->orWhere('email', $row['email']);
+                    })->first();
+
+                if ($existing) {
+                    $existing->update([
+                        'name' => $row['name'],
+                        'phone' => $phone ?? $existing->phone,
+                        'ad_object_id' => $row['ad_id'],
+                        'ad_upn' => $row['upn'],
+                        'ad_synced_at' => now(),
+                    ]);
+
+                    if ($existing->user) {
+                        $existing->user->update(['name' => $row['name']]);
+                    }
+
+                    DB::commit();
+
+                    $results[] = [
+                        'name' => $row['name'],
+                        'email' => $row['email'],
+                        'status' => 'updated',
+                        'message' => 'Details updated from AD',
+                    ];
+                    $updated++;
+
+                } else {
+                    // Create user account
+                    $email = $row['email'] ?: "ad_{$row['ad_id']}@{$org->id}.local";
+
+                    $user = User::create([
+                        'name' => $row['name'],
+                        'email' => $email,
+                        'password' => Hash::make('password'),
+                    ]);
+
+                    $employee = Employee::create([
+                        'name' => $row['name'],
+                        'email' => $email,
+                        'phone' => $phone,
+                        'shift_id' => $defaultShift?->id,
+                        'organization_id' => $org->id,
+                        'department_id' => $defaultDept?->id,
+                        'id_number' => 'AD-' . substr($row['ad_id'], 0, 8),
+                        'active' => true,
+                        'user_id' => $user->id,
+                        'ad_object_id' => $row['ad_id'],
+                        'ad_upn' => $row['upn'],
+                        'ad_synced_at' => now(),
+                        'is_student' => false,
+                        'employee_title' => $row['job_title'] !== '—' ? $row['job_title'] : null,
+                    ]);
+
+                    $user->assignRole('employee');
+                    $user->createToken('Api Token')->plainTextToken;
+
+                    if ($defaultLocation) {
+                        EmployeeAssignment::updateOrCreate(
+                            ['employee_id' => $employee->id],
+                            ['work_location_id' => $defaultLocation->id, 'is_current' => true]
+                        );
+                    }
+
+                    DB::commit();
+
+                    // ZKBio sync
+                    $zkStatus = 'skipped';
+
+                    $results[] = [
+                        'name' => $row['name'],
+                        'email' => $email,
+                        'status' => 'imported',
+                        'zk' => $zkStatus,
+                        'message' => 'Created from Active Directory',
+                    ];
+                    $imported++;
+                }
+
+            } catch (\Throwable $e) {
+                DB::rollBack();
+                $results[] = [
+                    'name' => $row['name'],
+                    'email' => $row['email'],
+                    'status' => 'error',
+                    'zk' => '—',
+                    'message' => $e->getMessage(),
+                ];
+                $errors++;
+            }
+        }
+
+        $this->adResults = $results;
+        $this->adImportedCount = $imported;
+        $this->adUpdatedCount = $updated;
+        $this->adErrorCount = $errors;
+        $this->adSyncProcessed = true;
+        $this->adLastSynced = now()->toDateTimeString();
+
+        $this->dispatch('refreshDatatable');
+        $this->loadSummaryStats();
+
+        LivewireAlert::title('AD Sync Complete!')
+            ->text("{$imported} imported, {$updated} updated, {$errors} failed.")
+            ->success()->toast()->position('top-end')->show();
     }
 
 
@@ -1562,6 +1787,19 @@ new class extends Component {
 
                 {{-- Action buttons --}}
                 <div class="d-flex gap-2">
+                    {{-- ★ AD SYNC BUTTON ★ --}}
+                    @if(!$isStudentOrg)
+                        <button
+                            wire:click="toggleAdSyncPanel"
+                            type="button"
+                            class="btn d-flex align-items-center gap-2"
+                            style="background:#fff; border:1.5px solid #0078d4 !important; color:#0078d4 !important; font-weight:600; border-radius:8px; font-size:0.875rem; padding:8px 14px;"
+                        >
+                            <iconify-icon icon="{{ $showAdSyncPanel ? 'mdi:close' : 'mdi:microsoft-azure' }}"
+                                          style="font-size:17px;"></iconify-icon>
+                            {{ $showAdSyncPanel ? 'Close AD Sync' : 'Sync from AD' }}
+                        </button>
+                    @endif
 
                     {{-- ★ IMPORT TOGGLE BUTTON ★ --}}
                     <button
@@ -1641,6 +1879,7 @@ new class extends Component {
                                         @endif
                                     </div>
                                     <div class="mt-3 d-flex gap-2">
+
                                         <button wire:click="downloadTemplate('csv')" type="button"
                                                 class="btn btn-sm"
                                                 style="background:#fde8e3; color:#c0341b; border:none; font-weight:600; border-radius:7px; font-size:0.78rem;">
@@ -1921,6 +2160,344 @@ new class extends Component {
                 </div>{{-- /import-accordion-wrap --}}
             @endif
             {{-- /showImportPanel --}}
+
+            {{-- ══════════════════════════════════════════════════════════════
+                  MICROSOFT AD SYNC PANEL
+         ══════════════════════════════════════════════════════════════ --}}
+            @if($showAdSyncPanel && !$isStudentOrg)
+                <div class="mb-3"
+                     style="border-radius:14px; border:1.5px solid #0078d4; background:#f0f6ff; overflow:hidden;">
+
+                    {{-- Header --}}
+                    <div class="d-flex align-items-center justify-content-between p-3"
+                         style="border-bottom:1px solid #cce0f5; cursor:pointer;" wire:click="toggleAdSyncPanel">
+                        <div class="d-flex align-items-center gap-3">
+                            <div
+                                style="width:38px;height:38px;background:#dbeafe;border-radius:9px;display:flex;align-items:center;justify-content:center;color:#0078d4;font-size:20px;">
+                                <iconify-icon icon="mdi:microsoft-azure"></iconify-icon>
+                            </div>
+                            <div>
+                                <p style="font-size:0.9rem;font-weight:700;color:#1e293b;margin:0;">Microsoft Active
+                                    Directory Sync</p>
+                                <p style="pointer:cursor; font-size:0.75rem;color:#64748b;margin:0;">
+                                    Fetch users from Cosmos AD tenant and import as employees with shift & ZKBio sync
+                                    @if($adLastSynced)
+                                        &nbsp;·&nbsp; Last
+                                        synced: {{ \Carbon\Carbon::parse($adLastSynced)->diffForHumans() }}
+                                    @endif
+                                </p>
+                            </div>
+                        </div>
+                        <iconify-icon icon="mdi:chevron-up" style="color:#0078d4;font-size:20px;"></iconify-icon>
+                    </div>
+
+                    {{-- Body --}}
+                    <div class="p-4">
+
+                        {{-- Error --}}
+                        @if($adSyncError)
+                            <div class="alert alert-danger d-flex align-items-center gap-2 py-2 px-3 mb-3"
+                                 style="border-radius:9px;font-size:0.82rem;">
+                                <iconify-icon icon="mdi:alert-circle-outline"
+                                              style="font-size:18px;flex-shrink:0;"></iconify-icon>
+                                {{ $adSyncError }}
+                            </div>
+                        @endif
+
+                        {{-- STEP A: Initial fetch --}}
+                        @if(!$adSyncPreviewed && !$adSyncProcessed)
+                            <div class="row g-3 mb-4">
+                                <div class="col-md-4">
+                                    <div
+                                        style="background:#fff;border:1px solid #e0edf8;border-radius:12px;padding:1.1rem;">
+                                        <div
+                                            style="width:28px;height:28px;background:#0078d4;border-radius:50%;color:#fff;font-weight:700;font-size:0.78rem;display:flex;align-items:center;justify-content:center;margin-bottom:0.65rem;">
+                                            1
+                                        </div>
+                                        <p style="font-weight:700;font-size:0.85rem;color:#1e293b;margin-bottom:0.25rem;">
+                                            Fetch from AD</p>
+                                        <p style="font-size:0.76rem;color:#64748b;margin:0;">Pulls all users from your
+                                            Microsoft Entra tenant with pagination.</p>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div
+                                        style="background:#fff;border:1px solid #e0edf8;border-radius:12px;padding:1.1rem;">
+                                        <div
+                                            style="width:28px;height:28px;background:#0078d4;border-radius:50%;color:#fff;font-weight:700;font-size:0.78rem;display:flex;align-items:center;justify-content:center;margin-bottom:0.65rem;">
+                                            2
+                                        </div>
+                                        <p style="font-weight:700;font-size:0.85rem;color:#1e293b;margin-bottom:0.25rem;">
+                                            Review Preview</p>
+                                        <p style="font-size:0.76rem;color:#64748b;margin:0;">See who's new vs already
+                                            exists. New users get default shift & department.</p>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div
+                                        style="background:#fff;border:1px solid #e0edf8;border-radius:12px;padding:1.1rem;">
+                                        <div
+                                            style="width:28px;height:28px;background:#0078d4;border-radius:50%;color:#fff;font-weight:700;font-size:0.78rem;display:flex;align-items:center;justify-content:center;margin-bottom:0.65rem;">
+                                            3
+                                        </div>
+                                        <p style="font-weight:700;font-size:0.85rem;color:#1e293b;margin-bottom:0.25rem;">
+                                            Import & Sync</p>
+                                        <p style="font-size:0.76rem;color:#64748b;margin:0;">Creates employee accounts
+                                            and syncs to ZKBio automatically.</p>
+                                        <div class="d-flex gap-1 mt-2 flex-wrap">
+                                            <span
+                                                style="font-size:0.68rem;font-weight:600;background:#e0f2fe;color:#0369a1;border-radius:5px;padding:2px 8px;">ZKBio Sync</span>
+                                            <span
+                                                style="font-size:0.68rem;font-weight:600;background:#dcfce7;color:#15803d;border-radius:5px;padding:2px 8px;">Default Shift</span>
+                                            <span
+                                                style="font-size:0.68rem;font-weight:600;background:#ede9fe;color:#6d28d9;border-radius:5px;padding:2px 8px;">Auto Role</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="d-flex justify-content-end">
+                                <button wire:click="previewAdSync" type="button"
+                                        class="btn d-flex align-items-center gap-2"
+                                        style="background:#0078d4;color:#fff;border:none;border-radius:8px;font-size:0.875rem;font-weight:600;padding:9px 20px;">
+                <span wire:loading wire:target="previewAdSync">
+                    <span class="spinner-border spinner-border-sm me-1"></span>
+                </span>
+                                    <iconify-icon icon="mdi:cloud-download-outline" wire:loading.remove
+                                                  wire:target="previewAdSync"></iconify-icon>
+                                    <span wire:loading wire:target="previewAdSync">Fetching from AD...</span>
+                                    <span wire:loading.remove wire:target="previewAdSync">Fetch & Preview Users</span>
+                                </button>
+                            </div>
+                        @endif
+
+                        {{-- STEP B: Preview table --}}
+                        @if($adSyncPreviewed && !$adSyncProcessed)
+                            @php
+                                $adNew      = collect($adPreview)->where('isNew', true)->count();
+                                $adExisting = collect($adPreview)->where('isNew', false)->count();
+                            @endphp
+
+                            {{-- Stats pills --}}
+                            <div class="d-flex align-items-center gap-3 mb-3 flex-wrap">
+            <span style="font-size:0.82rem;font-weight:700;color:#1e293b;">
+                {{ count($adPreview) }} users found in AD
+            </span>
+                                <span style="font-size:0.8rem;font-weight:700;color:#16a34a;">
+                <iconify-icon icon="mdi:account-plus"></iconify-icon> {{ $adNew }} new
+            </span>
+                                <span style="font-size:0.8rem;font-weight:700;color:#64748b;">
+                <iconify-icon icon="mdi:account-check"></iconify-icon> {{ $adExisting }} already exist
+            </span>
+                                <button wire:click="resetAdSync" type="button"
+                                        class="btn btn-sm ms-auto"
+                                        style="font-size:0.78rem;background:#f1f5f9;border:none;color:#64748b;border-radius:7px;">
+                                    <iconify-icon icon="mdi:refresh"></iconify-icon>
+                                    Re-fetch
+                                </button>
+                            </div>
+
+                            {{-- Preview table --}}
+                            <div
+                                style="overflow-x:auto;border-radius:10px;border:1px solid #cce0f5;margin-bottom:1rem;">
+                                <table class="table table-hover mb-0" style="font-size:0.78rem;">
+                                    <thead style="background:#e8f1fb;">
+                                    <tr>
+                                        <th style="padding:8px 12px;color:#1e4d8c;font-size:0.72rem;text-transform:uppercase;">
+                                            Name
+                                        </th>
+                                        <th style="padding:8px 12px;color:#1e4d8c;font-size:0.72rem;text-transform:uppercase;">
+                                            Email
+                                        </th>
+                                        <th style="padding:8px 12px;color:#1e4d8c;font-size:0.72rem;text-transform:uppercase;">
+                                            Job Title
+                                        </th>
+                                        <th style="padding:8px 12px;color:#1e4d8c;font-size:0.72rem;text-transform:uppercase;">
+                                            Phone
+                                        </th>
+                                        <th style="padding:8px 12px;color:#1e4d8c;font-size:0.72rem;text-transform:uppercase;">
+                                            Default Shift
+                                        </th>
+                                        <th style="padding:8px 12px;color:#1e4d8c;font-size:0.72rem;text-transform:uppercase;">
+                                            Status
+                                        </th>
+                                    </tr>
+                                    </thead>
+                                    <tbody>
+                                    @foreach(array_slice($adPreview, 0, 25) as $row)
+                                        <tr style="{{ $row['isNew'] ? 'background:#f0fdf4;' : '' }}">
+                                            <td style="padding:7px 12px;font-weight:600;color:#1e293b;">{{ $row['name'] }}</td>
+                                            <td style="padding:7px 12px;color:#64748b;">{{ $row['email'] }}</td>
+                                            <td style="padding:7px 12px;color:#64748b;">{{ $row['job_title'] }}</td>
+                                            <td style="padding:7px 12px;color:#64748b;">{{ $row['phone'] }}</td>
+                                            <td style="padding:7px 12px;">
+                        <span
+                            style="font-size:0.7rem;font-weight:600;background:#e0f2fe;color:#0369a1;border-radius:5px;padding:2px 8px;">
+                            {{ $row['shift'] }}
+                        </span>
+                                            </td>
+                                            <td style="padding:7px 12px;">
+                                                @if($row['isNew'])
+                                                    <span
+                                                        style="font-size:0.72rem;font-weight:700;padding:2px 9px;border-radius:99px;background:#dcfce7;color:#15803d;">
+                                <iconify-icon icon="mdi:plus-circle"></iconify-icon> New
+                            </span>
+                                                @else
+                                                    <span
+                                                        style="font-size:0.72rem;font-weight:700;padding:2px 9px;border-radius:99px;background:#f1f5f9;color:#64748b;">
+                                <iconify-icon icon="mdi:refresh"></iconify-icon> Update
+                            </span>
+                                                @endif
+                                            </td>
+                                        </tr>
+                                    @endforeach
+                                    @if(count($adPreview) > 25)
+                                        <tr>
+                                            <td colspan="6" class="text-center text-muted py-2"
+                                                style="font-size:0.75rem;">
+                                                … and {{ count($adPreview) - 25 }} more users
+                                            </td>
+                                        </tr>
+                                    @endif
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            <div class="alert d-flex align-items-start gap-2 py-2 px-3 mb-3"
+                                 style="border-radius:9px;font-size:0.8rem;background:#e0f2fe;border:1px solid #bae6fd;color:#075985;">
+                                <iconify-icon icon="mdi:information-outline"
+                                              style="font-size:18px;flex-shrink:0;margin-top:1px;"></iconify-icon>
+                                <span>
+                New employees will be assigned the <strong>default Day Shift</strong> and
+                <strong>first available department</strong>. You can edit these after import.
+                Existing employees will have their name, phone and AD ID updated only.
+            </span>
+                            </div>
+
+                            <div class="d-flex justify-content-end gap-2">
+                                <button wire:click="resetAdSync" type="button"
+                                        class="btn btn-outline-danger" style="font-size:0.875rem;border-radius:8px;">
+                                    Cancel
+                                </button>
+                                <button wire:click="commitAdSync" type="button"
+                                        class="btn d-flex align-items-center gap-2"
+                                        style="background:#0078d4;color:#fff;border:none;border-radius:8px;font-size:0.875rem;font-weight:600;padding:9px 20px;">
+                <span wire:loading wire:target="commitAdSync">
+                    <span class="spinner-border spinner-border-sm me-1"></span>
+                </span>
+                                    <iconify-icon icon="mdi:account-multiple-plus" wire:loading.remove
+                                                  wire:target="commitAdSync"></iconify-icon>
+                                    <span wire:loading wire:target="commitAdSync">Importing...</span>
+                                    <span wire:loading.remove wire:target="commitAdSync">
+                    Import {{ collect($adPreview)->where('isNew', true)->count() }} New
+                    &amp; Update {{ collect($adPreview)->where('isNew', false)->count() }}
+                </span>
+                                </button>
+                            </div>
+                        @endif
+
+                        {{-- STEP C: Results --}}
+                        @if($adSyncProcessed)
+                            <div class="d-flex align-items-center gap-3 mb-3 flex-wrap"
+                                 style="background:#fff;border-radius:10px;border:1px solid #cce0f5;padding:0.85rem 1.2rem;">
+                                <iconify-icon icon="mdi:check-circle"
+                                              style="font-size:22px;color:#16a34a;"></iconify-icon>
+                                <span style="font-size:0.8rem;font-weight:700;color:#15803d;">
+                <iconify-icon icon="mdi:account-plus"></iconify-icon> {{ $adImportedCount }} Imported
+            </span>
+                                <span style="color:#e2e8f0;">|</span>
+                                <span style="font-size:0.8rem;font-weight:700;color:#0369a1;">
+                <iconify-icon icon="mdi:refresh"></iconify-icon> {{ $adUpdatedCount }} Updated
+            </span>
+                                <span style="color:#e2e8f0;">|</span>
+                                <span style="font-size:0.8rem;font-weight:700;color:#dc2626;">
+                <iconify-icon icon="mdi:alert"></iconify-icon> {{ $adErrorCount }} Failed
+            </span>
+                                <button wire:click="resetAdSync" type="button"
+                                        class="btn btn-sm ms-auto"
+                                        style="font-size:0.78rem;background:#f1f5f9;border:none;color:#1e293b;border-radius:7px;font-weight:600;">
+                                    <iconify-icon icon="mdi:refresh"></iconify-icon>
+                                    Sync Again
+                                </button>
+                            </div>
+
+                            <div style="overflow-x:auto;border-radius:10px;border:1px solid #cce0f5;">
+                                <table class="table table-hover mb-0" style="font-size:0.78rem;">
+                                    <thead style="background:#e8f1fb;">
+                                    <tr>
+                                        <th style="padding:8px 12px;color:#1e4d8c;font-size:0.72rem;text-transform:uppercase;">
+                                            Name
+                                        </th>
+                                        <th style="padding:8px 12px;color:#1e4d8c;font-size:0.72rem;text-transform:uppercase;">
+                                            Email
+                                        </th>
+                                        <th style="padding:8px 12px;color:#1e4d8c;font-size:0.72rem;text-transform:uppercase;">
+                                            Status
+                                        </th>
+                                        <th style="padding:8px 12px;color:#1e4d8c;font-size:0.72rem;text-transform:uppercase;">
+                                            ZKBio
+                                        </th>
+                                        <th style="padding:8px 12px;color:#1e4d8c;font-size:0.72rem;text-transform:uppercase;">
+                                            Note
+                                        </th>
+                                    </tr>
+                                    </thead>
+                                    <tbody>
+                                    @foreach($adResults as $r)
+                                        <tr>
+                                            <td style="padding:7px 12px;font-weight:600;">{{ $r['name'] }}</td>
+                                            <td style="padding:7px 12px;color:#64748b;">{{ $r['email'] }}</td>
+                                            <td style="padding:7px 12px;">
+                                                @if($r['status'] === 'imported')
+                                                    <span
+                                                        style="font-size:0.72rem;font-weight:700;padding:2px 9px;border-radius:99px;background:#dcfce7;color:#15803d;">
+                                <iconify-icon icon="mdi:check-circle"></iconify-icon> Imported
+                            </span>
+                                                @elseif($r['status'] === 'updated')
+                                                    <span
+                                                        style="font-size:0.72rem;font-weight:700;padding:2px 9px;border-radius:99px;background:#e0f2fe;color:#0369a1;">
+                                <iconify-icon icon="mdi:refresh"></iconify-icon> Updated
+                            </span>
+                                                @else
+                                                    <span
+                                                        style="font-size:0.72rem;font-weight:700;padding:2px 9px;border-radius:99px;background:#fee2e2;color:#dc2626;">
+                                <iconify-icon icon="mdi:close-circle"></iconify-icon> Failed
+                            </span>
+                                                @endif
+                                            </td>
+                                            <td style="padding:7px 12px;">
+                                                @if(isset($r['zk']))
+                                                    @if($r['zk'] === 'synced')
+                                                        <span
+                                                            style="font-size:0.72rem;font-weight:700;padding:2px 9px;border-radius:99px;background:#e0f2fe;color:#0369a1;">
+                                    <iconify-icon icon="mdi:fingerprint"></iconify-icon> Synced
+                                </span>
+                                                    @elseif($r['zk'] === 'failed')
+                                                        <span
+                                                            style="font-size:0.72rem;font-weight:700;padding:2px 9px;border-radius:99px;background:#fef9c3;color:#a16207;">
+                                    <iconify-icon icon="mdi:alert"></iconify-icon> ZK Error
+                                </span>
+                                                    @else
+                                                        <span style="color:#94a3b8;font-size:0.72rem;">—</span>
+                                                    @endif
+                                                @else
+                                                    <span style="color:#94a3b8;font-size:0.72rem;">—</span>
+                                                @endif
+                                            </td>
+                                            <td style="padding:7px 12px;font-size:0.75rem;color:{{ $r['status'] === 'error' ? '#dc2626' : '#64748b' }};">
+                                                {{ $r['message'] }}
+                                            </td>
+                                        </tr>
+                                    @endforeach
+                                    </tbody>
+                                </table>
+                            </div>
+                        @endif
+
+                    </div>{{-- /body --}}
+                </div>
+            @endif
+            {{-- /AD sync panel --}}
 
             <livewire:employee-table
                 :type="$userType ?? null"

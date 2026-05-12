@@ -21,18 +21,24 @@ class AttendanceDailyExcelExport implements FromView, ShouldAutoSize, WithTitle,
     protected $startDate;
     protected $endDate;
     protected $status;
+    protected $departmentId;
+
 
     public function __construct(
         array   $selectedIds = [],
         ?string $startDate = null,
         ?string $endDate = null,
-        ?string $status = null
+        ?string $status = null,
+        mixed   $departmentId = null
+
     )
     {
         $this->selectedIds = $selectedIds;
         $this->startDate = $startDate;
         $this->endDate = $endDate;
         $this->status = $status;
+        $this->departmentId = ($departmentId && $departmentId !== 'all') ? (int) $departmentId : null;
+
     }
 
     public function view(): View
@@ -41,8 +47,13 @@ class AttendanceDailyExcelExport implements FromView, ShouldAutoSize, WithTitle,
 
         $query = Attendance::query()
             ->with(['employee.user', 'employee.department', 'employee.shift'])
-            ->whereHas('employee', fn($q) => $q->where('organization_id', $orgId)
-            );
+            ->whereHas('employee', function ($q) use ($orgId) {
+                $q->where('organization_id', $orgId);
+                // ← department filter inside the whereHas so it's scoped correctly
+                if ($this->departmentId) {
+                    $q->where('department_id', $this->departmentId);
+                }
+            });
 
         // 🔹 Filter by selected employees (if any)
         if (!empty($this->selectedIds)) {

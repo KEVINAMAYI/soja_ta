@@ -36,6 +36,9 @@ new class extends Component {
     public $departments = [];
     public $department_id;
     public $reportSettings;
+    public $exportDepartmentId = 'all';
+    public $filterGrade = null;
+
 
 
     protected function rules()
@@ -117,7 +120,7 @@ new class extends Component {
     #[On('filter-updated')]
     public function dateChaged()
     {
-        $this->dispatch('date-range-updated', startDate: $this->startDate, endDate: $this->endDate, status: $this->filterStatus);
+        $this->dispatch('date-range-updated', startDate: $this->startDate, endDate: $this->endDate, status: $this->filterStatus, grade: $this->filterGrade,department_id: $this->exportDepartmentId);
     }
 
     #[On('timesheets-filter-updated')]
@@ -676,6 +679,17 @@ new class extends Component {
                                                             Pivot Excel
                                                         </a>
                                                     </li>
+
+                                                    <li>
+                                                        <a href="#"
+                                                           wire:click.prevent="dispatch('export-full-excel')"
+                                                           class="dropdown-item">
+                                                            <iconify-icon icon="mdi:file-excel-box" width="16" height="16"
+                                                                          style="margin-right:6px; vertical-align:middle;"></iconify-icon>
+                                                            Full Excel (T&amp;A)
+                                                        </a>
+                                                    </li>
+
                                                     <li>
                                                         <a href="#"
                                                            wire:click.prevent="dispatch('export-daily-pdf')"
@@ -692,7 +706,7 @@ new class extends Component {
 
                                         <div class="row">
                                             {{-- DATE FILTER --}}
-                                            <div class="col-4 mb-4">
+                                            <div class="col-3 mb-3">
                                                 <label class="form-label">Start Date</label>
                                                 <input
                                                     type="date"
@@ -703,7 +717,7 @@ new class extends Component {
                                                 />
                                             </div>
 
-                                            <div class="col-4 mb-4">
+                                            <div class="col-3 mb-3">
                                                 <label class="form-label">End Date</label>
                                                 <input
                                                     type="date"
@@ -714,7 +728,7 @@ new class extends Component {
                                                 />
                                             </div>
 
-                                            <div class="col-md-4">
+                                            <div class="col-3 md-3">
                                                 <label class="form-label">Attendance Status</label>
                                                 <select
                                                     class="form-control"
@@ -730,6 +744,21 @@ new class extends Component {
                                                     <option value="sick_off">Sick Off</option>
                                                 </select>
                                             </div>
+
+                                            <div class="col-3 md-3">
+                                                <label class="form-label">Department</label>
+                                                <select
+                                                    class="form-control"
+                                                    wire:model="exportDepartmentId"
+                                                    wire:change="$dispatch('filter-updated')">
+                                                    <option value="all">All Departments</option>
+                                                    @foreach($departments as $department)
+                                                        <option value="{{ $department->id }}">{{ $department->name }}</option>
+                                                    @endforeach
+                                                </select>
+                                            </div>
+
+
 
                                         </div>
 

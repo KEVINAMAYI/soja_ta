@@ -3,6 +3,7 @@
 namespace App\Livewire;
 
 use App\Exports\AttendanceDailyExcelExport;
+use App\Exports\AttendanceFullExport;
 use App\Exports\AttendancePivotDailyExcelExport;
 use Carbon\Carbon;
 use Livewire\Attributes\On;
@@ -20,24 +21,27 @@ class AttendanceDailyTable extends DataTableComponent
     public $status;
     public $startDate;
     public $endDate;
+    public $departmentId;
     public $filterGrade;
 
     public function mount($status = null): void
     {
-        $this->status = $status;
+        $this->status    = $status;
         $this->startDate = now()->toDateString();
-        $this->endDate = now()->toDateString();
+        $this->endDate   = now()->toDateString();
+        $this->departmentId = 'all';
 
         $this->maybeSeed();
     }
 
     #[On('date-range-updated')]
-    public function filterByDateRange($startDate, $endDate, $status, $grade = null): void
+    public function filterByDateRange($startDate, $endDate, $status, $grade = null,  $department_id = null): void
     {
-        $this->startDate = $startDate;
-        $this->endDate = $endDate;
-        $this->status = $status;
+        $this->startDate   = $startDate;
+        $this->endDate     = $endDate;
+        $this->status      = $status;
         $this->filterGrade = $grade;
+        $this->departmentId = $department_id ?? 'all'; // ← add this
 
         $this->maybeSeed();
         $this->dispatch('refreshDatatable');
@@ -50,7 +54,7 @@ class AttendanceDailyTable extends DataTableComponent
     private function maybeSeed(): void
     {
         $isSchool = (bool)(auth()->user()->employee?->organization?->is_student_record ?? false);
-        $orgId = auth()->user()->employee->organization_id ?? null;
+        $orgId    = auth()->user()->employee->organization_id ?? null;
 
         if (!$orgId || $isSchool) return;
 
@@ -66,14 +70,14 @@ class AttendanceDailyTable extends DataTableComponent
 
     public function builder(): \Illuminate\Database\Eloquent\Builder
     {
-        $orgId = auth()->user()->employee->organization_id ?? null;
+        $orgId    = auth()->user()->employee->organization_id ?? null;
         $isSchool = (bool)(auth()->user()->employee?->organization?->is_student_record ?? false);
 
         $startDate = $this->startDate ?: now()->toDateString();
-        $endDate = $this->endDate ?: $startDate;
-        $status = $this->status;
-        $search = $this->search;
-        $grade = $this->filterGrade ?? null;
+        $endDate   = $this->endDate   ?: $startDate;
+        $status    = $this->status;
+        $search    = $this->search;
+        $grade     = $this->filterGrade ?? null;
 
         // ── School org: absent = students with NO scan on selected date ──
         // We fake an attendance-like query by querying employees directly
@@ -89,11 +93,15 @@ class AttendanceDailyTable extends DataTableComponent
             $query = Attendance::query()
                 ->select('attendances.*')
                 ->with(['employee', 'employee.shift'])
+                ->whereBetween('date', [$startDate, $endDate])
                 ->whereHas('employee', function ($q) use ($orgId, $grade, $isSchool) {
                     $q->where('organization_id', $orgId)
                         ->where('active', 0)
                         ->where('is_student', $isSchool ? 1 : 0);
                     if ($grade) $q->where('grade', $grade);
+                    if ($this->departmentId && $this->departmentId !== 'all') {
+                        $q->where('department_id', $this->departmentId);
+                    }
                 });
 
             // Same date logic
@@ -122,11 +130,15 @@ class AttendanceDailyTable extends DataTableComponent
         $query = Attendance::query()
             ->select('attendances.*')
             ->with(['employee', 'employee.shift'])
+            ->whereBetween('date', [$startDate, $endDate])
             ->whereHas('employee', function ($q) use ($orgId, $grade, $isSchool) {
                 $q->where('organization_id', $orgId)
                     ->where('active', 1)
                     ->where('is_student', $isSchool ? 1 : 0);
                 if ($grade) $q->where('grade', $grade);
+                if ($this->departmentId && $this->departmentId !== 'all') {
+                    $q->where('department_id', $this->departmentId); // ← add
+                }
             });
 
         // ── Date filtering — school uses actual scan timestamps, staff uses date column ──
@@ -141,9 +153,9 @@ class AttendanceDailyTable extends DataTableComponent
 
         if (!empty($status)) {
             match ($status) {
-                'absent' => $query->whereIn('status', ['absent', 'unchecked_in']),
+                'absent'  => $query->whereIn('status', ['absent', 'unchecked_in']),
                 'present' => $query->whereIn('status', ['clocked_in', 'clocked_out']),
-                default => $query->where('status', $status),
+                default   => $query->where('status', $status),
             };
         }
 
@@ -169,21 +181,17 @@ class AttendanceDailyTable extends DataTableComponent
      * than a left join with Rappasoft's builder constraint.
      */
     private function buildSchoolAbsentQuery(
-        ?int    $orgId,
-        string  $date,
+        ?int $orgId,
+        string $date,
         ?string $grade,
         ?string $search
-    ): \Illuminate\Database\Eloquent\Builder
-    {
+    ): \Illuminate\Database\Eloquent\Builder {
 
         // Step 1: find student IDs who DID scan on this date
         $scannedIds = Attendance::whereHas('employee', fn($q) => $q->where('organization_id', $orgId)
             ->where('active', 1)
             ->where('is_student', 1))
-            ->where(function ($q) use ($date) {
-                $q->whereDate('check_in_time', $date)
-                    ->orWhereDate('check_out_time', $date);
-            })
+            ->whereDate('date', $date)
             ->whereIn('status', ['clocked_in', 'clocked_out'])
             ->pluck('employee_id')
             ->unique()
@@ -254,10 +262,10 @@ class AttendanceDailyTable extends DataTableComponent
             Attendance::firstOrCreate(
                 ['employee_id' => $studentId, 'date' => $date],
                 [
-                    'status' => 'absent',
-                    'check_in_time' => null,
+                    'status'         => 'absent',
+                    'check_in_time'  => null,
                     'check_out_time' => null,
-                    'organization_id' => $orgId,
+                    'organization_id'=> $orgId,
                 ]
             );
         }
@@ -285,13 +293,13 @@ class AttendanceDailyTable extends DataTableComponent
         $minutes = max(0, $minutes);
         if ($minutes < 60) return $minutes . 'm';
         $hours = floor($minutes / 60);
-        $mins = $minutes % 60;
+        $mins  = $minutes % 60;
         return $mins === 0 ? "{$hours}h" : "{$hours}h {$mins}m";
     }
 
     public function columns(): array
     {
-        $isSchool = (bool)(auth()->user()->employee?->organization?->is_student_record ?? false);
+        $isSchool   = (bool)(auth()->user()->employee?->organization?->is_student_record ?? false);
         $targetDate = $this->startDate ?: now()->toDateString();
 
         return [
@@ -299,7 +307,7 @@ class AttendanceDailyTable extends DataTableComponent
             Column::make($isSchool ? 'Student' : 'Employee')
                 ->label(fn($row) => view('livewire.admin.attendance.employee', ['attendance' => $row])),
 
-            Column::make($isSchool ? 'Year Group' : 'Shift')
+            Column::make($isSchool ? 'Grade' : 'Shift')
                 ->label(function ($row) use ($isSchool) {
                     if ($isSchool) {
                         $grade = $row->employee->grade ?? null;
@@ -310,7 +318,7 @@ class AttendanceDailyTable extends DataTableComponent
                     if (!$row->employee->shift) return '<span class="text-muted">-</span>';
                     $shift = $row->employee->shift;
                     $start = Carbon::parse($shift->start_time)->format('g:i A');
-                    $end = Carbon::parse($shift->end_time)->format('g:i A');
+                    $end   = Carbon::parse($shift->end_time)->format('g:i A');
                     return "<strong>{$shift->name}</strong><br><small>{$start} - {$end}</small>";
                 })
                 ->html(),
@@ -322,7 +330,7 @@ class AttendanceDailyTable extends DataTableComponent
 
                     // Last-record fallback: SCHOOL ORGS ONLY
                     if ($isSchool && in_array($row->status, ['absent', 'unchecked_in'])) {
-                        $last = $this->getLastAttendance($row->employee_id, $targetDate);
+                        $last  = $this->getLastAttendance($row->employee_id, $targetDate);
                         $value = $last?->check_in_time;
                         if ($value) $label = "<br><small class='text-muted'>(Last Clock-In)</small>";
                     }
@@ -356,7 +364,7 @@ class AttendanceDailyTable extends DataTableComponent
 
                     // Last-record fallback: SCHOOL ORGS ONLY
                     if ($isSchool && in_array($row->status, ['absent', 'unchecked_in'])) {
-                        $last = $this->getLastAttendance($row->employee_id, $targetDate);
+                        $last  = $this->getLastAttendance($row->employee_id, $targetDate);
                         $value = $last?->check_out_time;
                         if ($value) $label = "<br><small class='text-muted'>(Last Clock-Out)</small>";
                     }
@@ -406,9 +414,31 @@ class AttendanceDailyTable extends DataTableComponent
                 selectedIds: $this->getSelected(),
                 startDate: $this->startDate,
                 endDate: $this->endDate,
-                status: $this->status
+                status: $this->status,
+                departmentId: $this->departmentId !== 'all' ? (int) $this->departmentId : null, // ← add
             ),
             'attendance.xlsx'
+        );
+    }
+
+
+
+    #[On('export-full-excel')]
+    public function exportFullExcel()
+    {
+        $orgId = auth()->user()->employee->organization_id ?? null;
+
+        $filename = 'T_A_Report_' . now()->format('Y-m-d') . '.xlsx';
+
+        return Excel::download(
+            new AttendanceFullExport(
+                orgId: $orgId,
+                ids: $this->getSelected(),
+                startDate: $this->startDate,
+                endDate: $this->endDate,
+                departmentId: $this->departmentId !== 'all' ? (int) $this->departmentId : null
+            ),
+            $filename,
         );
     }
 
