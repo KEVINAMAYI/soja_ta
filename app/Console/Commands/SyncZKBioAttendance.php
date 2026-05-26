@@ -164,7 +164,7 @@ class SyncZKBioAttendance extends Command
         $isNew = !$attendance->exists;
 
         // Never downgrade a fully clocked-out record unless fresh checkout data arrived.
-        if (!$isNew && $attendance->status === 'clocked_out' && !$c['check_out']) {
+        if (!$isNew && $attendance->status === 'clocked_out' && !$c['check_out'] && $c['scenario'] !== 'checkin_only') {
             Log::info('Skipping update — already clocked out, no new checkout.', [
                 'employee_id' => $employee->id,
                 'date' => $date,
