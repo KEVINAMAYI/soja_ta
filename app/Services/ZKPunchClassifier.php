@@ -297,6 +297,7 @@ class ZKPunchClassifier
         // ── Overtime ──────────────────────────────────────────────────────────
         if (
             !$result['check_out_synthetic']
+            && $result['check_out']
             && $result['check_out']->gt($shiftEnd)
             && $shift->overtime_enabled
         ) {
