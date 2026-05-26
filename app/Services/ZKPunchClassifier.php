@@ -286,7 +286,7 @@ class ZKPunchClassifier
 
         // ── Early checkout flag ───────────────────────────────────────────────
         // Only applies to real (non-synthetic) checkouts.
-        if (!$result['check_out_synthetic'] && $result['check_out']->lt($shiftEnd)) {
+        if (!$result['check_out_synthetic'] && $result['check_out'] && $result['check_out']->lt($shiftEnd)) {
             $minutesEarly = (int)$result['check_out']->diffInMinutes($shiftEnd);
             $result['early_checkout'] = true;
             $result['minutes_early'] = $minutesEarly;
