@@ -449,7 +449,7 @@ new class extends Component {
 
         // Absent = not present AND no other status record
         $accountedForIds = $attendances
-            ->whereIn('status', ['clocked_in', 'clocked_out', 'on_leave', 'sick_off', 'off_shift', 'on_break'])
+            ->whereIn('status', ['clocked_in', 'clocked_out', 'on_leave', 'sick_off', 'off_shift', 'on_break','not_scheduled'])
             ->pluck('employee_id')->unique();
 
         $this->absentCount = max(0, $this->totalEmployees - $accountedForIds->count());

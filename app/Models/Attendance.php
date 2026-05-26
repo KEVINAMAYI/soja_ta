@@ -35,7 +35,9 @@ class Attendance extends Model
         'paid_break_minutes',
         'excess_break_minutes',
         'is_break_checkout',
-        'break_count'
+        'break_count',
+        'scenario',
+        'incomplete'
     ];
 
     protected $casts = [

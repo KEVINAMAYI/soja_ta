@@ -227,7 +227,7 @@ new class extends Component {
 
         // Accounted for = present OR has some other status record
         $accountedForIds = $attendancesToday
-            ->whereIn('status', ['clocked_in', 'clocked_out', 'on_leave', 'sick_off', 'off_shift', 'on_break'])
+            ->whereIn('status', ['clocked_in', 'clocked_out', 'on_leave', 'sick_off', 'off_shift', 'on_break','not_scheduled'])
             ->pluck('employee_id')
             ->unique();
 

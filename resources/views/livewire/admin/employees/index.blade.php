@@ -91,6 +91,7 @@ new class extends Component {
     public ?string $adSyncError = null;
     public bool $adSyncing = false;
     public ?string $adLastSynced = null;
+    public array $selectedAdUsers = [];
 
     public function mount($roleId = null): void
     {
@@ -156,7 +157,7 @@ new class extends Component {
         $this->reset([
             'adPreview', 'adResults', 'adSyncPreviewed',
             'adSyncProcessed', 'adSyncError',
-            'adImportedCount', 'adUpdatedCount', 'adErrorCount',
+            'adImportedCount', 'adUpdatedCount', 'adErrorCount', 'selectedAdUsers'
         ]);
         $this->adSyncing = false;
     }
@@ -232,14 +233,20 @@ new class extends Component {
         $defaultDept = $org->departments->first();
 
         $defaultLocation = WorkLocation::where('organization_id', $org->id)
-            ->where('is_default', true)->first();
+            ->where('is_default', true)->first()
+            ?? WorkLocation::where('organization_id', $org->id)->first();
 
         $results = [];
         $imported = 0;
         $updated = 0;
         $errors = 0;
 
-        foreach ($this->adPreview as $row) {
+        $rows = empty($this->selectedAdUsers)
+            ? $this->adPreview
+            : array_filter($this->adPreview,
+                fn($r) => in_array($r['ad_id'], $this->selectedAdUsers));
+
+        foreach ($rows as $row) {
             try {
                 DB::beginTransaction();
 
@@ -266,10 +273,32 @@ new class extends Component {
 
                     DB::commit();
 
+                    // Assign a ZKBio PIN if the employee doesn't have one yet
+                    if (!$existing->zkbio_pin && $org->zkbio_enabled) {
+                        $existing->update([
+                            'zkbio_pin' => Employee::generateZKBioPin($org->id)
+                        ]);
+                    }
+
+                    $zkStatus = 'skipped';
+                    if (!$existing->zkbio_pin) {
+                        $zkStatus = 'no_pin';
+                    } elseif ($org->zkbio_sync_enabled && $org->zkbio_base_url && $org->zkbio_access_token) {
+                        try {
+                            $synced = app(ZKBioPersonService::class, ['organization' => $org])
+                                ->syncPerson($existing->fresh());
+                            $zkStatus = $synced ? 'synced' : 'zk_failed: API returned false';
+                        } catch (\Throwable $zkErr) {
+                            $zkStatus = 'zk_failed: ' . $zkErr->getMessage();
+                            Log::warning("ZKBio re-sync failed for {$row['name']}", ['error' => $zkErr->getMessage()]);
+                        }
+                    }
+
                     $results[] = [
                         'name' => $row['name'],
                         'email' => $row['email'],
                         'status' => 'updated',
+                        'zk'      => $zkStatus,
                         'message' => 'Details updated from AD',
                     ];
                     $updated++;
@@ -289,6 +318,7 @@ new class extends Component {
                         'email' => $email,
                         'phone' => $phone,
                         'shift_id' => $defaultShift?->id,
+                        'shift_status' => 'on_shift',
                         'organization_id' => $org->id,
                         'department_id' => $defaultDept?->id,
                         'id_number' => 'AD-' . substr($row['ad_id'], 0, 8),
@@ -313,8 +343,23 @@ new class extends Component {
 
                     DB::commit();
 
-                    // ZKBio sync
+
+                    // ZKBio sync — only if enabled for this org
                     $zkStatus = 'skipped';
+                    if ($org->zkbio_sync_enabled && $org->zkbio_base_url && $org->zkbio_access_token) {
+                        try {
+                            app(ZKBioPersonService::class, ['organization' => $org])
+                                ->syncPerson($employee->fresh());
+                            $zkStatus = 'synced';
+                        } catch (\Throwable $zkErr) {
+                            $zkStatus = 'zk_failed: ' . $zkErr->getMessage();
+                            Log::warning("ZKBio sync failed for AD employee {$row['name']}", [
+                                'error' => $zkErr->getMessage()
+                            ]);
+                        }
+                    } else {
+                        $zkStatus = 'skipped (ZKBio not enabled for this org)';
+                    }
 
                     $results[] = [
                         'name' => $row['name'],
@@ -557,7 +602,8 @@ new class extends Component {
         foreach ($this->importPreview as $index => $row) {
             $rowNum = $index + 1;
             try {
-                \Illuminate\Support\Facades\DB::beginTransaction();
+
+                DB::beginTransaction();
 
                 $name = $row['name'] ?? '';
                 $idNumber = $row['id_number'] ?? $row['admission_no'] ?? $row['student_id'] ?? '';
@@ -575,10 +621,22 @@ new class extends Component {
                 $shiftId = $org->shifts->firstWhere('name', 'Day Shift')?->id
                     ?? $org->shifts->first()?->id;
 
-                // Resolve department
-                $deptName = $row['department'] ?? '';
-                $dept = $org->departments->firstWhere('name', $deptName)
-                    ?? $org->departments->first();
+                // Resolve department — create on the fly if name given but not found
+                $deptName = trim($row['department'] ?? '');
+                if ($deptName !== '') {
+                    $dept = $org->departments->firstWhere('name', $deptName);
+                    if (!$dept) {
+                        $dept = $org->departments()->create([
+                            'name' => $deptName,
+                            'organization_id' => $org->id,
+                        ]);
+                        // Refresh the cached collection so subsequent rows can find it
+                        $org->unsetRelation('departments');
+                        $org->load('departments');
+                    }
+                } else {
+                    $dept = $org->departments->first();
+                }
                 $deptId = $dept?->id;
 
                 $roleName = $isStudent ? 'student' : ($row['role'] ?? 'employee');
@@ -587,15 +645,15 @@ new class extends Component {
                     : ($row['email'] ?? '');
                 $phone = $isStudent
                     ? ($org->phone_number ?? '')
-                    : \App\Helpers\PhoneSanitizer::sanitize($row['phone'] ?? '');
+                    : PhoneSanitizer::sanitize($row['phone'] ?? '');
 
-                $user = \App\Models\User::create([
+                $user = User::create([
                     'name' => $name,
                     'email' => $email ?: "auto_{$idNumber}_{$org->id}@internal.local",
-                    'password' => \Illuminate\Support\Facades\Hash::make('password'),
+                    'password' => Hash::make('password'),
                 ]);
 
-                $employee = \App\Models\Employee::create([
+                $employee = Employee::create([
                     'name' => $name,
                     'email' => $email,
                     'phone' => $phone,
@@ -614,25 +672,29 @@ new class extends Component {
                 $user->createToken('Api Token')->plainTextToken;
 
                 // Default work location
-                $defaultLocation = \App\Models\WorkLocation::where('organization_id', $org->id)
-                    ->where('is_default', true)->first();
+                $defaultLocation = WorkLocation::where('organization_id', $org->id)
+                    ->where('is_default', true)->first()
+                    ?? WorkLocation::where('organization_id', $org->id)->first();
+
                 if ($defaultLocation) {
-                    \App\Models\EmployeeAssignment::updateOrCreate(
+                    EmployeeAssignment::updateOrCreate(
                         ['employee_id' => $employee->id],
                         ['work_location_id' => $defaultLocation->id, 'start_date' => null, 'end_date' => null, 'is_current' => true]
                     );
                 }
 
-                \Illuminate\Support\Facades\DB::commit();
+                DB::commit();
 
                 // ── ZKBio Sync ──────────────────────────────────────────────
                 $zkStatus = 'skipped';
-                try {
-                    app(\App\Services\ZKBioPersonService::class, ['organization' => $org])
-                        ->syncPerson($employee->fresh());
-                    $zkStatus = 'synced';
-                } catch (\Throwable $zkErr) {
-                    $zkStatus = 'zk_failed: ' . $zkErr->getMessage();
+                if ($org->zkbio_sync_enabled && $org->zkbio_base_url && $org->zkbio_access_token) {
+                    try {
+                        app(\App\Services\ZKBioPersonService::class, ['organization' => $org])
+                            ->syncPerson($employee->fresh());
+                        $zkStatus = 'synced';
+                    } catch (\Throwable $zkErr) {
+                        $zkStatus = 'zk_failed: ' . $zkErr->getMessage();
+                    }
                 }
 
                 $results[] = [
@@ -646,7 +708,7 @@ new class extends Component {
                 $success++;
 
             } catch (\Throwable $e) {
-                \Illuminate\Support\Facades\DB::rollBack();
+                DB::rollBack();
                 $results[] = [
                     'row' => $rowNum,
                     'name' => $row['name'] ?? '—',
@@ -2272,128 +2334,176 @@ new class extends Component {
                         @endif
 
                         {{-- STEP B: Preview table --}}
+                        {{-- STEP B: Preview table --}}
                         @if($adSyncPreviewed && !$adSyncProcessed)
                             @php
                                 $adNew      = collect($adPreview)->where('isNew', true)->count();
                                 $adExisting = collect($adPreview)->where('isNew', false)->count();
+                                $allAdIds   = collect($adPreview)->pluck('ad_id')->toArray();
                             @endphp
 
-                            {{-- Stats pills --}}
-                            <div class="d-flex align-items-center gap-3 mb-3 flex-wrap">
+                            <div
+                                x-data="{
+            selected: [],
+            allIds: @js($allAdIds),
+            get allChecked() { return this.selected.length === this.allIds.length && this.allIds.length > 0; },
+            get someChecked() { return this.selected.length > 0 && !this.allChecked; },
+            toggleAll(checked) {
+                this.selected = checked ? [...this.allIds] : [];
+            },
+            toggle(id) {
+                this.selected.includes(id)
+                    ? this.selected = this.selected.filter(x => x !== id)
+                    : this.selected.push(id);
+            }
+        }"
+                            >
+                                {{-- Stats pills --}}
+                                <div class="d-flex align-items-center gap-3 mb-3 flex-wrap">
             <span style="font-size:0.82rem;font-weight:700;color:#1e293b;">
                 {{ count($adPreview) }} users found in AD
             </span>
-                                <span style="font-size:0.8rem;font-weight:700;color:#16a34a;">
+                                    <span style="font-size:0.8rem;font-weight:700;color:#16a34a;">
                 <iconify-icon icon="mdi:account-plus"></iconify-icon> {{ $adNew }} new
             </span>
-                                <span style="font-size:0.8rem;font-weight:700;color:#64748b;">
+                                    <span style="font-size:0.8rem;font-weight:700;color:#64748b;">
                 <iconify-icon icon="mdi:account-check"></iconify-icon> {{ $adExisting }} already exist
             </span>
-                                <button wire:click="resetAdSync" type="button"
-                                        class="btn btn-sm ms-auto"
-                                        style="font-size:0.78rem;background:#f1f5f9;border:none;color:#64748b;border-radius:7px;">
-                                    <iconify-icon icon="mdi:refresh"></iconify-icon>
-                                    Re-fetch
-                                </button>
-                            </div>
+                                    {{-- Live selection counter --}}
+                                    <span x-show="selected.length > 0"
+                                          style="font-size:0.8rem;font-weight:700;color:#0078d4;background:#dbeafe;padding:2px 10px;border-radius:99px;">
+                <iconify-icon icon="mdi:checkbox-marked"></iconify-icon>
+                <span x-text="selected.length"></span> selected
+            </span>
+                                    <button wire:click="resetAdSync" type="button"
+                                            class="btn btn-sm ms-auto"
+                                            style="font-size:0.78rem;background:#f1f5f9;border:none;color:#64748b;border-radius:7px;">
+                                        <iconify-icon icon="mdi:refresh"></iconify-icon>
+                                        Re-fetch
+                                    </button>
+                                </div>
 
-                            {{-- Preview table --}}
-                            <div
-                                style="overflow-x:auto;border-radius:10px;border:1px solid #cce0f5;margin-bottom:1rem;">
-                                <table class="table table-hover mb-0" style="font-size:0.78rem;">
-                                    <thead style="background:#e8f1fb;">
-                                    <tr>
-                                        <th style="padding:8px 12px;color:#1e4d8c;font-size:0.72rem;text-transform:uppercase;">
-                                            Name
-                                        </th>
-                                        <th style="padding:8px 12px;color:#1e4d8c;font-size:0.72rem;text-transform:uppercase;">
-                                            Email
-                                        </th>
-                                        <th style="padding:8px 12px;color:#1e4d8c;font-size:0.72rem;text-transform:uppercase;">
-                                            Job Title
-                                        </th>
-                                        <th style="padding:8px 12px;color:#1e4d8c;font-size:0.72rem;text-transform:uppercase;">
-                                            Phone
-                                        </th>
-                                        <th style="padding:8px 12px;color:#1e4d8c;font-size:0.72rem;text-transform:uppercase;">
-                                            Default Shift
-                                        </th>
-                                        <th style="padding:8px 12px;color:#1e4d8c;font-size:0.72rem;text-transform:uppercase;">
-                                            Status
-                                        </th>
-                                    </tr>
-                                    </thead>
-                                    <tbody>
-                                    @foreach(array_slice($adPreview, 0, 25) as $row)
-                                        <tr style="{{ $row['isNew'] ? 'background:#f0fdf4;' : '' }}">
-                                            <td style="padding:7px 12px;font-weight:600;color:#1e293b;">{{ $row['name'] }}</td>
-                                            <td style="padding:7px 12px;color:#64748b;">{{ $row['email'] }}</td>
-                                            <td style="padding:7px 12px;color:#64748b;">{{ $row['job_title'] }}</td>
-                                            <td style="padding:7px 12px;color:#64748b;">{{ $row['phone'] }}</td>
-                                            <td style="padding:7px 12px;">
-                        <span
-                            style="font-size:0.7rem;font-weight:600;background:#e0f2fe;color:#0369a1;border-radius:5px;padding:2px 8px;">
-                            {{ $row['shift'] }}
-                        </span>
-                                            </td>
-                                            <td style="padding:7px 12px;">
-                                                @if($row['isNew'])
-                                                    <span
-                                                        style="font-size:0.72rem;font-weight:700;padding:2px 9px;border-radius:99px;background:#dcfce7;color:#15803d;">
-                                <iconify-icon icon="mdi:plus-circle"></iconify-icon> New
-                            </span>
-                                                @else
-                                                    <span
-                                                        style="font-size:0.72rem;font-weight:700;padding:2px 9px;border-radius:99px;background:#f1f5f9;color:#64748b;">
-                                <iconify-icon icon="mdi:refresh"></iconify-icon> Update
-                            </span>
-                                                @endif
-                                            </td>
-                                        </tr>
-                                    @endforeach
-                                    @if(count($adPreview) > 25)
+                                {{-- Preview table --}}
+                                <div
+                                    style="overflow-x:auto;border-radius:10px;border:1px solid #cce0f5;margin-bottom:1rem;">
+                                    <table class="table table-hover mb-0" style="font-size:0.78rem;">
+                                        <thead style="background:#e8f1fb;">
                                         <tr>
-                                            <td colspan="6" class="text-center text-muted py-2"
-                                                style="font-size:0.75rem;">
-                                                … and {{ count($adPreview) - 25 }} more users
-                                            </td>
+                                            <th style="padding:8px 12px;width:36px;">
+                                                <input type="checkbox"
+                                                       :checked="allChecked"
+                                                       :indeterminate="someChecked"
+                                                       @change="toggleAll($event.target.checked)"
+                                                />
+                                            </th>
+                                            <th style="padding:8px 12px;color:#1e4d8c;font-size:0.72rem;text-transform:uppercase;">
+                                                Name
+                                            </th>
+                                            <th style="padding:8px 12px;color:#1e4d8c;font-size:0.72rem;text-transform:uppercase;">
+                                                Email
+                                            </th>
+                                            <th style="padding:8px 12px;color:#1e4d8c;font-size:0.72rem;text-transform:uppercase;">
+                                                Job Title
+                                            </th>
+                                            <th style="padding:8px 12px;color:#1e4d8c;font-size:0.72rem;text-transform:uppercase;">
+                                                Phone
+                                            </th>
+                                            <th style="padding:8px 12px;color:#1e4d8c;font-size:0.72rem;text-transform:uppercase;">
+                                                Default Shift
+                                            </th>
+                                            <th style="padding:8px 12px;color:#1e4d8c;font-size:0.72rem;text-transform:uppercase;">
+                                                Status
+                                            </th>
                                         </tr>
-                                    @endif
-                                    </tbody>
-                                </table>
-                            </div>
+                                        </thead>
+                                        <tbody>
+                                        @foreach(array_slice($adPreview, 0, 25) as $row)
+                                            <tr style="{{ $row['isNew'] ? 'background:#f0fdf4;' : '' }}"
+                                                :style="selected.includes('{{ $row['ad_id'] }}') ? 'outline:2px solid #0078d4;outline-offset:-2px;' : ''">
+                                                <td style="padding:7px 12px;">
+                                                    <input type="checkbox"
+                                                           value="{{ $row['ad_id'] }}"
+                                                           :checked="selected.includes('{{ $row['ad_id'] }}')"
+                                                           @change="toggle('{{ $row['ad_id'] }}')"
+                                                    />
+                                                </td>
+                                                <td style="padding:7px 12px;font-weight:600;color:#1e293b;">{{ $row['name'] }}</td>
+                                                <td style="padding:7px 12px;color:#64748b;">{{ $row['email'] }}</td>
+                                                <td style="padding:7px 12px;color:#64748b;">{{ $row['job_title'] }}</td>
+                                                <td style="padding:7px 12px;color:#64748b;">{{ $row['phone'] }}</td>
+                                                <td style="padding:7px 12px;">
+                            <span
+                                style="font-size:0.7rem;font-weight:600;background:#e0f2fe;color:#0369a1;border-radius:5px;padding:2px 8px;">
+                                {{ $row['shift'] }}
+                            </span>
+                                                </td>
+                                                <td style="padding:7px 12px;">
+                                                    @if($row['isNew'])
+                                                        <span
+                                                            style="font-size:0.72rem;font-weight:700;padding:2px 9px;border-radius:99px;background:#dcfce7;color:#15803d;">
+                                    <iconify-icon icon="mdi:plus-circle"></iconify-icon> New
+                                </span>
+                                                    @else
+                                                        <span
+                                                            style="font-size:0.72rem;font-weight:700;padding:2px 9px;border-radius:99px;background:#f1f5f9;color:#64748b;">
+                                    <iconify-icon icon="mdi:refresh"></iconify-icon> Update
+                                </span>
+                                                    @endif
+                                                </td>
+                                            </tr>
+                                        @endforeach
+                                        @if(count($adPreview) > 25)
+                                            <tr>
+                                                <td colspan="7" class="text-center text-muted py-2"
+                                                    style="font-size:0.75rem; background:#f8fafc; font-style:italic;">
+                                                    <iconify-icon icon="mdi:dots-horizontal"
+                                                                  style="margin-right:4px;"></iconify-icon>
+                                                    {{ count($adPreview) - 25 }} more users not shown — all will be
+                                                    processed unless you select specific rows above
+                                                </td>
+                                            </tr>
+                                        @endif
+                                        </tbody>
+                                    </table>
+                                </div>
 
-                            <div class="alert d-flex align-items-start gap-2 py-2 px-3 mb-3"
-                                 style="border-radius:9px;font-size:0.8rem;background:#e0f2fe;border:1px solid #bae6fd;color:#075985;">
-                                <iconify-icon icon="mdi:information-outline"
-                                              style="font-size:18px;flex-shrink:0;margin-top:1px;"></iconify-icon>
-                                <span>
+                                <div class="alert d-flex align-items-start gap-2 py-2 px-3 mb-3"
+                                     style="border-radius:9px;font-size:0.8rem;background:#e0f2fe;border:1px solid #bae6fd;color:#075985;">
+                                    <iconify-icon icon="mdi:information-outline"
+                                                  style="font-size:18px;flex-shrink:0;margin-top:1px;"></iconify-icon>
+                                    <span>
                 New employees will be assigned the <strong>default Day Shift</strong> and
                 <strong>first available department</strong>. You can edit these after import.
                 Existing employees will have their name, phone and AD ID updated only.
+                <strong>Leave all unchecked to process everyone.</strong>
             </span>
-                            </div>
+                                </div>
 
-                            <div class="d-flex justify-content-end gap-2">
-                                <button wire:click="resetAdSync" type="button"
-                                        class="btn btn-outline-danger" style="font-size:0.875rem;border-radius:8px;">
-                                    Cancel
-                                </button>
-                                <button wire:click="commitAdSync" type="button"
-                                        class="btn d-flex align-items-center gap-2"
-                                        style="background:#0078d4;color:#fff;border:none;border-radius:8px;font-size:0.875rem;font-weight:600;padding:9px 20px;">
-                <span wire:loading wire:target="commitAdSync">
-                    <span class="spinner-border spinner-border-sm me-1"></span>
-                </span>
-                                    <iconify-icon icon="mdi:account-multiple-plus" wire:loading.remove
-                                                  wire:target="commitAdSync"></iconify-icon>
-                                    <span wire:loading wire:target="commitAdSync">Importing...</span>
-                                    <span wire:loading.remove wire:target="commitAdSync">
-                    Import {{ collect($adPreview)->where('isNew', true)->count() }} New
-                    &amp; Update {{ collect($adPreview)->where('isNew', false)->count() }}
-                </span>
-                                </button>
-                            </div>
+                                <div class="d-flex justify-content-end gap-2">
+                                    <button wire:click="resetAdSync" type="button"
+                                            class="btn btn-outline-danger"
+                                            style="font-size:0.875rem;border-radius:8px;">
+                                        Cancel
+                                    </button>
+
+                                    {{-- The key: sync Alpine selection to Livewire right before committing --}}
+                                    <button type="button"
+                                            @click="
+                        $wire.set('selectedAdUsers', selected);
+                        $nextTick(() => $wire.commitAdSync());
+                    "
+                                            class="btn d-flex align-items-center gap-2"
+                                            style="background:#0078d4;color:#fff;border:none;border-radius:8px;font-size:0.875rem;font-weight:600;padding:9px 20px;">
+                                        <iconify-icon icon="mdi:account-multiple-plus"></iconify-icon>
+                                        <span x-text="
+                    selected.length > 0
+                        ? 'Import ' + selected.length + ' Selected'
+                        : 'Import {{ $adNew }} New & Update {{ $adExisting }}'
+                "></span>
+                                    </button>
+                                </div>
+
+                            </div>{{-- /x-data --}}
                         @endif
 
                         {{-- STEP C: Results --}}

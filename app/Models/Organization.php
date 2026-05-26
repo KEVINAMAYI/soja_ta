@@ -23,7 +23,11 @@ class Organization extends Model
         'logo_height',
         'logo_width',
         'sidebar_bg_color',
-        'page_bg_color'
+        'page_bg_color',
+        'zkbio_sync_enabled',
+        'zkbio_base_url',
+        'zkbio_access_token',
+        'zkbio_pin_start'
     ];
 
     public function employees()

@@ -42,7 +42,7 @@ class Employee extends Model
         static::creating(function ($employee) {
             $orgId = $employee->organization_id;
 
-            // Get the setting for the org
+            // QR code generation
             $setting = OrganizationSetting::where('organization_id', $orgId)
                 ->where('key', 'generate_employee_qr_on_create')
                 ->first();
@@ -56,14 +56,13 @@ class Employee extends Model
                 );
             }
 
-            // Only assign zkbio_pin if org has ZKBio enabled
+            // ZKBio PIN — org-scoped, only if org has ZKBio enabled
             if (empty($employee->zkbio_pin)) {
-                $org = $employee->organization ?? \App\Models\Organization::find($employee->organization_id);
+                $org = $employee->organization ?? \App\Models\Organization::find($orgId);
                 if ($org?->zkbio_enabled) {
-                    $employee->zkbio_pin = self::generateZKBioPin();
+                    $employee->zkbio_pin = self::generateZKBioPin($orgId);
                 }
             }
-
         });
     }
 
@@ -206,22 +205,28 @@ class Employee extends Model
     }
 
 
-    public static function generateZKBioPin(): string
+    public static function generateZKBioPin(int $organizationId): string
     {
-        // Get the next available ID by checking what's already taken
-        $max = self::withTrashed() // include soft-deleted to avoid reuse
-        ->whereNotNull('zkbio_pin')
+        // Get the org's configured starting PIN
+        $org      = \App\Models\Organization::find($organizationId);
+        $pinStart = (int)($org?->zkbio_pin_start ?? 4000);
+
+        // Get highest existing PIN for this org only
+        $max = self::withTrashed()
+            ->where('organization_id', $organizationId)
+            ->whereNotNull('zkbio_pin')
             ->selectRaw('MAX(CAST(zkbio_pin AS UNSIGNED)) as max_pin')
             ->value('max_pin');
 
-        $next = max(($max ?? 0) + 1, 1300); // start from 1000 to avoid clashing with legacy device pins like 1, 2, 36
+        // Start from pinStart if no pins exist yet, otherwise increment from max
+        $next = max(($max ?? 0) + 1, $pinStart + 1);
 
-        // Double-check it's not already taken (race condition safety)
-        while (self::withTrashed()->where('zkbio_pin', (string) $next)->exists()) {
+        // Race condition safety
+        while (self::withTrashed()->where('zkbio_pin', (string)$next)->exists()) {
             $next++;
         }
 
-        return (string) $next;
+        return (string)$next;
     }
 
 

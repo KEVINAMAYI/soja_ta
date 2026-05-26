@@ -71,12 +71,12 @@ class AttendanceSeeder
         }
 
         Attendance::create([
-            'employee_id'    => $student->id,
-            'date'           => $today,
-            'status'         => $lastRecord->status,
-            'check_in_time'  => $lastRecord->status === 'clocked_in' ? $lastRecord->check_in_time : null,
+            'employee_id' => $student->id,
+            'date' => $today,
+            'status' => $lastRecord->status,
+            'check_in_time' => $lastRecord->status === 'clocked_in' ? $lastRecord->check_in_time : null,
             'check_out_time' => null,
-            'worked_hours'   => 0,
+            'worked_hours' => 0,
             'overtime_hours' => 0,
         ]);
     }
@@ -88,37 +88,33 @@ class AttendanceSeeder
     {
         $shift = $employee->shift;
 
-        // Employees without a shift configuration cannot be processed.
-        if (!$shift) {
-            return;
-        }
+        if (!$shift) return;
 
         $attendance = Attendance::firstOrNew([
             'employee_id' => $employee->id,
             'date' => $today,
         ]);
 
-        // ── No assignments → not scheduled ──────────────────────
+        // ── No assignments ────────────────────────────────────────────────
         if ($employee->assignments()->count() === 0) {
             $this->markAsNotScheduled($attendance);
             return;
         }
 
-        // ── Not a working day for this shift ────────────────────
+        // ── Not a working day ─────────────────────────────────────────────
         if (!$this->isEmployeeScheduledToday($shift, $now)) {
             $this->markAsNotScheduled($attendance);
             return;
         }
 
-        // ── Build shift window ───────────────────────────────────
+        // ── Build shift window ────────────────────────────────────────────
         $shiftStart = $this->parseShiftTime($shift->start_time, $today);
         $shiftEnd = $this->parseShiftTime($shift->end_time, $today);
-
         if ($shiftEnd->lessThanOrEqualTo($shiftStart)) {
-            $shiftEnd->addDay(); // overnight shift
+            $shiftEnd->addDay();
         }
 
-        // ── Approved leave ───────────────────────────────────────
+        // ── Approved leave ────────────────────────────────────────────────
         $onLeave = Leave::where('employee_id', $employee->id)
             ->where('status', 'approved')
             ->whereDate('start_date', '<=', $today)
@@ -136,30 +132,41 @@ class AttendanceSeeder
             return;
         }
 
-        // ── Off-shift / sick-off windows ─────────────────────────
-        if ($handled = $this->handleShiftStatusWindow($employee, $attendance, $now)) {
-            return;
+        // ── Off-shift / sick-off ──────────────────────────────────────────
+        // FIX: Check shift_status BEFORE anything else that could mark absent
+        // Also handle case where dates are not set (treat as indefinitely off)
+        if (in_array($employee->shift_status, ['off_shift', 'sick_off'])) {
+            $handled = $this->handleShiftStatusWindow($employee, $attendance, $now);
+
+            if (!$handled) {
+                // Dates not set or period not yet started — still off shift
+                // Save the correct status instead of falling through to absent
+                $attendance->fill([
+                    'status' => $employee->shift_status,
+                    'check_in_time' => null,
+                    'check_out_time' => null,
+                    'worked_hours' => 0,
+                    'overtime_hours' => 0,
+                ])->save();
+            }
+
+            return; // Always return — never fall through to absent logic
         }
 
-        // Guard: skip employees in a non-working status that wasn't resolved above.
-        if (in_array($employee->shift_status, ['off_shift', 'sick_off', 'on_leave'])) {
-            return;
-        }
-
-        // ── Already clocked in → evaluate auto clock-out ─────────
+        // ── Already clocked in — evaluate auto clock-out ──────────────────
         if ($attendance->check_in_time && $attendance->status === 'clocked_in') {
             $this->handleAutoClockOut($attendance, $shift, $shiftStart, $shiftEnd, $now, $employee);
             return;
         }
 
-        // ── Not yet checked in ───────────────────────────────────
+        // ── Not yet checked in ────────────────────────────────────────────
         if (!$attendance->check_in_time) {
             if ($now->greaterThan($shiftEnd)) {
                 $status = 'absent';
             } elseif ($now->between($shiftStart, $shiftEnd)) {
                 $status = 'unchecked_in';
             } else {
-                return; // Shift hasn't started yet – nothing to do.
+                return; // Shift hasn't started yet
             }
 
             $attendance->fill([

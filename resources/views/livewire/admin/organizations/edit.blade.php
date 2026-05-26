@@ -31,6 +31,11 @@ new class extends Component {
     public $logo_width;
     public $sidebar_bg_color;
     public $page_bg_color;
+    public bool $zkbio_sync_enabled = false;
+    public ?string $zkbio_base_url = null;
+    public ?string $zkbio_access_token = null;
+    public int $zkbio_pin_start = 4000;
+
 
     public function mount($id)
     {
@@ -47,39 +52,44 @@ new class extends Component {
     public function rules()
     {
         return [
-            'name'          => 'required|string|max:255|unique:organizations,name,' . $this->editId,
-            'address'       => 'nullable|string|max:255',
-            'location'      => 'nullable|string|max:255',
-            'email'         => 'required|email|unique:organizations,email,' . $this->editId,
-            'phone_number'  => 'required|string|max:255',
-            'description'   => 'nullable|string',
-            'website'       => 'nullable|url',
-            'newLogo'       => 'nullable|image|mimes:jpg,jpeg,png,gif|max:2048',
+            'name' => 'required|string|max:255|unique:organizations,name,' . $this->editId,
+            'address' => 'nullable|string|max:255',
+            'location' => 'nullable|string|max:255',
+            'email' => 'required|email|unique:organizations,email,' . $this->editId,
+            'phone_number' => 'required|string|max:255',
+            'description' => 'nullable|string',
+            'website' => 'nullable|url',
+            'newLogo' => 'nullable|image|mimes:jpg,jpeg,png,gif|max:2048',
             'primary_color' => 'nullable|string|max:7',
-            'logo_height'   => 'nullable|integer|min:20|max:300',
-            'logo_width'    => 'nullable|integer|min:20|max:600',
+            'logo_height' => 'nullable|integer|min:20|max:300',
+            'logo_width' => 'nullable|integer|min:20|max:600',
             'sidebar_bg_color' => 'nullable|string|max:7',
-            'page_bg_color'    => 'nullable|string|max:7',
+            'page_bg_color' => 'nullable|string|max:7',
         ];
     }
 
 
     public function getOrgData($org)
     {
-        $this->name          = $org->name;
-        $this->address       = $org->address;
-        $this->location      = $org->location;
-        $this->email         = $org->email;
-        $this->phone_number  = $org->phone_number;
-        $this->description   = $org->description;
-        $this->website       = $org->website;
-        $this->logo_path     = $org->logo_path;
+        $this->name = $org->name;
+        $this->address = $org->address;
+        $this->location = $org->location;
+        $this->email = $org->email;
+        $this->phone_number = $org->phone_number;
+        $this->description = $org->description;
+        $this->website = $org->website;
+        $this->logo_path = $org->logo_path;
         $this->primary_color = $org->primary_color ?? '#072639';
-        $this->logo_height   = $org->logo_height   ?? 60;
-        $this->logo_width    = $org->logo_width     ?? 200;
-        $this->newLogo       = null;
+        $this->logo_height = $org->logo_height ?? 60;
+        $this->logo_width = $org->logo_width ?? 200;
+        $this->newLogo = null;
         $this->sidebar_bg_color = $org->sidebar_bg_color;
-        $this->page_bg_color    = $org->page_bg_color;
+        $this->page_bg_color = $org->page_bg_color;
+        $this->zkbio_sync_enabled = (bool)($org->zkbio_sync_enabled ?? false);
+        $this->zkbio_base_url = $org->zkbio_base_url;
+        $this->zkbio_access_token = $org->zkbio_access_token;
+        $this->zkbio_pin_start = (int)($org->zkbio_pin_start ?? 4000);
+
     }
 
 
@@ -101,19 +111,24 @@ new class extends Component {
             }
 
             $org->update([
-                'name'          => $this->name,
-                'address'       => $this->address,
-                'location'      => $this->location,
-                'email'         => $this->email,
-                'phone_number'  => $this->phone_number,
-                'description'   => $this->description,
-                'website'       => $this->website,
-                'logo_path'     => $logo_path ?? $org->logo_path,
+                'name' => $this->name,
+                'address' => $this->address,
+                'location' => $this->location,
+                'email' => $this->email,
+                'phone_number' => $this->phone_number,
+                'description' => $this->description,
+                'website' => $this->website,
+                'logo_path' => $logo_path ?? $org->logo_path,
                 'primary_color' => $this->primary_color,
-                'logo_height'   => $this->logo_height,
-                'logo_width'    => $this->logo_width,
+                'logo_height' => $this->logo_height,
+                'logo_width' => $this->logo_width,
                 'sidebar_bg_color' => $this->sidebar_bg_color,
-                'page_bg_color'    => $this->page_bg_color,
+                'page_bg_color' => $this->page_bg_color,
+                'zkbio_sync_enabled' => $this->zkbio_sync_enabled,
+                'zkbio_base_url' => $this->zkbio_base_url,
+                'zkbio_access_token' => $this->zkbio_access_token,
+                'zkbio_pin_start' => $this->zkbio_pin_start,
+
             ]);
 
             // --- Geofence Logic ---
@@ -121,17 +136,17 @@ new class extends Component {
                 WorkLocation::updateOrCreate(
                     [
                         'organization_id' => $org->id,
-                        'name'            => 'main_branch',
+                        'name' => 'main_branch',
                     ],
                     [
-                        'type'        => 'branch',
-                        'address'     => $this->location,
-                        'latitude'    => $this->latitude,
-                        'longitude'   => $this->longitude,
-                        'radius_m'    => 100,
+                        'type' => 'branch',
+                        'address' => $this->location,
+                        'latitude' => $this->latitude,
+                        'longitude' => $this->longitude,
+                        'radius_m' => 100,
                         'description' => 'Main Branch',
-                        'active'      => 1,
-                        'is_default'  => 1,
+                        'active' => 1,
+                        'is_default' => 1,
                     ]
                 );
             }
@@ -176,8 +191,8 @@ new class extends Component {
     #[On('locationUpdated')]
     public function updateLocationFields($location, $latitude, $longitude)
     {
-        $this->location  = $location;
-        $this->latitude  = $latitude;
+        $this->location = $location;
+        $this->latitude = $latitude;
         $this->longitude = $longitude;
     }
 
@@ -201,7 +216,8 @@ new class extends Component {
             <form wire:submit.prevent="updateOrganization">
 
                 <div class="mb-3 row align-items-center">
-                    <label class="col-sm-3 col-form-label fw-semibold">Company Name <span class="text-danger">*</span></label>
+                    <label class="col-sm-3 col-form-label fw-semibold">Company Name <span
+                            class="text-danger">*</span></label>
                     <div class="col-sm-9">
                         <input type="text" wire:model.defer="name" class="form-control">
                         @error('name') <span class="text-danger">{{ $message }}</span> @enderror
@@ -209,7 +225,8 @@ new class extends Component {
                 </div>
 
                 <div class="mb-3 row align-items-center">
-                    <label class="col-sm-3 col-form-label fw-semibold">Address <span class="text-danger">*</span></label>
+                    <label class="col-sm-3 col-form-label fw-semibold">Address <span
+                            class="text-danger">*</span></label>
                     <div class="col-sm-9">
                         <input type="text" wire:model.defer="address" class="form-control">
                         @error('address') <span class="text-danger">{{ $message }}</span> @enderror
@@ -248,7 +265,8 @@ new class extends Component {
                 </div>
 
                 <div class="mb-3 row align-items-center">
-                    <label class="col-sm-3 col-form-label fw-semibold">Phone Number <span class="text-danger">*</span></label>
+                    <label class="col-sm-3 col-form-label fw-semibold">Phone Number <span
+                            class="text-danger">*</span></label>
                     <div class="col-sm-9">
                         <input type="tel" wire:model.defer="phone_number" class="form-control">
                         @error('phone_number') <span class="text-danger">{{ $message }}</span> @enderror
@@ -256,7 +274,8 @@ new class extends Component {
                 </div>
 
                 <div class="mb-3 row align-items-start">
-                    <label class="col-sm-3 col-form-label fw-semibold">Description <span class="text-danger">*</span></label>
+                    <label class="col-sm-3 col-form-label fw-semibold">Description <span
+                            class="text-danger">*</span></label>
                     <div class="col-sm-9">
                         <textarea wire:model.defer="description" rows="3" class="form-control"></textarea>
                         @error('description') <span class="text-danger">{{ $message }}</span> @enderror
@@ -310,8 +329,10 @@ new class extends Component {
                 <div class="mb-3 row align-items-center">
                     <label class="col-sm-3 col-form-label fw-semibold">Primary Color</label>
                     <div class="col-sm-9 d-flex align-items-center gap-3">
-                        <input type="color" wire:model.defer="primary_color" class="form-control form-control-color" style="width: 60px; height: 38px;">
-                        <input type="text" wire:model.defer="primary_color" class="form-control" placeholder="#072639" style="max-width: 120px;">
+                        <input type="color" wire:model.defer="primary_color" class="form-control form-control-color"
+                               style="width: 60px; height: 38px;">
+                        <input type="text" wire:model.defer="primary_color" class="form-control" placeholder="#072639"
+                               style="max-width: 120px;">
                         @error('primary_color') <span class="text-danger">{{ $message }}</span> @enderror
                     </div>
                 </div>
@@ -340,7 +361,8 @@ new class extends Component {
                 <div class="mb-3 row align-items-center">
                     <label class="col-sm-3 col-form-label fw-semibold">Logo Height <span class="text-muted fw-normal">(px)</span></label>
                     <div class="col-sm-9">
-                        <input type="number" wire:model.defer="logo_height" class="form-control" style="max-width: 150px;" min="20" max="300">
+                        <input type="number" wire:model.defer="logo_height" class="form-control"
+                               style="max-width: 150px;" min="20" max="300">
                         @error('logo_height') <span class="text-danger">{{ $message }}</span> @enderror
                     </div>
                 </div>
@@ -348,10 +370,52 @@ new class extends Component {
                 <div class="mb-3 row align-items-center">
                     <label class="col-sm-3 col-form-label fw-semibold">Logo Width <span class="text-muted fw-normal">(px)</span></label>
                     <div class="col-sm-9">
-                        <input type="number" wire:model.defer="logo_width" class="form-control" style="max-width: 150px;" min="20" max="600">
+                        <input type="number" wire:model.defer="logo_width" class="form-control"
+                               style="max-width: 150px;" min="20" max="600">
                         @error('logo_width') <span class="text-danger">{{ $message }}</span> @enderror
                     </div>
                 </div>
+
+                <hr class="my-4">
+                <h6 class="fw-semibold mb-3 text-muted">ZKBio Integration</h6>
+
+                <div class="mb-3 row align-items-center">
+                    <label class="col-sm-3 col-form-label fw-semibold">Enable ZKBio Sync</label>
+                    <div class="col-sm-9">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox"
+                                   wire:model="zkbio_sync_enabled" id="zkbioToggle">
+                            <label class="form-check-label" for="zkbioToggle">
+                                Automatically sync new employees to ZKBio Server
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                @if($zkbio_sync_enabled)
+                    <div class="mb-3 row align-items-center">
+                        <label class="col-sm-3 col-form-label fw-semibold">ZKBio Server URL</label>
+                        <div class="col-sm-9">
+                            <input type="text" wire:model.defer="zkbio_base_url"
+                                   class="form-control" placeholder="http://192.168.1.100:8098">
+                        </div>
+                    </div>
+                    <div class="mb-3 row align-items-center">
+                        <label class="col-sm-3 col-form-label fw-semibold">Access Token</label>
+                        <div class="col-sm-9">
+                            <input type="password" wire:model.defer="zkbio_access_token"
+                                   class="form-control" placeholder="Your ZKBio access token">
+                        </div>
+                    </div>
+                    <div class="mb-3 row align-items-center">
+                        <label class="col-sm-3 col-form-label fw-semibold">ZKBio PIN Start</label>
+                        <div class="col-sm-9">
+                            <input type="number" wire:model.defer="zkbio_pin_start"
+                                   class="form-control" placeholder="e.g. 4000">
+                            <small class="text-muted">Employees for this org will get PINs starting from this number e.g. 4001, 4002...</small>
+                        </div>
+                    </div>
+                @endif
 
                 <div class="d-flex justify-content-end gap-2">
                     <button type="submit" class="btn btn-primary">
