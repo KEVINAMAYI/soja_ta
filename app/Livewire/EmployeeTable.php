@@ -59,7 +59,6 @@ class EmployeeTable extends DataTableComponent
             ->where('organization_id', $orgId);
 
         // For school orgs, eager load the last attendance record per pembroke
-        // We do this via a subquery so it's one query not N+1
         if ($isStudentOrg) {
             $query->with([
                 'organization',
