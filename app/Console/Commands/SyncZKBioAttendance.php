@@ -182,10 +182,7 @@ class SyncZKBioAttendance extends Command
             $attendance->within_grace_period = !$c['late_checkin'];
             $attendance->status = 'clocked_in';
 
-            // Snapshot the shift windows at the time of clock-in for audit purposes
             if ($shift) {
-                $today = Carbon::parse($date);
-
                 $shiftStart = Carbon::parse($date . ' ' . Carbon::parse($shift->start_time)->format('H:i:s'));
                 $shiftEnd = Carbon::parse($date . ' ' . Carbon::parse($shift->end_time)->format('H:i:s'));
                 if ($shiftEnd->lte($shiftStart)) $shiftEnd->addDay();
@@ -211,31 +208,23 @@ class SyncZKBioAttendance extends Command
             $attendance->minutes_early = $c['minutes_early'];
             $attendance->worked_hours = $c['worked_hours'];
             $attendance->overtime_hours = $c['overtime_hours'];
-
-            // Late checkout = stayed past shift end (has overtime)
             $attendance->is_late_checkout = $c['overtime_hours'] > 0;
-            $attendance->late_checkout_hours = $c['overtime_hours'] > 0
-                ? $c['overtime_hours']
-                : 0.00;
-
+            $attendance->late_checkout_hours = $c['overtime_hours'] > 0 ? $c['overtime_hours'] : 0.00;
             $attendance->status = 'clocked_out';
         }
 
-        // ── Break summary (derived from segments) ─────────────────────────────────
+        // ── Break summary ─────────────────────────────────────────────────────────
         $segments = collect($c['segments']);
         $breakSegments = $segments->where('type', 'break');
 
         $attendance->break_count = $breakSegments->count();
         $attendance->total_break_minutes = (int)$breakSegments->sum('duration_minutes');
         $attendance->paid_break_minutes = (int)$breakSegments->where('paid', true)->sum('duration_minutes');
-
-        // Excess = unpaid break time (paid breaks don't eat into worked hours)
         $attendance->excess_break_minutes = max(
             0,
             $attendance->total_break_minutes - $attendance->paid_break_minutes
         );
 
-        // Employee clocked out while still on a break (break segment, no return)
         $lastSeg = $segments->last();
         $attendance->is_break_checkout = $lastSeg
             && $lastSeg['type'] === 'break'
@@ -245,49 +234,44 @@ class SyncZKBioAttendance extends Command
         $attendance->scenario = $c['scenario'];
         $attendance->incomplete = $c['incomplete'];
 
-        // ── Status: never go backwards ────────────────────────────────────────────
+        // ── Status ───────────────────────────────────────────────────────────────
         $newStatus = $this->scenarioToStatus($c['scenario']);
         $currentPriority = self::STATUS_PRIORITY[$attendance->status ?? 'absent'] ?? 0;
         $newPriority = self::STATUS_PRIORITY[$newStatus] ?? 0;
 
-        if ($newPriority >= $currentPriority || $c['check_out']) {
+        // Employee returned after an intermediate departure — clear stale checkout
+        if ($c['scenario'] === 'checkin_only') {
+            $attendance->status = 'clocked_in';
+            $attendance->check_out_time = null;
+            $attendance->auto_clocked_out = false;
+            $attendance->auto_clocked_out_reason = null;
+            $attendance->is_early_checkout = false;
+            $attendance->minutes_early = 0;
+        } elseif ($newPriority >= $currentPriority || $c['check_out']) {
             $attendance->status = $newStatus;
         }
 
         $attendance->save();
 
         // ── Segments → AttendanceBreakLog ─────────────────────────────────────────
-        $segmentNumber = 0;
-
         foreach ($c['segments'] as $seg) {
 
-            if ($seg['type'] === 'checkout') {
-                // Final departure — captured in check_out_time. Nothing to log.
-                continue;
-            }
+            if ($seg['type'] === 'checkout') continue;
 
             $isBreak = $seg['type'] === 'break';
             $isCompleted = $seg['in'] !== null;
-
-            // ── Match to a configured ShiftBreak row ──────────────────────────────
-            // For 'break' segments the classifier already matched the out-punch to a
-            // break window. We find the ShiftBreak FK here for relational integrity.
             $shiftBreakId = null;
             $allowedDuration = null;
 
             if ($isBreak && $shift) {
                 $today = now()->toDateString();
-
                 foreach ($shift->breaks ?? [] as $shiftBreak) {
-                    if (!$shiftBreak->is_active || !$shiftBreak->window_start_time) {
-                        continue;
-                    }
+                    if (!$shiftBreak->is_active || !$shiftBreak->window_start_time) continue;
 
                     $windowStart = Carbon::parse(
                         $today . ' ' . Carbon::parse($shiftBreak->window_start_time)->format('H:i:s')
                     );
 
-                    // Same ±20 min tolerance the classifier used
                     if ($seg['out']->between(
                         $windowStart->copy()->subMinutes(20),
                         $windowStart->copy()->addMinutes(20)
@@ -299,60 +283,42 @@ class SyncZKBioAttendance extends Command
                 }
             }
 
-            // ── Derived fields ────────────────────────────────────────────────────
-            $excessMinutes = null;
+            $excessMinutes = 0;
             $isCompliant = false;
 
             if ($isBreak && $isCompleted) {
                 if ($allowedDuration !== null) {
                     $excessMinutes = max(0, $seg['duration_minutes'] - $allowedDuration);
-                    $isCompliant   = $excessMinutes === 0;
+                    $isCompliant = $excessMinutes === 0;
                 } else {
                     $excessMinutes = 0;
-                    $isCompliant   = true;
+                    $isCompliant = true;
                 }
-            } elseif ($isBreak && !$isCompleted) {
-                $excessMinutes = 0; // ← was null, DB doesn't allow it
-                $isCompliant   = false;
-            } else {
-                // unscheduled_leave
-                $excessMinutes = 0; // ← was null, DB doesn't allow it
-                $isCompliant   = false;
             }
 
-            // ── Notes ─────────────────────────────────────────────────────────────
             $notes = match (true) {
                 !$isCompleted && $isBreak
                 => 'Break started but employee did not return — checkout recorded without return punch.',
-
                 !$isCompleted && !$isBreak
                 => 'Employee left the premises and did not return.',
-
                 !$isBreak
-                => "Unscheduled absence of {$seg['duration_minutes']} min "
-                    . "(left {$seg['out']->format('H:i')}, returned {$seg['in']->format('H:i')}).",
-
+                => "Unscheduled absence of {$seg['duration_minutes']} min (left {$seg['out']->format('H:i')}, returned {$seg['in']->format('H:i')}).",
                 $isCompliant
-                => null, // clean break — no note needed
-
+                => null,
                 $excessMinutes > 0
-                => "Break exceeded allowed duration by {$excessMinutes} min "
-                    . "(took {$seg['duration_minutes']} min, allowed {$allowedDuration} min).",
-
+                => "Break exceeded allowed duration by {$excessMinutes} min (took {$seg['duration_minutes']} min, allowed {$allowedDuration} min).",
                 default => null,
             };
 
-            // ── Upsert ────────────────────────────────────────────────────────────
             AttendanceBreakLog::updateOrCreate(
                 [
-                    // Natural key: one row per (attendance, break_start_time)
                     'attendance_id' => $attendance->id,
                     'break_start_time' => $seg['out'],
                 ],
                 [
                     'shift_break_id' => $shiftBreakId,
-                    'type' => $seg['type'],          // 'break' | 'unscheduled_leave'
-                    'is_auto_detected' => true,                  // always — source is ZKBio
+                    'type' => $seg['type'],
+                    'is_auto_detected' => true,
                     'break_end_time' => $seg['in'],
                     'actual_duration_minutes' => $seg['duration_minutes'],
                     'excess_minutes' => $excessMinutes,
