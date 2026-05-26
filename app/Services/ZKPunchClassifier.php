@@ -11,7 +11,7 @@ class ZKPunchClassifier
      * Punches within this many minutes of each other = noise (double scans).
      * Keep only the FIRST of each cluster.
      */
-    const NOISE_GAP_MINUTES = 5;
+    const NOISE_GAP_MINUTES = 1;
 
     /**
      * How far before shift end a clock-out may fall and still be considered
