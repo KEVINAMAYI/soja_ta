@@ -35,6 +35,7 @@ new class extends Component {
     public ?string $zkbio_base_url = null;
     public ?string $zkbio_access_token = null;
     public int $zkbio_pin_start = 4000;
+    public bool $zkbio_enabled = false;
 
 
     public function mount($id)
