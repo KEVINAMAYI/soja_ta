@@ -116,7 +116,7 @@ class extends Component {
         />
 
         <!-- Password -->
-        <div class="relative" x-data="{ show: false }">
+        <div x-data="{ show: false }">
             <div class="flex justify-between items-center mb-2">
                 <flux:label>{{ __('Password') }}</flux:label>
                 @if (Route::has('password.request'))
@@ -126,21 +126,24 @@ class extends Component {
                 @endif
             </div>
 
-            <div class="relative flex items-center">
-                <flux:input
+            <div class="relative">
+                <input
                     wire:model="password"
-                    :placeholder="__('Password')"
+                    :type="show ? 'text' : 'password'"
+                    placeholder="{{ __('Password') }}"
                     required
                     autocomplete="current-password"
-                    x-bind:type="show ? 'text' : 'password'"
-                    class="pr-10"
+                    class="w-full pr-10 rounded-md border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-700 px-3 py-2 text-sm text-zinc-900 dark:text-white placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-[#e14326]"
                 />
 
                 <button
                     type="button"
-                    class="absolute right-3 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
-                    x-on:click="show = !show"
                     tabindex="-1"
+                    x-on:click="
+        show = !show;
+        $refs.passwordInput.type = show ? 'text' : 'password';
+    "
+                    class="absolute inset-y-0 right-0 flex items-center px-3 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
                 >
                     <svg x-show="!show" xmlns="http://www.w3.org/2000/svg" class="size-4" viewBox="0 0 20 20" fill="currentColor">
                         <path d="M10 12a2 2 0 100-4 2 2 0 000 4z"/>
@@ -152,10 +155,11 @@ class extends Component {
                     </svg>
                 </button>
             </div>
-        </div>
 
-        <!-- Remember Me -->
-        <flux:checkbox wire:model="remember" :label="__('Remember me')"/>
+            @error('password')
+            <p class="mt-1 text-sm text-red-500">{{ $message }}</p>
+            @enderror
+        </div>
 
         <div class="flex items-center justify-end">
             <flux:button variant="primary" type="submit" class="w-full">{{ __('Log in') }}</flux:button>
