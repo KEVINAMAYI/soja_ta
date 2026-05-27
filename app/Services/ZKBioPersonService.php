@@ -59,13 +59,14 @@ class ZKBioPersonService
 
         $response = Http::timeout(10)
             ->post("{$this->baseUrl}/api/person/add?access_token={$this->accessToken}", [
-                'pin' => (string)$employee->zkbio_pin,
-                'name' => $nameParts['first'],
-                'lastName' => $nameParts['last'],
-                'mobilePhone' => $phone = ($employee->is_student)
+                'pin'         => (string) $employee->zkbio_pin,
+                'name'        => $nameParts['first'],
+                'lastName'    => $nameParts['last'],
+                'mobilePhone' => $employee->is_student
                     ? '2547' . str_pad($employee->zkbio_pin, 8, '0', STR_PAD_LEFT)
                     : ($employee->phone ?? ''),
-                'ssn' => $employee->id_number ?? '',
+                'ssn'         => $employee->id_number ?? '',
+                'cardNo'      => '',
             ]);
 
         $body = $response->json();

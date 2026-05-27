@@ -33,7 +33,10 @@ class Employee extends Model
         'end_off_shift_date',
         'zkbio_pin',
         'grade',
-        'is_student'
+        'is_student',
+        'ad_employee_id',
+        'division',
+        'section'
     ];
 
 
@@ -208,7 +211,7 @@ class Employee extends Model
     public static function generateZKBioPin(int $organizationId): string
     {
         // Get the org's configured starting PIN
-        $org      = \App\Models\Organization::find($organizationId);
+        $org = \App\Models\Organization::find($organizationId);
         $pinStart = (int)($org?->zkbio_pin_start ?? 4000);
 
         // Get highest existing PIN for this org only
@@ -233,7 +236,7 @@ class Employee extends Model
     /** True if this employee belongs to a school org */
     public function isSchoolOrg(): bool
     {
-        return (bool) ($this->organization?->is_student_record ?? false);
+        return (bool)($this->organization?->is_student_record ?? false);
     }
 
     /** Display label: Student or Staff/Employee */
