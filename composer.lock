@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "22234dd1f42ebac6ba1f0db02e2d5022",
+    "content-hash": "ce4a5207222cbdd6984ec04ffa2b0ba2",
     "packages": [
         {
             "name": "bacon/bacon-qr-code",
@@ -3388,16 +3388,16 @@
         },
         {
             "name": "livewire/flux",
-            "version": "v2.13.1",
+            "version": "v2.14.1",
             "source": {
                 "type": "git",
                 "url": "https://github.com/livewire/flux.git",
-                "reference": "5bee3d50ea8382e178d2b10a3412a82e6ecfb4a3"
+                "reference": "44f240efd186b5629d5e4c4a4cc7bbba0111fb48"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/livewire/flux/zipball/5bee3d50ea8382e178d2b10a3412a82e6ecfb4a3",
-                "reference": "5bee3d50ea8382e178d2b10a3412a82e6ecfb4a3",
+                "url": "https://api.github.com/repos/livewire/flux/zipball/44f240efd186b5629d5e4c4a4cc7bbba0111fb48",
+                "reference": "44f240efd186b5629d5e4c4a4cc7bbba0111fb48",
                 "shasum": ""
             },
             "require": {
@@ -3448,22 +3448,22 @@
             ],
             "support": {
                 "issues": "https://github.com/livewire/flux/issues",
-                "source": "https://github.com/livewire/flux/tree/v2.13.1"
+                "source": "https://github.com/livewire/flux/tree/v2.14.1"
             },
-            "time": "2026-03-26T00:02:01+00:00"
+            "time": "2026-04-23T23:00:08+00:00"
         },
         {
             "name": "livewire/livewire",
-            "version": "v3.7.12",
+            "version": "v3.8.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/livewire/livewire.git",
-                "reference": "7fcb612d1274980d80703efb5658e58d6d37ada9"
+                "reference": "d81d269243c3f18d302663c0ce5672990df08ca1"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/livewire/livewire/zipball/7fcb612d1274980d80703efb5658e58d6d37ada9",
-                "reference": "7fcb612d1274980d80703efb5658e58d6d37ada9",
+                "url": "https://api.github.com/repos/livewire/livewire/zipball/d81d269243c3f18d302663c0ce5672990df08ca1",
+                "reference": "d81d269243c3f18d302663c0ce5672990df08ca1",
                 "shasum": ""
             },
             "require": {
@@ -3518,7 +3518,7 @@
             "description": "A front-end framework for Laravel.",
             "support": {
                 "issues": "https://github.com/livewire/livewire/issues",
-                "source": "https://github.com/livewire/livewire/tree/v3.7.12"
+                "source": "https://github.com/livewire/livewire/tree/v3.8.0"
             },
             "funding": [
                 {
@@ -3526,7 +3526,7 @@
                     "type": "github"
                 }
             ],
-            "time": "2026-03-25T23:04:42+00:00"
+            "time": "2026-04-30T23:56:43+00:00"
         },
         {
             "name": "livewire/volt",
@@ -12762,5 +12762,5 @@
     "platform-overrides": {
         "php": "8.2.27"
     },
-    "plugin-api-version": "2.6.0"
+    "plugin-api-version": "2.9.0"
 }

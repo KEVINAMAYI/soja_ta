@@ -5,7 +5,12 @@
 
     @include('partials.head')
 
-    @vite(['resources/css/app.css', 'resources/js/app.js'])
+    @if (app()->environment('local'))
+        @vite(['resources/css/app.css', 'resources/js/app.js'])
+    @else
+        <link rel="stylesheet" href="{{ asset('build/assets/app-Q3JOlUbb.css') }}">
+        <script type="module" src="{{ asset('build/assets/app-CFeSwWEE.js') }}"></script>
+    @endif
 
     <style>
         body {
@@ -68,6 +73,15 @@
 
 <!-- solar icons -->
 <script src="https://cdn.jsdelivr.net/npm/iconify-icon@1.0.8/dist/iconify-icon.min.js"></script>
+
+<script>
+document.addEventListener('alpine:init', () => {
+    Alpine.data('fluxInputViewable', () => ({
+        open: false,
+        toggle() { this.open = !this.open }
+    }));
+});
+</script>
 
 @fluxScripts
 
