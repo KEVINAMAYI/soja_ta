@@ -24,6 +24,7 @@ class Organization extends Model
         'logo_width',
         'sidebar_bg_color',
         'page_bg_color',
+        'zkbio_enabled',
         'zkbio_sync_enabled',
         'zkbio_base_url',
         'zkbio_access_token',

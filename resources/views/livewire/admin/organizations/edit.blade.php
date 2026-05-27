@@ -86,7 +86,7 @@ new class extends Component {
         $this->sidebar_bg_color = $org->sidebar_bg_color;
         $this->page_bg_color = $org->page_bg_color;
         $this->zkbio_sync_enabled = (bool)($org->zkbio_sync_enabled ?? false);
-        $this->zkbio_enabled = (bool)($org->zkbio_enabled ?? false);
+        $this->zkbio_enabled = (bool)($org->zkbio_sync_enabled ?? false);
         $this->zkbio_base_url = $org->zkbio_base_url;
         $this->zkbio_access_token = $org->zkbio_access_token;
         $this->zkbio_pin_start = (int)($org->zkbio_pin_start ?? 4000);
