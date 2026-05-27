@@ -81,7 +81,10 @@ class EmployeeTable extends DataTableComponent
             $query->where(function ($q) {
                 $q->where('name', 'like', '%' . $this->search . '%')
                     ->orWhere('email', 'like', '%' . $this->search . '%')
-                    ->orWhere('phone', 'like', '%' . $this->search . '%');
+                    ->orWhere('phone', 'like', '%' . $this->search . '%')
+                    ->orWhere('ad_employee_id', 'like', '%' . $this->search . '%')
+                    ->orWhere('section', 'like', '%' . $this->search . '%')
+                    ->orWhere('division', 'like', '%' . $this->search . '%');
             });
         }
 
@@ -108,6 +111,7 @@ class EmployeeTable extends DataTableComponent
                 ->sortable();
         }
 
+
         // ── Student / Employee name column ──
         $columns[] = Column::make($isStudent ? "Student" : ($isStudentOrg ? "Staff" : "Employee"), "name")
             ->format(function ($value, $row) use ($isStudentOrg) {
@@ -125,62 +129,90 @@ class EmployeeTable extends DataTableComponent
                     ? "<small class='text-muted d-block'><i class='ti ti-id me-1 text-success'></i>ID: {$row->id_number}</small>"
                     : '';
 
-                $gradeOrDept = $row->is_student
-                    ? ($row->grade
-                        ? "<small class='text-muted d-block'><i class='ti ti-school me-1 text-primary'></i>Year Group: {$row->grade}</small>"
-                        : '')
-                    : ($row->department
-                        ? "<small class='text-muted d-block'><i class='ti ti-building me-1'></i>Dept: {$row->department->name}</small>"
-                        : '');
+                $adEmployeeId = $row->ad_employee_id
+                    ? "<small class='text-muted d-block'><i class='ti ti-badge me-1 text-primary'></i>EMP No: <strong>{$row->ad_employee_id}</strong></small>"
+                    : '';
 
                 $zkbioPin = '';
                 if ($row->organization?->zkbio_enabled && $row->zkbio_pin) {
                     $zkbioPin = "<small class='text-muted d-block'>
-                        <i class='ti ti-fingerprint me-1 text-warning'></i>
-                        Device PIN: <span class='badge bg-warning-subtle text-warning border px-2'>{$row->zkbio_pin}</span>
-                    </small>";
+        <i class='ti ti-fingerprint me-1 text-warning'></i>
+        Device PIN: <span class='badge bg-warning-subtle text-warning border px-2'>{$row->zkbio_pin}</span>
+    </small>";
                 } elseif ($row->organization?->zkbio_enabled && !$row->zkbio_pin) {
                     $zkbioPin = "<small class='text-danger d-block'>
-                        <i class='ti ti-alert-circle me-1'></i>No device PIN assigned
-                    </small>";
+        <i class='ti ti-alert-circle me-1'></i>No device PIN assigned
+    </small>";
                 }
 
                 return "
-                    <div class='d-flex align-items-start'>
-                        {$icon}
-                        <div class='d-flex flex-column'>
-                            <span class='fw-semibold text-dark'>{$row->name}</span>
-                            {$title}
-                            {$email}
-                            {$idNumber}
-                            {$gradeOrDept}
-                            {$zkbioPin}
-                        </div>
-                    </div>
-                ";
+    <div class='d-flex align-items-start' style='max-width:260px;'>
+        {$icon}
+        <div class='d-flex flex-column' style='min-width:0;width:100%;'>
+            <span class='fw-semibold text-dark text-truncate' title='{$row->name}'>{$row->name}</span>
+            {$title}
+            <small class='text-muted d-block text-truncate' title='{$row->email}'>
+                <i class='ti ti-mail me-1 text-info'></i>{$row->email}
+            </small>
+            {$idNumber}
+            {$adEmployeeId}
+            {$zkbioPin}
+        </div>
+    </div>
+";
             })
             ->html()
             ->sortable();
 
+
         // ── Grade / Department column ──
-        $columns[] = Column::make($isStudent ? "Year Group" : "Department", "id")
+        $columns[] = Column::make($isStudent ? "Year Group" : "Dept / Division / Section", "id")
             ->format(function ($value, $row) {
                 if ($row->is_student) {
                     return $row->grade
-                        ? "<span style='color:var(--primary-color) !important;' class='badge bg-white border px-2 py-1'>
-                               <i class='ti ti-school me-1'></i>{$row->grade}
-                           </span>"
+                        ? "<span class='text-primary fw-semibold'>{$row->grade}</span>"
                         : "<span class='text-muted'>—</span>";
                 }
 
-                return $row->department
-                    ? "<span style='color:var(--primary-color) !important;' class='badge bg-white  border px-2 py-1'>
-                           <i class='ti ti-building me-1'></i>{$row->department->name}
-                       </span>"
+                $lines = [];
+
+                if ($row->division) {
+                    $lines[] = "
+                <small class='d-block'>
+                    <span class='text-muted' style='font-size:0.68rem;text-transform:uppercase;letter-spacing:0.4px;'>
+                        <i class='ti ti-layout-distribute-horizontal me-1'></i>Division
+                    </span><br>
+                    <span class='fw-semibold text-dark' style='font-size:0.82rem;'>{$row->division}</span>
+                </small>";
+                }
+
+                if ($row->department) {
+                    $lines[] = "
+                <small class='d-block mt-1'>
+                    <span class='text-muted' style='font-size:0.68rem;text-transform:uppercase;letter-spacing:0.4px;'>
+                        <i class='ti ti-building me-1'></i>Department
+                    </span><br>
+                    <span class='fw-semibold text-dark' style='font-size:0.82rem;'>{$row->department->name}</span>
+                </small>";
+                }
+
+                if ($row->section) {
+                    $lines[] = "
+                <small class='d-block mt-1'>
+                    <span class='text-muted' style='font-size:0.68rem;text-transform:uppercase;letter-spacing:0.4px;'>
+                        <i class='ti ti-sitemap me-1'></i>Section
+                    </span><br>
+                    <span class='fw-semibold text-dark' style='font-size:0.82rem;'>{$row->section}</span>
+                </small>";
+                }
+
+                return $lines
+                    ? "<div class='d-flex flex-column'>" . implode('', $lines) . "</div>"
                     : "<span class='text-muted'>—</span>";
             })
             ->html()
             ->collapseOnMobile();
+
 
         // ── School Status column (school orgs only, students only) ──
         // Shows Present / Left School / Not Reported based on LAST attendance
@@ -236,7 +268,6 @@ class EmployeeTable extends DataTableComponent
         }
 
         // ── Work / School Location ──
-        // ── Work / School Location ──
         $columns[] = Column::make($isStudentOrg ? "School Location" : "Work Location")
             ->label(function ($row) {
                 $locations = $row->assignments
@@ -259,21 +290,21 @@ class EmployeeTable extends DataTableComponent
             ->collapseOnMobile();
 
         // ── Roles ──
-        if (!$isStudentOrg) {
-            $columns[] = Column::make("Roles")
-                ->label(fn($row) => view('livewire.admin.employees.roles', ['employee' => $row]))
-                ->collapseOnMobile();
-        } else {
-            $columns[] = Column::make("Roles")
-                ->label(function ($row) {
-                    if ($row->is_student) {
-                        return "<span class='text-muted'>—</span>";
-                    }
-                    return view('livewire.admin.employees.roles', ['employee' => $row]);
-                })
-                ->html()
-                ->collapseOnMobile();
-        }
+//        if (!$isStudentOrg) {
+//            $columns[] = Column::make("Roles")
+//                ->label(fn($row) => view('livewire.admin.employees.roles', ['employee' => $row]))
+//                ->collapseOnMobile();
+//        } else {
+//            $columns[] = Column::make("Roles")
+//                ->label(function ($row) {
+//                    if ($row->is_student) {
+//                        return "<span class='text-muted'>—</span>";
+//                    }
+//                    return view('livewire.admin.employees.roles', ['employee' => $row]);
+//                })
+//                ->html()
+//                ->collapseOnMobile();
+//        }
 
         // ── Active ──
         $columns[] = BooleanColumn::make('Active')

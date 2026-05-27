@@ -170,19 +170,14 @@ new class extends Component {
         try {
             $ad = app(MicrosoftAdService::class);
             $users = $ad->filterValidUsers($ad->getAllUsers());
-
             $org = auth()->user()->employee->organization;
 
-            // Pre-load existing employees for fast lookup
             $existingByAdId = Employee::where('organization_id', $org->id)
                 ->whereNotNull('ad_object_id')
-                ->pluck('ad_object_id')
-                ->flip(); // id => true
+                ->pluck('ad_object_id')->flip();
 
             $existingByEmail = Employee::where('organization_id', $org->id)
-                ->pluck('email')                 // ← remove whereNotNull, check ALL emails
-                ->filter()                       // drop nulls after pluck
-                ->flip();
+                ->pluck('email')->filter()->flip();
 
             $defaultShift = $org->shifts->firstWhere('name', 'Day Shift')
                 ?? $org->shifts->firstWhere('name', 'Day')
@@ -199,14 +194,24 @@ new class extends Component {
                 $isNew = !isset($existingByAdId[$user['id']])
                     && ($adEmail === '' || !isset($existingByEmail[$adEmail]));
 
+                // Parse section & division from DN
+                $ous = [];
+                if (!empty($user['onPremisesDistinguishedName'])) {
+                    $ous = $ad->parseDnOUs($user['onPremisesDistinguishedName']);
+                }
+
                 $this->adPreview[] = [
                     'ad_id' => $user['id'],
                     'name' => $user['displayName'],
                     'email' => $user['mail'] ?? $user['userPrincipalName'],
-                    'phone' => $phone ?? '—',
-                    'job_title' => $user['jobTitle'] ?? '—',
+                    'phone' => $phone ?? '?',
+                    'job_title' => $user['jobTitle'] ?? '?',
                     'upn' => $user['userPrincipalName'],
-                    'shift' => $defaultShift?->name ?? '—',
+                    'shift' => $defaultShift?->name ?? '?',
+                    'department' => $user['department'] ?? null,   // from AD
+                    'employee_id' => $user['employeeId'] ?? null,   // e.g. M1ALI748
+                    'section' => $ous['section'] ?? null,
+                    'division' => $ous['division'] ?? null,
                     'isNew' => $isNew,
                 ];
             }
@@ -265,6 +270,11 @@ new class extends Component {
                         'ad_object_id' => $row['ad_id'],
                         'ad_upn' => $row['upn'],
                         'ad_synced_at' => now(),
+                        'ad_employee_id' => $row['employee_id'],  // ← add
+                        'section' => $row['section'],       // ← add
+                        'division' => $row['division'],      // ← add
+                        // update department if AD has one and we can resolve it
+                        'department_id' => $this->resolveDepartment($org, $row['department']) ?? $existing->department_id,
                     ]);
 
                     if ($existing->user) {
@@ -298,7 +308,7 @@ new class extends Component {
                         'name' => $row['name'],
                         'email' => $row['email'],
                         'status' => 'updated',
-                        'zk'      => $zkStatus,
+                        'zk' => $zkStatus,
                         'message' => 'Details updated from AD',
                     ];
                     $updated++;
@@ -329,6 +339,10 @@ new class extends Component {
                         'ad_synced_at' => now(),
                         'is_student' => false,
                         'employee_title' => $row['job_title'] !== '—' ? $row['job_title'] : null,
+                        'ad_employee_id' => $row['employee_id'],
+                        'section' => $row['section'],
+                        'division' => $row['division'],
+                        'department_id' => $this->resolveDepartment($org, $row['department']) ?? $defaultDept?->id,
                     ]);
 
                     $user->assignRole('employee');
@@ -399,6 +413,24 @@ new class extends Component {
             ->success()->toast()->position('top-end')->show();
     }
 
+
+    private function resolveDepartment($org, ?string $deptName): ?int
+    {
+        if (!$deptName) return null;
+
+        $dept = $org->departments->firstWhere('name', $deptName);
+
+        if (!$dept) {
+            $dept = $org->departments()->create([
+                'name' => $deptName,
+                'organization_id' => $org->id,
+            ]);
+            $org->unsetRelation('departments');
+            $org->load('departments');
+        }
+
+        return $dept->id;
+    }
 
     public function toggleImportPanel(): void
     {
@@ -1177,6 +1209,83 @@ new class extends Component {
 @push('styles')
     <style>
 
+        /* Loading overlay */
+        .sync-loading-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(15, 23, 42, 0.55);
+            z-index: 9999;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            backdrop-filter: blur(3px);
+        }
+
+        .sync-loading-card {
+            background: #fff;
+            border-radius: 16px;
+            padding: 2.5rem 3rem;
+            text-align: center;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+            min-width: 320px;
+        }
+
+        .sync-loading-spinner {
+            width: 56px;
+            height: 56px;
+            border: 5px solid #f1f5f9;
+            border-top-color: #0078d4;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin: 0 auto 1.2rem;
+        }
+
+        .sync-loading-spinner.orange {
+            border-top-color: #e14326;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .sync-loading-title {
+            font-size: 1rem;
+            font-weight: 700;
+            color: #1e293b;
+            margin-bottom: 0.4rem;
+        }
+
+        .sync-loading-sub {
+            font-size: 0.8rem;
+            color: #64748b;
+            margin: 0;
+        }
+
+        .sync-loading-progress {
+            margin-top: 1.2rem;
+            height: 4px;
+            background: #f1f5f9;
+            border-radius: 99px;
+            overflow: hidden;
+        }
+
+        .sync-loading-progress-bar {
+            height: 100%;
+            border-radius: 99px;
+            background: linear-gradient(90deg, #0078d4, #00b4d8);
+            animation: progress-indeterminate 1.5s ease-in-out infinite;
+        }
+
+        .sync-loading-progress-bar.orange {
+            background: linear-gradient(90deg, #e14326, #f97316);
+        }
+
+        @keyframes progress-indeterminate {
+            0%   { width: 0%;   margin-left: 0; }
+            50%  { width: 60%;  margin-left: 20%; }
+            100% { width: 0%;   margin-left: 100%; }
+        }
+
         .import-accordion-wrap {
             border-radius: 14px;
             border: 1.5px dashed #e14326;
@@ -1691,6 +1800,43 @@ new class extends Component {
 @endphp
 
 <div class="row">
+
+    {{-- AD Sync Loading Overlay --}}
+    <div wire:loading wire:target="commitAdSync" class="sync-loading-overlay">
+        <div class="sync-loading-card">
+            <div class="sync-loading-spinner"></div>
+            <p class="sync-loading-title">Syncing from Active Directory</p>
+            <p class="sync-loading-sub">Importing employees & syncing to ZKBio...<br>Please do not close this page.</p>
+            <div class="sync-loading-progress">
+                <div class="sync-loading-progress-bar"></div>
+            </div>
+        </div>
+    </div>
+
+    {{-- AD Preview Loading Overlay --}}
+    <div wire:loading wire:target="previewAdSync" class="sync-loading-overlay">
+        <div class="sync-loading-card">
+            <div class="sync-loading-spinner"></div>
+            <p class="sync-loading-title">Fetching from Active Directory</p>
+            <p class="sync-loading-sub">Pulling all users from Microsoft Entra...<br>This may take a moment.</p>
+            <div class="sync-loading-progress">
+                <div class="sync-loading-progress-bar"></div>
+            </div>
+        </div>
+    </div>
+
+    {{-- Import Loading Overlay --}}
+    <div wire:loading wire:target="commitImport" class="sync-loading-overlay">
+        <div class="sync-loading-card">
+            <div class="sync-loading-spinner orange"></div>
+            <p class="sync-loading-title">Importing Employees</p>
+            <p class="sync-loading-sub">Creating records & syncing to ZKBio...<br>Please do not close this page.</p>
+            <div class="sync-loading-progress">
+                <div class="sync-loading-progress-bar orange"></div>
+            </div>
+        </div>
+    </div>
+
     <div class="col-12">
 
         <livewire:admin.system-settings.bread-crumb
@@ -2114,7 +2260,10 @@ new class extends Component {
                                         class="btn btn-outline-danger" style="font-size:0.875rem; border-radius:8px;">
                                     Cancel
                                 </button>
-                                <button wire:click="commitImport" type="button"
+                                <button wire:click="commitImport"
+                                        wire:loading.attr="disabled"
+                                        wire:target="commitImport"
+                                        type="button"
                                         class="btn btn-success d-flex align-items-center gap-2"
                                         style="font-size:0.875rem; border-radius:8px;">
                                     <div wire:loading wire:target="commitImport">
@@ -2334,7 +2483,6 @@ new class extends Component {
                         @endif
 
                         {{-- STEP B: Preview table --}}
-                        {{-- STEP B: Preview table --}}
                         @if($adSyncPreviewed && !$adSyncProcessed)
                             @php
                                 $adNew      = collect($adPreview)->where('isNew', true)->count();
@@ -2384,6 +2532,7 @@ new class extends Component {
                                 </div>
 
                                 {{-- Preview table --}}
+                                {{-- Preview table --}}
                                 <div
                                     style="overflow-x:auto;border-radius:10px;border:1px solid #cce0f5;margin-bottom:1rem;">
                                     <table class="table table-hover mb-0" style="font-size:0.78rem;">
@@ -2403,13 +2552,25 @@ new class extends Component {
                                                 Email
                                             </th>
                                             <th style="padding:8px 12px;color:#1e4d8c;font-size:0.72rem;text-transform:uppercase;">
+                                                Emp No.
+                                            </th>
+                                            <th style="padding:8px 12px;color:#1e4d8c;font-size:0.72rem;text-transform:uppercase;">
                                                 Job Title
+                                            </th>
+                                            <th style="padding:8px 12px;color:#1e4d8c;font-size:0.72rem;text-transform:uppercase;">
+                                                Department
+                                            </th>
+                                            <th style="padding:8px 12px;color:#1e4d8c;font-size:0.72rem;text-transform:uppercase;">
+                                                Division
+                                            </th>
+                                            <th style="padding:8px 12px;color:#1e4d8c;font-size:0.72rem;text-transform:uppercase;">
+                                                Section
                                             </th>
                                             <th style="padding:8px 12px;color:#1e4d8c;font-size:0.72rem;text-transform:uppercase;">
                                                 Phone
                                             </th>
                                             <th style="padding:8px 12px;color:#1e4d8c;font-size:0.72rem;text-transform:uppercase;">
-                                                Default Shift
+                                                Shift
                                             </th>
                                             <th style="padding:8px 12px;color:#1e4d8c;font-size:0.72rem;text-transform:uppercase;">
                                                 Status
@@ -2429,33 +2590,73 @@ new class extends Component {
                                                 </td>
                                                 <td style="padding:7px 12px;font-weight:600;color:#1e293b;">{{ $row['name'] }}</td>
                                                 <td style="padding:7px 12px;color:#64748b;">{{ $row['email'] }}</td>
-                                                <td style="padding:7px 12px;color:#64748b;">{{ $row['job_title'] }}</td>
-                                                <td style="padding:7px 12px;color:#64748b;">{{ $row['phone'] }}</td>
                                                 <td style="padding:7px 12px;">
-                            <span
-                                style="font-size:0.7rem;font-weight:600;background:#e0f2fe;color:#0369a1;border-radius:5px;padding:2px 8px;">
-                                {{ $row['shift'] }}
-                            </span>
+                                                    @if($row['employee_id'])
+                                                        <span
+                                                            style="font-size:0.7rem;font-weight:600;background:#ede9fe;color:#6d28d9;border-radius:5px;padding:2px 8px;">
+                            {{ $row['employee_id'] }}
+                        </span>
+                                                    @else
+                                                        <span class="text-muted">—</span>
+                                                    @endif
+                                                </td>
+                                                <td style="padding:7px 12px;color:#64748b;">{{ $row['job_title'] !== '?' ? $row['job_title'] : '—' }}</td>
+                                                <td style="padding:7px 12px;">
+                                                    @if($row['department'])
+                                                        <span
+                                                            style="font-size:0.7rem;font-weight:600;background:#fde8e3;color:#c0341b;border-radius:5px;padding:2px 8px;">
+                            {{ $row['department'] }}
+                        </span>
+                                                    @else
+                                                        <span class="text-muted">—</span>
+                                                    @endif
+                                                </td>
+                                                <td style="padding:7px 12px;">
+                                                    @if($row['division'])
+                                                        <span
+                                                            style="font-size:0.7rem;font-weight:600;background:#e0f2fe;color:#0369a1;border-radius:5px;padding:2px 8px;">
+                            {{ $row['division'] }}
+                        </span>
+                                                    @else
+                                                        <span class="text-muted">—</span>
+                                                    @endif
+                                                </td>
+                                                <td style="padding:7px 12px;">
+                                                    @if($row['section'])
+                                                        <span
+                                                            style="font-size:0.7rem;font-weight:600;background:#dcfce7;color:#15803d;border-radius:5px;padding:2px 8px;">
+                            {{ $row['section'] }}
+                        </span>
+                                                    @else
+                                                        <span class="text-muted">—</span>
+                                                    @endif
+                                                </td>
+                                                <td style="padding:7px 12px;color:#64748b;">{{ $row['phone'] !== '?' ? $row['phone'] : '—' }}</td>
+                                                <td style="padding:7px 12px;">
+                    <span
+                        style="font-size:0.7rem;font-weight:600;background:#e0f2fe;color:#0369a1;border-radius:5px;padding:2px 8px;">
+                        {{ $row['shift'] }}
+                    </span>
                                                 </td>
                                                 <td style="padding:7px 12px;">
                                                     @if($row['isNew'])
                                                         <span
                                                             style="font-size:0.72rem;font-weight:700;padding:2px 9px;border-radius:99px;background:#dcfce7;color:#15803d;">
-                                    <iconify-icon icon="mdi:plus-circle"></iconify-icon> New
-                                </span>
+                            <iconify-icon icon="mdi:plus-circle"></iconify-icon> New
+                        </span>
                                                     @else
                                                         <span
                                                             style="font-size:0.72rem;font-weight:700;padding:2px 9px;border-radius:99px;background:#f1f5f9;color:#64748b;">
-                                    <iconify-icon icon="mdi:refresh"></iconify-icon> Update
-                                </span>
+                            <iconify-icon icon="mdi:refresh"></iconify-icon> Update
+                        </span>
                                                     @endif
                                                 </td>
                                             </tr>
                                         @endforeach
                                         @if(count($adPreview) > 25)
                                             <tr>
-                                                <td colspan="7" class="text-center text-muted py-2"
-                                                    style="font-size:0.75rem; background:#f8fafc; font-style:italic;">
+                                                <td colspan="11" class="text-center text-muted py-2"
+                                                    style="font-size:0.75rem;background:#f8fafc;font-style:italic;">
                                                     <iconify-icon icon="mdi:dots-horizontal"
                                                                   style="margin-right:4px;"></iconify-icon>
                                                     {{ count($adPreview) - 25 }} more users not shown — all will be
@@ -2488,6 +2689,8 @@ new class extends Component {
 
                                     {{-- The key: sync Alpine selection to Livewire right before committing --}}
                                     <button type="button"
+                                            wire:loading.attr="disabled"
+                                            wire:target="commitAdSync"
                                             @click="
                         $wire.set('selectedAdUsers', selected);
                         $nextTick(() => $wire.commitAdSync());
