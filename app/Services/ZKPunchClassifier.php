@@ -11,7 +11,7 @@ class ZKPunchClassifier
      * Punches within this many minutes of each other = noise (double scans).
      * Keep only the FIRST of each cluster.
      */
-    const NOISE_GAP_MINUTES = 5;
+    const NOISE_GAP_MINUTES = 1;
 
     /**
      * How far before shift end a clock-out may fall and still be considered
@@ -286,7 +286,7 @@ class ZKPunchClassifier
 
         // ── Early checkout flag ───────────────────────────────────────────────
         // Only applies to real (non-synthetic) checkouts.
-        if (!$result['check_out_synthetic'] && $result['check_out']->lt($shiftEnd)) {
+        if (!$result['check_out_synthetic'] && $result['check_out'] && $result['check_out']->lt($shiftEnd)) {
             $minutesEarly = (int)$result['check_out']->diffInMinutes($shiftEnd);
             $result['early_checkout'] = true;
             $result['minutes_early'] = $minutesEarly;
@@ -297,6 +297,7 @@ class ZKPunchClassifier
         // ── Overtime ──────────────────────────────────────────────────────────
         if (
             !$result['check_out_synthetic']
+            && $result['check_out']
             && $result['check_out']->gt($shiftEnd)
             && $shift->overtime_enabled
         ) {
