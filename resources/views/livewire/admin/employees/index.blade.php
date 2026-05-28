@@ -262,6 +262,10 @@ new class extends Component {
     {
         if (empty($this->adPreview)) return;
 
+        // Increase execution time for large AD syncs
+        set_time_limit(0); // unlimited
+        ini_set('max_execution_time', 0);
+
         $org = auth()->user()->employee->organization;
 
         $defaultShift = $org->shifts->firstWhere('name', 'Day Shift')
