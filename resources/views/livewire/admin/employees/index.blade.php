@@ -297,12 +297,14 @@ new class extends Component {
                 $existing = Employee::where('organization_id', $org->id)
                     ->where(function ($q) use ($row) {
                         $q->where('ad_object_id', $row['ad_id'])
-                            ->orWhere('email', $row['email']);
+                            ->orWhere('email', $row['email'])
+                            ->orWhere('id_number', 'AD-' . substr($row['ad_id'], 0, 8)); // ← add this
                     })->first();
 
                 if ($existing) {
                     $existing->update([
-                        'name' => $row['name'],
+                        'name'  => $row['name'],
+                        'email' => $row['email'] ?: $existing->email, // ← update email from AD
                         'phone' => $phone ?? $existing->phone,
                         'ad_object_id' => $row['ad_id'],
                         'ad_upn' => $row['upn'],
