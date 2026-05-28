@@ -40,12 +40,13 @@ class EmployeesExcelExport implements FromView, ShouldAutoSize, WithTitle, WithS
         $employees = $query->get();
 
         return view('exports.employees.index', [
-            'employees'    => $employees,
-            'orgName'      => $org->name ?? 'Organization',
-            'date'         => now()->format('d M Y, H:i'),
-            'totalActive'  => $employees->where('active', 1)->count(),
-            'totalInactive'=> $employees->where('active', 0)->count(),
-            'total'        => $employees->count(),
+            'employees' => $employees,
+            'orgName' => $org->name ?? 'Organization',
+            'date' => now()->format('d M Y, H:i'),
+            'totalActive' => $employees->where('active', 1)->count(),
+            'totalInactive' => $employees->where('active', 0)->count(),
+            'total' => $employees->count(),
+            'isExcel' => true,  // ← confirm this is present
         ]);
     }
 
@@ -62,11 +63,11 @@ class EmployeesExcelExport implements FromView, ShouldAutoSize, WithTitle, WithS
         // Style header row
         $sheet->getStyle("A1:{$lastCol}1")->applyFromArray([
             'font' => [
-                'bold'  => true,
+                'bold' => true,
                 'color' => ['argb' => 'FFFFFFFF'],
             ],
             'fill' => [
-                'fillType'   => Fill::FILL_SOLID,
+                'fillType' => Fill::FILL_SOLID,
                 'startColor' => ['argb' => 'FF0f172a'],
             ],
         ]);
