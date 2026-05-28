@@ -87,11 +87,14 @@ class ZKBioPersonService
         if (!$this->isEnabled()) return false;
 
         $response = Http::timeout(10)
-            ->post("{$this->baseUrl}/api/person/delete?access_token={$this->accessToken}", [
-                'pins' => [$pin],
-            ]);
+            ->post("{$this->baseUrl}/api/person/delete/{$pin}?access_token={$this->accessToken}");
 
         $body = $response->json();
+
+        Log::info('ZKBio deletePerson response', [
+            'pin'  => $pin,
+            'body' => $body,
+        ]);
 
         if (($body['code'] ?? -1) === 0) {
             Log::info("ZKBio person deleted", ['pin' => $pin]);
