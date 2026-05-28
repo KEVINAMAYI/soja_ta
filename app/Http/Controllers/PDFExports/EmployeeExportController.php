@@ -45,7 +45,7 @@ class EmployeeExportController extends Controller
                 'total'         => $employees->count(),
                 'totalActive'   => $employees->where('active', 1)->count(),
                 'totalInactive' => $employees->where('active', 0)->count(),
-                'isExcel'       => true,  // ← confirm this is present
+                'isExcel'       => false,  // ← confirm this is present
             ],
             'employees-report'
         );
