@@ -26,8 +26,8 @@ class EmployeesExcelExport implements FromView, ShouldAutoSize, WithTitle, WithS
     public function view(): View
     {
         $user = auth()->user();
-
         $organizationId = $user->employee->organization_id;
+        $org = $user->employee->organization;
 
         $query = Employee::query()
             ->with(['organization', 'shift', 'user', 'department'])
@@ -39,14 +39,13 @@ class EmployeesExcelExport implements FromView, ShouldAutoSize, WithTitle, WithS
 
         $employees = $query->get();
 
-        $organizationName = auth()->user()->employee->organization->name ?? 'Organization';
-        $title = "{$organizationName} - Employees Report";
-
         return view('exports.employees.index', [
-            'employees' => $employees,
-            'title' => $title,
-            'date' => now()->format('d M Y, H:i'),
-            'isExcel' => true
+            'employees'    => $employees,
+            'orgName'      => $org->name ?? 'Organization',
+            'date'         => now()->format('d M Y, H:i'),
+            'totalActive'  => $employees->where('active', 1)->count(),
+            'totalInactive'=> $employees->where('active', 0)->count(),
+            'total'        => $employees->count(),
         ]);
     }
 
@@ -57,35 +56,28 @@ class EmployeesExcelExport implements FromView, ShouldAutoSize, WithTitle, WithS
 
     public function styles(Worksheet $sheet)
     {
-        $sheet->getStyle('A1:G1')->applyFromArray([
+        $lastCol = $sheet->getHighestColumn();
+        $lastRow = $sheet->getHighestRow();
+
+        // Style header row
+        $sheet->getStyle("A1:{$lastCol}1")->applyFromArray([
             'font' => [
-                'bold' => true,
+                'bold'  => true,
                 'color' => ['argb' => 'FFFFFFFF'],
             ],
             'fill' => [
-                'fillType' => Fill::FILL_SOLID,
-                'startColor' => ['argb' => 'FF2c3e50'],
+                'fillType'   => Fill::FILL_SOLID,
+                'startColor' => ['argb' => 'FF0f172a'],
             ],
         ]);
 
-
-        $sheet->getStyle('A2:G2')->applyFromArray([
-            'font' => [
-                'bold' => true,
-                'color' => ['argb' => 'FFFFFFFF'],
-            ],
-            'fill' => [
-                'fillType' => Fill::FILL_SOLID,
-                'startColor' => ['argb' => 'FF2c3e50'],
-            ],
-        ]);
-
-        $sheet->getDefaultRowDimension()->setRowHeight(20);
-        $sheet->getRowDimension(1)->setRowHeight(40);
-        $sheet->getRowDimension(2)->setRowHeight(20);
-
-        $sheet->getStyle('A1:G' . $sheet->getHighestRow())->getAlignment()
+        // All rows alignment
+        $sheet->getStyle("A1:{$lastCol}{$lastRow}")
+            ->getAlignment()
             ->setHorizontal(Alignment::HORIZONTAL_LEFT)
             ->setVertical(Alignment::VERTICAL_CENTER);
+
+        $sheet->getDefaultRowDimension()->setRowHeight(18);
+        $sheet->getRowDimension(1)->setRowHeight(24);
     }
 }
