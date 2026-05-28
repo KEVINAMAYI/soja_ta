@@ -27,6 +27,16 @@
                         <span>Assign Location</span>
                     </a>
                 </li>
+                @if($employee->organization?->zkbio_enabled && $employee->zkbio_pin)
+                    <li>
+                        <a href="javascript:void(0)"
+                           class="dropdown-item d-flex align-items-center gap-2"
+                           wire:click="$dispatch('manage-employee-areas', { employeeId: {{ $employee->id }} })">
+                            <iconify-icon icon="mdi:microsoft-azure" style="font-size:15px; color:#0078d4;"></iconify-icon>
+                            Manage Device Areas
+                        </a>
+                    </li>
+                @endif
                 <!-- Offshift Action -->
                 {{--                <li>--}}
                 {{--                    <a class="dropdown-item d-flex align-items-center gap-2" href="javascript:void(0)"--}}
