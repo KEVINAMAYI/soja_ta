@@ -113,8 +113,20 @@ class SyncZKBioAttendance extends Command
             $breakCount = collect($classified['segments'])
                 ->where('type', 'break')
                 ->count();
+
             if ($breakCount > 0) {
                 $flags[] = "☕ {$breakCount} break(s)";
+            }
+
+            // ── New flags ─────────────────────────────────────────────────────────────
+            if (($classified['lost_minutes'] ?? 0) > 0) {
+                $flags[] = "⏱ Lost {$classified['lost_minutes']}min";
+            }
+            if ($classified['missed_break_return'] ?? false) {
+                $flags[] = "⚠ Missed punch";
+            }
+            if ($classified['break_enforced'] ?? false) {
+                $flags[] = "🔒 Break enforced";
             }
 
             $this->line(sprintf(
@@ -229,6 +241,17 @@ class SyncZKBioAttendance extends Command
         $attendance->is_break_checkout = $lastSeg
             && $lastSeg['type'] === 'break'
             && $lastSeg['in'] === null;
+
+        // ── Lost hours & missed punch flags ───────────────────────────────────────
+        $attendance->lost_minutes              = $c['lost_minutes'];
+        $attendance->late_checkin_lost_minutes = $c['late_checkin_lost_minutes'];
+        $attendance->break_lost_minutes        = $c['break_lost_minutes'];
+        $attendance->enforced_break_minutes    = $c['enforced_break_minutes'];
+        $attendance->break_enforced            = $c['break_enforced'];
+        $attendance->missed_break_return       = $c['missed_break_return'];
+        $attendance->lost_hours_breakdown      = !empty($c['lost_hours_breakdown'])
+            ? implode(' | ', $c['lost_hours_breakdown'])
+            : null;
 
         // ── Scenario + incomplete ─────────────────────────────────────────────────
         $attendance->scenario = $c['scenario'];

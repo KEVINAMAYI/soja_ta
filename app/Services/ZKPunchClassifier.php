@@ -8,83 +8,20 @@ use App\Models\Employee;
 class ZKPunchClassifier
 {
     /**
-     * Punches within this many minutes of each other = noise (double scans).
-     * Keep only the FIRST of each cluster.
+     * Punches within this many minutes of each other = noise. Keep FIRST only.
      */
     const NOISE_GAP_MINUTES = 1;
 
     /**
-     * How far before shift end a clock-out may fall and still be considered
-     * the final checkout (employee left early).
+     * How far before shift end a punch may fall and still be the final checkout.
      */
     const CHECKOUT_EARLY_WINDOW = 60;
 
     /**
-     * Tolerance either side of a configured break window start time (minutes).
+     * Tolerance either side of a break window start time (minutes).
      */
     const BREAK_TOLERANCE = 20;
 
-    /**
-     * Classify all punches for one employee on one day.
-     *
-     * ── Punch model ──────────────────────────────────────────────────────────
-     *
-     *   Punch 1  → clock-in            (always, no rejection)
-     *   Punch 2  → clock-out           (first departure)
-     *   Punch 3  → clock-in            (returned)
-     *   Punch 4  → clock-out           (second departure)
-     *   …
-     *
-     * Every "out" punch is classified against:
-     *   • configured break windows  → type = 'break'
-     *   • the shift checkout window → type = 'checkout'
-     *   • neither                   → type = 'unscheduled_leave'
-     *
-     * ── Nothing is left hanging ──────────────────────────────────────────────
-     *
-     *   Case A — last punch is an OUT:
-     *     That punch IS the final clock-out. The segment's 'in' is null and
-     *     'duration_minutes' is null. check_out = that punch time. No phantom
-     *     "open segment" — the employee simply left and didn't return.
-     *
-     *   Case B — last punch is an IN (no final clock-out):
-     *     A synthetic clock-out is inserted at shift end so tomorrow's data
-     *     is not contaminated.
-     *
-     * ── Extra flags ──────────────────────────────────────────────────────────
-     *
-     *   late_checkin   — clock-in arrived after shift start + grace period
-     *   early_checkout — real (non-synthetic) clock-out before shift end
-     *                    minus the configured early-checkout threshold
-     *
-     * ── Return shape ─────────────────────────────────────────────────────────
-     * [
-     *   check_in             => Carbon|null
-     *   check_out            => Carbon|null
-     *   check_out_synthetic  => bool
-     *   late_checkin         => bool
-     *   early_checkout       => bool
-     *   minutes_late         => int          // 0 when on time
-     *   minutes_early        => int          // 0 when not early
-     *   segments             => [
-     *     [
-     *       'out'              => Carbon,
-     *       'in'               => Carbon|null,   // null = never returned
-     *       'type'             => 'break'|'checkout'|'unscheduled_leave',
-     *       'duration_minutes' => int|null,       // null when 'in' is null
-     *       'paid'             => bool|null,      // only set for type='break'
-     *     ], …
-     *   ]
-     *   worked_hours         => float
-     *   overtime_hours       => float
-     *   scenario             => string
-     *   incomplete           => bool
-     *   raw_count            => int
-     *   filtered_count       => int
-     *   notes                => string[]
-     *   punches              => string[]     // original input unchanged
-     * ]
-     */
     public function classify(array $rawPunches, Employee $employee, ?string $date = null): array
     {
         $result = [
@@ -98,6 +35,16 @@ class ZKPunchClassifier
             'segments' => [],
             'worked_hours' => 0.0,
             'overtime_hours' => 0.0,
+            // ── Lost hours (only real losses, not missed punches) ──────────────
+            'lost_minutes' => 0,
+            'late_checkin_lost_minutes' => 0,   // only beyond grace period end
+            'break_lost_minutes' => 0,   // only beyond max_duration_minutes
+            'enforced_break_minutes' => 0,   // always 0 (no auto-deduct)
+            'break_enforced' => false,
+            // ── Missed punch flags ────────────────────────────────────────────
+            'missed_break_return' => false, // no return punch OR no break at all
+            'lost_hours_breakdown' => [],
+            // ── Meta ─────────────────────────────────────────────────────────
             'scenario' => 'no_punches',
             'incomplete' => true,
             'raw_count' => count($rawPunches),
@@ -131,7 +78,7 @@ class ZKPunchClassifier
             return $result;
         }
 
-        // ── On leave / off shift ──────────────────────────────────────────────
+        // ── Off shift / sick / on leave ───────────────────────────────────────
         if (in_array($employee->shift_status, ['off_shift', 'sick_off', 'on_leave'])) {
             $result['scenario'] = 'not_scheduled';
             $result['notes'][] = "Employee is {$employee->shift_status}. Punches recorded but not processed.";
@@ -141,23 +88,15 @@ class ZKPunchClassifier
 
         // ── Shift boundaries ──────────────────────────────────────────────────
         $today = $date ?? now()->toDateString();
-
         $shiftStart = Carbon::parse($today . ' ' . Carbon::parse($shift->start_time)->format('H:i:s'));
         $shiftEnd = Carbon::parse($today . ' ' . Carbon::parse($shift->end_time)->format('H:i:s'));
-
-        if ($shiftEnd->lte($shiftStart)) {
-            $shiftEnd->addDay(); // overnight shift
-        }
+        if ($shiftEnd->lte($shiftStart)) $shiftEnd->addDay();
 
         $gracePeriod = $shift->grace_period_enabled ? ($shift->grace_period_minutes ?? 0) : 0;
         $maxOvertimeMinutes = ($shift->max_overtime_hours ?? 0) * 60;
-
-        // Latest clock-in time considered on-time
         $onTimeDeadline = $shiftStart->copy()->addMinutes($gracePeriod);
-
-        // Earliest clock-out accepted as the final checkout (employee left early)
-        $earlyCheckoutThreshold = $shift->early_checkout_threshold_minutes ?? 0;
-        $checkOutStart = $shiftEnd->copy()->subMinutes(self::CHECKOUT_EARLY_WINDOW + $earlyCheckoutThreshold);
+        $earlyThreshold = $shift->early_checkout_threshold_minutes ?? 0;
+        $checkOutStart = $shiftEnd->copy()->subMinutes(self::CHECKOUT_EARLY_WINDOW + $earlyThreshold);
         $checkOutEnd = $shiftEnd->copy()->addMinutes($maxOvertimeMinutes + 30);
 
         // ── Filter noise ──────────────────────────────────────────────────────
@@ -171,23 +110,28 @@ class ZKPunchClassifier
             return $result;
         }
 
-        // ── Punch 1: always the clock-in ──────────────────────────────────────
-        // The ZKBio device already scopes punches to this employee on this date,
-        // so whatever arrives first is their clock-in — no window rejection.
+        // ── Punch 1: clock-in ─────────────────────────────────────────────────
         $result['check_in'] = $filtered[0];
 
         if ($filtered[0]->gt($onTimeDeadline)) {
-            $minutesLate = (int)$onTimeDeadline->diffInMinutes($filtered[0]);
+            // Full lateness from shift start (for display/reporting)
+            $minutesLate = (int)$shiftStart->diffInMinutes($filtered[0]);
+
+            // LOST HOURS = full minutes from shift start
+            // Grace period is included in the loss — once exceeded, all lateness counts.
+            $lostFromLate = $minutesLate;  // ← was: (int)$onTimeDeadline->diffInMinutes($filtered[0])
+
             $result['late_checkin'] = true;
             $result['minutes_late'] = $minutesLate;
-            $result['notes'][] = "⚠ Late clock-in at {$filtered[0]->format('H:i')} [punch #1] "
-                . "— {$minutesLate} min late (shift started {$shiftStart->format('H:i')}, "
-                . "grace until {$onTimeDeadline->format('H:i')}).";
+            $result['late_checkin_lost_minutes'] = $lostFromLate;
+
+            $result['notes'][] = "⚠ Late clock-in at {$filtered[0]->format('H:i')}"
+                . " — {$minutesLate} min late from shift start {$shiftStart->format('H:i')}."
+                . " Grace period {$gracePeriod} min exceeded — full lateness counted as lost hours.";
         } else {
-            $result['notes'][] = "✓ Clock-in at {$filtered[0]->format('H:i')} [punch #1] — on time.";
+            $result['notes'][] = "✓ Clock-in at {$filtered[0]->format('H:i')} — on time (within grace period).";
         }
 
-        // Only one punch: checked in, no departure yet.
         if (count($filtered) === 1) {
             $result['scenario'] = 'checkin_only';
             $result['incomplete'] = true;
@@ -196,21 +140,11 @@ class ZKPunchClassifier
         }
 
         // ── Walk punches 2…N in strict out/in alternation ─────────────────────
-        //
-        // $awaitingIn  = true  → employee is currently outside (we saw an out punch,
-        //                         waiting for the matching in punch)
-        // $awaitingIn  = false → employee is currently inside (waiting for next out)
-        //
-        // When we hit the LAST punch:
-        //   • If it's an OUT → final departure. The segment's 'in' is null.
-        //     check_out = this punch. Nothing is left hanging.
-        //   • If it's an IN  → employee returned but never clocked out.
-        //     A synthetic checkout will be added below.
-        //
         $shiftBreaks = $shift->breaks ?? collect();
         $segments = [];
         $awaitingIn = false;
         $currentOut = null;
+        $breakLost = 0;
 
         for ($i = 1; $i < count($filtered); $i++) {
             $punch = $filtered[$i];
@@ -223,45 +157,96 @@ class ZKPunchClassifier
                 $awaitingIn = true;
 
                 if ($isLast) {
-                    // Final punch is an out → employee left and didn't return.
-                    // This IS the checkout. Segment has no 'in'.
-                    $type = $this->classifyOut($punch, $shiftBreaks, $checkOutStart, $checkOutEnd);
-
+                    // Final punch is an out — normal checkout
+                    $type = $this->classifyOut($punch, $shiftBreaks, $checkOutStart, $checkOutEnd, $today);
                     $segments[] = [
                         'out' => $punch,
                         'in' => null,
                         'type' => $type,
                         'duration_minutes' => null,
-                        'paid' => $type === 'break' ? $this->isBreakPaid($punch, $shiftBreaks) : null,
+                        'paid' => $type === 'break'
+                            ? $this->isBreakPaid($punch, $shiftBreaks, $today)
+                            : null,
+                        'missed_punch' => false,
+                        'assumed' => false,
                     ];
-
                     $result['check_out'] = $punch;
-                    $result['notes'][] = "Clock-out at {$punch->format('H:i')} [punch #{$punchNum}] → {$type}.";
+                    $result['notes'][] = "Clock-out at {$punch->format('H:i')} [punch #{$punchNum}] — {$type}.";
                 } else {
                     $result['notes'][] = "Left at {$punch->format('H:i')} [punch #{$punchNum}].";
                 }
 
             } else {
-                // ── IN punch (return) ─────────────────────────────────────────
+                // ── IN punch ─────────────────────────────────────────────────
+                $outType = $this->classifyOut($currentOut, $shiftBreaks, $checkOutStart, $checkOutEnd, $today);
+
+                // ── SCENARIO: Missed break return punch ───────────────────────
+                // Employee went for break, next punch is in checkout window.
+                // → Flag as missed punch ONLY. No lost hours applied.
+                if ($isLast && $outType === 'break' && $punch->between($checkOutStart, $checkOutEnd)) {
+
+                    $segments[] = [
+                        'out' => $currentOut,
+                        'in' => null,      // no return punch recorded
+                        'type' => 'break',
+                        'duration_minutes' => null,      // unknown
+                        'paid' => $this->isBreakPaid($currentOut, $shiftBreaks, $today),
+                        'missed_punch' => true,      // ← missed punch flag
+                        'assumed' => false,
+                    ];
+
+                    $result['check_out'] = $punch;
+                    $result['missed_break_return'] = true;
+                    // NO lost hours — just a missed punch
+                    $awaitingIn = false;
+                    $currentOut = null;
+
+                    $result['notes'][] = "⚠ Missed break return punch — went for break at"
+                        . " {$currentOut->format('H:i')}, next punch is checkout at {$punch->format('H:i')}."
+                        . " Flagged as missed punch. No lost hours applied.";
+                    $result['notes'][] = "Final clock-out at {$punch->format('H:i')} [punch #{$punchNum}].";
+                    break;
+                }
+
+                // ── Normal return ─────────────────────────────────────────────
                 $awaitingIn = false;
-                $type = $this->classifyOut($currentOut, $shiftBreaks, $checkOutStart, $checkOutEnd);
                 $durationMins = (int)$currentOut->diffInMinutes($punch);
-                $isPaid = $type === 'break' ? $this->isBreakPaid($currentOut, $shiftBreaks) : null;
+                $isPaid = $outType === 'break'
+                    ? $this->isBreakPaid($currentOut, $shiftBreaks, $today)
+                    : null;
+
+                // ── SCENARIO: Late return from break ─────────────────────────
+                // Lost hours = only minutes BEYOND max_duration_minutes.
+                // duration_minutes = standard allowed time (no penalty yet).
+                // max_duration_minutes = hard limit — loss starts here.
+                if ($outType === 'break') {
+                    $maxDuration = $this->getMaxBreakDuration($currentOut, $shiftBreaks, $today);
+                    if ($durationMins > $maxDuration) {
+                        $excess = $durationMins - $maxDuration;
+                        $breakLost += $excess;
+                        $result['notes'][] = "⚠ Late return from break — took {$durationMins} min,"
+                            . " max allowed {$maxDuration} min."
+                            . " Lost: {$excess} min (beyond max duration).";
+                    } else {
+                        $result['notes'][] = "✓ Break return on time — took {$durationMins} min,"
+                            . " max allowed {$maxDuration} min.";
+                    }
+                }
 
                 $segments[] = [
                     'out' => $currentOut,
                     'in' => $punch,
-                    'type' => $type,
+                    'type' => $outType,
                     'duration_minutes' => $durationMins,
                     'paid' => $isPaid,
+                    'missed_punch' => false,
+                    'assumed' => false,
                 ];
 
-                $result['notes'][] = "Returned at {$punch->format('H:i')} [punch #{$punchNum}] "
-                    . "after {$durationMins} min ({$type}).";
+                $result['notes'][] = "Returned at {$punch->format('H:i')} [punch #{$punchNum}]"
+                    . " after {$durationMins} min ({$outType}).";
 
                 if ($isLast) {
-                    // Last punch is an in → still inside, no final clock-out yet.
-                    // Synthetic checkout added below.
                     $result['notes'][] = "Last punch is a return — no final clock-out recorded.";
                 }
 
@@ -271,74 +256,97 @@ class ZKPunchClassifier
 
         $result['segments'] = $segments;
 
-        // ── Synthetic checkout (last punch was an IN) ─────────────────────────
+        // ── Synthetic checkout ────────────────────────────────────────────────
         if ($result['check_out'] === null) {
             if (now()->gte($shiftEnd)) {
-                $synthetic = $shiftEnd->copy();
-                $result['check_out'] = $synthetic;
+                $result['check_out'] = $shiftEnd->copy();
                 $result['check_out_synthetic'] = true;
-                $result['notes'][] = "⚠ No final clock-out. Auto-inserted synthetic checkout "
-                    . "at shift end ({$synthetic->format('H:i')}).";
+                $result['notes'][] = "⚠ No final clock-out. Auto-inserted at shift end"
+                    . " {$shiftEnd->format('H:i')}.";
             } else {
-                $result['notes'][] = "No clock-out yet. Shift ends at {$shiftEnd->format('H:i')} — record left open.";
+                $result['notes'][] = "No clock-out yet. Shift ends at {$shiftEnd->format('H:i')}"
+                    . " — record left open.";
             }
         }
 
-        // ── Early checkout flag ───────────────────────────────────────────────
-        // Only applies to real (non-synthetic) checkouts.
-        if (!$result['check_out_synthetic'] && $result['check_out'] && $result['check_out']->lt($shiftEnd)) {
+        // ── Early checkout ────────────────────────────────────────────────────
+        if (!$result['check_out_synthetic'] && $result['check_out']
+            && $result['check_out']->lt($shiftEnd)) {
             $minutesEarly = (int)$result['check_out']->diffInMinutes($shiftEnd);
             $result['early_checkout'] = true;
             $result['minutes_early'] = $minutesEarly;
-            $result['notes'][] = "⚠ Early clock-out at {$result['check_out']->format('H:i')} "
-                . "— {$minutesEarly} min before shift end ({$shiftEnd->format('H:i')}).";
+            $result['notes'][] = "⚠ Early clock-out at {$result['check_out']->format('H:i')}"
+                . " — {$minutesEarly} min before shift end {$shiftEnd->format('H:i')}.";
         }
 
         // ── Overtime ──────────────────────────────────────────────────────────
-        if (
-            !$result['check_out_synthetic']
-            && $result['check_out']
-            && $result['check_out']->gt($shiftEnd)
-            && $shift->overtime_enabled
-        ) {
+        if (!$result['check_out_synthetic'] && $result['check_out']
+            && $result['check_out']->gt($shiftEnd) && $shift->overtime_enabled) {
             $result['overtime_hours'] = $this->calcOvertimeHours($result['check_out'], $shiftEnd, $shift);
             if ($result['overtime_hours'] > 0) {
-                $result['notes'][] = "Overtime: {$result['overtime_hours']}h after shift end ({$shiftEnd->format('H:i')}).";
+                $result['notes'][] = "Overtime: {$result['overtime_hours']}h after shift end.";
             }
         }
 
         // ── Worked hours ──────────────────────────────────────────────────────
-        //
-        // Sum all time the employee was physically INSIDE the building:
-        //   worked = Σ (arrivedAt → seg['out'])  for each segment,
-        //            plus (last arrivedAt → check_out) if still inside at end.
-        //
-        // This naturally excludes all out-of-building time (breaks, unscheduled
-        // leave, etc.) without any separate deduction logic.
-        //
         if ($result['check_in']) {
             $workedMinutes = 0;
             $arrivedAt = $result['check_in'];
 
             foreach ($result['segments'] as $seg) {
-                // Time inside from last arrival until this departure
                 $workedMinutes += $arrivedAt->diffInMinutes($seg['out']);
-
                 if ($seg['in'] !== null) {
-                    $arrivedAt = $seg['in']; // returned; next inside period starts here
+                    $arrivedAt = $seg['in'];
                 } else {
-                    $arrivedAt = null; // left and never came back
+                    $arrivedAt = null;
                     break;
                 }
             }
 
-            // Still inside at end of day (no segments, or last punch was a return)
             if ($arrivedAt !== null && $result['check_out']) {
                 $workedMinutes += $arrivedAt->diffInMinutes($result['check_out']);
             }
 
+            // ── No break punches detected ─────────────────────────────────────
+            // Rule: flag as missed punch ONLY — no deduction.
+            // Lost hours do NOT apply just because break was not punched.
+            $breakSegmentsCount = collect($segments)->where('type', 'break')->count();
+            $totalShiftMinutes = $shiftStart->diffInMinutes($shiftEnd);
+            $enforceThreshold = $totalShiftMinutes * 0.6;
+
+            if ($breakSegmentsCount === 0 && $workedMinutes >= $enforceThreshold) {
+                // Flag missed punch — do NOT deduct from worked hours
+                $result['missed_break_return'] = true;
+                $result['break_enforced'] = false;
+                $result['notes'][] = "⚠ No break punches recorded for full day —"
+                    . " flagged as missed punch. No hours deducted.";
+            }
+
             $result['worked_hours'] = round(max(0, $workedMinutes) / 60, 2);
             $result['notes'][] = "Worked hours (time inside building): {$result['worked_hours']}h.";
+        }
+
+        // ── Lost hours summary ────────────────────────────────────────────────
+        $result['break_lost_minutes'] = $breakLost;
+        $totalLost = $result['late_checkin_lost_minutes'] + $breakLost;
+        $result['lost_minutes'] = $totalLost;
+
+        $breakdown = [];
+        if ($result['late_checkin_lost_minutes'] > 0) {
+            $breakdown[] = "Late check-in: {$result['late_checkin_lost_minutes']} min"
+                . " (beyond grace period end {$onTimeDeadline->format('H:i')})";
+        }
+        if ($breakLost > 0) {
+            $breakdown[] = "Break overstay: {$breakLost} min (beyond max allowed duration)";
+        }
+        if ($result['missed_break_return']) {
+            $breakdown[] = "Missed punch flagged (no lost hours applied)";
+        }
+        $result['lost_hours_breakdown'] = $breakdown;
+
+        if ($totalLost > 0) {
+            $result['notes'][] = "Total lost hours: {$totalLost} min. "
+                . implode(' | ', array_filter($breakdown, fn($b) => !str_contains($b, 'Missed punch')));
         }
 
         // ── Scenario + incomplete ─────────────────────────────────────────────
@@ -348,42 +356,24 @@ class ZKPunchClassifier
         return $result;
     }
 
-    // ──────────────────────────────────────────────────────────────────────────
-    // Private helpers
-    // ──────────────────────────────────────────────────────────────────────────
+    // ── Private helpers ───────────────────────────────────────────────────────
 
-    /**
-     * Classify an out-punch as 'break', 'checkout', or 'unscheduled_leave'.
-     *
-     * Priority:
-     *   1. Falls within the shift checkout window          → 'checkout'
-     *   2. Falls within a configured break window (±tolerance) → 'break'
-     *   3. Neither                                         → 'unscheduled_leave'
-     */
     private function classifyOut(
         Carbon $outPunch,
                $shiftBreaks,
         Carbon $checkOutStart,
-        Carbon $checkOutEnd
+        Carbon $checkOutEnd,
+        string $today
     ): string
     {
-        // Checkout window takes precedence — an out punch near end-of-shift
-        // that also happens to overlap a break window is still a checkout.
         if ($outPunch->between($checkOutStart, $checkOutEnd)) {
             return 'checkout';
         }
-
-        $today = $date ?? now()->toDateString();
-
         foreach ($shiftBreaks as $break) {
-            if (!$break->is_active || !$break->window_start_time) {
-                continue;
-            }
-
+            if (!$break->is_active || !$break->window_start_time) continue;
             $windowStart = Carbon::parse(
                 $today . ' ' . Carbon::parse($break->window_start_time)->format('H:i:s')
             );
-
             if ($outPunch->between(
                 $windowStart->copy()->subMinutes(self::BREAK_TOLERANCE),
                 $windowStart->copy()->addMinutes(self::BREAK_TOLERANCE)
@@ -391,26 +381,60 @@ class ZKPunchClassifier
                 return 'break';
             }
         }
-
         return 'unscheduled_leave';
     }
 
     /**
-     * Return whether the break window the out-punch matched is paid.
+     * Max allowed duration before lost hours kick in.
+     * Uses max_duration_minutes — the hard limit.
+     * Falls back to duration_minutes if max not set.
      */
-    private function isBreakPaid(Carbon $outPunch, $shiftBreaks): bool
+    private function getMaxBreakDuration(Carbon $outPunch, $shiftBreaks, string $today): int
     {
-        $today = now()->toDateString();
-
         foreach ($shiftBreaks as $break) {
-            if (!$break->is_active || !$break->window_start_time) {
-                continue;
-            }
-
+            if (!$break->is_active || !$break->window_start_time) continue;
             $windowStart = Carbon::parse(
                 $today . ' ' . Carbon::parse($break->window_start_time)->format('H:i:s')
             );
+            if ($outPunch->between(
+                $windowStart->copy()->subMinutes(self::BREAK_TOLERANCE),
+                $windowStart->copy()->addMinutes(self::BREAK_TOLERANCE)
+            )) {
+                return $break->max_duration_minutes
+                    ?? $break->duration_minutes
+                    ?? 60;
+            }
+        }
+        return 60;
+    }
 
+    /**
+     * Standard allowed break duration (for reference/display only).
+     */
+    private function getAllowedBreakDuration(Carbon $outPunch, $shiftBreaks, string $today): int
+    {
+        foreach ($shiftBreaks as $break) {
+            if (!$break->is_active || !$break->window_start_time) continue;
+            $windowStart = Carbon::parse(
+                $today . ' ' . Carbon::parse($break->window_start_time)->format('H:i:s')
+            );
+            if ($outPunch->between(
+                $windowStart->copy()->subMinutes(self::BREAK_TOLERANCE),
+                $windowStart->copy()->addMinutes(self::BREAK_TOLERANCE)
+            )) {
+                return $break->duration_minutes ?? 60;
+            }
+        }
+        return 60;
+    }
+
+    private function isBreakPaid(Carbon $outPunch, $shiftBreaks, string $today): bool
+    {
+        foreach ($shiftBreaks as $break) {
+            if (!$break->is_active || !$break->window_start_time) continue;
+            $windowStart = Carbon::parse(
+                $today . ' ' . Carbon::parse($break->window_start_time)->format('H:i:s')
+            );
             if ($outPunch->between(
                 $windowStart->copy()->subMinutes(self::BREAK_TOLERANCE),
                 $windowStart->copy()->addMinutes(self::BREAK_TOLERANCE)
@@ -418,27 +442,20 @@ class ZKPunchClassifier
                 return ($break->type ?? 'unpaid') === 'paid';
             }
         }
-
         return false;
     }
 
-    /**
-     * Remove punches that are too close together; keep the FIRST of each cluster.
-     */
     private function filterNoise(array $times): array
     {
         if (empty($times)) return [];
-
         $filtered = [$times[0]];
         $last = $times[0]->copy();
-
         foreach (array_slice($times, 1) as $time) {
             if ($last->diffInSeconds($time) >= self::NOISE_GAP_MINUTES * 60) {
                 $filtered[] = $time;
                 $last = $time->copy();
             }
         }
-
         return $filtered;
     }
 
@@ -447,12 +464,10 @@ class ZKPunchClassifier
         $pattern = $shift->pattern_type ?? 'weekdays';
         $patternDays = $shift->pattern_days ?? ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
         $today = now()->format('D');
-
         return match ($pattern) {
             'weekdays' => in_array($today, ['Mon', 'Tue', 'Wed', 'Thu', 'Fri']),
             'weekends' => in_array($today, ['Sat', 'Sun']),
             'daily' => true,
-            'custom', 'rotating' => in_array($today, $patternDays),
             default => in_array($today, $patternDays),
         };
     }
@@ -464,96 +479,47 @@ class ZKPunchClassifier
 
     private function calcOvertimeHours(Carbon $checkout, Carbon $shiftEnd, $shift): float
     {
-        if (!$shift->overtime_enabled) {
-            return 0;
-        }
-
+        if (!$shift->overtime_enabled) return 0;
         $otMinutes = $shiftEnd->diffInMinutes($checkout);
         $maxOtMinutes = ($shift->max_overtime_hours ?? 0) * 60;
-
         return round(min($otMinutes, $maxOtMinutes) / 60, 2);
     }
 
-    /**
-     * Derive a human-readable scenario label from the classified result.
-     *
-     * Scenarios are mutually exclusive and listed from most specific to
-     * least specific. Every possible punch combination maps to exactly one.
-     *
-     * Suffixes:
-     *   _late        — clock-in after grace period
-     *   _early       — clock-out before shift end
-     *   _overtime    — clock-out after shift end (overtime counted)
-     *   _synthetic   — no real final clock-out; auto-closed at shift end
-     *   _break       — at least one break segment present
-     *   _unscheduled — at least one unscheduled-leave segment present
-     */
     private function determineScenario(array $r): string
     {
-        $in = $r['check_in'];
-        $out = $r['check_out'];
-        $synthetic = $r['check_out_synthetic'];
-        $late = $r['late_checkin'];
-        $early = $r['early_checkout'];
-        $ot = $r['overtime_hours'] > 0;
-        $segments = collect($r['segments']);
+        if (!$r['check_in']) return 'no_checkin';
+        if (!$r['check_out']) return 'checkin_only';
 
+        $synthetic = $r['check_out_synthetic'];
+        $segments = collect($r['segments']);
         $hasBreak = $segments->where('type', 'break')->count() > 0;
         $hasUnscheduled = $segments->where('type', 'unscheduled_leave')->count() > 0;
+        $missedPunch = $r['missed_break_return'];
 
-        // ── No check-in at all ────────────────────────────────────────────────
-        if (!$in) return 'no_checkin';
-
-        // ── Checked in, no check-out data yet ────────────────────────────────
-        if (!$out) return 'checkin_only';
-
-        // ── Auto-closed (last punch was an IN) ───────────────────────────────
         if ($synthetic) {
             if ($hasBreak && $hasUnscheduled) return 'synthetic_break_unscheduled';
             if ($hasBreak) return 'synthetic_break';
             if ($hasUnscheduled) return 'synthetic_unscheduled';
-            return 'synthetic';     // simplest case: in → synthetic out
+            return 'synthetic';
         }
 
-        // ── Real checkout ─────────────────────────────────────────────────────
-        // Build suffix tokens then combine.
         $tokens = [];
-        if ($late) $tokens[] = 'late';
+        if ($r['late_checkin']) $tokens[] = 'late';
         if ($hasBreak) $tokens[] = 'break';
+        if ($missedPunch) $tokens[] = 'missed_punch';
         if ($hasUnscheduled) $tokens[] = 'unscheduled';
-        if ($early) $tokens[] = 'early';
-        if ($ot) $tokens[] = 'overtime';
+        if ($r['early_checkout']) $tokens[] = 'early';
+        if ($r['overtime_hours'] > 0) $tokens[] = 'overtime';
 
-        // Base
-        $base = 'complete';
-
-        return empty($tokens) ? $base : $base . '_' . implode('_', $tokens);
-        // Examples:
-        //   complete
-        //   complete_late
-        //   complete_break
-        //   complete_late_break_early
-        //   complete_break_overtime
-        //   complete_late_unscheduled_overtime
+        return empty($tokens) ? 'complete' : 'complete_' . implode('_', $tokens);
     }
 
-    /**
-     * A record is incomplete when we cannot calculate reliable worked hours
-     * because we don't have a definitive clock-out or the day has not yet ended.
-     */
     private function isIncomplete(array $r): bool
     {
         return in_array($r['scenario'], [
-            'no_punches',
-            'no_checkin',
-            'checkin_only',
-            'no_shift',
-            'not_scheduled',
-            'synthetic',
-            'synthetic_break',
-            'synthetic_unscheduled',
-            'synthetic_break_unscheduled',
-            'unknown',
+            'no_punches', 'no_checkin', 'checkin_only', 'no_shift',
+            'not_scheduled', 'synthetic', 'synthetic_break',
+            'synthetic_unscheduled', 'synthetic_break_unscheduled', 'unknown',
         ]);
     }
 }
