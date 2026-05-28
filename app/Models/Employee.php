@@ -256,4 +256,11 @@ class Employee extends Model
         return $this->hasOne(Attendance::class)->ofMany(['date' => 'max', 'id' => 'max']);
     }
 
+
+    public function zkbioAreas(): \Illuminate\Database\Eloquent\Relations\BelongsToMany
+    {
+        return $this->belongsToMany(ZkbioArea::class, 'employee_areas', 'employee_id', 'zkbio_area_id')
+            ->withTimestamps();
+    }
+
 }

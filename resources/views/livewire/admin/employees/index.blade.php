@@ -3,6 +3,7 @@
 use App\Models\Role;
 use App\Models\User;
 use App\Models\Employee;
+use App\Models\ZkbioArea;
 use App\Models\WorkLocation;
 use App\Models\EmployeeAssignment;
 use Database\Seeders\RolesAndPermissionsSeeder;
@@ -93,6 +94,16 @@ new class extends Component {
     public ?string $adLastSynced = null;
     public array $selectedAdUsers = [];
 
+    //MANAGING AREAS
+    public ?Employee $employee = null;
+    public array $selectedAreas = [];
+    public array $availableAreas = [];
+    public bool $syncing = false;
+
+    // Add to the AD SYNC STATE section:
+    public array $availableZkbioAreas = [];
+    public array $defaultAdSyncAreas = [];
+
     public function mount($roleId = null): void
     {
 
@@ -147,9 +158,31 @@ new class extends Component {
     public function toggleAdSyncPanel(): void
     {
         $this->showAdSyncPanel = !$this->showAdSyncPanel;
-        if (!$this->showAdSyncPanel) {
+
+        if ($this->showAdSyncPanel) {
+            $this->loadZkbioAreas();
+        } else {
             $this->resetAdSync();
         }
+    }
+
+
+    public function loadZkbioAreas(): void
+    {
+        $org     = auth()->user()->employee->organization;
+        $service = app(\App\Services\ZKBioPersonService::class, ['organization' => $org]);
+
+        // Use cached, sync if empty
+        $areas = $service->getCachedAreas(4);
+        if ($areas->isEmpty()) {
+            $service->syncAreas();
+            $areas = $service->getCachedAreas(4);
+        }
+
+        $this->availableZkbioAreas = $areas->map(fn($a) => [
+            'area_code' => $a->area_code,
+            'area_name' => $a->area_name,
+        ])->toArray();
     }
 
     public function resetAdSync(): void
@@ -157,7 +190,7 @@ new class extends Component {
         $this->reset([
             'adPreview', 'adResults', 'adSyncPreviewed',
             'adSyncProcessed', 'adSyncError',
-            'adImportedCount', 'adUpdatedCount', 'adErrorCount', 'selectedAdUsers'
+            'adImportedCount', 'adUpdatedCount', 'adErrorCount', 'selectedAdUsers','defaultAdSyncAreas'
         ]);
         $this->adSyncing = false;
     }
@@ -283,6 +316,7 @@ new class extends Component {
 
                     DB::commit();
 
+
                     // Assign a ZKBio PIN if the employee doesn't have one yet
                     if (!$existing->zkbio_pin && $org->zkbio_enabled) {
                         $existing->update([
@@ -303,6 +337,13 @@ new class extends Component {
                             Log::warning("ZKBio re-sync failed for {$row['name']}", ['error' => $zkErr->getMessage()]);
                         }
                     }
+
+
+                    if (!empty($this->defaultAdSyncAreas) && $existing->zkbio_pin) {
+                        $zkService = app(\App\Services\ZKBioPersonService::class, ['organization' => $org]);
+                        $zkService->syncEmployeeAreas($existing, $this->defaultAdSyncAreas);
+                    }
+
 
                     $results[] = [
                         'name' => $row['name'],
@@ -355,6 +396,8 @@ new class extends Component {
                         );
                     }
 
+
+
                     DB::commit();
 
 
@@ -371,6 +414,17 @@ new class extends Component {
                                 'error' => $zkErr->getMessage()
                             ]);
                         }
+
+                        // Assign default areas
+                        if (!empty($this->defaultAdSyncAreas) && $employee->zkbio_pin) {
+                            $zkService = app(\App\Services\ZKBioPersonService::class, ['organization' => $org]);
+                            $zkService->assignPersonToAreas($employee, $this->defaultAdSyncAreas);
+                            $areaIds = \App\Models\ZkbioArea::where('organization_id', $org->id)
+                                ->whereIn('area_code', $this->defaultAdSyncAreas)
+                                ->pluck('id')->toArray();
+                            $employee->zkbioAreas()->sync($areaIds);
+                        }
+
                     } else {
                         $zkStatus = 'skipped (ZKBio not enabled for this org)';
                     }
@@ -1204,6 +1258,90 @@ new class extends Component {
         ];
     }
 
+
+    //FOR MANAGING AREAS
+    #[On('manage-employee-areas')]
+    public function open(int $employeeId): void
+    {
+        $this->employeeId = $employeeId;
+        $this->employee = Employee::with('zkbioAreas')->findOrFail($employeeId);
+
+        $org = auth()->user()->employee->organization;
+
+        // Load cached areas — sync from ZKBio if none cached yet
+        $cached = ZkbioArea::where('organization_id', $org->id)
+            ->where('area_code', '>', 4)
+            ->get();
+        if ($cached->isEmpty()) {
+            $service = app(ZKBioPersonService::class, ['organization' => $org]);
+            $service->syncAreas();
+            $cached = ZkbioArea::where('organization_id', $org->id)
+                ->where('area_code', '>', 4)
+                ->get();
+        }
+
+        $this->availableAreas = $cached->map(fn($a) => [
+            'id' => $a->id,
+            'area_code' => $a->area_code,
+            'area_name' => $a->area_name,
+        ])->toArray();
+
+        // Pre-select current areas
+        $this->selectedAreas = $this->employee->zkbioAreas->pluck('area_code')->toArray();
+
+        $this->dispatch('show-area-modal');
+    }
+
+    public function saveAreas(): void
+    {
+        if (!$this->employee) return;
+
+        $this->syncing = true;
+
+        $org = auth()->user()->employee->organization;
+        $service = app(ZKBioPersonService::class, ['organization' => $org]);
+
+        try {
+            $service->syncEmployeeAreas($this->employee, $this->selectedAreas);
+
+            LivewireAlert::title('Areas Updated!')
+                ->text("{$this->employee->name} has been assigned to " . count($this->selectedAreas) . " area(s).")
+                ->success()->toast()->position('top-end')->show();
+
+            $this->dispatch('hide-area-modal');
+            $this->dispatch('refreshDatatable');
+
+        } catch (\Throwable $e) {
+            LivewireAlert::title('Error!')
+                ->text('Failed to sync areas: ' . $e->getMessage())
+                ->error()->toast()->position('top-end')->show();
+        }
+
+        $this->syncing = false;
+    }
+
+    public function refreshAreas(): void
+    {
+        $org = auth()->user()->employee->organization;
+        $service = app(ZKBioPersonService::class, ['organization' => $org]);
+        $service->syncAreas();
+
+        $cached = ZkbioArea::where('organization_id', $org->id)
+            ->where('area_code', '>', 4)
+            ->get();
+
+        $this->availableAreas = $cached->map(fn($a) => [
+            'id' => $a->id,
+            'area_code' => $a->area_code,
+            'area_name' => $a->area_name,
+        ])->toArray();
+
+        LivewireAlert::title('Areas Refreshed!')
+            ->text('Fetched latest areas from ZKBio.')
+            ->success()->toast()->position('top-end')->show();
+    }
+
+
 }; ?>
 
 @push('styles')
@@ -1226,7 +1364,7 @@ new class extends Component {
             border-radius: 16px;
             padding: 2.5rem 3rem;
             text-align: center;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
             min-width: 320px;
         }
 
@@ -1245,7 +1383,9 @@ new class extends Component {
         }
 
         @keyframes spin {
-            to { transform: rotate(360deg); }
+            to {
+                transform: rotate(360deg);
+            }
         }
 
         .sync-loading-title {
@@ -1281,9 +1421,18 @@ new class extends Component {
         }
 
         @keyframes progress-indeterminate {
-            0%   { width: 0%;   margin-left: 0; }
-            50%  { width: 60%;  margin-left: 20%; }
-            100% { width: 0%;   margin-left: 100%; }
+            0% {
+                width: 0%;
+                margin-left: 0;
+            }
+            50% {
+                width: 60%;
+                margin-left: 20%;
+            }
+            100% {
+                width: 0%;
+                margin-left: 100%;
+            }
         }
 
         .import-accordion-wrap {
@@ -1802,7 +1951,7 @@ new class extends Component {
 <div class="row">
 
     {{-- AD Sync Loading Overlay --}}
-    <div wire:loading wire:target="commitAdSync" class="sync-loading-overlay">
+    <div style="padding-top:20px;" wire:loading wire:target="commitAdSync" class="sync-loading-overlay">
         <div class="sync-loading-card">
             <div class="sync-loading-spinner"></div>
             <p class="sync-loading-title">Syncing from Active Directory</p>
@@ -1814,7 +1963,7 @@ new class extends Component {
     </div>
 
     {{-- AD Preview Loading Overlay --}}
-    <div wire:loading wire:target="previewAdSync" class="sync-loading-overlay">
+    <div style="padding-top:20px;" wire:loading wire:target="previewAdSync" class="sync-loading-overlay">
         <div class="sync-loading-card">
             <div class="sync-loading-spinner"></div>
             <p class="sync-loading-title">Fetching from Active Directory</p>
@@ -1826,7 +1975,7 @@ new class extends Component {
     </div>
 
     {{-- Import Loading Overlay --}}
-    <div wire:loading wire:target="commitImport" class="sync-loading-overlay">
+    <div style="padding-top:20px;"  wire:loading wire:target="commitImport" class="sync-loading-overlay">
         <div class="sync-loading-card">
             <div class="sync-loading-spinner orange"></div>
             <p class="sync-loading-title">Importing Employees</p>
@@ -2466,8 +2615,44 @@ new class extends Component {
                                     </div>
                                 </div>
                             </div>
+                            {{-- Default Areas Selection --}}
+                            @if(!empty($availableZkbioAreas))
+                                <div class="mb-4 p-3 rounded-3" style="background:#fff; border:1px solid #cce0f5;">
+                                    <p class="mb-2 fw-semibold" style="font-size:0.82rem; color:#1e293b;">
+                                        <iconify-icon icon="mdi:map-marker-multiple" style="color:#0078d4; margin-right:4px;"></iconify-icon>
+                                        Default Device Areas
+                                        <small class="text-muted fw-normal ms-1">— assigned to all synced employees</small>
+                                    </p>
+                                    <div class="row g-2">
+                                        @foreach($availableZkbioAreas as $area)
+                                            <div class="col-md-6">
+                                                <label class="d-flex align-items-center gap-2 p-2 rounded-2 w-100"
+                                                       style="border:1.5px solid {{ in_array($area['area_code'], $defaultAdSyncAreas) ? '#0078d4' : '#e2e8f0' }};
+                                  background:{{ in_array($area['area_code'], $defaultAdSyncAreas) ? '#f0f6ff' : '#fafafa' }};
+                                  cursor:pointer; font-size:0.8rem;">
+                                                    <input type="checkbox"
+                                                           value="{{ $area['area_code'] }}"
+                                                           wire:model="defaultAdSyncAreas"
+                                                           style="accent-color:#0078d4; cursor:pointer;">
+                                                    <iconify-icon icon="mdi:map-marker"
+                                                                  style="color:{{ in_array($area['area_code'], $defaultAdSyncAreas) ? '#0078d4' : '#94a3b8' }};"></iconify-icon>
+                                                    <span class="fw-semibold text-dark">{{ $area['area_name'] }}</span>
+                                                    <small class="text-muted ms-auto">Code: {{ $area['area_code'] }}</small>
+                                                </label>
+                                            </div>
+                                        @endforeach
+                                    </div>
+                                    @if(!empty($defaultAdSyncAreas))
+                                        <p class="mt-2 mb-0" style="font-size:0.72rem; color:#0078d4;">
+                                            <iconify-icon icon="mdi:check-circle"></iconify-icon>
+                                            {{ count($defaultAdSyncAreas) }} area(s) will be assigned to all synced employees
+                                        </p>
+                                    @endif
+                                </div>
+                            @endif
 
                             <div class="d-flex justify-content-end">
+
                                 <button wire:click="previewAdSync" type="button"
                                         class="btn d-flex align-items-center gap-2"
                                         style="background:#0078d4;color:#fff;border:none;border-radius:8px;font-size:0.875rem;font-weight:600;padding:9px 20px;">
@@ -3053,6 +3238,140 @@ new class extends Component {
         </div>
     </div>
 
+    {{-- AREA MODEL--}}
+    <div class="modal fade" id="areaModal" tabindex="-1" aria-hidden="true" wire:ignore.self>
+        <div class="modal-dialog modal-lg modal-dialog-centered">
+            <div class="modal-content">
+
+                {{-- Header --}}
+                <div class="modal-header"
+                     style="background:var(--primary-color) !important; color:#fff; border-radius:12px 12px 0 0;">
+                    <div class="d-flex align-items-center gap-2">
+                        <iconify-icon icon="mdi:map-marker-radius" style="font-size:22px;"></iconify-icon>
+                        <div>
+                            <h6 class="mb-0 fw-700" style="font-size:0.95rem; color:white;">ZKBio Area Access</h6>
+                            @if($employee)
+                                <small style="opacity:0.8; font-size:0.75rem;">{{ $employee->name }}</small>
+                            @endif
+                        </div>
+                    </div>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+
+                {{-- Body --}}
+                <div class="modal-body p-4">
+
+                    {{-- Employee info strip --}}
+                    @if($employee)
+                        <div class="d-flex align-items-center gap-3 p-3 mb-4 rounded-3"
+                             style="background:#f0f6ff; border:1px solid #cce0f5;">
+                            <iconify-icon icon="tabler:user" style="font-size:28px; color:#0078d4;"></iconify-icon>
+                            <div>
+                                <p class="mb-0 fw-semibold text-dark" style="font-size:0.88rem;">{{ $employee->name }}</p>
+                                <small class="text-muted">
+                                    PIN: <strong>{{ $employee->zkbio_pin ?? 'No PIN' }}</strong>
+                                    @if($employee->department)
+                                        &nbsp;·&nbsp; {{ $employee->department->name }}
+                                    @endif
+                                </small>
+                            </div>
+                        </div>
+                    @endif
+
+                    {{-- Areas header --}}
+                    <div class="d-flex align-items-center justify-content-between mb-3">
+                        <p class="mb-0 fw-semibold text-dark" style="font-size:0.85rem;">
+                            <iconify-icon icon="mdi:map-marker-multiple" class="me-1" style="color:#0078d4;"></iconify-icon>
+                            Select Access Areas
+                        </p>
+                        <button wire:click="refreshAreas" type="button"
+                                class="btn btn-sm"
+                                style="font-size:0.72rem; background:#f1f5f9; border:none; color:#64748b; border-radius:6px;">
+                            <iconify-icon icon="mdi:refresh" style="font-size:13px;"></iconify-icon>
+                            Refresh from ZKBio
+                        </button>
+                    </div>
+
+                    @if(empty($availableAreas))
+                        <div class="text-center py-4 text-muted" style="font-size:0.82rem;">
+                            <iconify-icon icon="mdi:alert-circle-outline" style="font-size:28px;"></iconify-icon>
+                            <p class="mt-2 mb-0">No areas found. Click "Refresh from ZKBio" to load.</p>
+                        </div>
+                    @else
+                        {{-- Areas grid - 2 columns --}}
+                        <div class="row g-2">
+                            @foreach($availableAreas as $area)
+                                <div class="col-md-6">
+                                    <label class="d-flex align-items-center gap-3 p-3 rounded-3 w-100"
+                                           style="border: 1.5px solid {{ in_array($area['area_code'], $selectedAreas) ? '#0078d4' : '#e2e8f0' }};
+                                              background: {{ in_array($area['area_code'], $selectedAreas) ? '#f0f6ff' : '#fff' }};
+                                              cursor:pointer; transition: all 0.2s;">
+                                        <input
+                                            type="checkbox"
+                                            value="{{ $area['area_code'] }}"
+                                            wire:model="selectedAreas"
+                                            style="width:16px; height:16px; accent-color:#0078d4; cursor:pointer;"
+                                        />
+                                        <div class="d-flex align-items-center gap-2 flex-grow-1">
+                                            <div style="width:32px; height:32px; background:{{ in_array($area['area_code'], $selectedAreas) ? '#dbeafe' : '#f1f5f9' }};
+                                                    border-radius:8px; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+                                                <iconify-icon icon="mdi:map-marker"
+                                                              style="font-size:16px; color:{{ in_array($area['area_code'], $selectedAreas) ? '#0078d4' : '#94a3b8' }};"></iconify-icon>
+                                            </div>
+                                            <div>
+                                                <p class="mb-0 fw-semibold" style="font-size:0.85rem; color:#1e293b;">{{ $area['area_name'] }}</p>
+                                                <small class="text-muted" style="font-size:0.7rem;">Code: {{ $area['area_code'] }}</small>
+                                            </div>
+                                        </div>
+                                        @if(in_array($area['area_code'], $selectedAreas))
+                                            <iconify-icon icon="mdi:check-circle" style="font-size:18px; color:#0078d4; flex-shrink:0;"></iconify-icon>
+                                        @endif
+                                    </label>
+                                </div>
+                            @endforeach
+                        </div>
+
+                        {{-- Selection summary --}}
+                        <div class="mt-3 p-2 rounded-2 text-center"
+                             style="background:#f8fafc; font-size:0.78rem; color:#64748b;">
+                            <iconify-icon icon="mdi:checkbox-marked" class="me-1"></iconify-icon>
+                            <strong>{{ count($selectedAreas) }}</strong> of <strong>{{ count($availableAreas) }}</strong> areas selected
+                            @if(count($selectedAreas) === count($availableAreas))
+                                &nbsp;·&nbsp; <span style="color:#16a34a; font-weight:600;">Full Access</span>
+                            @elseif(count($selectedAreas) === 0)
+                                &nbsp;·&nbsp; <span style="color:#dc2626; font-weight:600;">No Access</span>
+                            @else
+                                &nbsp;·&nbsp; <span style="color:#0078d4; font-weight:600;">Restricted Access</span>
+                            @endif
+                        </div>
+                    @endif
+
+                </div>
+
+                {{-- Footer --}}
+                <div class="modal-footer border-0 pt-0">
+                    <button type="button" class="btn btn-outline-danger btn-sm" data-bs-dismiss="modal">
+                        Cancel
+                    </button>
+                    <button wire:click="saveAreas"
+                            wire:loading.attr="disabled"
+                            wire:target="saveAreas"
+                            type="button"
+                            class="btn btn-sm d-flex align-items-center gap-2"
+                            style="background:#fff; border:1.5px solid var(--primary-color) !important; color:var(--primary-color) !important;  border-radius:8px;">
+                    <span wire:loading wire:target="saveAreas">
+                        <span class="spinner-border spinner-border-sm"></span>
+                    </span>
+                        <iconify-icon icon="mdi:content-save" wire:loading.remove wire:target="saveAreas"></iconify-icon>
+                        <span wire:loading.remove wire:target="saveAreas">Save Areas</span>
+                        <span wire:loading wire:target="saveAreas">Saving...</span>
+                    </button>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
 </div>
 
 @push('scripts')
@@ -3074,6 +3393,13 @@ new class extends Component {
         });
         window.addEventListener('hide-off-shift-modal', () => {
             bootstrap.Modal.getInstance(document.getElementById('offShiftModal'))?.hide();
+        });
+
+        window.addEventListener('show-area-modal', () => {
+            new bootstrap.Modal(document.getElementById('areaModal')).show();
+        });
+        window.addEventListener('hide-area-modal', () => {
+            bootstrap.Modal.getInstance(document.getElementById('areaModal'))?.hide();
         });
 
         document.addEventListener('DOMContentLoaded', () => {
