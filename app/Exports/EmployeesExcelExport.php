@@ -9,11 +9,14 @@ use Maatwebsite\Excel\Concerns\FromView;
 use Maatwebsite\Excel\Concerns\ShouldAutoSize;
 use Maatwebsite\Excel\Concerns\WithTitle;
 use Maatwebsite\Excel\Concerns\WithStyles;
+use Maatwebsite\Excel\Events\AfterSheet;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
+use Maatwebsite\Excel\Concerns\WithEvents;
 
-class EmployeesExcelExport implements FromView, ShouldAutoSize, WithTitle, WithStyles
+
+class EmployeesExcelExport implements FromView, ShouldAutoSize, WithTitle, WithStyles, WithEvents
 {
     protected array $selectedIds;
 
@@ -22,6 +25,23 @@ class EmployeesExcelExport implements FromView, ShouldAutoSize, WithTitle, WithS
         $this->selectedIds = $selectedIds;
     }
 
+
+    public function registerEvents(): array
+    {
+        return [
+            AfterSheet::class => function (AfterSheet $event) {
+                $sheet = $event->sheet->getDelegate();
+                $lastCol = $sheet->getHighestColumn();
+                $lastRow = $sheet->getHighestRow();
+
+                // Apply autofilter on header row
+                $sheet->setAutoFilter("A1:{$lastCol}1");
+
+                // Freeze the header row so it stays visible when scrolling
+                $sheet->freezePane('A2');
+            },
+        ];
+    }
 
     public function view(): View
     {
