@@ -1184,15 +1184,30 @@ new class extends Component {
             $employee = Employee::findOrFail($id);
             $org = auth()->user()->employee->organization;
             $label = $employee->personTypeLabel();
+
+            // Remove from ZKBio device (also removes area assignments on device)
             if ($employee->zkbio_pin) {
-                app(ZKBioPersonService::class, ['organization' => $org])->deletePerson($employee->zkbio_pin);
+                app(ZKBioPersonService::class, ['organization' => $org])
+                    ->deletePerson($employee->zkbio_pin);
             }
+
+            // Clean up local DB area assignments
+            $employee->zkbioAreas()->detach();
+
+            // Soft delete
             $employee->delete();
-            LivewireAlert::title('Success!')->text("{$label} deleted successfully.")->success()->toast()->position('top-end')->show();
+
+            LivewireAlert::title('Success!')
+                ->text("{$label} deleted successfully.")
+                ->success()->toast()->position('top-end')->show();
+
             $this->dispatch('refreshDatatable');
             $this->loadSummaryStats();
+
         } catch (\Exception $e) {
-            LivewireAlert::title('Error!')->text('Something went wrong.')->error()->toast()->position('top-end')->show();
+            LivewireAlert::title('Error!')
+                ->text('Something went wrong.')
+                ->error()->toast()->position('top-end')->show();
         }
     }
 
