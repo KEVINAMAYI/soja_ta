@@ -179,7 +179,7 @@ new class extends Component {
             'lastName'    => $parts[1] ?? '',
             'mobilePhone' => $phone,
             'ssn'         => $emp->id_number ?? '',
-            'cardNo'      => $emp->employee_number ?? '',
+            'cardNo'      => '',
         ]));
         curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
         $res  = json_decode(curl_exec($ch), true);
