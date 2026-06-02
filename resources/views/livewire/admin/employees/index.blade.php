@@ -155,6 +155,54 @@ new class extends Component {
 
     }
 
+
+    #[On('sync-to-zkbio')]
+    public function syncToZkbio(int $employeeId): void
+    {
+
+        $org = auth()->user()->employee->organization;
+        $emp   = Employee::with('department')->find($employeeId);
+        $token = $org->zkbio_access_token;
+        $base  = $org->zkbio_base_url;
+
+        $parts = explode(' ', trim($emp->name), 2);
+        $phone = !empty($emp->phone)
+            ? $emp->phone
+            : '254' . str_pad($emp->zkbio_pin, 9, '0', STR_PAD_LEFT);
+
+        $ch = curl_init("{$base}/api/person/add?access_token={$token}");
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_POST, true);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode([
+            'pin'         => (string)$emp->zkbio_pin,
+            'name'        => $parts[0],
+            'lastName'    => $parts[1] ?? '',
+            'mobilePhone' => $phone,
+            'ssn'         => $emp->id_number ?? '',
+            'cardNo'      => $emp->employee_number ?? '',
+        ]));
+        curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
+        $res  = json_decode(curl_exec($ch), true);
+        curl_close($ch);
+
+        if (($res['code'] ?? -1) !== 0) {
+            LivewireAlert::title('Sync Failed')
+                ->text($res['message'] ?? 'Unknown error')
+                ->error()->toast()->position('top-end')->show();
+            return;
+        }
+
+        LivewireAlert::title('Synced!')
+            ->text("{$emp->name} synced to ZKBio successfully.")
+            ->success()->toast()->position('top-end')->show();
+    }
+
+
+
+
+
+
+
     public function toggleAdSyncPanel(): void
     {
         $this->showAdSyncPanel = !$this->showAdSyncPanel;
@@ -298,7 +346,11 @@ new class extends Component {
                     ->where(function ($q) use ($row) {
                         $q->where('ad_object_id', $row['ad_id'])
                             ->orWhere('email', $row['email'])
-                            ->orWhere('id_number', 'AD-' . substr($row['ad_id'], 0, 8)); // ← add this
+                            ->orWhere('id_number', 'AD-' . substr($row['ad_id'], 0, 8));
+
+                        if (!empty($row['employee_id'])) {
+                            $q->orWhere('ad_employee_id', $row['employee_id']);
+                        }
                     })->first();
 
                 if ($existing) {
@@ -1291,13 +1343,13 @@ new class extends Component {
 
         // Load cached areas — sync from ZKBio if none cached yet
         $cached = ZkbioArea::where('organization_id', $org->id)
-            ->where('area_code', '>', 4)
+            ->where('area_code', '>', 5)
             ->get();
         if ($cached->isEmpty()) {
             $service = app(ZKBioPersonService::class, ['organization' => $org]);
             $service->syncAreas();
             $cached = ZkbioArea::where('organization_id', $org->id)
-                ->where('area_code', '>', 4)
+                ->where('area_code', '>', 5)
                 ->get();
         }
 
@@ -1348,7 +1400,7 @@ new class extends Component {
         $service->syncAreas();
 
         $cached = ZkbioArea::where('organization_id', $org->id)
-            ->where('area_code', '>', 4)
+            ->where('area_code', '>', 5)
             ->get();
 
         $this->availableAreas = $cached->map(fn($a) => [

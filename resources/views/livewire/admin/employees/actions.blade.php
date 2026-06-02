@@ -37,14 +37,16 @@
                         </a>
                     </li>
                 @endif
-                <!-- Offshift Action -->
-                {{--                <li>--}}
-                {{--                    <a class="dropdown-item d-flex align-items-center gap-2" href="javascript:void(0)"--}}
-                {{--                       wire:click="$dispatch('set-off-shift', { id: {{ $employee->id }}, name: '{{ $employee->name }}' })">--}}
-                {{--                        <iconify-icon icon="mdi:timer-sand" class="text-info w-4 h-4"></iconify-icon>--}}
-                {{--                        <span>Offshift</span>--}}
-                {{--                    </a>--}}
-                {{--                </li>--}}
+                @if($employee->organization?->zkbio_enabled && $employee->zkbio_pin)
+                    <li>
+                        <a href="javascript:void(0)"
+                           class="dropdown-item d-flex align-items-center gap-2"
+                           wire:click="$dispatch('sync-to-zkbio', { employeeId: {{ $employee->id }} })">
+                        <iconify-icon icon="mdi:fingerprint" style="font-size:15px; color:#e65100;"></iconify-icon>
+                            Sync to ZKBio
+                        </a>
+                    </li>
+                @endif
                 <li>
                     @if($employee->active)
                         <a class="dropdown-item d-flex align-items-center gap-2 text-warning" href="javascript:void(0)"

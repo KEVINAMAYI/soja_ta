@@ -58,9 +58,9 @@ class ZKBioPersonService
                 'pin' => (string)$employee->zkbio_pin,
                 'name' => $nameParts['first'],
                 'lastName' => $nameParts['last'],
-                'mobilePhone' => $employee->is_student
-                    ? '2547' . str_pad($employee->zkbio_pin, 8, '0', STR_PAD_LEFT)
-                    : ($employee->phone ?? ''),
+                'mobilePhone' => !empty($employee->phone)
+                    ? $employee->phone
+                    : '254' . str_pad($employee->zkbio_pin, 9, '0', STR_PAD_LEFT),
                 'ssn' => $employee->id_number ?? '',
                 'cardNo' => '',
             ]);
