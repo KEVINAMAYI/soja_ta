@@ -344,7 +344,7 @@ class PresentSheet implements FromArray, WithTitle, WithStyles, WithColumnWidths
             $shift = $emp?->shift;
             $out[] = [
                 $this->fmtDate($r->date),
-                $emp?->employee_number ?? $emp?->id ?? '',
+                $emp?->ad_employee_id ?? $emp?->id ?? '',
                 $emp?->name ?? '',
                 $emp?->department?->name ?? '',
                 $emp?->section ?? '',
@@ -458,7 +458,7 @@ class LateSheet implements FromArray, WithTitle, WithStyles, WithColumnWidths
             $shift = $emp?->shift;
             $out[] = [
                 $this->fmtDate($r->date),
-                $emp?->employee_number ?? $emp?->id ?? '',
+                $emp?->ad_employee_id ?? $emp?->id ?? '',
                 $emp?->name ?? '',
                 $emp?->department?->name ?? '',
                 $emp?->section ?? '',
@@ -568,7 +568,7 @@ class AbsentSheet implements FromArray, WithTitle, WithStyles, WithColumnWidths
             $emp = $r->employee ?? null;
             $out[] = [
                 $this->fmtDate($r->date),
-                $emp?->employee_number ?? $emp?->id ?? '',
+                $emp?->ad_employee_id ?? $emp?->id ?? '',
                 $emp?->name ?? '',
                 $emp?->department?->name ?? '',
                 $emp?->section ?? '',
