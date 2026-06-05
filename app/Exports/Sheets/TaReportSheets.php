@@ -1,16 +1,5 @@
 <?php
 
-/**
- * ============================================================
- * T&A REPORT – EXCEL SHEET CLASSES
- * ============================================================
- * Place this file at: app/Exports/Sheets/TaReportSheets.php
- *
- * Or split each class into its own file under app/Exports/Sheets/
- * The namespace below matches either approach.
- * ============================================================
- */
-
 namespace App\Exports\Sheets;
 
 use Carbon\Carbon;
@@ -18,82 +7,82 @@ use Maatwebsite\Excel\Concerns\FromArray;
 use Maatwebsite\Excel\Concerns\WithTitle;
 use Maatwebsite\Excel\Concerns\WithStyles;
 use Maatwebsite\Excel\Concerns\WithColumnWidths;
-use Maatwebsite\Excel\Concerns\WithHeadings;
-use Maatwebsite\Excel\Concerns\ShouldAutoSize;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
-use PhpOffice\PhpSpreadsheet\Style\Font;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use PhpOffice\PhpSpreadsheet\Style\Border;
 use PhpOffice\PhpSpreadsheet\Style\Color;
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Shared helpers trait
-// ─────────────────────────────────────────────────────────────────────────────
+// =============================================================================
+// SHARED HELPERS TRAIT
+// =============================================================================
 trait TaSheetHelpers
 {
     private function hdrStyle(string $hexFill): array
     {
         return [
-            'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF'], 'size' => 9, 'name' => 'Arial'],
-            'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => $hexFill]],
+            'font'      => ['bold' => true, 'color' => ['rgb' => 'FFFFFF'], 'size' => 9, 'name' => 'Arial'],
+            'fill'      => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => $hexFill]],
             'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER, 'wrapText' => true],
-            'borders' => ['allBorders' => ['borderStyle' => Border::BORDER_THIN, 'color' => ['rgb' => 'CCCCCC']]],
+            'borders'   => ['allBorders' => ['borderStyle' => Border::BORDER_THIN, 'color' => ['rgb' => 'CCCCCC']]],
         ];
     }
 
     private function dataStyle(string $align = 'center', bool $bold = false): array
     {
         return [
-            'font' => ['name' => 'Arial', 'size' => 9, 'bold' => $bold],
+            'font'      => ['name' => 'Arial', 'size' => 9, 'bold' => $bold],
             'alignment' => ['horizontal' => $align, 'vertical' => Alignment::VERTICAL_CENTER],
-            'borders' => ['allBorders' => ['borderStyle' => Border::BORDER_THIN, 'color' => ['rgb' => 'CCCCCC']]],
+            'borders'   => ['allBorders' => ['borderStyle' => Border::BORDER_THIN, 'color' => ['rgb' => 'CCCCCC']]],
         ];
     }
 
     private function badgeStyle(string $bgHex, string $fgHex): array
     {
         return [
-            'font' => ['name' => 'Arial', 'size' => 9, 'bold' => true, 'color' => ['rgb' => $fgHex]],
-            'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => $bgHex]],
+            'font'      => ['name' => 'Arial', 'size' => 9, 'bold' => true, 'color' => ['rgb' => $fgHex]],
+            'fill'      => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => $bgHex]],
             'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER],
-            'borders' => ['allBorders' => ['borderStyle' => Border::BORDER_THIN, 'color' => ['rgb' => 'CCCCCC']]],
+            'borders'   => ['allBorders' => ['borderStyle' => Border::BORDER_THIN, 'color' => ['rgb' => 'CCCCCC']]],
         ];
+    }
+
+    private function employeeTypeBadge(string $type): array
+    {
+        return match ($type) {
+            'COSMOS'     => ['E0F2FE', '0369A1'],
+            'Outsourced' => ['FDE8E3', 'C0341B'],
+            default      => ['F1F5F9', '475569'],
+        };
     }
 
     private function interpretationBadge(string $interp): array
     {
         return match ($interp) {
-            'Attendance OK' => ['D4EDDA', '155724'],
-            'Late In' => ['FFF3CD', '856404'],
-            'Late In & Late Out' => ['F8D7DA', '721C24'],
-            'Early Out' => ['FFF3CD', '856404'],
-            'Extended Lunch' => ['D1ECF1', '0C5460'],
-            'Absent' => ['F8D7DA', '721C24'],
-            'Absent with Approved Leave' => ['CCE5FF', '004085'],
+            'Attendance OK'                  => ['D4EDDA', '155724'],
+            'Late In'                        => ['FFF3CD', '856404'],
+            'Late In & Late Out'             => ['F8D7DA', '721C24'],
+            'Early Out'                      => ['FFF3CD', '856404'],
+            'Extended Lunch'                 => ['D1ECF1', '0C5460'],
+            'Absent'                         => ['F8D7DA', '721C24'],
+            'Absent with Approved Leave'     => ['CCE5FF', '004085'],
             'Absent with Approved Gate Pass' => ['E2D9F3', '432E75'],
-            default => ['F8D7DA', '721C24'],
+            'Overtime 1'                     => ['FFE0B2', 'BF360C'],
+            'Overtime 2'                     => ['EDE7F6', '4527A0'],
+            default                          => ['F8D7DA', '721C24'],
         };
     }
 
-    private function fmtTime(?string $t): string
+    private function fmtTime($t): string
     {
         if (!$t) return '';
-        try {
-            return Carbon::parse($t)->format('H:i');
-        } catch (\Throwable) {
-            return '';
-        }
+        try { return Carbon::parse($t)->format('H:i'); } catch (\Throwable) { return ''; }
     }
 
     private function fmtDate(?string $d): string
     {
         if (!$d) return '';
-        try {
-            return Carbon::parse($d)->format('d/m/Y');
-        } catch (\Throwable) {
-            return '';
-        }
+        try { return Carbon::parse($d)->format('d/m/Y'); } catch (\Throwable) { return ''; }
     }
 
     private function fmtHours(float $h): string
@@ -104,592 +93,727 @@ trait TaSheetHelpers
     private function periodLabel(?string $start, ?string $end): string
     {
         $s = $start ? Carbon::parse($start)->format('d M Y') : '—';
-        $e = $end ? Carbon::parse($end)->format('d M Y') : $s;
+        $e = $end   ? Carbon::parse($end)->format('d M Y')   : $s;
         return "Period: {$s} – {$e}  |  Generated: " . now()->format('d M Y H:i');
     }
 
-    /** Apply thin border to a range */
-    private function applyBorder(Worksheet $ws, string $range): void
-    {
-        $ws->getStyle($range)->getBorders()->getAllBorders()
-            ->setBorderStyle(Border::BORDER_THIN)
-            ->setColor(new Color('CCCCCC'));
-    }
-}
-
-// =============================================================================
-// SHEET 1 – MASTER
-// =============================================================================
-class MasterSheet implements FromArray, WithTitle, WithStyles, WithColumnWidths
-{
-    use TaSheetHelpers;
-
-    private array $rows = [];
-
-    public function __construct(
-        private readonly array   $records,
-        private readonly ?string $startDate,
-        private readonly ?string $endDate,
-    )
-    {
-    }
-
-    public function title(): string
-    {
-        return 'Master';
-    }
-
-    public function columnWidths(): array
-    {
-        return [
-            'A' => 12, 'B' => 14, 'C' => 22, 'D' => 16, 'E' => 14,
-            'F' => 18, 'G' => 11, 'H' => 11, 'I' => 11, 'J' => 11,
-            'K' => 11, 'L' => 11, 'M' => 11, 'N' => 10, 'O' => 10,
-            'P' => 8, 'Q' => 8, 'R' => 11, 'S' => 22, 'T' => 24,
-        ];
-    }
-
-    public function array(): array
-    {
-        $out = [];
-        // Row 1: title (merged in styles)
-        $out[] = ['MASTER ATTENDANCE REPORT', ...array_fill(0, 19, '')];
-        // Row 2: period sub-title
-        $out[] = [$this->periodLabel($this->startDate, $this->endDate), ...array_fill(0, 19, '')];
-        // Row 3: column headers
-        $out[] = [
-            'Date', 'Employee Title', 'Employee Number', 'Full Names', 'Department', 'Section',
-            "Staff Category\n(General / Admin Shift)", "Shift\n(Day / Night)",
-            "Defined\nTime In", "Actual\nTime In", "Start of\nLunch", "End of\nLunch Break",
-            "Defined\nTime Out", "Actual\nTime Out", "Defined\nHours",
-            "Total Hours\nWorked", "OT 1", "OT 2", "Absent /\nLost Hours",
-            "Exceptions\n(Gatepasses, Leave Applications)", "Interpretation\nColumn",
-        ];
-        // Data rows
-        foreach ($this->records as $r) {
-            $emp = $r->employee ?? null;
-            $shift = $emp?->shift;
-            $out[] = [
-                $this->fmtDate($r->date),
-                $emp?->employee_title ?? '',
-                $emp?->ad_employee_id ?? $emp?->id ?? '',
-                $emp?->name ?? '',
-                $emp?->department?->name ?? '',
-                $emp?->section ?? '',   // map to your employee.section field name
-                $this->staffCategory($shift),
-                $this->shiftDayNight($shift),
-                $shift ? Carbon::parse($shift->start_time)->format('H:i') : '',
-                $this->fmtTime($r->check_in_time),
-                $this->fmtTime($r->break_start_time ?? null),  // adjust field name as needed
-                $this->fmtTime($r->break_end_time ?? null),
-                $shift ? Carbon::parse($shift->end_time)->format('H:i') : '',
-                $this->fmtTime($r->check_out_time),
-                $shift ? $this->shiftDefinedHours($shift) : '',
-                $this->fmtHours((float)($r->worked_hours ?? 0)),
-                $this->fmtHours((float)($r->overtime_hours ?? 0)),
-                '',  // OT2 – extend if you track two tiers
-                $this->lostHours($r),
-                $r->exception_note ?? '',   // add this field or derive from status
-                $r->interpretation ?? '',
-            ];
-        }
-        // Totals row
-        $dataStart = 4;
-        $dataEnd = 3 + count($this->records);
-        $out[] = [
-            'TOTALS', '', '', '', '', '', '', '', '', '', '', '', '',
-            "=SUM(N{$dataStart}:N{$dataEnd})",
-            "=SUM(O{$dataStart}:O{$dataEnd})",
-            "=SUM(P{$dataStart}:P{$dataEnd})",
-            "=SUM(Q{$dataStart}:Q{$dataEnd})",
-            "=SUM(R{$dataStart}:R{$dataEnd})",
-            '', '',
-        ];
-        return $out;
-    }
-
-    public function styles(Worksheet $sheet): array
-    {
-        $lastDataRow = 3 + count($this->records);
-        $totalRow = $lastDataRow + 1;
-
-        // Row 1: title banner
-        $sheet->mergeCells("A1:T1");
-        $sheet->getStyle('A1')->applyFromArray([
-            'font' => ['bold' => true, 'size' => 13, 'name' => 'Arial', 'color' => ['rgb' => '1F3864']],
-            'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => 'EBF3FB']],
-            'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER],
-            'borders' => ['outline' => ['borderStyle' => Border::BORDER_MEDIUM, 'color' => ['rgb' => '999999']]],
-        ]);
-        $sheet->getRowDimension(1)->setRowHeight(22);
-
-        // Row 2: period label
-        $sheet->mergeCells("A2:T2");
-        $sheet->getStyle('A2')->applyFromArray([
-            'font' => ['name' => 'Arial', 'size' => 8, 'color' => ['rgb' => '555555']],
-            'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER],
-        ]);
-        $sheet->getRowDimension(2)->setRowHeight(15);
-
-        // Row 3: column headers with section color groups
-        $sheet->getRowDimension(3)->setRowHeight(36);
-        $groups = [
-            'A3:E3' => '2E75B6',  // identity – blue
-            'F3:M3' => '375623',  // shift/time – green
-            'N3:R3' => '7F3F98',  // hours – purple
-            'S3:S3' => '833C00',  // exceptions – brown
-            'T3:T3' => 'C00000',  // interpretation – red
-        ];
-        foreach ($groups as $range => $color) {
-            $sheet->getStyle($range)->applyFromArray($this->hdrStyle($color));
-        }
-
-        // Data rows
-        for ($row = 4; $row <= $lastDataRow; $row++) {
-            $sheet->getRowDimension($row)->setRowHeight(18);
-            // Zebra stripe
-            if ($row % 2 === 0) {
-                $sheet->getStyle("A{$row}:S{$row}")->getFill()
-                    ->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('F5F5F5');
-            }
-            $sheet->getStyle("A{$row}:S{$row}")->applyFromArray($this->dataStyle('center'));
-            // Left-align text cols
-            $sheet->getStyle("C{$row}:F{$row}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_LEFT);
-            $sheet->getStyle("S{$row}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_LEFT);
-
-            // Interpretation badge (col T)
-            $interpVal = $sheet->getCell("T{$row}")->getValue();
-            if ($interpVal) {
-                [$bg, $fg] = $this->interpretationBadge($interpVal);
-                $sheet->getStyle("T{$row}")->applyFromArray($this->badgeStyle($bg, $fg));
-            }
-
-            // Red text for late minutes (col I) – highlight if actual later than defined
-            // (PhpSpreadsheet cannot evaluate formulas here; colour set by PHP logic above if needed)
-        }
-
-        // Totals row
-        $sheet->mergeCells("A{$totalRow}:M{$totalRow}");
-        $sheet->getStyle("A{$totalRow}:T{$totalRow}")->applyFromArray([
-            'font' => ['bold' => true, 'size' => 9, 'name' => 'Arial', 'color' => ['rgb' => 'FFFFFF']],
-            'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => '1F3864']],
-            'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER],
-        ]);
-        $sheet->getStyle("N{$totalRow}:R{$totalRow}")->getFill()
-            ->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('D9E1F2');
-        $sheet->getStyle("N{$totalRow}:R{$totalRow}")->getFont()->setColor(new Color('000000'))->setBold(true);
-        $sheet->getRowDimension($totalRow)->setRowHeight(18);
-
-        // Freeze panes & autofilter
-        $sheet->freezePane('A4');
-        $sheet->setAutoFilter("A3:T3");
-
-        return [];
-    }
-
-    // ── Private helpers ───────────────────────────────────────────────────────
-
     private function staffCategory($shift): string
     {
         if (!$shift) return '';
-        // Adjust logic to your shift model fields
-        return str_contains(strtolower($shift->name ?? ''), 'admin') ? 'Admin Shift' : 'General Shift';
+
+        // Use seeded department_type column first
+        if (!empty($shift->department_type)) {
+            return match ($shift->department_type) {
+                'admin'       => 'Admin',
+                'general'     => 'General',
+                'engineering' => 'Engineering',
+                default       => ucfirst($shift->department_type),
+            };
+        }
+
+        // Fallback: derive from shift name
+        $name = strtolower($shift->name ?? '');
+        if (str_contains($name, 'admin'))       return 'Admin';
+        if (str_contains($name, 'engineering')) return 'Engineering';
+        return 'General';
     }
 
     private function shiftDayNight($shift): string
     {
         if (!$shift) return '';
-        $start = (int)Carbon::parse($shift->start_time)->format('H');
-        return ($start >= 6 && $start < 18) ? 'Day' : 'Night';
+
+        // Use seeded shift_type — admin and extended are Day shifts
+        if (!empty($shift->shift_type)) {
+            return match ($shift->shift_type) {
+                'night'                    => 'Night',
+                'day', 'admin', 'extended' => 'Day',
+                default                    => 'Day',
+            };
+        }
+
+        // Fallback: derive from start time — night starts at 17:00 or later
+        $startHour = (int) Carbon::parse($shift->start_time)->format('H');
+        return $startHour >= 17 ? 'Night' : 'Day';
     }
 
+    // Always 9.0 per client requirement
     private function shiftDefinedHours($shift): string
     {
-        if (!$shift) return '';
-        $mins = Carbon::parse($shift->start_time)->diffInMinutes(Carbon::parse($shift->end_time));
-        return number_format($mins / 60, 1);
+        return '9.0';
     }
 
+    /**
+     * Lost hours — reads lost_minutes directly from the DB column.
+     * 95 minutes → "1:35"
+     * Absent     → "9.0" (full shift)
+     */
     private function lostHours($r): string
     {
-        $shift = $r->employee?->shift;
-        if (!$shift || !empty($r->check_in_time)) {
-            // If absent return defined hours; if present return 0
-            if (in_array($r->status ?? '', ['absent', 'unchecked_in'])) {
-                return $this->shiftDefinedHours($shift);
-            }
+        if (in_array($r->status ?? '', ['absent', 'unchecked_in'])) {
+            return '9.0';
+        }
+
+        $lostMinutes = (int) ($r->lost_minutes ?? 0);
+
+        if ($lostMinutes <= 0) {
             return '0.0';
         }
-        return '0.0';
-    }
-}
 
-// =============================================================================
-// SHEET 2 – PRESENT
-// =============================================================================
-class PresentSheet implements FromArray, WithTitle, WithStyles, WithColumnWidths
-{
-    use TaSheetHelpers;
+        $h = (int) floor($lostMinutes / 60);
+        $m = $lostMinutes % 60;
 
-    public function __construct(
-        private readonly array   $records,
-        private readonly ?string $startDate,
-        private readonly ?string $endDate,
-    )
-    {
-    }
-
-    public function title(): string
-    {
-        return 'Present';
-    }
-
-    public function columnWidths(): array
-    {
-        return ['A' => 12, 'B' => 14, 'C' => 22, 'D' => 16, 'E' => 14, 'F' => 18, 'G' => 11, 'H' => 11, 'I' => 11, 'J' => 11, 'K' => 11, 'L' => 13];
-    }
-
-    public function array(): array
-    {
-        $out = [];
-        $out[] = ['PRESENT REPORT', ...array_fill(0, 11, '')];
-        $out[] = [$this->periodLabel($this->startDate, $this->endDate), ...array_fill(0, 11, '')];
-        $out[] = [
-            'Date', 'Employee Title', 'Employee Number', 'Name', 'Department', 'Section',
-            "Staff Category\n(General / Admin Shift)", "Shift\n(Day / Night)",
-            "Defined\nTime In", "Actual\nTime In", "Defined\nTime Out", "Actual\nTime Out", "Total Hours\nWorked",
-        ];
-        foreach ($this->records as $r) {
-            $emp = $r->employee ?? null;
-            $shift = $emp?->shift;
-            $out[] = [
-                $this->fmtDate($r->date),
-                $emp?->employee_title ?? '',
-                $emp?->ad_employee_id ?? $emp?->id ?? '',
-                $emp?->name ?? '',
-                $emp?->department?->name ?? '',
-                $emp?->section ?? '',
-                $this->staffCategory($shift),
-                $this->shiftDayNight($shift),
-                $shift ? Carbon::parse($shift->start_time)->format('H:i') : '',
-                $this->fmtTime($r->check_in_time),
-                $shift ? Carbon::parse($shift->end_time)->format('H:i') : '',
-                $this->fmtTime($r->check_out_time),
-                $this->fmtHours((float)($r->worked_hours ?? 0)),
-            ];
-        }
-        $ds = 4;
-        $de = 3 + count($this->records);
-        $out[] = ['TOTALS', ...array_fill(0, 10, ''), "=SUM(L{$ds}:L{$de})"];
-        return $out;
-    }
-
-    public function styles(Worksheet $sheet): array
-    {
-        $last = 3 + count($this->records);
-        $total = $last + 1;
-
-        $sheet->mergeCells("A1:L1");
-        $sheet->getStyle('A1')->applyFromArray([
-            'font' => ['bold' => true, 'size' => 13, 'name' => 'Arial', 'color' => ['rgb' => '1B5E20']],
-            'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => 'E8F5E9']],
-            'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER],
-        ]);
-        $sheet->getRowDimension(1)->setRowHeight(22);
-
-        $sheet->mergeCells("A2:L2");
-        $sheet->getStyle('A2')->applyFromArray([
-            'font' => ['name' => 'Arial', 'size' => 8, 'color' => ['rgb' => '555555']],
-            'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER],
-        ]);
-        $sheet->getRowDimension(2)->setRowHeight(15);
-
-        $sheet->getRowDimension(3)->setRowHeight(36);
-        $sheet->getStyle('A3:L3')->applyFromArray($this->hdrStyle('1B5E20'));
-
-        for ($row = 4; $row <= $last; $row++) {
-            $sheet->getRowDimension($row)->setRowHeight(18);
-            if ($row % 2 === 0) {
-                $sheet->getStyle("A{$row}:L{$row}")->getFill()
-                    ->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('F5F5F5');
-            }
-            $sheet->getStyle("A{$row}:L{$row}")->applyFromArray($this->dataStyle('center'));
-            $sheet->getStyle("C{$row}:F{$row}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_LEFT);
-        }
-
-        $sheet->mergeCells("A{$total}:K{$total}");
-        $sheet->getStyle("A{$total}:L{$total}")->applyFromArray([
-            'font' => ['bold' => true, 'size' => 9, 'name' => 'Arial', 'color' => ['rgb' => 'FFFFFF']],
-            'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => '1B5E20']],
-            'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER],
-        ]);
-        $sheet->getStyle("L{$total}")->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('D4EDDA');
-        $sheet->getStyle("L{$total}")->getFont()->setColor(new Color('000000'))->setBold(true);
-        $sheet->getRowDimension($total)->setRowHeight(18);
-
-        $sheet->freezePane('A4');
-        $sheet->setAutoFilter('A3:L3');
-        return [];
-    }
-
-    private function staffCategory($shift): string
-    {
-        if (!$shift) return '';
-        return str_contains(strtolower($shift->name ?? ''), 'admin') ? 'Admin Shift' : 'General Shift';
-    }
-
-    private function shiftDayNight($shift): string
-    {
-        if (!$shift) return '';
-        $start = (int)Carbon::parse($shift->start_time)->format('H');
-        return ($start >= 6 && $start < 18) ? 'Day' : 'Night';
-    }
-}
-
-// =============================================================================
-// SHEET 3 – LATE REPORT
-// =============================================================================
-class LateSheet implements FromArray, WithTitle, WithStyles, WithColumnWidths
-{
-    use TaSheetHelpers;
-
-    public function __construct(
-        private readonly array   $records,
-        private readonly ?string $startDate,
-        private readonly ?string $endDate,
-    )
-    {
-    }
-
-    public function title(): string
-    {
-        return 'Late Report';
-    }
-
-    public function columnWidths(): array
-    {
-        return ['A' => 12, 'B' => 14, 'C' => 22, 'D' => 16, 'E' => 14, 'F' => 11, 'G' => 11, 'H' => 13, 'I' => 13];
-    }
-
-    public function array(): array
-    {
-        $out = [];
-        $out[] = ['LATENESS REPORT', ...array_fill(0, 8, '')];
-        $out[] = [$this->periodLabel($this->startDate, $this->endDate), ...array_fill(0, 8, '')];
-        $out[] = [
-            'Date', 'Employee Title', 'Employee Number', 'Name', 'Department', 'Section',
-            "Actual\nTime In", "Actual\nTime Out", "Expected Working\nHours", "Lateness\nTotal Time",
-        ];
-        foreach ($this->records as $r) {
-            $emp = $r->employee ?? null;
-            $shift = $emp?->shift;
-            $out[] = [
-                $this->fmtDate($r->date),
-                $emp?->employee_title ?? '',
-                $emp?->ad_employee_id ?? $emp?->id ?? '',
-                $emp?->name ?? '',
-                $emp?->department?->name ?? '',
-                $emp?->section ?? '',
-                $this->fmtTime($r->check_in_time),
-                $this->fmtTime($r->check_out_time),
-                $shift ? $this->definedHours($shift) : '',
-                $r->minutes_late > 0 ? $this->minutesToHHMM($r->minutes_late) : '',
-            ];
-        }
-        $ds = 4;
-        $de = 3 + count($this->records);
-        $out[] = ["TOTAL LATE ARRIVALS: " . count($this->records), ...array_fill(0, 7, ''), "=COUNTA(I{$ds}:I{$de})"];
-        return $out;
-    }
-
-    public function styles(Worksheet $sheet): array
-    {
-        $last = 3 + count($this->records);
-        $total = $last + 1;
-
-        $sheet->mergeCells('A1:I1');
-        $sheet->getStyle('A1')->applyFromArray([
-            'font' => ['bold' => true, 'size' => 13, 'name' => 'Arial', 'color' => ['rgb' => '856404']],
-            'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => 'FFF8E1']],
-            'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER],
-        ]);
-        $sheet->getRowDimension(1)->setRowHeight(22);
-
-        $sheet->mergeCells('A2:I2');
-        $sheet->getStyle('A2')->applyFromArray([
-            'font' => ['name' => 'Arial', 'size' => 8, 'color' => ['rgb' => '555555']],
-            'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER],
-        ]);
-        $sheet->getRowDimension(2)->setRowHeight(15);
-
-        $sheet->getRowDimension(3)->setRowHeight(36);
-        $sheet->getStyle('A3:I3')->applyFromArray($this->hdrStyle('856404'));
-
-        for ($row = 4; $row <= $last; $row++) {
-            $sheet->getRowDimension($row)->setRowHeight(18);
-            if ($row % 2 === 0) {
-                $sheet->getStyle("A{$row}:I{$row}")->getFill()
-                    ->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('FFFDE7');
-            }
-            $sheet->getStyle("A{$row}:I{$row}")->applyFromArray($this->dataStyle('center'));
-            $sheet->getStyle("C{$row}:E{$row}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_LEFT);
-            // Highlight lateness time in amber bold
-            $sheet->getStyle("I{$row}")->getFont()->setBold(true)->getColor()->setRGB('856404');
-        }
-
-        $sheet->mergeCells("A{$total}:H{$total}");
-        $sheet->getStyle("A{$total}:I{$total}")->applyFromArray([
-            'font' => ['bold' => true, 'size' => 9, 'name' => 'Arial', 'color' => ['rgb' => 'FFFFFF']],
-            'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => '856404']],
-            'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER],
-        ]);
-        $sheet->getStyle("I{$total}")->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('FFF3CD');
-        $sheet->getStyle("I{$total}")->getFont()->setColor(new Color('000000'))->setBold(true);
-        $sheet->getRowDimension($total)->setRowHeight(18);
-
-        $sheet->freezePane('A4');
-        $sheet->setAutoFilter('A3:I3');
-        return [];
-    }
-
-    private function definedHours($shift): string
-    {
-        $mins = Carbon::parse($shift->start_time)->diffInMinutes(Carbon::parse($shift->end_time));
-        return number_format($mins / 60, 1);
+        return sprintf('%d:%02d', $h, $m); // e.g. "1:35"
     }
 
     private function minutesToHHMM(int $minutes): string
     {
-        $h = floor($minutes / 60);
+        $h = (int) floor($minutes / 60);
         $m = $minutes % 60;
         return sprintf('%d:%02d', $h, $m);
     }
 }
 
 // =============================================================================
-// SHEET 4 – ABSENT REPORT
+// SHEET 1 – MASTER
+//
+// A=Date | B=Employee Type | C=Employee Number | D=Full Names | E=Department
+// F=Section | G=Staff Category | H=Shift(Day/Night) | I=Defined Time In
+// J=Actual Time In | K=Start of Lunch | L=End of Lunch | M=Defined Time Out
+// N=Actual Time Out | O=Defined Hours | P=Total Hours Worked
+// Q=OT1 | R=OT2 | S=Absent/Lost Hours | T=Exceptions | U=Interpretation
 // =============================================================================
-class AbsentSheet implements FromArray, WithTitle, WithStyles, WithColumnWidths
+class MasterSheet implements FromArray, WithTitle, WithStyles, WithColumnWidths
 {
     use TaSheetHelpers;
+
+    private const LAST_COL   = 'U';
+    private const TOTAL_COLS = 21;
 
     public function __construct(
         private readonly array   $records,
         private readonly ?string $startDate,
         private readonly ?string $endDate,
-    )
-    {
-    }
+    ) {}
 
-    public function title(): string
-    {
-        return 'Absent Report';
-    }
+    public function title(): string { return 'Master'; }
 
     public function columnWidths(): array
     {
-        return ['A' => 12, 'B' => 14, 'C' => 22, 'D' => 16, 'E' => 14, 'F' => 30];
+        return [
+            'A' => 12, 'B' => 16, 'C' => 16, 'D' => 24,
+            'E' => 18, 'F' => 14, 'G' => 18, 'H' => 10,
+            'I' => 11, 'J' => 11, 'K' => 11, 'L' => 11,
+            'M' => 11, 'N' => 11, 'O' => 10, 'P' => 11,
+            'Q' => 9,  'R' => 9,  'S' => 11, 'T' => 26,
+            'U' => 26,
+        ];
     }
 
     public function array(): array
     {
         $out = [];
-        $out[] = ['ABSENT REPORT', ...array_fill(0, 5, '')];
-        $out[] = [$this->periodLabel($this->startDate, $this->endDate), ...array_fill(0, 5, '')];
-        $out[] = ['Date', 'Employee Title', 'Employee Number', 'Name', 'Department', 'Section', 'Reason'];
+        $out[] = ['MASTER ATTENDANCE REPORT', ...array_fill(0, self::TOTAL_COLS - 1, '')];
+        $out[] = [$this->periodLabel($this->startDate, $this->endDate), ...array_fill(0, self::TOTAL_COLS - 1, '')];
+        $out[] = [
+            'Date',                              // A
+            'Employee Type',                     // B
+            'Employee Number',                   // C
+            'Full Names',                        // D
+            'Department',                        // E
+            'Section',                           // F
+            'Staff Category',                    // G
+            "Shift\n(Day/Night)",                // H
+            "Defined\nTime In",                  // I
+            "Actual\nTime In",                   // J
+            "Start of\nLunch",                   // K
+            "End of\nLunch",                     // L
+            "Defined\nTime Out",                 // M
+            "Actual\nTime Out",                  // N
+            "Defined\nHours",                    // O
+            "Total Hours\nWorked",               // P
+            "OT 1",                              // Q
+            "OT 2",                              // R
+            "Absent /\nLost Hours",              // S
+            "Exceptions\n(Gate Passes, Leave)",  // T
+            "Interpretation",                    // U
+        ];
 
         foreach ($this->records as $r) {
-            $emp = $r->employee ?? null;
+            $emp   = $r->employee ?? null;
+            $shift = $emp?->shift;
+
+            $firstBreak = method_exists($r, 'breakLogs')
+                ? $r->breakLogs()->where('type', 'break')->orderBy('break_start_time')->first()
+                : null;
+
+            $definedOut = '';
+            if ($shift) {
+                try {
+                    $definedOut = $shift->getEffectiveEndTime($r->date ?? now()->toDateString())->format('H:i');
+                } catch (\Throwable) {
+                    $definedOut = Carbon::parse($shift->end_time)->format('H:i');
+                }
+            }
+
             $out[] = [
-                $this->fmtDate($r->date),
-                $emp?->employee_title ?? '',
-                $emp?->ad_employee_id ?? $emp?->id ?? '',
-                $emp?->name ?? '',
-                $emp?->department?->name ?? '',
-                $emp?->section ?? '',
-                $this->absentReason($r),
+                $this->fmtDate($r->date),                           // A
+                $emp?->employee_type ?? '',                          // B ← employee_type ONLY
+                $emp?->ad_employee_id ?? $emp?->id ?? '',            // C
+                $emp?->name ?? '',                                   // D
+                $emp?->department?->name ?? '',                      // E
+                $emp?->section ?? '',                                // F
+                $this->staffCategory($shift),                        // G
+                $this->shiftDayNight($shift),                        // H
+                $shift ? Carbon::parse($shift->start_time)->format('H:i') : '', // I
+                $this->fmtTime($r->check_in_time),                  // J
+                $firstBreak ? $this->fmtTime($firstBreak->break_start_time) : '', // K
+                $firstBreak ? $this->fmtTime($firstBreak->break_end_time)   : '', // L
+                $definedOut,                                         // M
+                $this->fmtTime($r->check_out_time),                 // N
+                '9.0',                                               // O always 9
+                $this->fmtHours((float)($r->worked_hours ?? 0)),    // P
+                $this->fmtHours((float)($r->ot1_hours ?? 0)),       // Q
+                $this->fmtHours((float)($r->ot2_hours ?? 0)),       // R
+                $this->lostHours($r),                               // S ← reads lost_minutes from DB
+                $r->exception_note ?? '',                            // T
+                $r->interpretation ?? '',                            // U
             ];
         }
+
         $ds = 4;
         $de = 3 + count($this->records);
-        $out[] = ["TOTAL ABSENCES: " . count($this->records), '', '', '', '', "=COUNTA(F{$ds}:F{$de})"];
+        $out[] = [
+            'TOTALS',
+            '', '', '', '', '', '', '', '', '', '', '', '',  // B–M blank
+            "=SUM(O{$ds}:O{$de})",  // O
+            "=SUM(P{$ds}:P{$de})",  // P
+            "=SUM(Q{$ds}:Q{$de})",  // Q
+            "=SUM(R{$ds}:R{$de})",  // R
+            '',                      // S (lost hours — not summed, mixed format)
+            '', '',                  // T U
+        ];
+
         return $out;
     }
 
     public function styles(Worksheet $sheet): array
     {
-        $last = 3 + count($this->records);
-        $total = $last + 1;
+        $lastDataRow = 3 + count($this->records);
+        $totalRow    = $lastDataRow + 1;
+        $lastCol     = self::LAST_COL;
 
-        $sheet->mergeCells('A1:F1');
+        // Row 1
+        $sheet->mergeCells("A1:{$lastCol}1");
         $sheet->getStyle('A1')->applyFromArray([
-            'font' => ['bold' => true, 'size' => 13, 'name' => 'Arial', 'color' => ['rgb' => 'C00000']],
-            'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => 'FDEDED']],
+            'font'      => ['bold' => true, 'size' => 13, 'name' => 'Arial', 'color' => ['rgb' => '1F3864']],
+            'fill'      => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => 'EBF3FB']],
+            'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER],
+            'borders'   => ['outline' => ['borderStyle' => Border::BORDER_MEDIUM, 'color' => ['rgb' => '999999']]],
+        ]);
+        $sheet->getRowDimension(1)->setRowHeight(22);
+
+        // Row 2
+        $sheet->mergeCells("A2:{$lastCol}2");
+        $sheet->getStyle('A2')->applyFromArray([
+            'font'      => ['name' => 'Arial', 'size' => 8, 'color' => ['rgb' => '555555']],
+            'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER],
+        ]);
+        $sheet->getRowDimension(2)->setRowHeight(15);
+
+        // Row 3 — headers
+        $sheet->getRowDimension(3)->setRowHeight(40);
+        foreach ([
+                     'A3:A3' => '2E75B6',
+                     'B3:B3' => 'C0341B',   // Employee Type — distinct red
+                     'C3:F3' => '2E75B6',
+                     'G3:H3' => '375623',
+                     'I3:N3' => '1F6B3A',
+                     'O3:O3' => '7F3F98',
+                     'P3:P3' => '4472C4',
+                     'Q3:R3' => 'C55A11',
+                     'S3:S3' => 'C00000',
+                     'T3:T3' => '833C00',
+                     'U3:U3' => '404040',
+                 ] as $range => $color) {
+            $sheet->getStyle($range)->applyFromArray($this->hdrStyle($color));
+        }
+
+        // Data rows
+        for ($row = 4; $row <= $lastDataRow; $row++) {
+            $sheet->getRowDimension($row)->setRowHeight(18);
+
+            if ($row % 2 === 0) {
+                $sheet->getStyle("A{$row}:{$lastCol}{$row}")->getFill()
+                    ->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('F5F5F5');
+            }
+
+            // Style ALL columns A to U
+            $sheet->getStyle("A{$row}:{$lastCol}{$row}")->applyFromArray($this->dataStyle('center'));
+
+            // Left-align text columns
+            $sheet->getStyle("D{$row}:F{$row}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_LEFT);
+            $sheet->getStyle("T{$row}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_LEFT);
+
+            // Employee Type badge — col B
+            $empType = (string) $sheet->getCell("B{$row}")->getValue();
+            if ($empType) {
+                [$bg, $fg] = $this->employeeTypeBadge($empType);
+                $sheet->getStyle("B{$row}")->applyFromArray($this->badgeStyle($bg, $fg));
+            }
+
+            // Interpretation badge — col U (last column)
+            $interpVal = (string) $sheet->getCell("U{$row}")->getValue();
+            if ($interpVal) {
+                [$bg, $fg] = $this->interpretationBadge($interpVal);
+                $sheet->getStyle("U{$row}")->applyFromArray($this->badgeStyle($bg, $fg));
+            }
+
+            // Lost hours red — col S
+            $lostVal = (string) $sheet->getCell("S{$row}")->getValue();
+            if ($lostVal && $lostVal !== '0.0') {
+                $sheet->getStyle("S{$row}")->getFont()->setBold(true)->getColor()->setRGB('C00000');
+            }
+        }
+
+        // Totals row
+        $sheet->mergeCells("A{$totalRow}:N{$totalRow}");
+        $sheet->getStyle("A{$totalRow}:{$lastCol}{$totalRow}")->applyFromArray([
+            'font'      => ['bold' => true, 'size' => 9, 'name' => 'Arial', 'color' => ['rgb' => 'FFFFFF']],
+            'fill'      => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => '1F3864']],
+            'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER],
+        ]);
+        foreach (['O', 'P', 'Q', 'R'] as $col) {
+            $sheet->getStyle("{$col}{$totalRow}")->getFill()
+                ->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('D9E1F2');
+            $sheet->getStyle("{$col}{$totalRow}")->getFont()
+                ->setColor(new Color('000000'))->setBold(true);
+        }
+        $sheet->getRowDimension($totalRow)->setRowHeight(20);
+
+        $sheet->freezePane('A4');
+        $sheet->setAutoFilter("A3:{$lastCol}3");
+
+        return [];
+    }
+}
+
+// =============================================================================
+// SHEET 2 – PRESENT
+//
+// A=Date | B=Employee Type | C=Employee Number | D=Name | E=Department
+// F=Section | G=Staff Category | H=Shift | I=Defined In | J=Actual In
+// K=Defined Out | L=Actual Out | M=Total Hours
+// =============================================================================
+class PresentSheet implements FromArray, WithTitle, WithStyles, WithColumnWidths
+{
+    use TaSheetHelpers;
+
+    private const LAST_COL   = 'M';
+    private const TOTAL_COLS = 13;
+
+    public function __construct(
+        private readonly array   $records,
+        private readonly ?string $startDate,
+        private readonly ?string $endDate,
+    ) {}
+
+    public function title(): string { return 'Present'; }
+
+    public function columnWidths(): array
+    {
+        return [
+            'A' => 12, 'B' => 16, 'C' => 16, 'D' => 24,
+            'E' => 18, 'F' => 14, 'G' => 18, 'H' => 10,
+            'I' => 11, 'J' => 11, 'K' => 11, 'L' => 11,
+            'M' => 13,
+        ];
+    }
+
+    public function array(): array
+    {
+        $out = [];
+        $out[] = ['PRESENT REPORT', ...array_fill(0, self::TOTAL_COLS - 1, '')];
+        $out[] = [$this->periodLabel($this->startDate, $this->endDate), ...array_fill(0, self::TOTAL_COLS - 1, '')];
+        $out[] = [
+            'Date',                 // A
+            'Employee Type',        // B
+            'Employee Number',      // C
+            'Name',                 // D
+            'Department',           // E
+            'Section',              // F
+            'Staff Category',       // G
+            "Shift\n(Day/Night)",   // H
+            "Defined\nTime In",     // I
+            "Actual\nTime In",      // J
+            "Defined\nTime Out",    // K
+            "Actual\nTime Out",     // L
+            "Total Hours\nWorked",  // M
+        ];
+
+        foreach ($this->records as $r) {
+            $emp   = $r->employee ?? null;
+            $shift = $emp?->shift;
+            $out[] = [
+                $this->fmtDate($r->date),                          // A
+                $emp?->employee_type ?? '',                         // B
+                $emp?->ad_employee_id ?? $emp?->id ?? '',           // C
+                $emp?->name ?? '',                                  // D
+                $emp?->department?->name ?? '',                     // E
+                $emp?->section ?? '',                               // F
+                $this->staffCategory($shift),                       // G
+                $this->shiftDayNight($shift),                       // H
+                $shift ? Carbon::parse($shift->start_time)->format('H:i') : '', // I
+                $this->fmtTime($r->check_in_time),                 // J
+                $shift ? Carbon::parse($shift->end_time)->format('H:i') : '',   // K
+                $this->fmtTime($r->check_out_time),                // L
+                $this->fmtHours((float)($r->worked_hours ?? 0)),   // M
+            ];
+        }
+
+        $ds = 4;
+        $de = 3 + count($this->records);
+        $out[] = ['TOTALS', ...array_fill(0, self::TOTAL_COLS - 2, ''), "=SUM(M{$ds}:M{$de})"];
+
+        return $out;
+    }
+
+    public function styles(Worksheet $sheet): array
+    {
+        $last    = 3 + count($this->records);
+        $total   = $last + 1;
+        $lastCol = self::LAST_COL;
+
+        $sheet->mergeCells("A1:{$lastCol}1");
+        $sheet->getStyle('A1')->applyFromArray([
+            'font'      => ['bold' => true, 'size' => 13, 'name' => 'Arial', 'color' => ['rgb' => '1B5E20']],
+            'fill'      => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => 'E8F5E9']],
             'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER],
         ]);
         $sheet->getRowDimension(1)->setRowHeight(22);
 
-        $sheet->mergeCells('A2:F2');
+        $sheet->mergeCells("A2:{$lastCol}2");
         $sheet->getStyle('A2')->applyFromArray([
-            'font' => ['name' => 'Arial', 'size' => 8, 'color' => ['rgb' => '555555']],
+            'font'      => ['name' => 'Arial', 'size' => 8, 'color' => ['rgb' => '555555']],
             'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER],
         ]);
         $sheet->getRowDimension(2)->setRowHeight(15);
 
         $sheet->getRowDimension(3)->setRowHeight(36);
-        $sheet->getStyle('A3:F3')->applyFromArray($this->hdrStyle('C00000'));
-
-        // Reason badge colours
-        $reasonBadges = [
-            'absent' => ['F8D7DA', '721C24'],
-            'leave' => ['CCE5FF', '004085'],
-            'gate' => ['E2D9F3', '432E75'],
-        ];
+        $sheet->getStyle("A3:{$lastCol}3")->applyFromArray($this->hdrStyle('1B5E20'));
+        $sheet->getStyle('B3')->applyFromArray($this->hdrStyle('C0341B'));
 
         for ($row = 4; $row <= $last; $row++) {
             $sheet->getRowDimension($row)->setRowHeight(18);
             if ($row % 2 === 0) {
-                $sheet->getStyle("A{$row}:E{$row}")->getFill()
-                    ->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('FEF2F2');
+                $sheet->getStyle("A{$row}:{$lastCol}{$row}")->getFill()
+                    ->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('F5F5F5');
             }
-            $sheet->getStyle("A{$row}:F{$row}")->applyFromArray($this->dataStyle('center'));
-            $sheet->getStyle("C{$row}:F{$row}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_LEFT);
+            // Style ALL columns A to M
+            $sheet->getStyle("A{$row}:{$lastCol}{$row}")->applyFromArray($this->dataStyle('center'));
+            $sheet->getStyle("D{$row}:F{$row}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_LEFT);
 
-            // Badge the Reason column
-            $reason = strtolower((string)$sheet->getCell("F{$row}")->getValue());
-            if (str_contains($reason, 'leave')) {
-                $sheet->getStyle("F{$row}")->applyFromArray($this->badgeStyle('CCE5FF', '004085'));
-            } elseif (str_contains($reason, 'gate') || str_contains($reason, 'pass')) {
-                $sheet->getStyle("F{$row}")->applyFromArray($this->badgeStyle('E2D9F3', '432E75'));
-            } else {
-                $sheet->getStyle("F{$row}")->applyFromArray($this->badgeStyle('F8D7DA', '721C24'));
+            $empType = (string) $sheet->getCell("B{$row}")->getValue();
+            if ($empType) {
+                [$bg, $fg] = $this->employeeTypeBadge($empType);
+                $sheet->getStyle("B{$row}")->applyFromArray($this->badgeStyle($bg, $fg));
             }
         }
 
-        $sheet->mergeCells("A{$total}:E{$total}");
-        $sheet->getStyle("A{$total}:F{$total}")->applyFromArray([
-            'font' => ['bold' => true, 'size' => 9, 'name' => 'Arial', 'color' => ['rgb' => 'FFFFFF']],
-            'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => 'C00000']],
+        $sheet->mergeCells("A{$total}:L{$total}");
+        $sheet->getStyle("A{$total}:{$lastCol}{$total}")->applyFromArray([
+            'font'      => ['bold' => true, 'size' => 9, 'name' => 'Arial', 'color' => ['rgb' => 'FFFFFF']],
+            'fill'      => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => '1B5E20']],
             'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER],
         ]);
-        $sheet->getStyle("F{$total}")->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('F8D7DA');
-        $sheet->getStyle("F{$total}")->getFont()->setColor(new Color('000000'))->setBold(true);
+        // Style last column (M) total
+        $sheet->getStyle("M{$total}")->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('D4EDDA');
+        $sheet->getStyle("M{$total}")->getFont()->setColor(new Color('000000'))->setBold(true);
         $sheet->getRowDimension($total)->setRowHeight(18);
 
         $sheet->freezePane('A4');
-        $sheet->setAutoFilter('A3:F3');
+        $sheet->setAutoFilter("A3:{$lastCol}3");
+
+        return [];
+    }
+}
+
+// =============================================================================
+// SHEET 3 – LATE REPORT
+//
+// A=Date | B=Employee Type | C=Employee Number | D=Name | E=Department
+// F=Section | G=Actual Time In | H=Actual Time Out | I=Expected Hours | J=Lateness
+// =============================================================================
+class LateSheet implements FromArray, WithTitle, WithStyles, WithColumnWidths
+{
+    use TaSheetHelpers;
+
+    private const LAST_COL   = 'J';
+    private const TOTAL_COLS = 10;
+
+    public function __construct(
+        private readonly array   $records,
+        private readonly ?string $startDate,
+        private readonly ?string $endDate,
+    ) {}
+
+    public function title(): string { return 'Late Report'; }
+
+    public function columnWidths(): array
+    {
+        return [
+            'A' => 12, 'B' => 16, 'C' => 16, 'D' => 24,
+            'E' => 18, 'F' => 14, 'G' => 11, 'H' => 11,
+            'I' => 16, 'J' => 13,
+        ];
+    }
+
+    public function array(): array
+    {
+        $out = [];
+        $out[] = ['LATENESS REPORT', ...array_fill(0, self::TOTAL_COLS - 1, '')];
+        $out[] = [$this->periodLabel($this->startDate, $this->endDate), ...array_fill(0, self::TOTAL_COLS - 1, '')];
+        $out[] = [
+            'Date',                          // A
+            'Employee Type',                 // B
+            'Employee Number',               // C
+            'Name',                          // D
+            'Department',                    // E
+            'Section',                       // F
+            "Actual\nTime In",               // G
+            "Actual\nTime Out",              // H
+            "Expected Hours\n(Defined: 9h)", // I
+            "Lateness\n(HH:MM)",             // J
+        ];
+
+        foreach ($this->records as $r) {
+            $emp = $r->employee ?? null;
+            $out[] = [
+                $this->fmtDate($r->date),                       // A
+                $emp?->employee_type ?? '',                      // B
+                $emp?->ad_employee_id ?? $emp?->id ?? '',        // C
+                $emp?->name ?? '',                               // D
+                $emp?->department?->name ?? '',                  // E
+                $emp?->section ?? '',                            // F
+                $this->fmtTime($r->check_in_time),              // G
+                $this->fmtTime($r->check_out_time),             // H
+                '9:00',                                          // I always 9h
+                $r->minutes_late > 0
+                    ? $this->minutesToHHMM((int) $r->minutes_late)
+                    : '',                                        // J
+            ];
+        }
+
+        $ds = 4;
+        $de = 3 + count($this->records);
+        $out[] = [
+            'TOTAL LATE: ' . count($this->records),
+            ...array_fill(0, self::TOTAL_COLS - 2, ''),
+            "=COUNTA(J{$ds}:J{$de})",
+        ];
+
+        return $out;
+    }
+
+    public function styles(Worksheet $sheet): array
+    {
+        $last    = 3 + count($this->records);
+        $total   = $last + 1;
+        $lastCol = self::LAST_COL;
+
+        $sheet->mergeCells("A1:{$lastCol}1");
+        $sheet->getStyle('A1')->applyFromArray([
+            'font'      => ['bold' => true, 'size' => 13, 'name' => 'Arial', 'color' => ['rgb' => '856404']],
+            'fill'      => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => 'FFF8E1']],
+            'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER],
+        ]);
+        $sheet->getRowDimension(1)->setRowHeight(22);
+
+        $sheet->mergeCells("A2:{$lastCol}2");
+        $sheet->getStyle('A2')->applyFromArray([
+            'font'      => ['name' => 'Arial', 'size' => 8, 'color' => ['rgb' => '555555']],
+            'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER],
+        ]);
+        $sheet->getRowDimension(2)->setRowHeight(15);
+
+        $sheet->getRowDimension(3)->setRowHeight(36);
+        $sheet->getStyle("A3:{$lastCol}3")->applyFromArray($this->hdrStyle('856404'));
+        $sheet->getStyle('B3')->applyFromArray($this->hdrStyle('C0341B'));
+
+        for ($row = 4; $row <= $last; $row++) {
+            $sheet->getRowDimension($row)->setRowHeight(18);
+            if ($row % 2 === 0) {
+                $sheet->getStyle("A{$row}:{$lastCol}{$row}")->getFill()
+                    ->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('FFFDE7');
+            }
+            // Style ALL columns A to J
+            $sheet->getStyle("A{$row}:{$lastCol}{$row}")->applyFromArray($this->dataStyle('center'));
+            $sheet->getStyle("D{$row}:F{$row}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_LEFT);
+
+            $empType = (string) $sheet->getCell("B{$row}")->getValue();
+            if ($empType) {
+                [$bg, $fg] = $this->employeeTypeBadge($empType);
+                $sheet->getStyle("B{$row}")->applyFromArray($this->badgeStyle($bg, $fg));
+            }
+
+            // Lateness bold amber — col J (last column)
+            $sheet->getStyle("J{$row}")->getFont()->setBold(true)->getColor()->setRGB('856404');
+        }
+
+        $sheet->mergeCells("A{$total}:I{$total}");
+        $sheet->getStyle("A{$total}:{$lastCol}{$total}")->applyFromArray([
+            'font'      => ['bold' => true, 'size' => 9, 'name' => 'Arial', 'color' => ['rgb' => 'FFFFFF']],
+            'fill'      => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => '856404']],
+            'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER],
+        ]);
+        // Style last column (J) total
+        $sheet->getStyle("J{$total}")->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('FFF3CD');
+        $sheet->getStyle("J{$total}")->getFont()->setColor(new Color('000000'))->setBold(true);
+        $sheet->getRowDimension($total)->setRowHeight(18);
+
+        $sheet->freezePane('A4');
+        $sheet->setAutoFilter("A3:{$lastCol}3");
+
+        return [];
+    }
+}
+
+// =============================================================================
+// SHEET 4 – ABSENT REPORT
+//
+// A=Date | B=Employee Type | C=Employee Number | D=Name | E=Department
+// F=Section | G=Reason
+// =============================================================================
+class AbsentSheet implements FromArray, WithTitle, WithStyles, WithColumnWidths
+{
+    use TaSheetHelpers;
+
+    private const LAST_COL   = 'G';
+    private const TOTAL_COLS = 7;
+
+    public function __construct(
+        private readonly array   $records,
+        private readonly ?string $startDate,
+        private readonly ?string $endDate,
+    ) {}
+
+    public function title(): string { return 'Absent Report'; }
+
+    public function columnWidths(): array
+    {
+        return [
+            'A' => 12, 'B' => 16, 'C' => 16,
+            'D' => 24, 'E' => 18, 'F' => 14, 'G' => 34,
+        ];
+    }
+
+    public function array(): array
+    {
+        $out = [];
+        $out[] = ['ABSENT REPORT', ...array_fill(0, self::TOTAL_COLS - 1, '')];
+        $out[] = [$this->periodLabel($this->startDate, $this->endDate), ...array_fill(0, self::TOTAL_COLS - 1, '')];
+        $out[] = [
+            'Date',               // A
+            'Employee Type',      // B
+            'Employee Number',    // C
+            'Name',               // D
+            'Department',         // E
+            'Section',            // F
+            'Reason / Exception', // G
+        ];
+
+        foreach ($this->records as $r) {
+            $emp = $r->employee ?? null;
+            $out[] = [
+                $this->fmtDate($r->date),                       // A
+                $emp?->employee_type ?? '',                      // B
+                $emp?->ad_employee_id ?? $emp?->id ?? '',        // C
+                $emp?->name ?? '',                               // D
+                $emp?->department?->name ?? '',                  // E
+                $emp?->section ?? '',                            // F
+                $this->absentReason($r),                         // G
+            ];
+        }
+
+        $out[] = ['TOTAL ABSENCES: ' . count($this->records), '', '', '', '', '', ''];
+
+        return $out;
+    }
+
+    public function styles(Worksheet $sheet): array
+    {
+        $last    = 3 + count($this->records);
+        $total   = $last + 1;
+        $lastCol = self::LAST_COL;
+
+        $sheet->mergeCells("A1:{$lastCol}1");
+        $sheet->getStyle('A1')->applyFromArray([
+            'font'      => ['bold' => true, 'size' => 13, 'name' => 'Arial', 'color' => ['rgb' => 'C00000']],
+            'fill'      => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => 'FDEDED']],
+            'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER],
+        ]);
+        $sheet->getRowDimension(1)->setRowHeight(22);
+
+        $sheet->mergeCells("A2:{$lastCol}2");
+        $sheet->getStyle('A2')->applyFromArray([
+            'font'      => ['name' => 'Arial', 'size' => 8, 'color' => ['rgb' => '555555']],
+            'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER],
+        ]);
+        $sheet->getRowDimension(2)->setRowHeight(15);
+
+        $sheet->getRowDimension(3)->setRowHeight(36);
+        $sheet->getStyle("A3:{$lastCol}3")->applyFromArray($this->hdrStyle('C00000'));
+        $sheet->getStyle('B3')->applyFromArray($this->hdrStyle('C0341B'));
+
+        for ($row = 4; $row <= $last; $row++) {
+            $sheet->getRowDimension($row)->setRowHeight(18);
+            if ($row % 2 === 0) {
+                $sheet->getStyle("A{$row}:{$lastCol}{$row}")->getFill()
+                    ->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('FEF2F2');
+            }
+            // Style ALL columns A to G
+            $sheet->getStyle("A{$row}:{$lastCol}{$row}")->applyFromArray($this->dataStyle('center'));
+            $sheet->getStyle("D{$row}:G{$row}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_LEFT);
+
+            $empType = (string) $sheet->getCell("B{$row}")->getValue();
+            if ($empType) {
+                [$bg, $fg] = $this->employeeTypeBadge($empType);
+                $sheet->getStyle("B{$row}")->applyFromArray($this->badgeStyle($bg, $fg));
+            }
+
+            // Reason badge — col G (last column)
+            $reason = strtolower((string) $sheet->getCell("G{$row}")->getValue());
+            if (str_contains($reason, 'leave') || str_contains($reason, 'sick')) {
+                $sheet->getStyle("G{$row}")->applyFromArray($this->badgeStyle('CCE5FF', '004085'));
+            } elseif (str_contains($reason, 'gate') || str_contains($reason, 'pass')) {
+                $sheet->getStyle("G{$row}")->applyFromArray($this->badgeStyle('E2D9F3', '432E75'));
+            } else {
+                $sheet->getStyle("G{$row}")->applyFromArray($this->badgeStyle('F8D7DA', '721C24'));
+            }
+        }
+
+        // Totals row covers ALL columns
+        $sheet->mergeCells("A{$total}:{$lastCol}{$total}");
+        $sheet->getStyle("A{$total}:{$lastCol}{$total}")->applyFromArray([
+            'font'      => ['bold' => true, 'size' => 9, 'name' => 'Arial', 'color' => ['rgb' => 'FFFFFF']],
+            'fill'      => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => 'C00000']],
+            'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER],
+        ]);
+        $sheet->getRowDimension($total)->setRowHeight(18);
+
+        $sheet->freezePane('A4');
+        $sheet->setAutoFilter("A3:{$lastCol}3");
+
         return [];
     }
 
     private function absentReason($r): string
     {
-        // Map your status field to a human reason
         return match ($r->status ?? '') {
-            'on_leave' => 'Annual Leave – Approved',
+            'on_leave'   => 'Annual Leave – Approved',
             'sick_leave' => 'Sick Leave – Approved',
-            'sick_off' => 'Sick Day – Approved',
-            'gate_pass' => 'Gate Pass – ' . ($r->exception_note ?? 'Approved'),
-            default => 'Absent – No Reason',
+            'sick_off'   => 'Sick Day – Approved',
+            'gate_pass'  => 'Gate Pass – ' . ($r->exception_note ?? 'Approved'),
+            default      => 'Absent – No Reason',
         };
     }
 }
