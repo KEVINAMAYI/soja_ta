@@ -322,14 +322,22 @@ class EmployeeTable extends DataTableComponent
     public function exportExcel()
     {
         return Excel::download(
-            new EmployeesExcelExport($this->getSelected()),
+            new EmployeesExcelExport(
+                selectedIds:   $this->getSelected(),
+                empTypeFilter: $this->empTypeFilter,
+                activeFilter:  $this->activeFilter,
+            ),
             'employees.xlsx'
         );
     }
 
     public function exportPdf()
     {
-        $url = route('employees.export.pdf', ['ids' => $this->getSelected()]);
+        $url = route('employees.export.pdf', [
+            'ids'      => $this->getSelected(),
+            'emp_type' => $this->empTypeFilter,
+            'active'   => $this->activeFilter,
+        ]);
         return redirect()->to($url);
     }
 

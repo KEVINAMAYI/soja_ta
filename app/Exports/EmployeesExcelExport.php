@@ -19,12 +19,18 @@ use Maatwebsite\Excel\Concerns\WithEvents;
 class EmployeesExcelExport implements FromView, ShouldAutoSize, WithTitle, WithStyles, WithEvents
 {
     protected array $selectedIds;
+    protected string $empTypeFilter;
+    protected string $activeFilter;
 
-    public function __construct(array $selectedIds = [])
-    {
-        $this->selectedIds = $selectedIds;
+    public function __construct(
+        array $selectedIds = [],
+        string $empTypeFilter = '',
+        string $activeFilter = ''
+    ) {
+        $this->selectedIds   = $selectedIds;
+        $this->empTypeFilter = $empTypeFilter;
+        $this->activeFilter  = $activeFilter;
     }
-
 
     public function registerEvents(): array
     {
@@ -45,9 +51,9 @@ class EmployeesExcelExport implements FromView, ShouldAutoSize, WithTitle, WithS
 
     public function view(): View
     {
-        $user = auth()->user();
+        $user           = auth()->user();
         $organizationId = $user->employee->organization_id;
-        $org = $user->employee->organization;
+        $org            = $user->employee->organization;
 
         $query = Employee::query()
             ->with(['organization', 'shift', 'user', 'department'])
@@ -57,16 +63,24 @@ class EmployeesExcelExport implements FromView, ShouldAutoSize, WithTitle, WithS
             $query->whereIn('id', $this->selectedIds);
         }
 
+        if ($this->empTypeFilter !== '') {
+            $query->where('employee_type', $this->empTypeFilter);
+        }
+
+        if ($this->activeFilter !== '') {
+            $query->where('active', (int) $this->activeFilter);
+        }
+
         $employees = $query->get();
 
         return view('exports.employees.index', [
-            'employees' => $employees,
-            'orgName' => $org->name ?? 'Organization',
-            'date' => now()->format('d M Y, H:i'),
-            'totalActive' => $employees->where('active', 1)->count(),
-            'totalInactive' => $employees->where('active', 0)->count(),
-            'total' => $employees->count(),
-            'isExcel' => true,  // ← confirm this is present
+            'employees'    => $employees,
+            'orgName'      => $org->name ?? 'Organization',
+            'date'         => now()->format('d M Y, H:i'),
+            'totalActive'  => $employees->where('active', 1)->count(),
+            'totalInactive'=> $employees->where('active', 0)->count(),
+            'total'        => $employees->count(),
+            'isExcel'      => true,
         ]);
     }
 
