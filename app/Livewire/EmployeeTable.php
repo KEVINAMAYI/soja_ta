@@ -315,7 +315,7 @@ class EmployeeTable extends DataTableComponent
             'activate' => 'Activate',
             'deactivate' => 'Deactivate',
             'exportExcel' => 'Export Excel',
-            'exportPdf' => 'Export PDF',
+//            'exportPdf' => 'Export PDF',
         ];
     }
 
@@ -340,6 +340,8 @@ class EmployeeTable extends DataTableComponent
         ]);
         return redirect()->to($url);
     }
+
+
 
     public function activate(): void
     {
