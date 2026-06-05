@@ -26,16 +26,16 @@ class PresentSheet implements FromArray, WithTitle, WithStyles, WithColumnWidths
 
     public function columnWidths(): array
     {
-        return ['A' => 12, 'B' => 14, 'C' => 22, 'D' => 16, 'E' => 14, 'F' => 18, 'G' => 11, 'H' => 11, 'I' => 11, 'J' => 11, 'K' => 11, 'L' => 13];
+        return ['A' => 12, 'B' => 14, 'C' => 14, 'D' => 22, 'E' => 16, 'F' => 14, 'G' => 18, 'H' => 11, 'I' => 11, 'J' => 11, 'K' => 11, 'L' => 11, 'M' => 13];
     }
 
     public function array(): array
     {
         $out   = [];
-        $out[] = ['PRESENT REPORT', ...array_fill(0, 11, '')];
-        $out[] = [$this->periodLabel($this->startDate, $this->endDate), ...array_fill(0, 11, '')];
+        $out[] = ['PRESENT REPORT', ...array_fill(0, 12, '')];
+        $out[] = [$this->periodLabel($this->startDate, $this->endDate), ...array_fill(0, 12, '')];
         $out[] = [
-            'Date', 'Employee Title', 'Employee Number', 'Name', 'Department', 'Section',
+            'Date', 'Employee Type', 'Employee Title', 'Employee Number', 'Name', 'Department', 'Section',
             "Staff Category\n(General / Admin Shift)", "Shift\n(Day / Night)",
             "Defined\nTime In", "Actual\nTime In", "Defined\nTime Out", "Actual\nTime Out", "Total Hours\nWorked",
         ];
@@ -44,6 +44,7 @@ class PresentSheet implements FromArray, WithTitle, WithStyles, WithColumnWidths
             $shift = $emp?->shift;
             $out[] = [
                 $this->fmtDate($r->date),
+                $emp?->employee_type ?? '',
                 $emp?->employee_title ?? '',
                 $emp?->ad_employee_id ?? $emp?->id ?? '',
                 $emp?->name ?? '',
@@ -60,7 +61,7 @@ class PresentSheet implements FromArray, WithTitle, WithStyles, WithColumnWidths
         }
         $ds    = 4;
         $de    = 3 + count($this->records);
-        $out[] = ['TOTALS', ...array_fill(0, 10, ''), "=SUM(L{$ds}:L{$de})"];
+        $out[] = ['TOTALS', ...array_fill(0, 11, ''), "=SUM(M{$ds}:M{$de})"];
         return $out;
     }
 
@@ -69,7 +70,7 @@ class PresentSheet implements FromArray, WithTitle, WithStyles, WithColumnWidths
         $last  = 3 + count($this->records);
         $total = $last + 1;
 
-        $sheet->mergeCells("A1:L1");
+        $sheet->mergeCells("A1:M1");
         $sheet->getStyle('A1')->applyFromArray([
             'font'      => ['bold' => true, 'size' => 13, 'name' => 'Arial', 'color' => ['rgb' => '1B5E20']],
             'fill'      => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => 'E8F5E9']],
@@ -77,7 +78,7 @@ class PresentSheet implements FromArray, WithTitle, WithStyles, WithColumnWidths
         ]);
         $sheet->getRowDimension(1)->setRowHeight(22);
 
-        $sheet->mergeCells("A2:L2");
+        $sheet->mergeCells("A2:M2");
         $sheet->getStyle('A2')->applyFromArray([
             'font'      => ['name' => 'Arial', 'size' => 8, 'color' => ['rgb' => '555555']],
             'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER],
@@ -85,29 +86,39 @@ class PresentSheet implements FromArray, WithTitle, WithStyles, WithColumnWidths
         $sheet->getRowDimension(2)->setRowHeight(15);
 
         $sheet->getRowDimension(3)->setRowHeight(36);
-        $sheet->getStyle('A3:L3')->applyFromArray($this->hdrStyle('1B5E20'));
+        $sheet->getStyle('A3:M3')->applyFromArray($this->hdrStyle('1B5E20'));
 
         for ($row = 4; $row <= $last; $row++) {
             $sheet->getRowDimension($row)->setRowHeight(18);
             if ($row % 2 === 0) {
-                $sheet->getStyle("A{$row}:L{$row}")->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('F5F5F5');
+                $sheet->getStyle("A{$row}:M{$row}")->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('F5F5F5');
             }
-            $sheet->getStyle("A{$row}:L{$row}")->applyFromArray($this->dataStyle('center'));
-            $sheet->getStyle("C{$row}:F{$row}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_LEFT);
+            $sheet->getStyle("A{$row}:M{$row}")->applyFromArray($this->dataStyle('center'));
+            $sheet->getStyle("D{$row}:G{$row}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_LEFT);
+
+            $empType = $sheet->getCell("B{$row}")->getValue();
+            if ($empType) {
+                [$bg, $fg] = match ($empType) {
+                    'COSMOS'     => ['E0F2FE', '0369A1'],
+                    'Outsourced' => ['FDE8E3', 'C0341B'],
+                    default      => ['F1F5F9', '475569'],
+                };
+                $sheet->getStyle("B{$row}")->applyFromArray($this->badgeStyle($bg, $fg));
+            }
         }
 
-        $sheet->mergeCells("A{$total}:K{$total}");
-        $sheet->getStyle("A{$total}:L{$total}")->applyFromArray([
+        $sheet->mergeCells("A{$total}:L{$total}");
+        $sheet->getStyle("A{$total}:M{$total}")->applyFromArray([
             'font'      => ['bold' => true, 'size' => 9, 'name' => 'Arial', 'color' => ['rgb' => 'FFFFFF']],
             'fill'      => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => '1B5E20']],
             'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER],
         ]);
-        $sheet->getStyle("L{$total}")->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('D4EDDA');
-        $sheet->getStyle("L{$total}")->getFont()->setColor(new Color('000000'))->setBold(true);
+        $sheet->getStyle("M{$total}")->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('D4EDDA');
+        $sheet->getStyle("M{$total}")->getFont()->setColor(new Color('000000'))->setBold(true);
         $sheet->getRowDimension($total)->setRowHeight(18);
 
         $sheet->freezePane('A4');
-        $sheet->setAutoFilter('A3:L3');
+        $sheet->setAutoFilter('A3:M3');
         return [];
     }
 

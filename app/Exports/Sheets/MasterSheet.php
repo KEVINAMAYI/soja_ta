@@ -28,20 +28,20 @@ class MasterSheet implements FromArray, WithTitle, WithStyles, WithColumnWidths
     public function columnWidths(): array
     {
         return [
-            'A' => 12, 'B' => 14, 'C' => 22, 'D' => 16, 'E' => 14,
-            'F' => 18, 'G' => 11, 'H' => 11, 'I' => 11, 'J' => 11,
-            'K' => 11, 'L' => 11, 'M' => 11, 'N' => 10, 'O' => 10,
-            'P' => 8,  'Q' => 8,  'R' => 11, 'S' => 22, 'T' => 24,
+            'A' => 12, 'B' => 14, 'C' => 14, 'D' => 22, 'E' => 16, 'F' => 14,
+            'G' => 18, 'H' => 11, 'I' => 11, 'J' => 11, 'K' => 11,
+            'L' => 11, 'M' => 11, 'N' => 11, 'O' => 10, 'P' => 10,
+            'Q' => 8,  'R' => 8,  'S' => 11, 'T' => 22, 'U' => 24,
         ];
     }
 
     public function array(): array
     {
         $out = [];
-        $out[] = ['MASTER ATTENDANCE REPORT', ...array_fill(0, 19, '')];
-        $out[] = [$this->periodLabel($this->startDate, $this->endDate), ...array_fill(0, 19, '')];
+        $out[] = ['MASTER ATTENDANCE REPORT', ...array_fill(0, 20, '')];
+        $out[] = [$this->periodLabel($this->startDate, $this->endDate), ...array_fill(0, 20, '')];
         $out[] = [
-            'Date', 'Employee Title', 'Employee Number', 'Full Names', 'Department', 'Section',
+            'Date', 'Employee Type', 'Employee Title', 'Employee Number', 'Full Names', 'Department', 'Section',
             "Staff Category\n(General / Admin Shift)", "Shift\n(Day / Night)",
             "Defined\nTime In", "Actual\nTime In", "Start of\nLunch", "End of\nLunch Break",
             "Defined\nTime Out", "Actual\nTime Out", "Defined\nHours",
@@ -53,7 +53,8 @@ class MasterSheet implements FromArray, WithTitle, WithStyles, WithColumnWidths
             $shift = $emp?->shift;
             $out[] = [
                 $this->fmtDate($r->date),
-                $emp?->employee_title ?? '',
+                $emp?->employee_type ?? '',        // ← B
+                $emp?->employee_title ?? '',       // ← C
                 $emp?->ad_employee_id ?? $emp?->id ?? '',
                 $emp?->name ?? '',
                 $emp?->department?->name ?? '',
@@ -78,10 +79,10 @@ class MasterSheet implements FromArray, WithTitle, WithStyles, WithColumnWidths
         $ds  = 4;
         $de  = 3 + count($this->records);
         $out[] = [
-            'TOTALS', '', '', '', '', '', '', '', '', '', '', '', '',
-            "=SUM(N{$ds}:N{$de})", "=SUM(O{$ds}:O{$de})",
-            "=SUM(P{$ds}:P{$de})", "=SUM(Q{$ds}:Q{$de})",
-            "=SUM(R{$ds}:R{$de})", '', '',
+            'TOTALS', '', '', '', '', '', '', '', '', '', '', '', '', '',
+            "=SUM(O{$ds}:O{$de})", "=SUM(P{$ds}:P{$de})",
+            "=SUM(Q{$ds}:Q{$de})", "=SUM(R{$ds}:R{$de})",
+            "=SUM(S{$ds}:S{$de})", '', '',
         ];
         return $out;
     }
@@ -91,7 +92,7 @@ class MasterSheet implements FromArray, WithTitle, WithStyles, WithColumnWidths
         $lastDataRow = 3 + count($this->records);
         $totalRow    = $lastDataRow + 1;
 
-        $sheet->mergeCells("A1:T1");
+        $sheet->mergeCells("A1:V1");
         $sheet->getStyle('A1')->applyFromArray([
             'font'      => ['bold' => true, 'size' => 13, 'name' => 'Arial', 'color' => ['rgb' => '1F3864']],
             'fill'      => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => 'EBF3FB']],
@@ -100,7 +101,7 @@ class MasterSheet implements FromArray, WithTitle, WithStyles, WithColumnWidths
         ]);
         $sheet->getRowDimension(1)->setRowHeight(22);
 
-        $sheet->mergeCells("A2:T2");
+        $sheet->mergeCells("A2:V2");
         $sheet->getStyle('A2')->applyFromArray([
             'font'      => ['name' => 'Arial', 'size' => 8, 'color' => ['rgb' => '555555']],
             'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER],
@@ -108,38 +109,55 @@ class MasterSheet implements FromArray, WithTitle, WithStyles, WithColumnWidths
         $sheet->getRowDimension(2)->setRowHeight(15);
 
         $sheet->getRowDimension(3)->setRowHeight(36);
-        foreach (['A3:E3' => '2E75B6', 'F3:M3' => '375623', 'N3:R3' => '7F3F98', 'S3:S3' => '833C00', 'T3:T3' => 'C00000'] as $range => $color) {
+        foreach ([
+                     'A3:F3' => '2E75B6',  // identity (now includes employee type + title)
+                     'G3:N3' => '375623',  // shift/time
+                     'O3:S3' => '7F3F98',  // hours
+                     'T3:T3' => '833C00',  // exceptions
+                     'U3:U3' => 'C00000',  // interpretation
+                 ] as $range => $color) {
             $sheet->getStyle($range)->applyFromArray($this->hdrStyle($color));
         }
 
         for ($row = 4; $row <= $lastDataRow; $row++) {
             $sheet->getRowDimension($row)->setRowHeight(18);
             if ($row % 2 === 0) {
-                $sheet->getStyle("A{$row}:S{$row}")->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('F5F5F5');
+                $sheet->getStyle("A{$row}:T{$row}")->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('F5F5F5');
             }
-            $sheet->getStyle("A{$row}:S{$row}")->applyFromArray($this->dataStyle('center'));
-            $sheet->getStyle("C{$row}:F{$row}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_LEFT);
-            $sheet->getStyle("S{$row}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_LEFT);
+            $sheet->getStyle("A{$row}:T{$row}")->applyFromArray($this->dataStyle('center'));
+            $sheet->getStyle("D{$row}:G{$row}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_LEFT);
+            $sheet->getStyle("T{$row}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_LEFT);
 
-            $interpVal = $sheet->getCell("T{$row}")->getValue();
+            // Employee type badge (col B)
+            $empType = $sheet->getCell("B{$row}")->getValue();
+            if ($empType) {
+                [$bg, $fg] = match ($empType) {
+                    'COSMOS'     => ['E0F2FE', '0369A1'],
+                    'Outsourced' => ['FDE8E3', 'C0341B'],
+                    default      => ['F1F5F9', '475569'],
+                };
+                $sheet->getStyle("B{$row}")->applyFromArray($this->badgeStyle($bg, $fg));
+            }
+
+            $interpVal = $sheet->getCell("U{$row}")->getValue();
             if ($interpVal) {
                 [$bg, $fg] = $this->interpretationBadge($interpVal);
-                $sheet->getStyle("T{$row}")->applyFromArray($this->badgeStyle($bg, $fg));
+                $sheet->getStyle("U{$row}")->applyFromArray($this->badgeStyle($bg, $fg));
             }
         }
 
-        $sheet->mergeCells("A{$totalRow}:M{$totalRow}");
-        $sheet->getStyle("A{$totalRow}:T{$totalRow}")->applyFromArray([
+        $sheet->mergeCells("A{$totalRow}:N{$totalRow}");
+        $sheet->getStyle("A{$totalRow}:U{$totalRow}")->applyFromArray([
             'font'      => ['bold' => true, 'size' => 9, 'name' => 'Arial', 'color' => ['rgb' => 'FFFFFF']],
             'fill'      => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => '1F3864']],
             'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER],
         ]);
-        $sheet->getStyle("N{$totalRow}:R{$totalRow}")->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('D9E1F2');
-        $sheet->getStyle("N{$totalRow}:R{$totalRow}")->getFont()->setColor(new Color('000000'))->setBold(true);
+        $sheet->getStyle("O{$totalRow}:S{$totalRow}")->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('D9E1F2');
+        $sheet->getStyle("O{$totalRow}:S{$totalRow}")->getFont()->setColor(new Color('000000'))->setBold(true);
         $sheet->getRowDimension($totalRow)->setRowHeight(18);
 
         $sheet->freezePane('A4');
-        $sheet->setAutoFilter("A3:T3");
+        $sheet->setAutoFilter("A3:U3");
         return [];
     }
 

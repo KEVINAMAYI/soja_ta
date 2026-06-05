@@ -59,7 +59,7 @@ class AbsentSheet implements FromArray, WithTitle, WithStyles, WithColumnWidths
         $last  = 3 + count($this->records);
         $total = $last + 1;
 
-        $sheet->mergeCells('A1:F1');
+        $sheet->mergeCells('A1:g1');
         $sheet->getStyle('A1')->applyFromArray([
             'font'      => ['bold' => true, 'size' => 13, 'name' => 'Arial', 'color' => ['rgb' => 'C00000']],
             'fill'      => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => 'FDEDED']],
@@ -67,31 +67,31 @@ class AbsentSheet implements FromArray, WithTitle, WithStyles, WithColumnWidths
         ]);
         $sheet->getRowDimension(1)->setRowHeight(22);
 
-        $sheet->mergeCells('A2:F2');
-        $sheet->getStyle('A2')->applyFromArray([
+        $sheet->mergeCells('A2:g2');
+        $sheet->getStyle('G2')->applyFromArray([
             'font'      => ['name' => 'Arial', 'size' => 8, 'color' => ['rgb' => '555555']],
             'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER],
         ]);
         $sheet->getRowDimension(2)->setRowHeight(15);
 
         $sheet->getRowDimension(3)->setRowHeight(36);
-        $sheet->getStyle('A3:F3')->applyFromArray($this->hdrStyle('C00000'));
+        $sheet->getStyle('A3:G3')->applyFromArray($this->hdrStyle('C00000'));
 
         for ($row = 4; $row <= $last; $row++) {
             $sheet->getRowDimension($row)->setRowHeight(18);
             if ($row % 2 === 0) {
                 $sheet->getStyle("A{$row}:E{$row}")->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('FEF2F2');
             }
-            $sheet->getStyle("A{$row}:F{$row}")->applyFromArray($this->dataStyle('center'));
-            $sheet->getStyle("C{$row}:F{$row}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_LEFT);
+            $sheet->getStyle("A{$row}:G{$row}")->applyFromArray($this->dataStyle('center'));
+            $sheet->getStyle("C{$row}:G{$row}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_LEFT);
 
             $reason = strtolower((string) $sheet->getCell("F{$row}")->getValue());
             if (str_contains($reason, 'leave')) {
-                $sheet->getStyle("F{$row}")->applyFromArray($this->badgeStyle('CCE5FF', '004085'));
+                $sheet->getStyle("G$row}")->applyFromArray($this->badgeStyle('CCE5FF', '004085'));
             } elseif (str_contains($reason, 'gate') || str_contains($reason, 'pass')) {
-                $sheet->getStyle("F{$row}")->applyFromArray($this->badgeStyle('E2D9F3', '432E75'));
+                $sheet->getStyle("G{$row}")->applyFromArray($this->badgeStyle('E2D9F3', '432E75'));
             } else {
-                $sheet->getStyle("F{$row}")->applyFromArray($this->badgeStyle('F8D7DA', '721C24'));
+                $sheet->getStyle("G{$row}")->applyFromArray($this->badgeStyle('F8D7DA', '721C24'));
             }
         }
 
