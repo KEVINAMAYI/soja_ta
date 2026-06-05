@@ -104,6 +104,9 @@ new class extends Component {
     public array $availableZkbioAreas = [];
     public array $defaultAdSyncAreas = [];
 
+    public string $empTypeFilter = '';
+    public string $activeFilter  = '';
+
     public function mount($roleId = null): void
     {
 
@@ -198,6 +201,26 @@ new class extends Component {
     }
 
 
+
+    public function exportFilteredExcel(): mixed
+    {
+        return \Maatwebsite\Excel\Facades\Excel::download(
+            new \App\Exports\EmployeesExcelExport(
+                selectedIds:   [],
+                empTypeFilter: $this->empTypeFilter,
+                activeFilter:  $this->activeFilter,
+            ),
+            'employees_' . now()->format('Y-m-d') . '.xlsx'
+        );
+    }
+
+    public function exportFilteredPdf(): \Illuminate\Http\RedirectResponse
+    {
+        return redirect()->route('employees.export.pdf', [
+            'emp_type' => $this->empTypeFilter,
+            'active'   => $this->activeFilter,
+        ]);
+    }
 
 
 
@@ -1415,6 +1438,29 @@ new class extends Component {
     }
 
 
+
+    public function setEmpTypeFilter(string $val): void
+    {
+        $this->empTypeFilter = $val;
+        $this->dispatch('filter-by-type',
+            type: $this->personType,
+            empType: $this->empTypeFilter,
+            active: $this->activeFilter,
+        );
+    }
+
+    public function setActiveFilter(string $val): void
+    {
+        $this->activeFilter = $val;
+        $this->dispatch('filter-by-type',
+            type: $this->personType,
+            empType: $this->empTypeFilter,
+            active: $this->activeFilter,
+        );
+    }
+
+
+
 }; ?>
 
 @push('styles')
@@ -2252,6 +2298,78 @@ new class extends Component {
                     </a>
                 </div>
             </div>
+
+
+            {{-- ── Filter bar (non-student orgs) ──────────────────────────────────── --}}
+            @if(!$isStudentOrg)
+                <div class="d-flex flex-wrap gap-3 align-items-end mb-3 p-3 rounded-3"
+                     style="background:#f8fafc; border:1px solid #e2e8f0;">
+
+                    {{-- Employee Type --}}
+                    <div>
+                        <label class="d-block mb-1"
+                               style="font-size:0.72rem;font-weight:600;color:#64748b;
+                          text-transform:uppercase;letter-spacing:0.4px;">
+                            Employee Type
+                        </label>
+                        <div class="d-flex gap-1 flex-wrap">
+                            @foreach(['' => 'All', 'COSMOS' => 'COSMOS', 'Outsourced' => 'Outsourced'] as $val => $label)
+                                @php
+                                    $active = ($empTypeFilter ?? '') === $val;
+                                    [$bg, $color] = match($val) {
+                                        'COSMOS'     => ['#e0f2fe', '#0369a1'],
+                                        'Outsourced' => ['#fde8e3', '#c0341b'],
+                                        default      => ['#f1f5f9', '#475569'],
+                                    };
+                                @endphp
+                                <button
+                                    type="button"
+                                    wire:click="setEmpTypeFilter('{{ $val }}')"
+                                    style="font-size:0.75rem; font-weight:600; border-radius:99px;
+                               padding:4px 14px; border:1.5px solid {{ $active ? $color : '#e2e8f0' }};
+                               background:{{ $active ? $bg : '#fff' }};
+                               color:{{ $active ? $color : '#64748b' }};
+                               cursor:pointer; transition:all 0.15s;">
+                                    {{ $label }}
+                                </button>
+                            @endforeach
+                        </div>
+                    </div>
+
+                    {{-- Active Status --}}
+                    <div>
+                        <label class="d-block mb-1"
+                               style="font-size:0.72rem;font-weight:600;color:#64748b;
+                          text-transform:uppercase;letter-spacing:0.4px;">
+                            Status
+                        </label>
+                        <div class="d-flex gap-1 flex-wrap">
+                            @foreach(['' => 'All', '1' => 'Active', '0' => 'Inactive'] as $val => $label)
+                                @php
+                                    $val    = (string) $val;
+                                    $active = $activeFilter === $val;
+                                    [$bg, $color] = match($val) {
+                                        '1'     => ['#dcfce7', '#15803d'],
+                                        '0'     => ['#fee2e2', '#dc2626'],
+                                        default => ['#f1f5f9', '#475569'],
+                                    };
+                                @endphp
+                                <button
+                                    type="button"
+                                    wire:click="setActiveFilter('{{ $val }}')"
+                                    style="font-size:0.75rem; font-weight:600; border-radius:99px;
+                               padding:4px 14px; border:1.5px solid {{ $active ? $color : '#e2e8f0' }};
+                               background:{{ $active ? $bg : '#fff' }};
+                               color:{{ $active ? $color : '#64748b' }};
+                               cursor:pointer; transition:all 0.15s;">
+                                    {{ $label }}
+                                </button>
+                            @endforeach
+                        </div>
+                    </div>
+
+                </div>
+            @endif
 
 
             {{-- ══════════════════════════════════════════════════════════════

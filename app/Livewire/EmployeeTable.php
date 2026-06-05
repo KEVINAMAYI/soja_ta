@@ -3,7 +3,6 @@
 namespace App\Livewire;
 
 use App\Exports\EmployeesExcelExport;
-use App\Models\Attendance;
 use App\Models\Role;
 use Illuminate\Support\Facades\Auth;
 use Jantinnerezo\LivewireAlert\Facades\LivewireAlert;
@@ -20,13 +19,14 @@ class EmployeeTable extends DataTableComponent
     protected $model = Employee::class;
     public $entityLabel = 'Employee';
     public ?string $activePersonType = '';
+    public string $empTypeFilter = '';
+    public string $activeFilter = '';
 
     public function mount($type = 'student'): void
     {
         $isStudentOrg = Auth::user()->employee?->organization?->is_student_record ?? false;
 
         $this->activePersonType = $isStudentOrg ? ($type ?? 'student') : '';
-
         $this->entityLabel = $isStudentOrg ? 'Student' : 'Employee';
 
         if (request()->has('active')) {
@@ -35,12 +35,12 @@ class EmployeeTable extends DataTableComponent
     }
 
     #[On('filter-by-type')]
-    public function filterByType($type)
+    public function filterByType(string $empType = '', string $active = ''): void
     {
-        $this->activePersonType = $type;
-        $this->dispatch('refreshDatatable');
+        $this->empTypeFilter = $empType;
+        $this->activeFilter  = $active;
+        $this->dispatch('refreshDatatable'); // ← this was missing
     }
-
 
     public function configure(): void
     {
@@ -58,23 +58,24 @@ class EmployeeTable extends DataTableComponent
             ->select('employees.*')
             ->where('organization_id', $orgId);
 
-        // For school orgs, eager load the last attendance record per pembroke
         if ($isStudentOrg) {
-            $query->with([
-                'organization',
-                'user',
-                'assignments',
-                // Load last attendance record (most recent by date, regardless of date)
-                'lastAttendance',
-            ]);
+            $query->with(['organization', 'user', 'assignments', 'lastAttendance']);
         } else {
-            $query->with(['organization', 'shift', 'user', 'assignments']);
+            $query->with(['organization', 'shift', 'user', 'assignments', 'department']);
         }
 
         if ($this->activePersonType === 'student') {
             $query->where('is_student', 1);
         } elseif ($this->activePersonType === 'staff') {
             $query->where('is_student', 0);
+        }
+
+        if ($this->empTypeFilter !== '') {
+            $query->where('employee_type', $this->empTypeFilter);
+        }
+
+        if ($this->activeFilter !== '') {
+            $query->where('active', (int)$this->activeFilter);
         }
 
         if ($this->search !== null && $this->search !== '') {
@@ -84,7 +85,8 @@ class EmployeeTable extends DataTableComponent
                     ->orWhere('phone', 'like', '%' . $this->search . '%')
                     ->orWhere('ad_employee_id', 'like', '%' . $this->search . '%')
                     ->orWhere('section', 'like', '%' . $this->search . '%')
-                    ->orWhere('division', 'like', '%' . $this->search . '%');
+                    ->orWhere('division', 'like', '%' . $this->search . '%')
+                    ->orWhere('employee_type', 'like', '%' . $this->search . '%');
             });
         }
 
@@ -93,14 +95,12 @@ class EmployeeTable extends DataTableComponent
 
     public function columns(): array
     {
-
-        $isStudent = $this->activePersonType == 'student' ?? false;
+        $isStudent = $this->activePersonType === 'student';
         $isStudentOrg = auth()->user()->employee?->organization?->is_student_record ?? false;
-
 
         $columns = [];
 
-        // ── For non-school orgs only: Shift column ──
+        // Shift — non-school orgs only
         if (!$isStudentOrg) {
             $columns[] = Column::make("Shift", "shift_id")
                 ->format(fn($value, $row) => $row->shift?->name
@@ -111,18 +111,16 @@ class EmployeeTable extends DataTableComponent
                 ->sortable();
         }
 
-
-        // ── Student / Employee name column ──
-        $columns[] = Column::make($isStudent ? "Student" : ($isStudentOrg ? "Staff" : "Employee"), "name")
-            ->format(function ($value, $row) use ($isStudentOrg) {
-                $icon = '<iconify-icon icon="tabler:user" style="color:var(--primary-color) !important;" class="me-2" width="20"></iconify-icon>';
+        // Name / identity column
+        $columns[] = Column::make(
+            $isStudent ? "Student" : ($isStudentOrg ? "Staff" : "Employee"),
+            "name"
+        )
+            ->format(function ($value, $row) {
+                $icon = '<iconify-icon icon="tabler:user" style="color:var(--primary-color);" class="me-2" width="20"></iconify-icon>';
 
                 $title = $row->employee_title
                     ? "<small class='text-secondary d-block'>{$row->employee_title}</small>"
-                    : '';
-
-                $email = $row->email
-                    ? "<small class='text-muted d-block'><i class='ti ti-mail me-1 text-info'></i>{$row->email}</small>"
                     : '';
 
                 $idNumber = $row->id_number
@@ -136,37 +134,38 @@ class EmployeeTable extends DataTableComponent
                 $zkbioPin = '';
                 if ($row->organization?->zkbio_enabled && $row->zkbio_pin) {
                     $zkbioPin = "<small class='text-muted d-block'>
-        <i class='ti ti-fingerprint me-1 text-warning'></i>
-        Device PIN: <span class='badge bg-warning-subtle text-warning border px-2'>{$row->zkbio_pin}</span>
-    </small>";
+                        <i class='ti ti-fingerprint me-1 text-warning'></i>
+                        Device PIN: <span class='badge bg-warning-subtle text-warning border px-2'>{$row->zkbio_pin}</span>
+                    </small>";
                 } elseif ($row->organization?->zkbio_enabled && !$row->zkbio_pin) {
                     $zkbioPin = "<small class='text-danger d-block'>
-        <i class='ti ti-alert-circle me-1'></i>No device PIN assigned
-    </small>";
+                        <i class='ti ti-alert-circle me-1'></i>No device PIN assigned
+                    </small>";
                 }
 
                 return "
-    <div class='d-flex align-items-start' style='max-width:260px;'>
-        {$icon}
-        <div class='d-flex flex-column' style='min-width:0;width:100%;'>
-            <span class='fw-semibold text-dark text-truncate' title='{$row->name}'>{$row->name}</span>
-            {$title}
-            <small class='text-muted d-block text-truncate' title='{$row->email}'>
-                <i class='ti ti-mail me-1 text-info'></i>{$row->email}
-            </small>
-            {$idNumber}
-            {$adEmployeeId}
-            {$zkbioPin}
-        </div>
-    </div>
-";
+                    <div class='d-flex align-items-start' style='max-width:260px;'>
+                        {$icon}
+                        <div class='d-flex flex-column' style='min-width:0;width:100%;'>
+                            <span class='fw-semibold text-dark text-truncate' title='{$row->name}'>{$row->name}</span>
+                            {$title}
+                            <small class='text-muted d-block text-truncate'>
+                                <i class='ti ti-mail me-1 text-info'></i>{$row->email}
+                            </small>
+                            {$idNumber}
+                            {$adEmployeeId}
+                            {$zkbioPin}
+                        </div>
+                    </div>";
             })
             ->html()
             ->sortable();
 
-
-        // ── Grade / Department column ──
-        $columns[] = Column::make($isStudent ? "Year Group" : "Dept / Division / Section", "id")
+        // Dept / Grade column
+        $columns[] = Column::make(
+            $isStudent ? "Year Group" : "Dept / Division / Section",
+            "id"
+        )
             ->format(function ($value, $row) {
                 if ($row->is_student) {
                     return $row->grade
@@ -177,33 +176,30 @@ class EmployeeTable extends DataTableComponent
                 $lines = [];
 
                 if ($row->division) {
-                    $lines[] = "
-                <small class='d-block'>
-                    <span class='text-muted' style='font-size:0.68rem;text-transform:uppercase;letter-spacing:0.4px;'>
-                        <i class='ti ti-layout-distribute-horizontal me-1'></i>Division
-                    </span><br>
-                    <span class='fw-semibold text-dark' style='font-size:0.82rem;'>{$row->division}</span>
-                </small>";
+                    $lines[] = "<small class='d-block'>
+                        <span class='text-muted' style='font-size:0.68rem;text-transform:uppercase;letter-spacing:0.4px;'>
+                            <i class='ti ti-layout-distribute-horizontal me-1'></i>Division
+                        </span><br>
+                        <span class='fw-semibold text-dark' style='font-size:0.82rem;'>{$row->division}</span>
+                    </small>";
                 }
 
                 if ($row->department) {
-                    $lines[] = "
-                <small class='d-block mt-1'>
-                    <span class='text-muted' style='font-size:0.68rem;text-transform:uppercase;letter-spacing:0.4px;'>
-                        <i class='ti ti-building me-1'></i>Department
-                    </span><br>
-                    <span class='fw-semibold text-dark' style='font-size:0.82rem;'>{$row->department->name}</span>
-                </small>";
+                    $lines[] = "<small class='d-block mt-1'>
+                        <span class='text-muted' style='font-size:0.68rem;text-transform:uppercase;letter-spacing:0.4px;'>
+                            <i class='ti ti-building me-1'></i>Department
+                        </span><br>
+                        <span class='fw-semibold text-dark' style='font-size:0.82rem;'>{$row->department->name}</span>
+                    </small>";
                 }
 
                 if ($row->section) {
-                    $lines[] = "
-                <small class='d-block mt-1'>
-                    <span class='text-muted' style='font-size:0.68rem;text-transform:uppercase;letter-spacing:0.4px;'>
-                        <i class='ti ti-sitemap me-1'></i>Section
-                    </span><br>
-                    <span class='fw-semibold text-dark' style='font-size:0.82rem;'>{$row->section}</span>
-                </small>";
+                    $lines[] = "<small class='d-block mt-1'>
+                        <span class='text-muted' style='font-size:0.68rem;text-transform:uppercase;letter-spacing:0.4px;'>
+                            <i class='ti ti-sitemap me-1'></i>Section
+                        </span><br>
+                        <span class='fw-semibold text-dark' style='font-size:0.82rem;'>{$row->section}</span>
+                    </small>";
                 }
 
                 return $lines
@@ -213,61 +209,76 @@ class EmployeeTable extends DataTableComponent
             ->html()
             ->collapseOnMobile();
 
+        // ── Employee Type badge — non-student orgs only ──────────────────────
+        if (!$isStudentOrg) {
+            $columns[] = Column::make("Type", "employee_type")
+                ->format(function ($value, $row) {
+                    if (empty($value)) {
+                        return "<span class='text-muted'>—</span>";
+                    }
 
-        // ── School Status column (school orgs only, students only) ──
-        // Shows Present / Left School / Not Reported based on LAST attendance
-        // record regardless of date — a pembroke who checked in 2 weeks ago
-        // and never checked out is still considered Present.
+                    [$bg, $color, $icon] = match ($value) {
+                        'COSMOS' => ['#e0f2fe', '#0369a1', 'mdi:office-building'],
+                        'Outsourced' => ['#fde8e3', '#c0341b', 'mdi:account-switch'],
+                        default => ['#f1f5f9', '#475569', 'mdi:account'],
+                    };
+
+                    return "<span style='background:{$bg}; color:{$color}; font-size:0.72rem;
+                                font-weight:700; padding:3px 10px; border-radius:99px;
+                                white-space:nowrap; display:inline-flex; align-items:center; gap:4px;'>
+                                <iconify-icon icon='{$icon}' style='font-size:12px;'></iconify-icon>
+                                {$value}
+                            </span>";
+                })
+                ->html()
+                ->sortable()
+                ->collapseOnMobile();
+        }
+
+        // School attendance status
         if ($isStudentOrg) {
             $columns[] = Column::make("Status")
                 ->label(function ($row) {
-
                     $last = $row->lastAttendance;
 
                     if (!$last) {
-                        // No attendance record at all
-                        return "
-                            <span class='badge' style='background:var(--primary-color) !important; color:white; padding:5px 10px; border-radius:8px; font-size:0.75rem; font-weight:600;'>
-                                <i class='ti ti-circle-x me-1'></i>Not Enrolled
-                            </span>
-                        ";
+                        return "<span class='badge' style='background:var(--primary-color);color:white;
+                                    padding:5px 10px;border-radius:8px;font-size:0.75rem;font-weight:600;'>
+                                    <i class='ti ti-circle-x me-1'></i>Not Enrolled
+                                </span>";
                     }
 
                     if ($last->status === 'clocked_in') {
                         $since = $last->check_in_time
                             ? \Carbon\Carbon::parse($last->check_in_time)->format('d M, g:i A')
                             : \Carbon\Carbon::parse($last->date)->format('d M Y');
-                        return "
-                            <span class='badge' style='background:#dcfce7; color:#16a34a; padding:5px 10px; border-radius:8px; font-size:0.75rem; font-weight:600;'>
-                                <i class='ti ti-check me-1'></i>Present
-                            </span>
-                            <small class='text-muted d-block mt-1' style='font-size:0.7rem;'>Since {$since}</small>
-                        ";
+                        return "<span class='badge' style='background:#dcfce7;color:#16a34a;
+                                    padding:5px 10px;border-radius:8px;font-size:0.75rem;font-weight:600;'>
+                                    <i class='ti ti-check me-1'></i>Present
+                                </span>
+                                <small class='text-muted d-block mt-1' style='font-size:0.7rem;'>Since {$since}</small>";
                     }
 
                     if ($last->status === 'clocked_out') {
                         $when = $last->check_out_time
                             ? \Carbon\Carbon::parse($last->check_out_time)->format('d M, g:i A')
                             : \Carbon\Carbon::parse($last->date)->format('d M Y');
-                        return "
-                            <span class='badge' style='background:#e0f2fe; color:#0284c7; padding:5px 10px; border-radius:8px; font-size:0.75rem; font-weight:600;'>
-                                <i class='ti ti-logout me-1'></i>Left School
-                            </span>
-                            <small class='text-muted d-block mt-1' style='font-size:0.7rem;'>Left {$when}</small>
-                        ";
+                        return "<span class='badge' style='background:#e0f2fe;color:#0284c7;
+                                    padding:5px 10px;border-radius:8px;font-size:0.75rem;font-weight:600;'>
+                                    <i class='ti ti-logout me-1'></i>Left School
+                                </span>
+                                <small class='text-muted d-block mt-1' style='font-size:0.7rem;'>Left {$when}</small>";
                     }
 
-                    // Any other status (absent, on_leave, etc.) — treat as not reported
-                    return "
-                        <span class='badge' style='background:var(--primary-color) !important; color:#white; padding:5px 10px; border-radius:8px; font-size:0.75rem; font-weight:600;'>
-                            <i class='ti ti-circle-x me-1'></i>Not Enrolled
-                        </span>
-                    ";
+                    return "<span class='badge' style='background:var(--primary-color);color:white;
+                                padding:5px 10px;border-radius:8px;font-size:0.75rem;font-weight:600;'>
+                                <i class='ti ti-circle-x me-1'></i>Not Enrolled
+                            </span>";
                 })
                 ->html();
         }
 
-        // ── Work / School Location ──
+        // Work / school location
         $columns[] = Column::make($isStudentOrg ? "School Location" : "Work Location")
             ->label(function ($row) {
                 $locations = $row->assignments
@@ -281,107 +292,21 @@ class EmployeeTable extends DataTableComponent
                 }
 
                 return $locations->map(fn($loc) => "
-            <span style='color:var(--primary-color) !important;' class='badge bg-primary-subtle border px-2 py-1 me-1 mb-1'>
-                <i class='ti ti-map-pin me-1'></i>{$loc}
-            </span>
-        ")->implode('');
+                    <span style='color:var(--primary-color);'
+                          class='badge bg-primary-subtle border px-2 py-1 me-1 mb-1'>
+                        <i class='ti ti-map-pin me-1'></i>{$loc}
+                    </span>"
+                )->implode('');
             })
             ->html()
             ->collapseOnMobile();
 
-        // ── Roles ──
-//        if (!$isStudentOrg) {
-//            $columns[] = Column::make("Roles")
-//                ->label(fn($row) => view('livewire.admin.employees.roles', ['employee' => $row]))
-//                ->collapseOnMobile();
-//        } else {
-//            $columns[] = Column::make("Roles")
-//                ->label(function ($row) {
-//                    if ($row->is_student) {
-//                        return "<span class='text-muted'>—</span>";
-//                    }
-//                    return view('livewire.admin.employees.roles', ['employee' => $row]);
-//                })
-//                ->html()
-//                ->collapseOnMobile();
-//        }
+        $columns[] = BooleanColumn::make('Active')->sortable()->collapseOnMobile();
 
-        // ── Active ──
-        $columns[] = BooleanColumn::make('Active')
-            ->sortable()
-            ->collapseOnMobile();
-
-        // ── Actions ──
         $columns[] = Column::make("Action")
             ->label(fn($row) => view('livewire.admin.employees.actions', ['employee' => $row]));
 
         return $columns;
-    }
-
-    public function filters(): array
-    {
-        $orgId = auth()->user()->employee->organization_id ?? null;
-        $isStudentOrg = auth()->user()->employee?->organization?->is_student_record ?? false;
-
-        $roleOptions = ['' => 'All Roles'] +
-            Role::where('organization_id', $orgId)
-                ->where('name', '!=', 'super-admin')
-                ->pluck('name', 'id')
-                ->toArray();
-
-        $filters = [
-            'active' => SelectFilter::make('Active')
-                ->options([
-                    '' => 'All',
-                    '1' => 'Active',
-                    '0' => 'Inactive',
-                ])
-                ->filter(function ($builder, $value) {
-                    if ($value === '' || $value === null) return;
-                    $builder->where('active', (int)$value);
-                }),
-
-            'role' => SelectFilter::make('Role')
-                ->options($roleOptions)
-                ->filter(function ($builder, $value) {
-                    if ($value === '' || $value === null) return;
-                    $builder->whereHas('user.roles', function ($q) use ($value) {
-                        $q->where('id', $value);
-                    });
-                }),
-        ];
-
-        // For school orgs, add a status filter that uses the last attendance record
-        if ($isStudentOrg) {
-            $filters['attendance_status'] = SelectFilter::make('Attendance Status')
-                ->options([
-                    '' => 'All',
-                    'present' => 'Present (Still In)',
-                    'left' => 'Left School',
-                    'not_reported' => 'Unscanned',
-                ])
-                ->filter(function ($builder, $value) {
-                    if ($value === '' || $value === null) return;
-
-                    if ($value === 'present') {
-                        // Has a last attendance record with clocked_in
-                        $builder->whereHas('lastAttendance', fn($q) => $q->where('status', 'clocked_in')
-                        );
-                    } elseif ($value === 'left') {
-                        $builder->whereHas('lastAttendance', fn($q) => $q->where('status', 'clocked_out')
-                        );
-                    } elseif ($value === 'not_reported') {
-                        // Either no attendance at all, or last record is not clocked_in/out
-                        $builder->where(function ($q) {
-                            $q->doesntHave('lastAttendance')
-                                ->orWhereHas('lastAttendance', fn($q2) => $q2->whereNotIn('status', ['clocked_in', 'clocked_out'])
-                                );
-                        });
-                    }
-                });
-        }
-
-        return $filters;
     }
 
     public function bulkActions(): array
@@ -396,7 +321,10 @@ class EmployeeTable extends DataTableComponent
 
     public function exportExcel()
     {
-        return Excel::download(new EmployeesExcelExport($this->getSelected()), 'employees.xlsx');
+        return Excel::download(
+            new EmployeesExcelExport($this->getSelected()),
+            'employees.xlsx'
+        );
     }
 
     public function exportPdf()
@@ -405,31 +333,19 @@ class EmployeeTable extends DataTableComponent
         return redirect()->to($url);
     }
 
-    public function bulkDelete()
-    {
-        Employee::whereIn('id', $this->getSelected())->delete();
-        $this->clearSelected();
-
-        LivewireAlert::title('Awesome!')
-            ->text('Employees deleted successfully.')
-            ->success()->toast()->position('top-end')->show();
-    }
-
-    public function activate()
+    public function activate(): void
     {
         Employee::whereIn('id', $this->getSelected())->update(['active' => true]);
         $this->clearSelected();
-
         LivewireAlert::title('Awesome!')
             ->text('Employees activated successfully.')
             ->success()->toast()->position('top-end')->show();
     }
 
-    public function deactivate()
+    public function deactivate(): void
     {
         Employee::whereIn('id', $this->getSelected())->update(['active' => false]);
         $this->clearSelected();
-
         LivewireAlert::title('Awesome!')
             ->text('Employees deactivated successfully.')
             ->success()->toast()->position('top-end')->show();
