@@ -18,9 +18,11 @@ class EmployeeExportController extends Controller
 
     public function exportEmployeePdf(Request $request)
     {
-        $ids   = $request->input('ids', []);
-        $orgId = auth()->user()->employee->organization_id ?? null;
-        $org   = auth()->user()->employee->organization;
+        $ids           = $request->input('ids', []);
+        $empTypeFilter = $request->input('emp_type', '');
+        $activeFilter  = $request->input('active', '');
+        $orgId         = auth()->user()->employee->organization_id ?? null;
+        $org           = auth()->user()->employee->organization;
 
         $query = Employee::query()
             ->with(['organization', 'shift', 'user', 'department'])
@@ -28,6 +30,14 @@ class EmployeeExportController extends Controller
 
         if (!empty($ids)) {
             $query->whereIn('id', $ids);
+        }
+
+        if ($empTypeFilter !== '') {
+            $query->where('employee_type', $empTypeFilter);
+        }
+
+        if ($activeFilter !== '') {
+            $query->where('active', (int) $activeFilter);
         }
 
         $employees = $query->get();
@@ -45,7 +55,7 @@ class EmployeeExportController extends Controller
                 'total'         => $employees->count(),
                 'totalActive'   => $employees->where('active', 1)->count(),
                 'totalInactive' => $employees->where('active', 0)->count(),
-                'isExcel'       => false,  // ← confirm this is present
+                'isExcel'       => false,
             ],
             'employees-report'
         );
