@@ -158,7 +158,7 @@ class MasterSheet implements FromArray, WithTitle, WithStyles, WithColumnWidths
             $shift = $emp?->shift;
             $out[] = [
                 $this->fmtDate($r->date),
-                $emp?->employee_number ?? $emp?->id ?? '',
+                $emp?->ad_employee_id ?? $emp?->id ?? '',
                 $emp?->name ?? '',
                 $emp?->department?->name ?? '',
                 $emp?->section ?? '',   // map to your employee.section field name
