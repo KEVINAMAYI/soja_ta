@@ -32,7 +32,7 @@ class ShiftSeeder extends Seeder
 {
 
 
-    private int $orgId = 2;  // ← change this
+    private int $orgId = 3;  // ← change this
 
     /**
      * !! SET THIS to your organization's ID before running !!
