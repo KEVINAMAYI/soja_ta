@@ -10,429 +10,311 @@ class Shift extends Model
 {
     use HasFactory;
 
-    // ... [Keep all existing properties and methods from the original model]
-
     protected $table = 'shifts';
 
     protected $fillable = [
-        'organization_id',
-        'name',
-        'start_time',
-        'end_time',
-        'duration_hours',
-        'break_minutes', // DEPRECATED - keeping for backward compatibility
-        'overtime_rate',
-        'overtime_enabled',
-        'max_overtime_hours',
-        'auto_clock_out',
-        'warning_time_minutes',
-        'pattern_type',
-        'pattern_days',
-        'notify_managers_overtime',
-        'employee_mobile_notifications',
-        'email_summaries',
-        'status',
-        'notes',
-        'grace_period_enabled',
-        'grace_period_minutes',
-        'track_late_checkin',
-        'notify_on_late_checkin',
-        'track_early_checkout',
+        // existing
+        'organization_id', 'name', 'start_time', 'end_time', 'duration_hours',
+        'break_minutes', 'overtime_rate', 'overtime_enabled', 'max_overtime_hours',
+        'auto_clock_out', 'warning_time_minutes', 'pattern_type', 'pattern_days',
+        'notify_managers_overtime', 'employee_mobile_notifications', 'email_summaries',
+        'status', 'notes', 'grace_period_enabled', 'grace_period_minutes',
+        'track_late_checkin', 'notify_on_late_checkin', 'track_early_checkout',
         'early_checkout_threshold_minutes',
+        // NEW
+        'department_type', 'shift_type', 'friday_end_time',
+        'is_overnight', 'overtime_saturday', 'overtime_sunday',
     ];
 
     protected $casts = [
-        'start_time' => 'datetime:H:i',
-        'end_time' => 'datetime:H:i',
-        'duration_hours' => 'decimal:2',
-        'max_overtime_hours' => 'decimal:2',
-        'warning_time_minutes' => 'integer',
-        'overtime_enabled' => 'boolean',
-        'auto_clock_out' => 'boolean',
-        'notify_managers_overtime' => 'boolean',
-        'employee_mobile_notifications' => 'boolean',
-        'email_summaries' => 'boolean',
-        'pattern_days' => 'array',
-        'grace_period_enabled' => 'boolean',
-        'track_late_checkin' => 'boolean',
-        'notify_on_late_checkin' => 'boolean',
-        'track_early_checkout' => 'boolean',
-        'grace_period_minutes' => 'integer',
+        // existing
+        'start_time' => 'datetime:H:i', 'end_time' => 'datetime:H:i',
+        'duration_hours' => 'decimal:2', 'max_overtime_hours' => 'decimal:2',
+        'warning_time_minutes' => 'integer', 'overtime_enabled' => 'boolean',
+        'auto_clock_out' => 'boolean', 'notify_managers_overtime' => 'boolean',
+        'employee_mobile_notifications' => 'boolean', 'email_summaries' => 'boolean',
+        'pattern_days' => 'array', 'grace_period_enabled' => 'boolean',
+        'track_late_checkin' => 'boolean', 'notify_on_late_checkin' => 'boolean',
+        'track_early_checkout' => 'boolean', 'grace_period_minutes' => 'integer',
         'early_checkout_threshold_minutes' => 'integer',
+        // NEW
+        'is_overnight' => 'boolean',
     ];
 
     protected $attributes = [
-        'duration_hours' => 8.00,
-        'overtime_enabled' => true,
-        'max_overtime_hours' => 2.00,
-        'auto_clock_out' => false,
-        'warning_time_minutes' => 30,
-        'pattern_type' => 'weekdays',
-        'notify_managers_overtime' => false,
-        'employee_mobile_notifications' => true,
-        'email_summaries' => false,
-        'grace_period_enabled' => true,
-        'grace_period_minutes' => 15,
-        'track_late_checkin' => true,
-        'notify_on_late_checkin' => false,
-        'track_early_checkout' => true,
+        // existing
+        'duration_hours' => 8.00, 'overtime_enabled' => true,
+        'max_overtime_hours' => 2.00, 'auto_clock_out' => false,
+        'warning_time_minutes' => 30, 'pattern_type' => 'weekdays',
+        'notify_managers_overtime' => false, 'employee_mobile_notifications' => true,
+        'email_summaries' => false, 'grace_period_enabled' => true,
+        'grace_period_minutes' => 15, 'track_late_checkin' => true,
+        'notify_on_late_checkin' => false, 'track_early_checkout' => true,
         'early_checkout_threshold_minutes' => 15,
+        // NEW
+        'is_overnight' => false, 'overtime_saturday' => 'ot1', 'overtime_sunday' => 'ot2',
     ];
 
-    /**
-     * ========================================
-     * NEW RELATIONSHIPS FOR BREAKS
-     * ========================================
-     */
+    // =========================================================================
+    // EXISTING relationships & methods — ALL KEPT EXACTLY AS-IS
+    // =========================================================================
 
-    public function breaks()
-    {
-        return $this->hasMany(ShiftBreak::class)->ordered();
-    }
+    public function breaks() { return $this->hasMany(ShiftBreak::class)->ordered(); }
+    public function activeBreaks() { return $this->hasMany(ShiftBreak::class)->active()->ordered(); }
+    public function mandatoryBreaks() { return $this->hasMany(ShiftBreak::class)->active()->mandatory()->ordered(); }
+    public function organization() { return $this->belongsTo(Organization::class); }
+    public function employees() { return $this->hasMany(Employee::class)->withTrashed(); }
 
-    public function activeBreaks()
-    {
-        return $this->hasMany(ShiftBreak::class)->active()->ordered();
-    }
-
-    public function mandatoryBreaks()
-    {
-        return $this->hasMany(ShiftBreak::class)->active()->mandatory()->ordered();
-    }
-
-    // ... [Keep all existing relationships]
-
-    public function organization()
-    {
-        return $this->belongsTo(Organization::class);
-    }
-
-    public function employees()
-    {
-        return $this->hasMany(Employee::class)->withTrashed();
-    }
-
-    /**
-     * ========================================
-     * NEW BREAK-RELATED METHODS
-     * ========================================
-     */
-
-    /**
-     * Get total break minutes (sum of all active breaks)
-     */
     public function getTotalBreakMinutes(): int
     {
-        return $this->activeBreaks()
-            ->where('type', '!=', 'paid') // Only unpaid breaks reduce working time
-            ->sum('duration_minutes');
+        return $this->activeBreaks()->where('type', '!=', 'paid')->sum('duration_minutes');
     }
 
-    /**
-     * Get total paid break minutes
-     */
     public function getTotalPaidBreakMinutes(): int
     {
-        return $this->activeBreaks()
-            ->where('type', 'paid')
-            ->sum('duration_minutes');
+        return $this->activeBreaks()->where('type', 'paid')->sum('duration_minutes');
     }
 
-    /**
-     * Calculate effective working hours (excluding unpaid breaks)
-     */
     public function getEffectiveWorkingHours(): float
     {
         if ($this->start_time && $this->end_time) {
             try {
                 $baseDate = now()->startOfDay();
-
-                $start = $baseDate->copy()->setTime(
-                    $this->start_time->hour,
-                    $this->start_time->minute,
-                    $this->start_time->second
-                );
-
-                $end = $baseDate->copy()->setTime(
-                    $this->end_time->hour,
-                    $this->end_time->minute,
-                    $this->end_time->second
-                );
-
-                // Handle overnight shifts
-                if ($end->lt($start)) {
-                    $end->addDay();
-                }
-
-                // Get total unpaid break minutes from breaks table
-                $unpaidBreakMinutes = $this->getTotalBreakMinutes();
-
-                $rawMinutes = $start->diffInMinutes($end);
-                $workingMinutes = max(0, $rawMinutes - $unpaidBreakMinutes);
-
+                $start = $baseDate->copy()->setTime($this->start_time->hour, $this->start_time->minute, $this->start_time->second);
+                $end   = $baseDate->copy()->setTime($this->end_time->hour, $this->end_time->minute, $this->end_time->second);
+                if ($end->lt($start)) $end->addDay();
+                $workingMinutes = max(0, $start->diffInMinutes($end) - $this->getTotalBreakMinutes());
                 return round($workingMinutes / 60, 2);
-
-            } catch (\Exception $e) {
-                return 0;
-            }
+            } catch (\Exception $e) { return 0; }
         }
-
         return 0;
     }
 
-    /**
-     * Initialize break logs for an attendance record
-     */
     public function initializeBreakLogs(Attendance $attendance): void
     {
-        $activeBreaks = $this->activeBreaks;
-
-        foreach ($activeBreaks as $break) {
-            AttendanceBreakLog::create([
-                'attendance_id' => $attendance->id,
-                'shift_break_id' => $break->id,
-                'status' => 'pending',
-                'is_taken' => false,
-                'is_compliant' => true,
-            ]);
+        foreach ($this->activeBreaks as $break) {
+            AttendanceBreakLog::create(['attendance_id' => $attendance->id, 'shift_break_id' => $break->id, 'status' => 'pending', 'is_taken' => false, 'is_compliant' => true]);
         }
     }
 
-    /**
-     * Check if all mandatory breaks are completed
-     */
     public function areAllMandatoryBreaksCompleted(Attendance $attendance): bool
     {
-        $mandatoryBreakIds = $this->mandatoryBreaks()->pluck('id');
-
-        $completedCount = AttendanceBreakLog::where('attendance_id', $attendance->id)
-            ->whereIn('shift_break_id', $mandatoryBreakIds)
-            ->whereIn('status', ['completed', 'exceeded'])
-            ->count();
-
-        return $completedCount === $mandatoryBreakIds->count();
+        $ids = $this->mandatoryBreaks()->pluck('id');
+        return AttendanceBreakLog::where('attendance_id', $attendance->id)->whereIn('shift_break_id', $ids)->whereIn('status', ['completed', 'exceeded'])->count() === $ids->count();
     }
 
-    /**
-     * Get next scheduled break for current time
-     */
     public function getNextScheduledBreak(?Carbon $currentTime = null): ?ShiftBreak
     {
         $currentTime = $currentTime ?? now();
-
-        return $this->activeBreaks()
-            ->where('window_start_time', '>', $currentTime->format('H:i:s'))
-            ->first();
+        return $this->activeBreaks()->where('window_start_time', '>', $currentTime->format('H:i:s'))->first();
     }
 
-    /**
-     * Get current available break (within window)
-     */
     public function getCurrentAvailableBreak(?Carbon $currentTime = null): ?ShiftBreak
     {
         $currentTime = $currentTime ?? now();
-
-        foreach ($this->activeBreaks as $break) {
-            if ($break->isWithinWindow($currentTime)) {
-                return $break;
-            }
-        }
-
+        foreach ($this->activeBreaks as $break) { if ($break->isWithinWindow($currentTime)) return $break; }
         return null;
     }
 
-    /**
-     * ========================================
-     * UPDATED DURATION CALCULATION
-     * ========================================
-     */
+    public function getDurationAttribute(): ?float { return $this->getEffectiveWorkingHours(); }
 
-    /**
-     * Get shift duration (excluding unpaid breaks)
-     * This overrides/updates the existing getDurationAttribute
-     */
-    public function getDurationAttribute(): ?float
-    {
-        // Use the new method that accounts for breaks
-        return $this->getEffectiveWorkingHours();
-    }
-
-    /**
-     * Get pattern display
-     */
     public function getPatternDisplayAttribute(): string
     {
-        $patterns = [
-            'weekdays' => 'Weekdays Only',
-            'weekends' => 'Weekends Only',
-            'daily' => 'Daily',
-            'rotating' => 'Rotating Schedule',
-            'custom' => 'Custom Days',
-        ];
-
-        $patternName = $patterns[$this->pattern_type] ?? 'Custom';
-
-        if (in_array($this->pattern_type, ['custom', 'rotating']) && $this->pattern_days) {
-            return $patternName . ' (' . implode(', ', $this->pattern_days) . ')';
-        }
-
-        return $patternName;
+        $patterns = ['weekdays' => 'Weekdays Only', 'weekends' => 'Weekends Only', 'daily' => 'Daily', 'rotating' => 'Rotating Schedule', 'custom' => 'Custom Days'];
+        $name = $patterns[$this->pattern_type] ?? 'Custom';
+        if (in_array($this->pattern_type, ['custom', 'rotating']) && $this->pattern_days) return $name . ' (' . implode(', ', $this->pattern_days) . ')';
+        return $name;
     }
 
-    /**
-     * Get employee count
-     */
-    public function getEmployeeCountAttribute(): int
-    {
-        return $this->employees()->where('active', true)->count();
-    }
+    public function getEmployeeCountAttribute(): int { return $this->employees()->where('active', true)->count(); }
 
-    /**
-     * Calculate auto clock-out time
-     */
     public function getAutoClockOutTimeAttribute(): ?Carbon
     {
-        if (!$this->auto_clock_out) {
-            return null;
-        }
-
-        $endTime = Carbon::parse($this->end_time);
-
-        if ($this->overtime_enabled) {
-            return $endTime->addHours($this->max_overtime_hours);
-        }
-
-        return $endTime;
+        if (!$this->auto_clock_out) return null;
+        $end = Carbon::parse($this->end_time);
+        return $this->overtime_enabled ? $end->addHours($this->max_overtime_hours) : $end;
     }
 
-    /**
-     * Calculate warning time
-     */
     public function getWarningTimeAttribute(): ?Carbon
     {
-        if (!$this->auto_clock_out) {
-            return null;
-        }
-
-        $autoClockOutTime = $this->getAutoClockOutTimeAttribute();
-
-        if ($autoClockOutTime) {
-            return $autoClockOutTime->copy()->subMinutes($this->warning_time_minutes);
-        }
-
-        return null;
+        if (!$this->auto_clock_out) return null;
+        return $this->getAutoClockOutTimeAttribute()?->copy()->subMinutes($this->warning_time_minutes);
     }
 
-    /**
-     * Check if shift is active on a specific day
-     */
-    public function isActiveOnDay(string $dayAbbreviation): bool
-    {
-        return in_array($dayAbbreviation, $this->pattern_days ?? []);
-    }
+    public function isActiveOnDay(string $dayAbbreviation): bool { return in_array($dayAbbreviation, $this->pattern_days ?? []); }
+    public function scopeActive($query) { return $query->where('status', 'active'); }
+    public function scopeByPattern($query, string $pattern) { return $query->where('pattern_type', $pattern); }
 
-    /**
-     * Scope for active shifts
-     */
-    public function scopeActive($query)
-    {
-        return $query->where('status', 'active');
-    }
-
-    /**
-     * Scope for shifts by pattern
-     */
-    public function scopeByPattern($query, string $pattern)
-    {
-        return $query->where('pattern_type', $pattern);
-    }
-
-    /**
-     * Get grace period end time for late check-ins
-     */
     public function getGracePeriodEndTime(): Carbon
     {
-        $shiftStart = Carbon::parse($this->start_time);
-        $graceMinutes = $this->grace_period_enabled ? $this->grace_period_minutes : 0;
-        return $shiftStart->copy()->addMinutes($graceMinutes);
+        return Carbon::parse($this->start_time)->copy()->addMinutes($this->grace_period_enabled ? $this->grace_period_minutes : 0);
     }
 
-    /**
-     * Get early checkout threshold time
-     */
     public function getEarlyCheckoutThreshold(): Carbon
     {
-        $shiftEnd = Carbon::parse($this->end_time);
-        $thresholdMinutes = $this->track_early_checkout ? $this->early_checkout_threshold_minutes : 0;
-        return $shiftEnd->copy()->subMinutes($thresholdMinutes);
+        return Carbon::parse($this->end_time)->copy()->subMinutes($this->track_early_checkout ? $this->early_checkout_threshold_minutes : 0);
     }
 
-    /**
-     * Check if check-in time is within grace period
-     */
     public function isWithinGracePeriod(Carbon $checkInTime): bool
     {
-        if (!$this->grace_period_enabled) {
-            return false;
-        }
-
-        $shiftStart = Carbon::parse($this->start_time);
-        $gracePeriodEnd = $this->getGracePeriodEndTime();
-
-        return $checkInTime->greaterThan($shiftStart) && $checkInTime->lessThanOrEqualTo($gracePeriodEnd);
+        if (!$this->grace_period_enabled) return false;
+        return $checkInTime->greaterThan(Carbon::parse($this->start_time)) && $checkInTime->lessThanOrEqualTo($this->getGracePeriodEndTime());
     }
 
-    /**
-     * Calculate if a check-in time is late
-     */
     public function isLateCheckIn(Carbon $checkInTime): bool
     {
-        if (!$this->track_late_checkin) {
-            return false;
-        }
-
-        $gracePeriodEnd = $this->getGracePeriodEndTime();
-        return $checkInTime->greaterThan($gracePeriodEnd);
+        if (!$this->track_late_checkin) return false;
+        return $checkInTime->greaterThan($this->getGracePeriodEndTime());
     }
 
-    /**
-     * Calculate minutes late
-     */
     public function getMinutesLate(Carbon $checkInTime): int
     {
         $shiftStart = Carbon::parse($this->start_time);
-
-        if ($checkInTime->lessThanOrEqualTo($shiftStart)) {
-            return 0;
-        }
-
-        return $shiftStart->diffInMinutes($checkInTime);
+        return $checkInTime->lessThanOrEqualTo($shiftStart) ? 0 : $shiftStart->diffInMinutes($checkInTime);
     }
 
-    /**
-     * Check if checkout is early
-     */
     public function isEarlyCheckOut(Carbon $checkOutTime): bool
     {
-        if (!$this->track_early_checkout) {
-            return false;
-        }
-
-        $earlyThreshold = $this->getEarlyCheckoutThreshold();
-        return $checkOutTime->lessThan($earlyThreshold);
+        if (!$this->track_early_checkout) return false;
+        return $checkOutTime->lessThan($this->getEarlyCheckoutThreshold());
     }
 
-    /**
-     * Calculate minutes early
-     */
     public function getMinutesEarly(Carbon $checkOutTime): int
     {
         $shiftEnd = $checkOutTime->copy()->setTimeFromTimeString($this->end_time);
-
-        if ($checkOutTime->greaterThanOrEqualTo($shiftEnd)) {
-            return 0;
-        }
-
-        return $checkOutTime->diffInMinutes($shiftEnd);
+        return $checkOutTime->greaterThanOrEqualTo($shiftEnd) ? 0 : $checkOutTime->diffInMinutes($shiftEnd);
     }
+
+    // =========================================================================
+    // NEW METHODS — client shift requirements
+    // =========================================================================
+
+    /**
+     * Start time anchored to a real date string.
+     * Fixes overnight comparisons when date is not today.
+     */
+    public function getEffectiveStartTime(string $date): Carbon
+    {
+        return Carbon::parse($date . ' ' . Carbon::parse($this->start_time)->format('H:i:s'));
+    }
+
+    /**
+     * End time anchored to a real date.
+     * Handles:
+     *   - Friday variant  (General Day ends 16:30, not 17:30)
+     *   - Overnight shift (Night Shift 17:30 → 05:00 adds one day)
+     */
+    public function getEffectiveEndTime(string $date): Carbon
+    {
+        $dow = Carbon::parse($date)->format('D');
+
+        $endStr = ($dow === 'Fri' && $this->friday_end_time)
+            ? $this->friday_end_time
+            : $this->end_time;
+
+        $start = Carbon::parse($date . ' ' . Carbon::parse($this->start_time)->format('H:i:s'));
+        $end   = Carbon::parse($date . ' ' . Carbon::parse($endStr)->format('H:i:s'));
+
+        if ($end->lte($start)) $end->addDay();
+
+        return $end;
+    }
+
+    /**
+     * Grace deadline anchored to a real date.
+     */
+    public function getGraceDeadline(string $date): Carbon
+    {
+        $grace = $this->grace_period_enabled ? ($this->grace_period_minutes ?? 0) : 0;
+        return $this->getEffectiveStartTime($date)->addMinutes($grace);
+    }
+
+    /**
+     * True when shift crosses midnight.
+     * Checks flag first, then compares times as fallback.
+     */
+    public function isOvernightShift(): bool
+    {
+        if ($this->is_overnight) return true;
+        return Carbon::parse($this->end_time)->lte(Carbon::parse($this->start_time));
+    }
+
+    /**
+     * Is this shift scheduled on a given calendar date?
+     */
+    public function isScheduledOn(string $date): bool
+    {
+        $day     = Carbon::parse($date)->format('D');
+        $pattern = $this->pattern_type ?? 'weekdays';
+        $days    = $this->pattern_days  ?? ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
+
+        return match ($pattern) {
+            'weekdays' => in_array($day, ['Mon', 'Tue', 'Wed', 'Thu', 'Fri']),
+            'weekends' => in_array($day, ['Sat', 'Sun']),
+            'daily'    => true,
+            default    => in_array($day, $days),
+        };
+    }
+
+    /**
+     * OT tier for a given date.
+     * Saturday → OT1 | Sunday → OT2 | Weekday → Weekday OT | null = OT disabled
+     */
+    public function getOvertimeTier(string $date): ?string
+    {
+        if (!$this->overtime_enabled) return null;
+        return match (Carbon::parse($date)->dayOfWeek) {
+            Carbon::SATURDAY => 'OT1',
+            Carbon::SUNDAY   => 'OT2',
+            default          => 'Weekday OT',
+        };
+    }
+
+    /** T&A report: Staff Category column */
+    public function getDepartmentLabel(): string
+    {
+        return match ($this->department_type) {
+            'admin'       => 'Admin',
+            'general'     => 'General',
+            'engineering' => 'Engineering',
+            default       => ucfirst($this->department_type ?? 'Unknown'),
+        };
+    }
+
+    /** T&A report: Shift (Day/Night) column */
+    public function getShiftTypeLabel(): string
+    {
+        return match ($this->shift_type) {
+            'day'      => 'Day',
+            'night'    => 'Night',
+            'extended' => 'Extended',
+            'admin'    => 'Admin',
+            default    => ucfirst($this->shift_type ?? 'Unknown'),
+        };
+    }
+
+    /** Full label for UI dropdowns and shift cards */
+    public function getFullLabel(): string
+    {
+        $label = $this->getDepartmentLabel() . ' — ' . $this->getShiftTypeLabel() . ' Shift';
+        if ($this->friday_end_time && $this->friday_end_time !== $this->end_time && !$this->isOvernightShift()) {
+            $label .= ' (Fri ends ' . Carbon::parse($this->friday_end_time)->format('H:i') . ')';
+        }
+        if ($this->isOvernightShift()) $label .= ' 🌙';
+        return $label;
+    }
+
+    /** Hex colour for sidebar badge */
+    public function getDepartmentColour(): string
+    {
+        return match ($this->department_type) {
+            'admin'       => '1565C0',
+            'general'     => '2E7D32',
+            'engineering' => '6A1B9A',
+            default       => '546E7A',
+        };
+    }
+
+    public function scopeForDepartment($query, string $dept) { return $query->where('department_type', $dept); }
+    public function scopeForOrganization($query, int $orgId) { return $query->where('organization_id', $orgId); }
 }
