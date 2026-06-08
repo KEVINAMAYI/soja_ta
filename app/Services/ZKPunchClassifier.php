@@ -55,23 +55,6 @@ class ZKPunchClassifier
         }
 
         if (!$shift->isScheduledOn($today)) {
-            // Night shift punch on an "unscheduled" day (e.g. General Night Shift
-            // Mon-Thu employee punching in at 18:xx on Friday) — employee is doing
-            // overtime or an extra shift. Still record the clock-in so that when
-            // the 05:xx clock-out arrives the next morning, the overnight redirect
-            // can find this open record and close it correctly.
-            $punchHour    = (int) $filtered[0]->format('H');
-            $isNightPunch = $punchHour >= self::NIGHT_SHIFT_START_HOUR;
-
-            if ($isNightPunch && $shift->shift_type === 'night') {
-                $result['check_in']            = $filtered[0];
-                $result['within_grace_period'] = true;
-                $result['incomplete']          = true;
-                $result['scenario']            = 'checkin_only';
-                $result['notes'][]             = "Night shift clock-in on unscheduled day — recording for overnight tracking.";
-                return $result;
-            }
-
             $result['scenario'] = 'not_scheduled';
             $result['notes'][]  = 'Not scheduled today.';
             return $result;
