@@ -228,18 +228,12 @@ class SyncZKBioAttendance extends Command
         }
 
         // ── MISSED CLOCK-IN CASE ─────────────────────────────────────────────
-        // Employee forgot to punch in at shift start on yesterday.
-        // We only have their clock-out (05:xx today).
-        // Check if the night shift was scheduled yesterday.
-        if ($nightShift->isScheduledOn($yesterday)) {
-            // Inject synthetic clock-in at shift start on yesterday
-            $shiftStart     = $nightShift->getEffectiveStartTime($yesterday);
-            $syntheticCheckin = $shiftStart->toDateTimeString();
-
-            return [$yesterday, true, $syntheticCheckin];
-        }
-
-        return [$date, false, null];
+        // No open record from yesterday means they forgot to punch in.
+        // BUT they clearly worked the night (punching out at 05:xx proves it).
+        // Redirect to yesterday regardless of whether the shift was "scheduled" —
+        // they may have worked overtime or a schedule exception.
+        // The 05:xx punch will be classified as clock-OUT with missing clock-IN.
+        return [$yesterday, true, null];
     }
 
     // =========================================================================
