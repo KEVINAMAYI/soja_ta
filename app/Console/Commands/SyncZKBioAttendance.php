@@ -118,32 +118,47 @@ class SyncZKBioAttendance extends Command
                 return (int) Carbon::parse($p)->format('H') >= self::OVERNIGHT_BOUNDARY_HOUR;
             }));
 
-            // ── OVERNIGHT CLOCK-OUT → save against YESTERDAY ─────────
+            // ── OVERNIGHT CLOCK-OUT → save against LAST SCHEDULED DAY ──
             if (!empty($overnightPunches)) {
-                $yesterday        = Carbon::parse($date)->subDay()->toDateString();
-                $yesterdayPunches = $this->zkbio->getAllPunchesForEmployee($pin, $yesterday);
+                // Night shifts span two calendar days (e.g. Thu 17:30 → Fri 05:00).
+                // "Yesterday" may not be scheduled (e.g. syncing Sat Jun 6, yesterday
+                // is Fri Jun 5 but the night shift pattern is Mon–Thu).
+                // Walk back up to 3 days to find the last day the night shift was scheduled.
+                $nightShift     = $employee->shifts->firstWhere('shift_type', 'night');
+                $shiftStartDate = Carbon::parse($date)->subDay()->toDateString(); // default: yesterday
 
-                // Only keep yesterday's evening punches (>= 06:00) so we
-                // don't double-count any early-morning punches from yesterday
-                $yesterdayEveningPunches = array_values(array_filter($yesterdayPunches, function ($p) {
+                if ($nightShift) {
+                    for ($i = 1; $i <= 3; $i++) {
+                        $candidate = Carbon::parse($date)->subDays($i)->toDateString();
+                        if ($nightShift->isScheduledOn($candidate)) {
+                            $shiftStartDate = $candidate;
+                            break;
+                        }
+                    }
+                }
+
+                $shiftStartPunches = $this->zkbio->getAllPunchesForEmployee($pin, $shiftStartDate);
+
+                // Only keep that day's evening punches (>= 06:00) — the clock-IN punches
+                $shiftStartEveningPunches = array_values(array_filter($shiftStartPunches, function ($p) {
                     return (int) Carbon::parse($p)->format('H') >= self::OVERNIGHT_BOUNDARY_HOUR;
                 }));
 
-                // Merge: yesterday's clock-in punches + today's early-morning clock-out
+                // Merge: shift-start-day clock-in punches + today's early-morning clock-out
                 $mergedPunches = array_values(array_unique(
-                    array_merge($yesterdayEveningPunches, $overnightPunches)
+                    array_merge($shiftStartEveningPunches, $overnightPunches)
                 ));
                 sort($mergedPunches);
 
-                $this->line("  [{$pin}] {$employee->name} — overnight punch(es) redirected to {$yesterday}");
+                $this->line("  [{$pin}] {$employee->name} — overnight punch(es) redirected to {$shiftStartDate}");
 
-                $classified = $this->classifier->classify($mergedPunches, $employee, $yesterday);
+                $classified = $this->classifier->classify($mergedPunches, $employee, $shiftStartDate);
 
                 $this->printClassifiedLine($pin, $employee->name, $classified);
 
                 DB::beginTransaction();
                 try {
-                    $this->saveAttendance($employee, $yesterday, $classified);
+                    $this->saveAttendance($employee, $shiftStartDate, $classified);
                     DB::commit();
                     $processed++;
                 } catch (\Exception $e) {
