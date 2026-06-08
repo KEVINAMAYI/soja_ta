@@ -2,9 +2,21 @@
 
 namespace App\Services;
 
-use App\Models\Attendance;
 use Carbon\Carbon;
 
+/**
+ * InterpretationService
+ *
+ * Priority order:
+ *  1. Approved Leave / Gate Pass
+ *  2. Missed Clock-In (Day/Night)   ← reads scenario + punch time
+ *  3. Missed Clock-Out (Day/Night)  ← reads scenario + punch time
+ *  4. Weekend OT1 / OT2             ← checked BEFORE absent/late
+ *  5. Weekend — No OT
+ *  6. Absent (weekday)
+ *  7. Late In & Late Out / Late In / Early Out / Extended Lunch
+ *  8. Attendance OK
+ */
 class InterpretationService
 {
     private int $extendedLunchThreshold;
@@ -16,24 +28,25 @@ class InterpretationService
 
     public function interpret($attendance): string
     {
-        $status = $this->get($attendance, 'status');
-        $checkIn = $this->get($attendance, 'check_in_time');
-        $isLateIn = (bool)$this->get($attendance, 'is_late_checkin');
-        $withinGrace = (bool)$this->get($attendance, 'within_grace_period');
-        $isEarlyOut = (bool)$this->get($attendance, 'is_early_checkout');
-        $excessBreak = (int)$this->get($attendance, 'excess_break_minutes', 0);
+        $status      = $this->get($attendance, 'status');
+        $checkIn     = $this->get($attendance, 'check_in_time');
+        $checkOut    = $this->get($attendance, 'check_out_time');
+        $scenario    = $this->get($attendance, 'scenario', '');
+        $isLateIn    = (bool) $this->get($attendance, 'is_late_checkin');
+        $withinGrace = (bool) $this->get($attendance, 'within_grace_period');
+        $isEarlyOut  = (bool) $this->get($attendance, 'is_early_checkout');
+        $excessBreak = (int)  $this->get($attendance, 'excess_break_minutes', 0);
 
-        // Day of week from attendance date
-        $date = $this->get($attendance, 'date');
+        $date       = $this->get($attendance, 'date');
         $isSaturday = false;
-        $isSunday = false;
+        $isSunday   = false;
         if ($date) {
-            $dow = Carbon::parse($date)->dayOfWeek;
+            $dow        = Carbon::parse($date)->dayOfWeek;
             $isSaturday = $dow === Carbon::SATURDAY;
-            $isSunday = $dow === Carbon::SUNDAY;
+            $isSunday   = $dow === Carbon::SUNDAY;
         }
 
-        // Leave / gate-pass
+        // ── 1. Leave / gate-pass ─────────────────────────────────────────
         if (in_array($status, ['on_leave', 'sick_leave', 'sick_off'])) {
             return 'Absent with Approved Leave';
         }
@@ -41,32 +54,38 @@ class InterpretationService
             return 'Absent with Approved Gate Pass';
         }
 
-        // Weekend OT — checked BEFORE any absent/late logic
-        // Weekend OT — checked BEFORE any absent/late logic
-        if ($isSaturday) {
-            if (!$checkIn) return 'Weekend — No OT';
-            // Could be clocked_in (not yet clocked out) or clocked_out
-            $ot1 = $this->get($attendance, 'ot1_hours', 0);
-            return $ot1 > 0 ? "Overtime 1 ({$ot1}h)" : 'Overtime 1 (In Progress)';
-        }
-        if ($isSunday) {
-            if (!$checkIn) return 'Weekend — No OT';
-            $ot2 = $this->get($attendance, 'ot2_hours', 0);
-            return $ot2 > 0 ? "Overtime 2 ({$ot2}h)" : 'Overtime 2 (In Progress)';
+        // ── 2. Missed clock-in — only clock-OUT is recorded ─────────────
+        if (str_starts_with($scenario, 'missed_clockin')) {
+            $shiftLabel = $this->shiftLabel($checkOut);
+            return "Missed Clock-In ({$shiftLabel})";
         }
 
-        // Absent (weekday)
+        // ── 3. Missed clock-out — only clock-IN is recorded ─────────────
+        if (str_starts_with($scenario, 'missed_clockout')) {
+            $shiftLabel = $this->shiftLabel($checkIn);
+            return "Missed Clock-Out ({$shiftLabel})";
+        }
+
+        // ── 4. Weekend OT — checked BEFORE absent/late ───────────────────
+        if ($isSaturday) {
+            return $checkIn ? 'Overtime 1' : 'Weekend — No OT';
+        }
+        if ($isSunday) {
+            return $checkIn ? 'Overtime 2' : 'Weekend — No OT';
+        }
+
+        // ── 5. Absent (weekday) ──────────────────────────────────────────
         if (in_array($status, ['absent', 'unchecked_in', 'off_shift']) || !$checkIn) {
             return 'Absent';
         }
 
-        // Late / Early (weekday only)
+        // ── 6. Late / Early (weekday only) ───────────────────────────────
         $actuallyLate = $isLateIn && !$withinGrace;
         if ($actuallyLate && $isEarlyOut) return 'Late In & Late Out';
-        if ($actuallyLate) return 'Late In';
-        if ($isEarlyOut) return 'Early Out';
+        if ($actuallyLate)               return 'Late In';
+        if ($isEarlyOut)                 return 'Early Out';
 
-        // Break overrun
+        // ── 7. Break overrun ─────────────────────────────────────────────
         if ($excessBreak >= $this->extendedLunchThreshold) return 'Extended Lunch';
 
         return 'Attendance OK';
@@ -76,11 +95,26 @@ class InterpretationService
     {
         $out = [];
         foreach ($records as $record) {
-            $copy = is_object($record) ? clone $record : (object)$record;
+            $copy = is_object($record) ? clone $record : (object) $record;
             $copy->interpretation = $this->interpret($record);
             $out[] = $copy;
         }
         return $out;
+    }
+
+    /**
+     * Determine "Day Shift" or "Night Shift" from a punch timestamp.
+     * Night = 16:00–05:59, Day = 06:00–15:59
+     */
+    private function shiftLabel($punchTime): string
+    {
+        if (!$punchTime) return 'Day Shift';
+        try {
+            $hour = (int) Carbon::parse($punchTime)->format('H');
+            return ($hour >= 16 || $hour < 6) ? 'Night Shift' : 'Day Shift';
+        } catch (\Throwable) {
+            return 'Day Shift';
+        }
     }
 
     private function get($attendance, string $key, $default = null)
