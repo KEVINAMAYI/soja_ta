@@ -269,13 +269,21 @@ class SyncZKBioAttendance extends Command
         $shift      = $this->classifier->resolveShift($employee, $firstPunch, $date);
 
         // Clock-in
-        if ($c['check_in'] && !$attendance->check_in_time) {
-            $attendance->check_in_time       = $c['check_in'];
+        // Clock-in (FIXED: Populate shift definitions even if check_in_time already exists from an open row state)
+        if ($c['check_in']) {
+            if (!$attendance->check_in_time) {
+                $attendance->check_in_time = $c['check_in'];
+            }
+
             $attendance->is_late_checkin     = $c['late_checkin'];
             $attendance->minutes_late        = $c['minutes_late'];
             $attendance->within_grace_period = !$c['late_checkin'];
-            $attendance->status              = 'clocked_in';
-            $attendance->shift_id            = $shift?->id;
+
+            if ($attendance->status !== 'clocked_out') {
+                $attendance->status = 'clocked_in';
+            }
+
+            $attendance->shift_id = $shift?->id;
 
             if ($shift) {
                 $shiftStart     = $shift->getEffectiveStartTime($date);
