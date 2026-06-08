@@ -55,16 +55,11 @@ class ZKPunchClassifier
         }
 
         if (!$shift->isScheduledOn($today)) {
-            // A punch before OVERNIGHT_BOUNDARY_HOUR (06:00) on an unscheduled day
-            // is an overnight clock-OUT from a night shift that started yesterday.
-            // A punch >= NIGHT_SHIFT_START_HOUR (16:00) is a clock-IN on an unscheduled day
-            // for a night shift that ends tomorrow — still record so overnight redirect finds it.
             $punchHour = (int)$filtered[0]->format('H');
             $isNightPunch = $punchHour >= self::NIGHT_SHIFT_START_HOUR
                 || $punchHour < self::OVERNIGHT_BOUNDARY_HOUR;
 
             if ($isNightPunch && $shift->shift_type === 'night') {
-                // Only exit early if it is a single punch (waiting for the overnight merge later)
                 if (count($filtered) === 1) {
                     $result['check_in'] = $filtered[0];
                     $result['within_grace_period'] = true;
@@ -74,14 +69,15 @@ class ZKPunchClassifier
                     return $result;
                 }
 
-                // If they have multiple punches on an unscheduled day, let the code continue down
-                // to process their actual check-out!
+                // FIX: Let the execution bypass the "not_scheduled" early exit entirely
+                // if they completed an overnight shift lifecycle on this day!
                 $result['notes'][] = 'Night shift punch on unscheduled day with multiple punches — processing full shift.';
+            } else {
+                // Regular day shifts or non-night punches still fail out safely here
+                $result['scenario'] = 'not_scheduled';
+                $result['notes'][] = 'Not scheduled today.';
+                return $result;
             }
-
-            $result['scenario'] = 'not_scheduled';
-            $result['notes'][] = 'Not scheduled today.';
-            return $result;
         }
 
         if (in_array($employee->shift_status, ['off_shift', 'sick_off', 'on_leave'])) {
