@@ -152,12 +152,18 @@ class Shift extends Model
 
     public function getGracePeriodEndTime(): Carbon
     {
-        return Carbon::parse($this->start_time)->copy()->addMinutes($this->grace_period_enabled ? $this->grace_period_minutes : 0);
+        $time = Carbon::parse($this->getRawOriginal('start_time'))->format('H:i:s');
+        return Carbon::parse($time)->addMinutes(
+            $this->grace_period_enabled ? $this->grace_period_minutes : 0
+        );
     }
 
     public function getEarlyCheckoutThreshold(): Carbon
     {
-        return Carbon::parse($this->end_time)->copy()->subMinutes($this->track_early_checkout ? $this->early_checkout_threshold_minutes : 0);
+        $time = Carbon::parse($this->getRawOriginal('end_time'))->format('H:i:s');
+        return Carbon::parse($time)->subMinutes(
+            $this->track_early_checkout ? $this->early_checkout_threshold_minutes : 0
+        );
     }
 
     public function isWithinGracePeriod(Carbon $checkInTime): bool
@@ -200,53 +206,45 @@ class Shift extends Model
      */
     public function getEffectiveStartTime(string $date): Carbon
     {
-        return Carbon::parse($date . ' ' . Carbon::parse($this->start_time)->format('H:i:s'));
+        $time = Carbon::parse($this->getRawOriginal('start_time'))->format('H:i:s');
+        return Carbon::parse($date . ' ' . $time);
     }
 
-    /**
-     * End time anchored to a real date.
-     * Handles:
-     *   - Friday variant  (General Day ends 16:30, not 17:30)
-     *   - Overnight shift (Night Shift 17:30 → 05:00 adds one day)
-     */
-    // In Shift model:
     public function getEffectiveEndTime(string $date): Carbon
     {
-        $carbon = Carbon::parse($date);
+        $carbon   = Carbon::parse($date);
         $isFriday = $carbon->dayOfWeek === Carbon::FRIDAY;
 
-        // Use friday_end_time if set and it's Friday
-        $endTime = ($isFriday && $this->friday_end_time)
-            ? $this->friday_end_time
-            : $this->end_time;
+        $rawEnd   = $this->getRawOriginal('end_time');
+        $rawStart = $this->getRawOriginal('start_time');
 
-        $end = Carbon::parse($date . ' ' . $endTime);
+        $endTime = ($isFriday && $this->friday_end_time)
+            ? Carbon::parse($this->getRawOriginal('friday_end_time') ?? $this->friday_end_time)->format('H:i:s')
+            : Carbon::parse($rawEnd)->format('H:i:s');
+
+        $end   = Carbon::parse($date . ' ' . $endTime);
+        $start = Carbon::parse($date . ' ' . Carbon::parse($rawStart)->format('H:i:s'));
 
         // Overnight shift
-        if ($end->lt(Carbon::parse($date . ' ' . $this->start_time))) {
+        if ($end->lte($start)) {
             $end->addDay();
         }
 
         return $end;
     }
 
-    /**
-     * Grace deadline anchored to a real date.
-     */
     public function getGraceDeadline(string $date): Carbon
     {
         $grace = $this->grace_period_enabled ? ($this->grace_period_minutes ?? 0) : 0;
         return $this->getEffectiveStartTime($date)->addMinutes($grace);
     }
 
-    /**
-     * True when shift crosses midnight.
-     * Checks flag first, then compares times as fallback.
-     */
     public function isOvernightShift(): bool
     {
         if ($this->is_overnight) return true;
-        return Carbon::parse($this->end_time)->lte(Carbon::parse($this->start_time));
+        $start = Carbon::parse($this->getRawOriginal('start_time'))->format('H:i:s');
+        $end   = Carbon::parse($this->getRawOriginal('end_time'))->format('H:i:s');
+        return Carbon::parse($end)->lte(Carbon::parse($start));
     }
 
     /**
