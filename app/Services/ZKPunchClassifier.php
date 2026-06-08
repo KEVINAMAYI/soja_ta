@@ -6,13 +6,32 @@ use Carbon\Carbon;
 use App\Models\Employee;
 use App\Models\Shift;
 
+/**
+ * ZKPunchClassifier — Multi-shift version
+ *
+ * AUTO-DETECTION:
+ *   Punch 05:00–15:59 → Day shift
+ *   Punch 16:00–04:59 → Night shift
+ *
+ * SHIFT RESOLUTION:
+ *   1. Load ALL shifts assigned to employee via employee_shifts pivot
+ *   2. Match punch time to correct shift (day/night)
+ *   3. If employee only has day shift → always day
+ *   4. If employee has both → auto-detect by punch time
+ *   5. Night shift overrides day shift for that attendance record
+ *
+ * WEEKEND:
+ *   Saturday → OT1 (all hours)
+ *   Sunday   → OT2 (all hours)
+ *   No late/absent/early logic on weekends
+ */
 class ZKPunchClassifier
 {
     const NOISE_GAP_MINUTES      = 1;
     const CHECKOUT_EARLY_WINDOW  = 60;
     const BREAK_TOLERANCE        = 20;
     const NIGHT_SHIFT_START_HOUR = 16;
-    const DAY_SHIFT_START_HOUR   = 6;
+    const DAY_SHIFT_START_HOUR   = 6;  // 05:xx = still night shift end
 
     public function classify(array $rawPunches, Employee $employee, ?string $date = null): array
     {
@@ -37,12 +56,13 @@ class ZKPunchClassifier
         $isSunday   = $dow === Carbon::SUNDAY;
         $isWeekend  = $isSaturday || $isSunday;
 
+        // Resolve correct shift from punch time
         $shift = $this->resolveShift($employee, $filtered[0], $today);
 
         if (!$shift) {
             $result['scenario'] = 'no_shift';
             $result['notes'][]  = 'No matching shift found.';
-            $result['check_in'] = $filtered[0];
+            if (count($filtered) >= 1) $result['check_in']  = $filtered[0];
             if (count($filtered) >= 2) $result['check_out'] = end($filtered);
             return $result;
         }
@@ -50,16 +70,19 @@ class ZKPunchClassifier
         $employee->setRelation('shift', $shift);
         $result['notes'][] = "Resolved shift: {$shift->name}";
 
+        // Weekend = pure OT
         if ($isWeekend) {
             return $this->classifyWeekendOt($filtered, $shift, $today, $isSaturday, $result);
         }
 
+        // Not scheduled today (weekday)
         if (!$shift->isScheduledOn($today)) {
             $result['scenario'] = 'not_scheduled';
             $result['notes'][]  = 'Not scheduled today.';
             return $result;
         }
 
+        // Employee status
         if (in_array($employee->shift_status, ['off_shift', 'sick_off', 'on_leave'])) {
             $result['scenario'] = 'not_scheduled';
             $result['notes'][]  = "Employee is {$employee->shift_status}.";
@@ -77,15 +100,7 @@ class ZKPunchClassifier
         $checkOutStart      = $shiftEnd->copy()->subMinutes(self::CHECKOUT_EARLY_WINDOW + $earlyThreshold);
         $checkOutEnd        = $shiftEnd->copy()->addMinutes($maxOvertimeMinutes + 30);
 
-        // ── SINGLE PUNCH ──────────────────────────────────────────────────────
-        if (count($filtered) === 1) {
-            return $this->classifySinglePunch(
-                $filtered[0], $shiftStart, $shiftEnd,
-                $onTimeDeadline, $checkOutStart, $checkOutEnd, $isExtended, $result
-            );
-        }
-
-        // ── MULTIPLE PUNCHES ──────────────────────────────────────────────────
+        // Clock-in
         $result['check_in'] = $filtered[0];
 
         if ($isExtended && $filtered[0]->lt($shiftStart)) {
@@ -95,10 +110,17 @@ class ZKPunchClassifier
             $result['late_checkin']              = true;
             $result['minutes_late']              = $minutesLate;
             $result['late_checkin_lost_minutes'] = $minutesLate;
-            $result['notes'][] = "Late clock-in at {$filtered[0]->format('H:i')} — {$minutesLate} min late from {$shiftStart->format('H:i')}. Full lateness = lost hours.";
+            $result['notes'][] = "Late clock-in at {$filtered[0]->format('H:i')} — {$minutesLate} min late from shift start {$shiftStart->format('H:i')}. Full lateness counted as lost hours.";
         } else {
             $result['within_grace_period'] = true;
             $result['notes'][] = "Clock-in at {$filtered[0]->format('H:i')} — on time.";
+        }
+
+        if (count($filtered) === 1) {
+            $result['scenario']   = 'checkin_only';
+            $result['incomplete'] = true;
+            $result['notes'][]    = 'Only one punch — not clocked out yet.';
+            return $result;
         }
 
         $shiftBreaks = $shift->breaks ?? collect();
@@ -118,7 +140,9 @@ class ZKPunchClassifier
                 if ($isLast) {
                     $type = $this->classifyOut($punch, $shiftBreaks, $checkOutStart, $checkOutEnd, $today);
                     $segments[] = [
-                        'out' => $punch, 'in' => null, 'type' => $type,
+                        'out'              => $punch,
+                        'in'               => null,
+                        'type'             => $type,
                         'duration_minutes' => null,
                         'paid'             => $type === 'break' ? $this->isBreakPaid($punch, $shiftBreaks, $today) : null,
                         'missed_punch'     => false,
@@ -135,8 +159,14 @@ class ZKPunchClassifier
                 $isPaid       = $outType === 'break' ? $this->isBreakPaid($currentOut, $shiftBreaks, $today) : null;
 
                 if ($isLast && $outType === 'break' && $punch->between($checkOutStart, $checkOutEnd)) {
-                    $segments[] = ['out' => $currentOut, 'in' => null, 'type' => 'break',
-                        'duration_minutes' => null, 'paid' => $isPaid, 'missed_punch' => true];
+                    $segments[] = [
+                        'out'              => $currentOut,
+                        'in'               => null,
+                        'type'             => 'break',
+                        'duration_minutes' => null,
+                        'paid'             => $isPaid,
+                        'missed_punch'     => true,
+                    ];
                     $result['check_out']           = $punch;
                     $result['missed_break_return'] = true;
                     $result['notes'][] = "Missed punch — break at {$currentOut->format('H:i')}, out at {$punch->format('H:i')}. NOT overridden.";
@@ -149,11 +179,19 @@ class ZKPunchClassifier
                         $excess     = $durationMins - $maxDur;
                         $breakLost += $excess;
                         $result['notes'][] = "Late break return — {$durationMins} min, max {$maxDur}. Lost: {$excess} min.";
+                    } else {
+                        $result['notes'][] = "Break return on time — {$durationMins} min.";
                     }
                 }
 
-                $segments[] = ['out' => $currentOut, 'in' => $punch, 'type' => $outType,
-                    'duration_minutes' => $durationMins, 'paid' => $isPaid, 'missed_punch' => false];
+                $segments[] = [
+                    'out'              => $currentOut,
+                    'in'               => $punch,
+                    'type'             => $outType,
+                    'duration_minutes' => $durationMins,
+                    'paid'             => $isPaid,
+                    'missed_punch'     => false,
+                ];
 
                 $result['notes'][] = "Returned at {$punch->format('H:i')} after {$durationMins} min ({$outType}).";
                 if ($isLast) $result['notes'][] = 'Last punch is return — no final clock-out.';
@@ -163,25 +201,29 @@ class ZKPunchClassifier
 
         $result['segments'] = $segments;
 
-        // No clock-out and shift ended → missed clock-out, flag only, no synthetic
         if ($result['check_out'] === null && !$result['missed_break_return']) {
             if (now()->gte($shiftEnd)) {
-                $result['missed_checkout_punch'] = true;
-                $result['incomplete']            = true;
-                $result['notes'][]               = "⚠ Clock-OUT missing — flagged for HR review. No synthetic fill.";
+                $result['check_out']           = $shiftEnd->copy();
+                $result['check_out_synthetic'] = true;
+                $result['notes'][] = "No clock-out. Auto-inserted at {$shiftEnd->format('H:i')}.";
             } else {
-                $result['notes'][] = "Record open — shift ends at {$shiftEnd->format('H:i')}.";
+                $result['notes'][] = "Record left open — shift ends at {$shiftEnd->format('H:i')}.";
             }
         }
 
-        if (!$isExtended && $result['check_out'] && $result['check_out']->lt($shiftEnd)) {
+        if (!$isExtended && !$result['check_out_synthetic']
+            && $result['check_out'] && $result['check_out']->lt($shiftEnd)
+        ) {
             $minutesEarly             = (int) $result['check_out']->diffInMinutes($shiftEnd);
             $result['early_checkout'] = true;
             $result['minutes_early']  = $minutesEarly;
             $result['notes'][] = "Early clock-out — {$minutesEarly} min before {$shiftEnd->format('H:i')}.";
         }
 
-        if ($result['check_out'] && $result['check_out']->gt($shiftEnd) && ($shift->overtime_enabled ?? false)) {
+        if (!$result['check_out_synthetic'] && $result['check_out']
+            && $result['check_out']->gt($shiftEnd)
+            && ($shift->overtime_enabled ?? false)
+        ) {
             $otMinutes  = (int) $shiftEnd->diffInMinutes($result['check_out']);
             $maxOtMins  = ($shift->max_overtime_hours ?? 0) * 60;
             $cappedMins = $maxOtMins > 0 ? min($otMinutes, $maxOtMins) : $otMinutes;
@@ -204,13 +246,14 @@ class ZKPunchClassifier
         if ($breakCount === 0 && $workedMinutes >= ($totalShiftMin * 0.6)) {
             $result['missed_break_return'] = true;
             $result['break_enforced']      = false;
-            $result['notes'][] = "No break punches for full shift — flagged. No deduction.";
+            $result['notes'][] = "No break punches for full shift — flagged as missed punch. No deduction.";
         }
 
-        $result['worked_hours']         = round(max(0, $workedMinutes) / 60, 2);
-        $result['break_lost_minutes']   = $breakLost;
-        $result['lost_minutes']         = $result['late_checkin_lost_minutes'] + $breakLost;
-        $result['notes'][]              = "Worked hours: {$result['worked_hours']}h.";
+        $result['worked_hours'] = round(max(0, $workedMinutes) / 60, 2);
+        $result['notes'][]      = "Worked hours: {$result['worked_hours']}h.";
+
+        $result['break_lost_minutes'] = $breakLost;
+        $result['lost_minutes']       = $result['late_checkin_lost_minutes'] + $breakLost;
 
         $breakdown = [];
         if ($result['late_checkin_lost_minutes'] > 0) $breakdown[] = "Late check-in: {$result['late_checkin_lost_minutes']} min";
@@ -218,57 +261,13 @@ class ZKPunchClassifier
         if ($result['missed_break_return'])            $breakdown[] = "Missed punch flagged (no deduction)";
         $result['lost_hours_breakdown'] = $breakdown;
 
-        if ($result['lost_minutes'] > 0) $result['notes'][] = "Total lost: {$result['lost_minutes']} min.";
+        if ($result['lost_minutes'] > 0) {
+            $result['notes'][] = "Total lost: {$result['lost_minutes']} min.";
+        }
 
         $result['scenario']   = $this->determineScenario($result);
         $result['incomplete'] = $this->isIncomplete($result);
 
-        return $result;
-    }
-
-    // =========================================================================
-    // SINGLE PUNCH — is it a clock-IN or clock-OUT?
-    // =========================================================================
-
-    private function classifySinglePunch(
-        Carbon $punch,
-        Carbon $shiftStart,
-        Carbon $shiftEnd,
-        Carbon $onTimeDeadline,
-        Carbon $checkOutStart,
-        Carbon $checkOutEnd,
-        bool   $isExtended,
-        array  $result
-    ): array {
-        // Punch in checkout window → it's a CLOCK-OUT, clock-IN missing
-        if ($punch->between($checkOutStart, $checkOutEnd) || $punch->gte($shiftEnd)) {
-            $result['check_in']             = null;
-            $result['check_out']            = $punch;
-            $result['missed_checkin_punch'] = true;
-            $result['incomplete']           = true;
-            $result['scenario']             = 'missed_clockin';
-            $result['notes'][]              = "Single punch at {$punch->format('H:i')} — clock-OUT recorded. Clock-IN missing. Flagged for HR review.";
-            return $result;
-        }
-
-        // Otherwise → it's a CLOCK-IN, clock-OUT missing
-        $result['check_in']              = $punch;
-        $result['check_out']             = null;
-        $result['missed_checkout_punch'] = true;
-        $result['incomplete']            = true;
-        $result['scenario']              = 'missed_clockout';
-
-        if (!$isExtended && $punch->gt($onTimeDeadline)) {
-            $minutesLate                         = (int) $shiftStart->diffInMinutes($punch);
-            $result['late_checkin']              = true;
-            $result['minutes_late']              = $minutesLate;
-            $result['late_checkin_lost_minutes'] = $minutesLate;
-            $result['notes'][] = "Late clock-in at {$punch->format('H:i')} — {$minutesLate} min late.";
-        } else {
-            $result['within_grace_period'] = true;
-        }
-
-        $result['notes'][] = "Single punch at {$punch->format('H:i')} — clock-IN recorded. Clock-OUT missing. Flagged for HR review.";
         return $result;
     }
 
@@ -279,15 +278,15 @@ class ZKPunchClassifier
     private function classifyWeekendOt(array $filtered, object $shift, string $today, bool $isSaturday, array $result): array
     {
         $result['check_in']            = $filtered[0];
-        $result['check_out']           = count($filtered) > 1 ? end($filtered) : null;
+        $result['check_out']           = end($filtered);
         $result['within_grace_period'] = true;
+
         $result['notes'][] = $isSaturday ? "Saturday — all hours are OT1." : "Sunday — all hours are OT2.";
 
         if (count($filtered) < 2) {
-            $result['missed_checkout_punch'] = true;
-            $result['incomplete']            = true;
-            $result['scenario']              = $isSaturday ? 'missed_clockout_ot1' : 'missed_clockout_ot2';
-            $result['notes'][]               = "Single punch — clock-OUT missing. Flagged for HR review.";
+            $result['scenario']   = 'checkin_only';
+            $result['incomplete'] = true;
+            $result['notes'][]    = 'Only one punch — no clock-out yet.';
             return $result;
         }
 
@@ -297,38 +296,70 @@ class ZKPunchClassifier
             $middle = array_slice($filtered, 1, -1);
             for ($i = 0; $i + 1 < count($middle); $i += 2) {
                 $breakMins = (int) $middle[$i]->diffInMinutes($middle[$i + 1]);
-                if ($breakMins < 120) { $workedMinutes -= $breakMins; $result['notes'][] = "Break deducted: {$breakMins} min."; }
+                if ($breakMins < 120) {
+                    $workedMinutes -= $breakMins;
+                    $result['notes'][] = "Break deducted: {$breakMins} min.";
+                }
             }
         }
 
         $otHours = round(max(0, $workedMinutes) / 60, 2);
-        if ($isSaturday) { $result['ot1_hours'] = $otHours; } else { $result['ot2_hours'] = $otHours; }
+
+        if ($isSaturday) {
+            $result['ot1_hours'] = $otHours;
+        } else {
+            $result['ot2_hours'] = $otHours;
+        }
+
         $result['worked_hours'] = $otHours;
         $result['notes'][]      = "Total OT hours: {$otHours}h.";
         $result['incomplete']   = false;
         $result['scenario']     = $isSaturday ? 'complete_ot1' : 'complete_ot2';
+
         return $result;
     }
 
     // =========================================================================
-    // Shift resolver
+    // SHIFT RESOLVER — Multi-shift aware
+    //
+    // Priority:
+    //   1. Load ALL employee shifts from pivot table
+    //   2. Night punch (16:00–04:59) → find night shift for this employee
+    //   3. Day punch (05:00–15:59)   → find day shift for this employee
+    //   4. If employee has only one shift → use it regardless of punch time
+    //   5. Fallback to employee.shift_id (legacy)
     // =========================================================================
 
     public function resolveShift(Employee $employee, Carbon $firstPunch, string $date): ?object
     {
         $punchHour    = (int) $firstPunch->format('H');
-        $isNightPunch = $punchHour >= self::NIGHT_SHIFT_START_HOUR || $punchHour < self::DAY_SHIFT_START_HOUR;
+        $isNightPunch = $punchHour >= self::NIGHT_SHIFT_START_HOUR
+            || $punchHour <  self::DAY_SHIFT_START_HOUR;
 
+        // Load all assigned shifts from pivot table
         $assignedShifts = $employee->shifts()->with('breaks')->get();
 
         if ($assignedShifts->isNotEmpty()) {
-            if ($assignedShifts->count() === 1) return $assignedShifts->first();
+
+            // If only one shift — use it always
+            if ($assignedShifts->count() === 1) {
+                return $assignedShifts->first();
+            }
+
+            // Multiple shifts — auto-detect by punch time
             $targetType = $isNightPunch ? 'night' : 'day';
-            $shift      = $assignedShifts->firstWhere('shift_type', $targetType);
+
+            // Admin group = always day
+            $shift = $assignedShifts->firstWhere('shift_type', $targetType);
+
             if ($shift) return $shift;
-            return $assignedShifts->firstWhere('pivot.is_primary', true) ?? $assignedShifts->first();
+
+            // Fallback: return primary shift
+            return $assignedShifts->firstWhere('pivot.is_primary', true)
+                ?? $assignedShifts->first();
         }
 
+        // Legacy fallback: use employee.shift_id
         return $employee->shift?->load('breaks');
     }
 
@@ -358,8 +389,6 @@ class ZKPunchClassifier
             'enforced_break_minutes'    => 0,
             'break_enforced'            => false,
             'missed_break_return'       => false,
-            'missed_checkin_punch'      => false,
-            'missed_checkout_punch'     => false,
             'lost_hours_breakdown'      => [],
             'scenario'                  => 'no_punches',
             'incomplete'                => true,
@@ -410,24 +439,33 @@ class ZKPunchClassifier
         $filtered = [$times[0]];
         $last     = $times[0]->copy();
         foreach (array_slice($times, 1) as $time) {
-            if ($last->diffInSeconds($time) >= self::NOISE_GAP_MINUTES * 60) { $filtered[] = $time; $last = $time->copy(); }
+            if ($last->diffInSeconds($time) >= self::NOISE_GAP_MINUTES * 60) {
+                $filtered[] = $time;
+                $last       = $time->copy();
+            }
         }
         return $filtered;
     }
 
     private function determineScenario(array $r): string
     {
-        if ($r['missed_checkin_punch'])  return 'missed_clockin';
-        if ($r['missed_checkout_punch']) return 'missed_clockout';
-        if (!$r['check_in'])             return 'no_checkin';
-        if (!$r['check_out'])            return 'checkin_only';
+        if (!$r['check_in'])  return 'no_checkin';
+        if (!$r['check_out']) return 'checkin_only';
+        $synthetic      = $r['check_out_synthetic'];
         $segments       = collect($r['segments']);
         $hasBreak       = $segments->where('type', 'break')->count() > 0;
         $hasUnscheduled = $segments->where('type', 'unscheduled_leave')->count() > 0;
+        $missedPunch    = $r['missed_break_return'];
+        if ($synthetic) {
+            if ($hasBreak && $hasUnscheduled) return 'synthetic_break_unscheduled';
+            if ($hasBreak)       return 'synthetic_break';
+            if ($hasUnscheduled) return 'synthetic_unscheduled';
+            return 'synthetic';
+        }
         $tokens = [];
         if ($r['late_checkin'])       $tokens[] = 'late';
         if ($hasBreak)                $tokens[] = 'break';
-        if ($r['missed_break_return'])$tokens[] = 'missed_punch';
+        if ($missedPunch)             $tokens[] = 'missed_punch';
         if ($hasUnscheduled)          $tokens[] = 'unscheduled';
         if ($r['early_checkout'])     $tokens[] = 'early';
         if ($r['overtime_hours'] > 0) $tokens[] = 'overtime';
@@ -440,7 +478,7 @@ class ZKPunchClassifier
     {
         return in_array($r['scenario'], [
             'no_punches','no_checkin','checkin_only','no_shift','not_scheduled',
-            'missed_clockin','missed_clockout','missed_clockout_ot1','missed_clockout_ot2','unknown',
+            'synthetic','synthetic_break','synthetic_unscheduled','synthetic_break_unscheduled','unknown',
         ]);
     }
 }
