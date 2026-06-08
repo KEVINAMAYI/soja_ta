@@ -61,7 +61,7 @@ class EmployeeTable extends DataTableComponent
         if ($isStudentOrg) {
             $query->with(['organization', 'user', 'assignments', 'lastAttendance']);
         } else {
-            $query->with(['organization', 'shift', 'user', 'assignments', 'department']);
+            $query->with(['organization', 'shifts', 'user', 'assignments', 'department']);
         }
 
         if ($this->activePersonType === 'student') {
@@ -103,10 +103,29 @@ class EmployeeTable extends DataTableComponent
         // Shift — non-school orgs only
         if (!$isStudentOrg) {
             $columns[] = Column::make("Shift", "shift_id")
-                ->format(fn($value, $row) => $row->shift?->name
-                    ? "<span class='fw-semibold text-primary'>{$row->shift->name}</span>"
-                    : "<span class='text-muted'>—</span>"
-                )
+                ->format(function ($value, $row) {
+                    // Get primary shift from pivot
+                    $primaryShift = $row->shifts
+                        ->firstWhere('pivot.is_primary', true)
+                        ?? $row->shifts->first(); // fallback to any shift
+
+                    if (!$primaryShift) {
+                        return "<span class='text-muted'>—</span>";
+                    }
+
+                    $start = \Carbon\Carbon::parse($primaryShift->start_time)->format('g:i A');
+                    $end   = \Carbon\Carbon::parse($primaryShift->end_time)->format('g:i A');
+
+                    // Show additional shifts count if more than one
+                    $extraCount = $row->shifts->count() - 1;
+                    $extra = $extraCount > 0
+                        ? "<br><span style='font-size:0.65rem;color:#6366f1;font-weight:600;'>+{$extraCount} more shift(s)</span>"
+                        : '';
+
+                    return "<span class='fw-semibold text-primary'>{$primaryShift->name}</span>
+                    <br><small class='text-muted'>{$start} - {$end}</small>
+                    {$extra}";
+                })
                 ->html()
                 ->sortable();
         }
