@@ -62,6 +62,11 @@ new class extends Component {
     public $totalEmployees = 0;
     public $activeEmployees = 0;
     public $inactiveEmployees = 0;
+
+    public array $empTypeTotals = [];  // ['COSMOS' => 120, 'Outsourced' => 45]
+    public array $empTypeActive = [];
+    public array $empTypeInactive = [];
+
     public $totalStudents = 0;
     public $totalStaff = 0;
 
@@ -105,7 +110,7 @@ new class extends Component {
     public array $defaultAdSyncAreas = [];
 
     public string $empTypeFilter = '';
-    public string $activeFilter  = '';
+    public string $activeFilter = '';
 
     public function mount($roleId = null): void
     {
@@ -164,9 +169,9 @@ new class extends Component {
     {
 
         $org = auth()->user()->employee->organization;
-        $emp   = Employee::with('department')->find($employeeId);
+        $emp = Employee::with('department')->find($employeeId);
         $token = $org->zkbio_access_token;
-        $base  = $org->zkbio_base_url;
+        $base = $org->zkbio_base_url;
 
         $parts = explode(' ', trim($emp->name), 2);
         $phone = !empty($emp->phone)
@@ -177,15 +182,15 @@ new class extends Component {
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($ch, CURLOPT_POST, true);
         curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode([
-            'pin'         => (string)$emp->zkbio_pin,
-            'name'        => $parts[0],
-            'lastName'    => $parts[1] ?? '',
+            'pin' => (string)$emp->zkbio_pin,
+            'name' => $parts[0],
+            'lastName' => $parts[1] ?? '',
             'mobilePhone' => $phone,
-            'ssn'         => $emp->id_number ?? '',
-            'cardNo'      => '',
+            'ssn' => $emp->id_number ?? '',
+            'cardNo' => '',
         ]));
         curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
-        $res  = json_decode(curl_exec($ch), true);
+        $res = json_decode(curl_exec($ch), true);
         curl_close($ch);
 
         if (($res['code'] ?? -1) !== 0) {
@@ -201,14 +206,13 @@ new class extends Component {
     }
 
 
-
     public function exportFilteredExcel(): mixed
     {
         return \Maatwebsite\Excel\Facades\Excel::download(
             new \App\Exports\EmployeesExcelExport(
-                selectedIds:   [],
+                selectedIds: [],
                 empTypeFilter: $this->empTypeFilter,
-                activeFilter:  $this->activeFilter,
+                activeFilter: $this->activeFilter,
             ),
             'employees_' . now()->format('Y-m-d') . '.xlsx'
         );
@@ -218,12 +222,9 @@ new class extends Component {
     {
         return redirect()->route('employees.export.pdf', [
             'emp_type' => $this->empTypeFilter,
-            'active'   => $this->activeFilter,
+            'active' => $this->activeFilter,
         ]);
     }
-
-
-
 
 
     public function toggleAdSyncPanel(): void
@@ -240,7 +241,7 @@ new class extends Component {
 
     public function loadZkbioAreas(): void
     {
-        $org     = auth()->user()->employee->organization;
+        $org = auth()->user()->employee->organization;
         $service = app(\App\Services\ZKBioPersonService::class, ['organization' => $org]);
 
         // Use cached, sync if empty
@@ -261,7 +262,7 @@ new class extends Component {
         $this->reset([
             'adPreview', 'adResults', 'adSyncPreviewed',
             'adSyncProcessed', 'adSyncError',
-            'adImportedCount', 'adUpdatedCount', 'adErrorCount', 'selectedAdUsers','defaultAdSyncAreas'
+            'adImportedCount', 'adUpdatedCount', 'adErrorCount', 'selectedAdUsers', 'defaultAdSyncAreas'
         ]);
         $this->adSyncing = false;
     }
@@ -378,7 +379,7 @@ new class extends Component {
 
                 if ($existing) {
                     $existing->update([
-                        'name'  => $row['name'],
+                        'name' => $row['name'],
                         'email' => $row['email'] ?: $existing->email, // ← update email from AD
                         'phone' => $phone ?? $existing->phone,
                         'ad_object_id' => $row['ad_id'],
@@ -476,7 +477,6 @@ new class extends Component {
                             ['work_location_id' => $defaultLocation->id, 'is_current' => true]
                         );
                     }
-
 
 
                     DB::commit();
@@ -961,15 +961,23 @@ new class extends Component {
             $this->activeEmployees = Employee::where('organization_id', $orgId)->where('active', 1)->count();
             $this->inactiveEmployees = Employee::where('organization_id', $orgId)->where('active', 0)->count();
 
-            // reset unused properties so they don't bleed through
-            $this->totalStudents = 0;
-            $this->totalStaff = 0;
-            $this->presentCount = 0;
-            $this->leftSchoolCount = 0;
-            $this->notReportedCount = 0;
-            $this->staffPresentCount = 0;
-            $this->staffLeftCount = 0;
-            $this->staffNotReportedCount = 0;
+            // ── Employee type breakdown ──
+            $typeRows = Employee::where('organization_id', $orgId)
+                ->selectRaw("COALESCE(NULLIF(employee_type,''), 'Unassigned') as employee_type, active, COUNT(*) as count")
+                ->groupBy('employee_type', 'active')
+                ->get();
+
+            $this->empTypeTotals = $this->empTypeActive = $this->empTypeInactive = [];
+            foreach ($typeRows as $row) {
+                $t = $row->employee_type;
+                $this->empTypeTotals[$t] = ($this->empTypeTotals[$t] ?? 0) + $row->count;
+                if ($row->active) $this->empTypeActive[$t] = ($this->empTypeActive[$t] ?? 0) + $row->count;
+                else              $this->empTypeInactive[$t] = ($this->empTypeInactive[$t] ?? 0) + $row->count;
+            }
+
+            $this->totalStudents = $this->totalStaff = 0;
+            $this->presentCount = $this->leftSchoolCount = $this->notReportedCount = 0;
+            $this->staffPresentCount = $this->staffLeftCount = $this->staffNotReportedCount = 0;
         }
     }
 
@@ -1438,7 +1446,6 @@ new class extends Component {
     }
 
 
-
     public function setEmpTypeFilter(string $val): void
     {
         $this->empTypeFilter = $val;
@@ -1458,7 +1465,6 @@ new class extends Component {
             active: $this->activeFilter,
         );
     }
-
 
 
 }; ?>
@@ -2094,7 +2100,7 @@ new class extends Component {
     </div>
 
     {{-- Import Loading Overlay --}}
-    <div style="padding-top:20px;"  wire:loading wire:target="commitImport" class="sync-loading-overlay">
+    <div style="padding-top:20px;" wire:loading wire:target="commitImport" class="sync-loading-overlay">
         <div class="sync-loading-card">
             <div class="sync-loading-spinner orange"></div>
             <p class="sync-loading-title">Importing Employees</p>
@@ -2189,6 +2195,14 @@ new class extends Component {
             @else
                 {{-- ── REGULAR (non-school) ORG ── --}}
 
+                @php
+                    $typeConfig = [
+                        'COSMOS'     => ['bg' => '#e0f2fe', 'color' => '#0369a1', 'icon' => 'mdi:office-building'],
+                        'Outsourced' => ['bg' => '#fde8e3', 'color' => '#c0341b', 'icon' => 'mdi:account-switch'],
+                        'Unassigned' => ['bg' => '#f1f5f9', 'color' => '#475569', 'icon' => 'mdi:account-question'],
+                    ];
+                @endphp
+
                 {{-- Total Employees --}}
                 <div class="col-lg-4 col-md-6 col-12">
                     <div class="summary-card">
@@ -2198,6 +2212,18 @@ new class extends Component {
                         <p class="summary-card-title">Total Employees</p>
                         <div class="summary-card-value">{{ $totalEmployees }}</div>
                         <p class="summary-card-subtitle">All registered employees</p>
+                        {{-- Type breakdown --}}
+                        <div class="d-flex flex-wrap gap-1 mt-2">
+                            @foreach($empTypeTotals as $type => $count)
+                                @php $cfg = $typeConfig[$type] ?? $typeConfig['Unassigned']; @endphp
+                                <span style="display:inline-flex;align-items:center;gap:4px;font-size:0.7rem;font-weight:700;
+                                 background:{{ $cfg['bg'] }};color:{{ $cfg['color'] }};
+                                 padding:2px 9px;border-radius:99px;white-space:nowrap;">
+                        <iconify-icon icon="{{ $cfg['icon'] }}" style="font-size:11px;"></iconify-icon>
+                        {{ $type }} · {{ $count }}
+                    </span>
+                            @endforeach
+                        </div>
                     </div>
                 </div>
 
@@ -2210,6 +2236,17 @@ new class extends Component {
                         <p class="summary-card-title">Active Employees</p>
                         <div class="summary-card-value">{{ $activeEmployees }}</div>
                         <p class="summary-card-subtitle">Currently active</p>
+                        <div class="d-flex flex-wrap gap-1 mt-2">
+                            @foreach($empTypeActive as $type => $count)
+                                @php $cfg = $typeConfig[$type] ?? $typeConfig['Unassigned']; @endphp
+                                <span style="display:inline-flex;align-items:center;gap:4px;font-size:0.7rem;font-weight:700;
+                                 background:{{ $cfg['bg'] }};color:{{ $cfg['color'] }};
+                                 padding:2px 9px;border-radius:99px;white-space:nowrap;">
+                        <iconify-icon icon="{{ $cfg['icon'] }}" style="font-size:11px;"></iconify-icon>
+                        {{ $type }} · {{ $count }}
+                    </span>
+                            @endforeach
+                        </div>
                         <div class="summary-card-bar">
                             <div class="summary-card-bar-fill"
                                  style="width:{{ $totalEmployees > 0 ? ($activeEmployees/$totalEmployees)*100 : 0 }}%; background:#22c55e;"></div>
@@ -2226,6 +2263,17 @@ new class extends Component {
                         <p class="summary-card-title">Inactive Employees</p>
                         <div class="summary-card-value">{{ $inactiveEmployees }}</div>
                         <p class="summary-card-subtitle">Deactivated accounts</p>
+                        <div class="d-flex flex-wrap gap-1 mt-2">
+                            @foreach($empTypeInactive as $type => $count)
+                                @php $cfg = $typeConfig[$type] ?? $typeConfig['Unassigned']; @endphp
+                                <span style="display:inline-flex;align-items:center;gap:4px;font-size:0.7rem;font-weight:700;
+                                 background:{{ $cfg['bg'] }};color:{{ $cfg['color'] }};
+                                 padding:2px 9px;border-radius:99px;white-space:nowrap;">
+                        <iconify-icon icon="{{ $cfg['icon'] }}" style="font-size:11px;"></iconify-icon>
+                        {{ $type }} · {{ $count }}
+                    </span>
+                            @endforeach
+                        </div>
                         <div class="summary-card-bar">
                             <div class="summary-card-bar-fill"
                                  style="width:{{ $totalEmployees > 0 ? ($inactiveEmployees/$totalEmployees)*100 : 0 }}%; background:#ef4444;"></div>
@@ -2810,9 +2858,11 @@ new class extends Component {
                             @if(!empty($availableZkbioAreas))
                                 <div class="mb-4 p-3 rounded-3" style="background:#fff; border:1px solid #cce0f5;">
                                     <p class="mb-2 fw-semibold" style="font-size:0.82rem; color:#1e293b;">
-                                        <iconify-icon icon="mdi:map-marker-multiple" style="color:#0078d4; margin-right:4px;"></iconify-icon>
+                                        <iconify-icon icon="mdi:map-marker-multiple"
+                                                      style="color:#0078d4; margin-right:4px;"></iconify-icon>
                                         Default Device Areas
-                                        <small class="text-muted fw-normal ms-1">— assigned to all synced employees</small>
+                                        <small class="text-muted fw-normal ms-1">— assigned to all synced
+                                            employees</small>
                                     </p>
                                     <div class="row g-2">
                                         @foreach($availableZkbioAreas as $area)
@@ -2828,7 +2878,8 @@ new class extends Component {
                                                     <iconify-icon icon="mdi:map-marker"
                                                                   style="color:{{ in_array($area['area_code'], $defaultAdSyncAreas) ? '#0078d4' : '#94a3b8' }};"></iconify-icon>
                                                     <span class="fw-semibold text-dark">{{ $area['area_name'] }}</span>
-                                                    <small class="text-muted ms-auto">Code: {{ $area['area_code'] }}</small>
+                                                    <small
+                                                        class="text-muted ms-auto">Code: {{ $area['area_code'] }}</small>
                                                 </label>
                                             </div>
                                         @endforeach
@@ -2836,7 +2887,8 @@ new class extends Component {
                                     @if(!empty($defaultAdSyncAreas))
                                         <p class="mt-2 mb-0" style="font-size:0.72rem; color:#0078d4;">
                                             <iconify-icon icon="mdi:check-circle"></iconify-icon>
-                                            {{ count($defaultAdSyncAreas) }} area(s) will be assigned to all synced employees
+                                            {{ count($defaultAdSyncAreas) }} area(s) will be assigned to all synced
+                                            employees
                                         </p>
                                     @endif
                                 </div>
@@ -3458,7 +3510,8 @@ new class extends Component {
                              style="background:#f0f6ff; border:1px solid #cce0f5;">
                             <iconify-icon icon="tabler:user" style="font-size:28px; color:#0078d4;"></iconify-icon>
                             <div>
-                                <p class="mb-0 fw-semibold text-dark" style="font-size:0.88rem;">{{ $employee->name }}</p>
+                                <p class="mb-0 fw-semibold text-dark"
+                                   style="font-size:0.88rem;">{{ $employee->name }}</p>
                                 <small class="text-muted">
                                     PIN: <strong>{{ $employee->zkbio_pin ?? 'No PIN' }}</strong>
                                     @if($employee->department)
@@ -3472,7 +3525,8 @@ new class extends Component {
                     {{-- Areas header --}}
                     <div class="d-flex align-items-center justify-content-between mb-3">
                         <p class="mb-0 fw-semibold text-dark" style="font-size:0.85rem;">
-                            <iconify-icon icon="mdi:map-marker-multiple" class="me-1" style="color:#0078d4;"></iconify-icon>
+                            <iconify-icon icon="mdi:map-marker-multiple" class="me-1"
+                                          style="color:#0078d4;"></iconify-icon>
                             Select Access Areas
                         </p>
                         <button wire:click="refreshAreas" type="button"
@@ -3510,12 +3564,15 @@ new class extends Component {
                                                               style="font-size:16px; color:{{ in_array($area['area_code'], $selectedAreas) ? '#0078d4' : '#94a3b8' }};"></iconify-icon>
                                             </div>
                                             <div>
-                                                <p class="mb-0 fw-semibold" style="font-size:0.85rem; color:#1e293b;">{{ $area['area_name'] }}</p>
-                                                <small class="text-muted" style="font-size:0.7rem;">Code: {{ $area['area_code'] }}</small>
+                                                <p class="mb-0 fw-semibold"
+                                                   style="font-size:0.85rem; color:#1e293b;">{{ $area['area_name'] }}</p>
+                                                <small class="text-muted"
+                                                       style="font-size:0.7rem;">Code: {{ $area['area_code'] }}</small>
                                             </div>
                                         </div>
                                         @if(in_array($area['area_code'], $selectedAreas))
-                                            <iconify-icon icon="mdi:check-circle" style="font-size:18px; color:#0078d4; flex-shrink:0;"></iconify-icon>
+                                            <iconify-icon icon="mdi:check-circle"
+                                                          style="font-size:18px; color:#0078d4; flex-shrink:0;"></iconify-icon>
                                         @endif
                                     </label>
                                 </div>
@@ -3526,7 +3583,8 @@ new class extends Component {
                         <div class="mt-3 p-2 rounded-2 text-center"
                              style="background:#f8fafc; font-size:0.78rem; color:#64748b;">
                             <iconify-icon icon="mdi:checkbox-marked" class="me-1"></iconify-icon>
-                            <strong>{{ count($selectedAreas) }}</strong> of <strong>{{ count($availableAreas) }}</strong> areas selected
+                            <strong>{{ count($selectedAreas) }}</strong> of
+                            <strong>{{ count($availableAreas) }}</strong> areas selected
                             @if(count($selectedAreas) === count($availableAreas))
                                 &nbsp;·&nbsp; <span style="color:#16a34a; font-weight:600;">Full Access</span>
                             @elseif(count($selectedAreas) === 0)
@@ -3553,7 +3611,8 @@ new class extends Component {
                     <span wire:loading wire:target="saveAreas">
                         <span class="spinner-border spinner-border-sm"></span>
                     </span>
-                        <iconify-icon icon="mdi:content-save" wire:loading.remove wire:target="saveAreas"></iconify-icon>
+                        <iconify-icon icon="mdi:content-save" wire:loading.remove
+                                      wire:target="saveAreas"></iconify-icon>
                         <span wire:loading.remove wire:target="saveAreas">Save Areas</span>
                         <span wire:loading wire:target="saveAreas">Saving...</span>
                     </button>
