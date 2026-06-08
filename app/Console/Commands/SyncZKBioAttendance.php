@@ -173,14 +173,20 @@ class SyncZKBioAttendance extends Command
             }
 
             // ── TODAY'S PUNCHES → save against TODAY ─────────────────
+            // FIX: Filter out morning punches belonging to yesterday's shift lifecycle
+            // so they do not pollute today's real evening clock-in timeline data array!
+            if ($employee->shifts->firstWhere('shift_type', 'night') || ($employee->shift && $employee->shift->shift_type === 'night')) {
+                $todayPunches = array_values(array_filter($todayPunches, function ($p) {
+                    return (int) Carbon::parse($p)->format('H') >= self::OVERNIGHT_BOUNDARY_HOUR;
+                }));
+            }
+
             if (empty($todayPunches)) {
-                // All punches were overnight — nothing for today itself
                 if (empty($overnightPunches)) $skipped++;
                 continue;
             }
 
             $classified = $this->classifier->classify($todayPunches, $employee, $date);
-
             $this->printClassifiedLine($pin, $employee->name, $classified);
 
             DB::beginTransaction();
