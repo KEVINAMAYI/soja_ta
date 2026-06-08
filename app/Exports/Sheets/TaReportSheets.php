@@ -75,6 +75,7 @@ trait TaSheetHelpers
 
         return match ($interp) {
             'Attendance OK'                  => ['D4EDDA', '155724'],
+            'Still In'                       => ['DCFCE7', '166534'],
             'Late In'                        => ['FFF3CD', '856404'],
             'Late In & Late Out'             => ['F8D7DA', '721C24'],
             'Early Out'                      => ['FFF3CD', '856404'],
@@ -145,16 +146,74 @@ trait TaSheetHelpers
     }
 
     /**
-     * Get the resolved shift for an attendance record.
-     * Uses attendance.shift_id (set during sync) first, falls back to employee's primary shift.
+     * Resolve the correct Shift model for an attendance record.
+     *
+     * Priority:
+     *  1. attendance.shift_id → shiftCache lookup
+     *  2. If that shift is a DAY shift but the punch is in the night range,
+     *     look for the employee's NIGHT shift instead — the shift_id may have
+     *     been saved incorrectly during sync.
+     *  3. Fall back to employee's primary/first shift.
      */
-    private function resolvedShift($r, $shiftCache = []): ?object
+    private function resolveShiftObject($r, array $shiftCache = []): ?object
     {
-        $shiftId = $r->shift_id ?? null;
-        if ($shiftId) {
-            return $shiftCache[$shiftId] ?? Shift::find($shiftId);
+        // Determine if the actual punch is a night punch
+        $punchTime = $r->check_in_time ?? $r->check_out_time;
+        $isPunchNight = false;
+        if ($punchTime) {
+            $hour = (int) Carbon::parse($punchTime)->format('H');
+            $isPunchNight = ($hour < 6 || $hour >= 16);
         }
-        return $r->employee?->shift ?? null;
+
+        // 1. Try attendance's own shift_id
+        $shiftId = $r->shift_id ?? null;
+        if ($shiftId && isset($shiftCache[$shiftId])) {
+            $shift = $shiftCache[$shiftId];
+            // If it's the right type for the punch, use it
+            $shiftType = $shift->shift_type ?? '';
+            $shiftIsNight = ($shiftType === 'night');
+            if ($isPunchNight === $shiftIsNight) return $shift;
+        }
+
+        // 2. Punch is at night but shift_id points to day → find the employee's night shift
+        $employee = $r->employee ?? null;
+        if ($employee) {
+            if ($isPunchNight) {
+                // Try shifts pivot for a night shift
+                $nightShift = $employee->shifts?->firstWhere('shift_type', 'night');
+                if ($nightShift) return $nightShift;
+            } else {
+                // Daytime punch → try day/admin/extended shift
+                $dayShift = $employee->shifts?->first(fn($s) => in_array($s->shift_type ?? '', ['day', 'admin', 'extended']));
+                if ($dayShift) return $dayShift;
+            }
+
+            // 3. Fall back to primary shift or any shift
+            $primary = $employee->shifts?->firstWhere('pivot.is_primary', true)
+                ?? $employee->shifts?->first()
+                ?? $employee->shift;
+            if ($primary) return $primary;
+        }
+
+        return null;
+    }
+
+    /**
+     * Resolve Day/Night label — uses resolveShiftObject internally.
+     */
+    private function resolveShiftDisplay($r, array $shiftCache = []): string
+    {
+        $shift = $this->resolveShiftObject($r, $shiftCache);
+        if (!$shift) {
+            // Pure punch-time fallback
+            $punchTime = $r->check_in_time ?? $r->check_out_time;
+            if ($punchTime) {
+                $hour = (int) Carbon::parse($punchTime)->format('H');
+                return ($hour < 6 || $hour >= 16) ? 'Night' : 'Day';
+            }
+            return '';
+        }
+        return $this->shiftDayNight($shift);
     }
 
     private function lostHours($r): string
@@ -277,10 +336,10 @@ class MasterSheet implements FromArray, WithTitle, WithStyles, WithColumnWidths
         ];
 
         foreach ($this->records as $r) {
-            $emp   = $r->employee ?? null;
+            $emp = $r->employee ?? null;
 
-            // Use the RESOLVED shift (from attendance.shift_id) for accurate day/night display
-            $shift = $this->shiftCache[$r->shift_id ?? 0] ?? $emp?->shift;
+            // Use punch-time-aware shift for ALL shift-dependent columns
+            $shift = $this->resolveShiftObject($r, $this->shiftCache);
 
             $firstBreak = method_exists($r, 'breakLogs')
                 ? $r->breakLogs()->where('type', 'break')->orderBy('break_start_time')->first()
@@ -304,7 +363,7 @@ class MasterSheet implements FromArray, WithTitle, WithStyles, WithColumnWidths
                 $emp?->department?->name ?? '',                     // E
                 $emp?->section ?? '',                               // F
                 $this->staffCategory($shift),                       // G
-                $this->shiftDayNight($shift),                       // H ← resolved shift
+                $this->resolveShiftDisplay($r, $this->shiftCache), // H ← punch-time aware
                 $definedIn,                                         // I
                 $this->fmtTime($r->check_in_time),                 // J
                 $firstBreak ? $this->fmtTime($firstBreak->break_start_time) : '', // K
@@ -316,8 +375,11 @@ class MasterSheet implements FromArray, WithTitle, WithStyles, WithColumnWidths
                 $this->fmtHours((float)($r->ot1_hours ?? 0)),      // Q
                 $this->fmtHours((float)($r->ot2_hours ?? 0)),      // R
                 $this->lostHours($r),                              // S
-                $this->exceptionNote($r),                          // T ← missed punch note
-                $r->interpretation ?? '',                           // U
+                $this->exceptionNote($r),                          // T
+                // U — if clocked_in with no clock-out today, show Still In not Missed Clock-Out
+                ($r->status === 'clocked_in' && !$r->check_out_time && ($r->date ?? '') === now()->toDateString())
+                    ? 'Still In'
+                    : ($r->interpretation ?? ''),                  // U
             ];
         }
 
@@ -386,19 +448,31 @@ class MasterSheet implements FromArray, WithTitle, WithStyles, WithColumnWidths
             }
 
             $interpVal = (string) $sheet->getCell("U{$row}")->getValue();
-            if ($interpVal) {
+
+            // If status is clocked_in and it's today, the shift may still be running.
+            // Don't mark clock-out as missing or show "Missed Clock-Out" interpretation.
+            $recordDate  = $records[$row - 4]->date ?? null;
+            $recordStatus = $records[$row - 4]->status ?? null;
+            $isStillIn   = $recordStatus === 'clocked_in'
+                && $recordDate === now()->toDateString()
+                && !($records[$row - 4]->check_out_time ?? null);
+
+            if ($interpVal && !$isStillIn) {
                 [$bg, $fg] = $this->interpretationBadge($interpVal);
                 $sheet->getStyle("U{$row}")->applyFromArray($this->badgeStyle($bg, $fg));
             }
 
             // Missed punch rows — highlight the missing column red
-            if (str_contains($interpVal, 'Missed Clock-In')) {
-                $sheet->getStyle("J{$row}")->applyFromArray($this->badgeStyle('F8D7DA', 'C00000')); // J = actual time in
-                $sheet->getCell("J{$row}")->setValue('⚠ MISSING');
-            }
-            if (str_contains($interpVal, 'Missed Clock-Out')) {
-                $sheet->getStyle("N{$row}")->applyFromArray($this->badgeStyle('F8D7DA', 'C00000')); // N = actual time out
-                $sheet->getCell("N{$row}")->setValue('⚠ MISSING');
+            // Skip if still in (shift may not have ended)
+            if (!$isStillIn) {
+                if (str_contains($interpVal, 'Missed Clock-In')) {
+                    $sheet->getStyle("J{$row}")->applyFromArray($this->badgeStyle('F8D7DA', 'C00000'));
+                    $sheet->getCell("J{$row}")->setValue('⚠ MISSING');
+                }
+                if (str_contains($interpVal, 'Missed Clock-Out')) {
+                    $sheet->getStyle("N{$row}")->applyFromArray($this->badgeStyle('F8D7DA', 'C00000'));
+                    $sheet->getCell("N{$row}")->setValue('⚠ MISSING');
+                }
             }
 
             $lostVal = (string) $sheet->getCell("S{$row}")->getValue();
@@ -471,7 +545,7 @@ class PresentSheet implements FromArray, WithTitle, WithStyles, WithColumnWidths
 
         foreach ($this->records as $r) {
             $emp   = $r->employee ?? null;
-            $shift = $this->shiftCache[$r->shift_id ?? 0] ?? $emp?->shift;
+            $shift = $this->resolveShiftObject($r, $this->shiftCache);
             $out[] = [
                 $this->fmtDate($r->date),
                 $emp?->employee_type ?? '',
@@ -480,7 +554,7 @@ class PresentSheet implements FromArray, WithTitle, WithStyles, WithColumnWidths
                 $emp?->department?->name ?? '',
                 $emp?->section ?? '',
                 $this->staffCategory($shift),
-                $this->shiftDayNight($shift),
+                $this->resolveShiftDisplay($r, $this->shiftCache),
                 $shift ? Carbon::parse($shift->start_time)->format('H:i') : '',
                 $this->fmtTime($r->check_in_time),
                 $shift ? Carbon::parse($shift->end_time)->format('H:i') : '',
