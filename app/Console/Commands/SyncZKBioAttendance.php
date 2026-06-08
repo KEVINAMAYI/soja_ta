@@ -356,12 +356,16 @@ class SyncZKBioAttendance extends Command
         $newPriority     = self::STATUS_PRIORITY[$newStatus] ?? 0;
 
         if ($c['scenario'] === 'checkin_only') {
-            $attendance->status                  = 'clocked_in';
-            $attendance->check_out_time          = null;
-            $attendance->auto_clocked_out        = false;
-            $attendance->auto_clocked_out_reason = null;
-            $attendance->is_early_checkout       = false;
-            $attendance->minutes_early           = 0;
+            // FIX: If an overnight split pass already verified and closed this row,
+            // do not allow a subsequent empty daytime sweep to wipe out the data!
+            if (!$attendance->check_out_time) {
+                $attendance->status                  = 'clocked_in';
+                $attendance->check_out_time          = null;
+                $attendance->auto_clocked_out        = false;
+                $attendance->auto_clocked_out_reason = null;
+                $attendance->is_early_checkout       = false;
+                $attendance->minutes_early           = 0;
+            }
         } elseif ($newPriority >= $currentPriority || $c['check_out']) {
             $attendance->status = $newStatus;
         }
