@@ -97,35 +97,36 @@ class SyncZKBioAttendance extends Command
             }
 
             // ── OVERNIGHT DETECTION ───────────────────────────────────────────
-            // If all punches for this date fall between 00:00–05:59, they are
-            // night shift clock-outs belonging to YESTERDAY's attendance record.
-            // Redirect them there instead of creating a new record for today.
-            $attendanceDate = $this->resolveAttendanceDate($employee, $allPunches, $date);
+            [$attendanceDate, $missedCheckin, $syntheticCheckin] =
+                $this->resolveAttendanceDate($employee, $allPunches, $date);
 
             if ($attendanceDate !== $date) {
-                $this->line("  [{$pin}] {$employee->name} — overnight punch redirected to {$attendanceDate}");
-
-                // Pull yesterday's full punches (17:30+) + today's early punches (00:00-05:59)
+                // Redirect overnight punch to yesterday
+                // If they also punched in yesterday (17:30), merge those punches
                 $yesterdayPunches = $this->zkbio->getAllPunchesForEmployee($pin, $attendanceDate);
-                $allPunches       = array_merge($yesterdayPunches, $allPunches);
+                $allPunches       = array_values(array_unique(array_merge($yesterdayPunches, $allPunches)));
+                sort($allPunches);
 
-                // Deduplicate
-                $allPunches = array_values(array_unique($allPunches));
+                $missedCheckin
+                    ? $this->line("  [{$pin}] {$employee->name} — overnight, no clock-in on {$attendanceDate} (missed). Clock-OUT only.")
+                    : $this->line("  [{$pin}] {$employee->name} — overnight punch redirected to {$attendanceDate}");
             }
 
             $classified = $this->classifier->classify($allPunches, $employee, $attendanceDate);
 
             // ── Console output ────────────────────────────────────────────────
             $flags = [];
-            if ($classified['incomplete'])                 $flags[] = '⚠  Incomplete';
-            if ($classified['check_out_synthetic'])        $flags[] = '🤖 Auto clock-out';
-            if ($classified['late_checkin'])               $flags[] = "🕐 Late +{$classified['minutes_late']}min";
-            if ($classified['early_checkout'])             $flags[] = "🚪 Early -{$classified['minutes_early']}min";
-            if ($classified['missed_break_return'])        $flags[] = '❓ Missed punch';
-            if (($classified['lost_minutes'] ?? 0) > 0)   $flags[] = "⏳ Lost {$classified['lost_minutes']}min";
-            if (($classified['ot1_hours'] ?? 0) > 0)      $flags[] = "💰 OT1 {$classified['ot1_hours']}h";
-            if (($classified['ot2_hours'] ?? 0) > 0)      $flags[] = "💰 OT2 {$classified['ot2_hours']}h";
-            if (($classified['overtime_hours'] ?? 0) > 0) $flags[] = "💰 OT {$classified['overtime_hours']}h";
+            if ($classified['incomplete'])                        $flags[] = '⚠  Incomplete';
+            if ($classified['check_out_synthetic'] ?? false)     $flags[] = '🤖 Auto clock-out';
+            if ($classified['missed_checkin_punch'] ?? false)    $flags[] = '🔴 Missed clock-IN';
+            if ($classified['missed_checkout_punch'] ?? false)   $flags[] = '🔴 Missed clock-OUT';
+            if ($classified['late_checkin'])                     $flags[] = "🕐 Late +{$classified['minutes_late']}min";
+            if ($classified['early_checkout'])                   $flags[] = "🚪 Early -{$classified['minutes_early']}min";
+            if ($classified['missed_break_return'])              $flags[] = '❓ Missed break punch';
+            if (($classified['lost_minutes'] ?? 0) > 0)         $flags[] = "⏳ Lost {$classified['lost_minutes']}min";
+            if (($classified['ot1_hours'] ?? 0) > 0)            $flags[] = "💰 OT1 {$classified['ot1_hours']}h";
+            if (($classified['ot2_hours'] ?? 0) > 0)            $flags[] = "💰 OT2 {$classified['ot2_hours']}h";
+            if (($classified['overtime_hours'] ?? 0) > 0)       $flags[] = "💰 OT {$classified['overtime_hours']}h";
 
             $breakCount = collect($classified['segments'])->where('type', 'break')->count();
             if ($breakCount > 0) $flags[] = "☕ {$breakCount} break(s)";
@@ -179,9 +180,17 @@ class SyncZKBioAttendance extends Command
     //   → redirect to yesterday's date.
     // =========================================================================
 
-    private function resolveAttendanceDate(Employee $employee, array $punches, string $date): string
+    /**
+     * Resolve the correct attendance date for a set of punches.
+     *
+     * Returns an array:
+     *   [0] string  $attendanceDate  — the date the punches belong to
+     *   [1] bool    $missedCheckin   — true if employee forgot to punch in (synthetic clock-in needed)
+     *   [2] string|null $syntheticCheckin — the synthetic clock-in time to prepend (e.g. '2026-06-05 17:30:00')
+     */
+    private function resolveAttendanceDate(Employee $employee, array $punches, string $date): array
     {
-        if (empty($punches)) return $date;
+        if (empty($punches)) return [$date, false, null];
 
         // Check if ALL punches are before 06:00
         $allEarlyMorning = collect($punches)->every(function ($punchTime) {
@@ -189,7 +198,7 @@ class SyncZKBioAttendance extends Command
             return $hour < self::OVERNIGHT_BOUNDARY_HOUR;
         });
 
-        if (!$allEarlyMorning) return $date;
+        if (!$allEarlyMorning) return [$date, false, null];
 
         // Does this employee have a night shift?
         $assignedShifts = $employee->shifts;
@@ -197,12 +206,12 @@ class SyncZKBioAttendance extends Command
             $assignedShifts = collect([$employee->shift]);
         }
 
-        $hasNightShift = $assignedShifts->contains('shift_type', 'night');
-        if (!$hasNightShift) return $date;
+        $nightShift = $assignedShifts->firstWhere('shift_type', 'night');
+        if (!$nightShift) return [$date, false, null];
 
-        // Is there an open night shift record from yesterday?
         $yesterday = Carbon::parse($date)->subDay()->toDateString();
 
+        // Is there an open night shift record from yesterday?
         $openNightRecord = Attendance::where('employee_id', $employee->id)
             ->where('date', $yesterday)
             ->where('status', 'clocked_in')
@@ -210,14 +219,27 @@ class SyncZKBioAttendance extends Command
             ->whereNull('check_out_time')
             ->first();
 
-        if (!$openNightRecord) return $date;
+        if ($openNightRecord) {
+            $checkInHour = (int) Carbon::parse($openNightRecord->check_in_time)->format('H');
+            if ($checkInHour >= 16) {
+                // Normal case: open record exists, redirect to yesterday
+                return [$yesterday, false, null];
+            }
+        }
 
-        // Verify the clock-in on yesterday's record is a night shift time (>=16:00)
-        $checkInHour = (int) Carbon::parse($openNightRecord->check_in_time)->format('H');
-        if ($checkInHour < 16) return $date;
+        // ── MISSED CLOCK-IN CASE ─────────────────────────────────────────────
+        // Employee forgot to punch in at shift start on yesterday.
+        // We only have their clock-out (05:xx today).
+        // Check if the night shift was scheduled yesterday.
+        if ($nightShift->isScheduledOn($yesterday)) {
+            // Inject synthetic clock-in at shift start on yesterday
+            $shiftStart     = $nightShift->getEffectiveStartTime($yesterday);
+            $syntheticCheckin = $shiftStart->toDateTimeString();
 
-        // All conditions met — redirect to yesterday
-        return $yesterday;
+            return [$yesterday, true, $syntheticCheckin];
+        }
+
+        return [$date, false, null];
     }
 
     // =========================================================================
@@ -314,6 +336,14 @@ class SyncZKBioAttendance extends Command
 
         $attendance->scenario   = $c['scenario'];
         $attendance->incomplete = $c['incomplete'];
+
+        // Missed punch flags — flag only, never override with fake data
+        if ($c['missed_checkin_punch'] ?? false) {
+            $attendance->exception_note = trim(($attendance->exception_note ?? '') . ' | Missed clock-IN punch — HR review required.', ' |');
+        }
+        if ($c['missed_checkout_punch'] ?? false) {
+            $attendance->exception_note = trim(($attendance->exception_note ?? '') . ' | Missed clock-OUT punch — HR review required.', ' |');
+        }
 
         $newStatus       = $this->scenarioToStatus($c['scenario']);
         $currentPriority = self::STATUS_PRIORITY[$attendance->status ?? 'absent'] ?? 0;
