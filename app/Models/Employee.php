@@ -263,4 +263,40 @@ class Employee extends Model
             ->withTimestamps();
     }
 
+
+    public function shifts()
+    {
+        return $this->belongsToMany(Shift::class, 'employee_shifts')
+            ->withPivot('is_primary')
+            ->withTimestamps();
+    }
+
+    /**
+     * Primary shift (backward-compatible with existing shift_id).
+     * Use this for display in UI when showing "the" shift.
+     */
+    public function primaryShift()
+    {
+        return $this->belongsToMany(Shift::class, 'employee_shifts')
+            ->withPivot('is_primary')
+            ->wherePivot('is_primary', true)
+            ->withTimestamps();
+    }
+
+    /**
+     * Convenience: get IDs of all assigned shifts.
+     */
+    public function getShiftIdsAttribute(): array
+    {
+        return $this->shifts->pluck('id')->toArray();
+    }
+
+    /**
+     * Check if employee is assigned to a specific shift.
+     */
+    public function hasShift(int $shiftId): bool
+    {
+        return $this->shifts->contains('id', $shiftId);
+    }
+
 }

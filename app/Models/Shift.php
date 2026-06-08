@@ -63,7 +63,12 @@ class Shift extends Model
     public function activeBreaks() { return $this->hasMany(ShiftBreak::class)->active()->ordered(); }
     public function mandatoryBreaks() { return $this->hasMany(ShiftBreak::class)->active()->mandatory()->ordered(); }
     public function organization() { return $this->belongsTo(Organization::class); }
-    public function employees() { return $this->hasMany(Employee::class)->withTrashed(); }
+    public function employees()
+    {
+        return $this->belongsToMany(Employee::class, 'employee_shifts')
+            ->withPivot('is_primary')
+            ->withTimestamps();
+    }
 
     public function getTotalBreakMinutes(): int
     {
@@ -204,18 +209,23 @@ class Shift extends Model
      *   - Friday variant  (General Day ends 16:30, not 17:30)
      *   - Overnight shift (Night Shift 17:30 → 05:00 adds one day)
      */
+    // In Shift model:
     public function getEffectiveEndTime(string $date): Carbon
     {
-        $dow = Carbon::parse($date)->format('D');
+        $carbon = Carbon::parse($date);
+        $isFriday = $carbon->dayOfWeek === Carbon::FRIDAY;
 
-        $endStr = ($dow === 'Fri' && $this->friday_end_time)
+        // Use friday_end_time if set and it's Friday
+        $endTime = ($isFriday && $this->friday_end_time)
             ? $this->friday_end_time
             : $this->end_time;
 
-        $start = Carbon::parse($date . ' ' . Carbon::parse($this->start_time)->format('H:i:s'));
-        $end   = Carbon::parse($date . ' ' . Carbon::parse($endStr)->format('H:i:s'));
+        $end = Carbon::parse($date . ' ' . $endTime);
 
-        if ($end->lte($start)) $end->addDay();
+        // Overnight shift
+        if ($end->lt(Carbon::parse($date . ' ' . $this->start_time))) {
+            $end->addDay();
+        }
 
         return $end;
     }
@@ -244,16 +254,11 @@ class Shift extends Model
      */
     public function isScheduledOn(string $date): bool
     {
-        $day     = Carbon::parse($date)->format('D');
-        $pattern = $this->pattern_type ?? 'weekdays';
-        $days    = $this->pattern_days  ?? ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
+        $carbon    = Carbon::parse($date);
+        $dayOfWeek = $carbon->format('D'); // Mon, Tue, etc.
+        $days      = $this->pattern_days ?? [];
 
-        return match ($pattern) {
-            'weekdays' => in_array($day, ['Mon', 'Tue', 'Wed', 'Thu', 'Fri']),
-            'weekends' => in_array($day, ['Sat', 'Sun']),
-            'daily'    => true,
-            default    => in_array($day, $days),
-        };
+        return in_array($dayOfWeek, $days);
     }
 
     /**

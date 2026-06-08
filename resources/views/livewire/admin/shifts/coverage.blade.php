@@ -136,14 +136,13 @@ new class extends Component {
     {
         $organizationId = auth()->user()->employee->organization_id;
 
-        // Determine date range based on view mode
         if ($this->viewMode === 'month') {
             $startDate = $this->selectedDate->copy()->startOfMonth()->startOfWeek(\Carbon\Carbon::MONDAY);
             $endDate = $this->selectedDate->copy()->endOfMonth()->endOfWeek(\Carbon\Carbon::SUNDAY);
         } elseif ($this->viewMode === 'week') {
             $startDate = $this->selectedDate->copy()->startOfWeek(\Carbon\Carbon::MONDAY);
             $endDate = $this->selectedDate->copy()->endOfWeek(\Carbon\Carbon::SUNDAY);
-        } else { // day view
+        } else {
             $startDate = $this->selectedDate->copy();
             $endDate = $this->selectedDate->copy();
         }
@@ -154,70 +153,61 @@ new class extends Component {
             ->get();
 
         $allShifts = [];
-        $today = Carbon::today();
 
-        // Generate shifts for each day in the range
         while ($startDate <= $endDate) {
             $date = $startDate->toDateString();
             $isFutureDate = $startDate->isFuture();
-
-            // Get the day of week in short format (Mon, Tue, etc.)
-            $dayOfWeek = $startDate->format('D'); // Returns: Mon, Tue, Wed, etc.
+            $dayOfWeek = $startDate->format('D');
 
             foreach ($shifts as $shift) {
-
-                // Decode pattern_days from JSON
                 $patternDays = json_decode($shift->pattern_days, true) ?? [];
 
-                // Skip this shift if it doesn't run on this day of the week
                 if (!in_array($dayOfWeek, $patternDays)) {
                     continue;
                 }
 
-                // Employees assigned to this shift
+                // ← USE PIVOT TABLE instead of shift_id column
                 $employees = DB::table('employees')
-                    ->where('shift_id', $shift->id)
-                    ->where('active', 1)
-                    ->where('organization_id', $organizationId)
-                    ->get(['id', 'name']);
+                    ->join('employee_shifts', 'employees.id', '=', 'employee_shifts.employee_id')
+                    ->where('employee_shifts.shift_id', $shift->id)
+                    ->where('employees.active', 1)
+                    ->where('employees.organization_id', $organizationId)
+                    ->select('employees.id', 'employees.name')
+                    ->get();
 
                 $totalEmployees = $employees->count();
-
-                // Create unique ID by combining shift ID with date
                 $uniqueShiftId = $shift->id . '_' . $date;
 
-                // For future dates, show as "scheduled" not critical
                 if ($isFutureDate) {
                     $allShifts[] = [
-                        'id' => $uniqueShiftId,
+                        'id'       => $uniqueShiftId,
                         'shift_id' => $shift->id,
-                        'date' => $date,
-                        'time' => $shift->start_time . ' - ' . $shift->end_time,
-                        'dept' => $shift->name,
+                        'date'     => $date,
+                        'time'     => $shift->start_time . ' - ' . $shift->end_time,
+                        'dept'     => $shift->name,
                         'required' => $totalEmployees,
                         'assigned' => 0,
-                        'staff' => $employees->map(fn($e) => ['id' => $e->id, 'name' => $e->name])->toArray(),
-                        'status' => 'scheduled',
+                        'staff'    => $employees->map(fn($e) => ['id' => $e->id, 'name' => $e->name])->toArray(),
+                        'status'   => 'scheduled',
                     ];
                     continue;
                 }
 
                 if ($totalEmployees === 0) {
                     $allShifts[] = [
-                        'id' => $uniqueShiftId,
+                        'id'       => $uniqueShiftId,
                         'shift_id' => $shift->id,
-                        'date' => $date,
-                        'time' => $shift->start_time . ' - ' . $shift->end_time,
-                        'dept' => $shift->name,
+                        'date'     => $date,
+                        'time'     => $shift->start_time . ' - ' . $shift->end_time,
+                        'dept'     => $shift->name,
                         'required' => 0,
                         'assigned' => 0,
-                        'staff' => [],
-                        'status' => 'critical',
+                        'staff'    => [],
+                        'status'   => 'critical',
                     ];
                     continue;
                 }
 
-                // Attendance for this shift's employees on this date (only for past/today)
                 $presentEmployeeIds = DB::table('attendances')
                     ->whereDate('date', $date)
                     ->whereIn('employee_id', $employees->pluck('id'))
@@ -227,7 +217,6 @@ new class extends Component {
 
                 $presentCount = $presentEmployeeIds->count();
 
-                // Determine shift status
                 if ($presentCount === $totalEmployees) {
                     $status = 'full';
                 } elseif ($presentCount > ($totalEmployees / 2)) {
@@ -237,15 +226,15 @@ new class extends Component {
                 }
 
                 $allShifts[] = [
-                    'id' => $uniqueShiftId,
+                    'id'       => $uniqueShiftId,
                     'shift_id' => $shift->id,
-                    'date' => $date,
-                    'time' => $shift->start_time . ' - ' . $shift->end_time,
-                    'dept' => $shift->name,
+                    'date'     => $date,
+                    'time'     => $shift->start_time . ' - ' . $shift->end_time,
+                    'dept'     => $shift->name,
                     'required' => $totalEmployees,
                     'assigned' => $presentCount,
-                    'staff' => $employees->map(fn($e) => ['id' => $e->id, 'name' => $e->name])->toArray(),
-                    'status' => $status,
+                    'staff'    => $employees->map(fn($e) => ['id' => $e->id, 'name' => $e->name])->toArray(),
+                    'status'   => $status,
                 ];
             }
 
@@ -260,38 +249,40 @@ new class extends Component {
     {
         try {
             $employee = Employee::findOrFail($employeeId);
+            $shiftId = $this->selectedShift['shift_id'];
 
-            // 1. Reset the shift and status
-            $employee->update([
-                'shift_id' => null,
-                'shift_status' => 'off_shift'
-            ]);
+            // Remove from pivot
+            DB::table('employee_shifts')
+                ->where('employee_id', $employeeId)
+                ->where('shift_id', $shiftId)
+                ->delete();
 
-            // 2. Refresh the UI data
-            $this->loadShifts();
-
-            // 3. Update the currently viewed selectedShift
-            if ($this->selectedShift) {
-                $shifts = $this->getShifts();
-                $this->selectedShift = collect($shifts)->firstWhere('id', $this->selectedShift['id']);
+            // If no shifts remain, clear shift_id
+            $remaining = DB::table('employee_shifts')->where('employee_id', $employeeId)->count();
+            if ($remaining === 0) {
+                $employee->update(['shift_id' => null, 'shift_status' => 'off_shift']);
+            } else {
+                // Promote another to primary if needed
+                $hasPrimary = DB::table('employee_shifts')
+                    ->where('employee_id', $employeeId)
+                    ->where('is_primary', true)->exists();
+                if (!$hasPrimary) {
+                    DB::table('employee_shifts')
+                        ->where('employee_id', $employeeId)
+                        ->limit(1)->update(['is_primary' => true]);
+                }
             }
 
+            $this->loadShifts();
+            $this->selectedShift = collect($this->getShifts())->firstWhere('id', $this->selectedShift['id']);
+            $this->availableStaff = $this->getAvailableStaff();
+
             LivewireAlert::title('Awesome!')
-                ->text("{$employee->name} has been removed from the shift.")
-                ->success()
-                ->toast()
-                ->position('top-end')
-                ->show();
+                ->text("{$employee->name} removed from shift.")
+                ->success()->toast()->position('top-end')->show();
 
         } catch (\Exception $e) {
-
-            LivewireAlert::title('Error!')
-                ->text('Failed to remove staff.')
-                ->error()
-                ->toast()
-                ->position('top-end')
-                ->show();
-
+            LivewireAlert::title('Error!')->text('Failed to remove staff.')->error()->toast()->position('top-end')->show();
         }
     }
 
@@ -303,24 +294,21 @@ new class extends Component {
 
     public function getAvailableStaff()
     {
-
         if (!$this->selectedShift) return [];
 
         $organizationId = auth()->user()->employee->organization_id;
-        $currentShiftId = $this->selectedShift['shift_id']; // Use shift_id instead of id
+        $currentShiftId = $this->selectedShift['shift_id'];
+
+        // Employees already on this shift via pivot
+        $assignedIds = DB::table('employee_shifts')
+            ->where('shift_id', $currentShiftId)
+            ->pluck('employee_id');
 
         return Employee::query()
             ->where('organization_id', $organizationId)
-            // 1. Exclude those already on THIS shift
-            ->where(function ($query) use ($currentShiftId) {
-                $query->where('shift_id', '!=', $currentShiftId)
-                    ->orWhereNull('shift_id');
-            })
-            // 2. Search filter
-            ->when($this->searchTerm, function ($query) {
-                $query->where('name', 'like', '%' . $this->searchTerm . '%');
-            })
-            ->with('shift') // To show what shift they are currently on
+            ->whereNotIn('id', $assignedIds)  // ← exclude pivot-assigned
+            ->when($this->searchTerm, fn($q) => $q->where('name', 'like', '%' . $this->searchTerm . '%'))
+            ->with('shifts')
             ->get();
     }
 
@@ -331,31 +319,42 @@ new class extends Component {
 
         try {
             $employee = Employee::findOrFail($employeeId);
-            $newShiftId = $this->selectedShift['shift_id']; // Use shift_id instead of id
+            $newShiftId = $this->selectedShift['shift_id'];
 
-            $employee->update([
-                'shift_id' => $newShiftId,
-                'shift_status' => 'on_shift'
+            // Insert into pivot
+            DB::table('employee_shifts')->insertOrIgnore([
+                'employee_id' => $employeeId,
+                'shift_id'    => $newShiftId,
+                'is_primary'  => false,
+                'created_at'  => now(),
+                'updated_at'  => now(),
             ]);
 
+            // Set as primary if none exists
+            $hasPrimary = DB::table('employee_shifts')
+                ->where('employee_id', $employeeId)
+                ->where('is_primary', true)
+                ->exists();
+
+            if (!$hasPrimary) {
+                DB::table('employee_shifts')
+                    ->where('employee_id', $employeeId)
+                    ->where('shift_id', $newShiftId)
+                    ->update(['is_primary' => true]);
+
+                $employee->update(['shift_id' => $newShiftId, 'shift_status' => 'on_shift']);
+            }
+
             $this->loadShifts();
-            $shifts = $this->getShifts();
-            $this->selectedShift = collect($shifts)->firstWhere('id', $this->selectedShift['id']);
+            $this->selectedShift = collect($this->getShifts())->firstWhere('id', $this->selectedShift['id']);
+            $this->availableStaff = $this->getAvailableStaff();
 
             LivewireAlert::title('Awesome!')
                 ->text("{$employee->name} has been assigned successfully!")
-                ->success()
-                ->toast()
-                ->position('top-end')
-                ->show();
+                ->success()->toast()->position('top-end')->show();
 
         } catch (\Exception $e) {
-            LivewireAlert::title('Error!')
-                ->text('Failed to assign staff!')
-                ->error()
-                ->toast()
-                ->position('top-end')
-                ->show();
+            LivewireAlert::title('Error!')->text('Failed to assign staff!')->error()->toast()->position('top-end')->show();
         }
     }
 

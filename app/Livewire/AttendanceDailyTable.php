@@ -92,7 +92,7 @@ class AttendanceDailyTable extends DataTableComponent
         if ($status === 'inactive') {
             $query = Attendance::query()
                 ->select('attendances.*')
-                ->with(['employee', 'employee.shift'])
+                ->with(['employee', 'employee.shifts'])
                 ->whereBetween('date', [$startDate, $endDate])
                 ->whereHas('employee', function ($q) use ($orgId, $grade, $isSchool) {
                     $q->where('organization_id', $orgId)
@@ -315,13 +315,20 @@ class AttendanceDailyTable extends DataTableComponent
                             ? "<strong>{$grade}</strong>"
                             : '<span class="text-muted">-</span>';
                     }
-                    if (!$row->employee->shift) return '<span class="text-muted">-</span>';
-                    $shift = $row->employee->shift;
+
+                    // ← Use primary shift from pivot
+                    $shift = $row->employee->shifts
+                        ?->firstWhere('pivot.is_primary', true)
+                        ?? $row->employee->shifts?->first();
+
+                    if (!$shift) return '<span class="text-muted">-</span>';
+
                     $start = Carbon::parse($shift->start_time)->format('g:i A');
                     $end   = Carbon::parse($shift->end_time)->format('g:i A');
                     return "<strong>{$shift->name}</strong><br><small>{$start} - {$end}</small>";
                 })
                 ->html(),
+
 
             Column::make('Clock In', 'check_in_time')
                 ->format(function ($value, $row) use ($targetDate, $isSchool) {

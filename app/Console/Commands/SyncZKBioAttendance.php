@@ -100,7 +100,7 @@ class SyncZKBioAttendance extends Command
         foreach ($grouped as $pin => $employeeData) {
 
             $employee = Employee::where('zkbio_pin', $pin)
-                ->with('shift.breaks')
+                ->with(['shifts.breaks', 'shift.breaks']) // ← both pivot and legacy
                 ->first();
 
             if (!$employee) {
@@ -196,7 +196,9 @@ class SyncZKBioAttendance extends Command
             return;
         }
 
-        $shift = $employee->shift;
+        $firstPunch = $c['check_in'] ?? Carbon::parse($date . ' 00:00:00');
+        $shift = $this->classifier->resolveShift($employee, $firstPunch, $date);
+        $attendance->shift_id = $shift?->id;
 
         // ── Clock-in (written once, never overwritten) ────────────────────────
         if ($c['check_in'] && !$attendance->check_in_time) {
@@ -205,6 +207,7 @@ class SyncZKBioAttendance extends Command
             $attendance->minutes_late        = $c['minutes_late'];
             $attendance->within_grace_period = !$c['late_checkin'];
             $attendance->status              = 'clocked_in';
+            $attendance->shift_id = $shift?->id;
 
             if ($shift) {
                 // Use Shift model helpers so overnight + Friday variant are correct

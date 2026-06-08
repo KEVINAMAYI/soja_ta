@@ -74,24 +74,24 @@ new class extends Component {
     public function mount()
     {
         $this->loadShifts();
+        $this->entityLabel = auth()->user()->employee?->organization?->is_student_record ? "Student" : "Employee";
 
-        $this->entityLabel = auth()->user()->employee?->organization?->is_student_record  ? "Student" : "Employee";
+        if (isset($this->selectedShift['id'])) {
+            // ← Use pivot table, not shift_id column
+            $this->assignedStaffIds = \DB::table('employee_shifts')
+                ->where('shift_id', $this->selectedShift['id'])
+                ->pluck('employee_id')
+                ->toArray();
 
-        // After saving — now reload truth from DB
-        $this->assignedStaffIds = Employee::where('shift_id', $this->selectedShift['id'])
-            ->pluck('id')
-            ->toArray();
+            $this->assigningShift = Shift::findOrFail($this->selectedShift['id']);
 
-        $this->assigningShift = Shift::findOrFail($this->selectedShift['id']);
+            $this->assignedStaff = Employee::whereIn('id', $this->assignedStaffIds)
+                ->with('shifts')
+                ->get();
 
-        $this->assignedStaff = Employee::whereIn('id', $this->assignedStaffIds)
-            ->with('shift')
-            ->get();
-
-        $this->searchEmployees();
-
-        $this->loadBreaks();
-
+            $this->searchEmployees();
+            $this->loadBreaks();
+        }
     }
 
     public function loadBreaks()
@@ -442,7 +442,7 @@ new class extends Component {
         }
     }
 
-    public function selectShift($shiftId)
+    public function selectShift($shiftId): void
     {
         if (!$shiftId) return;
 
@@ -450,8 +450,6 @@ new class extends Component {
 
         if ($key !== false) {
             $this->selectedShift = $this->shifts[$key];
-
-            // Use find() instead of findOrFail() to handle race conditions gracefully
             $this->assigningShift = Shift::find($shiftId);
 
             if (!$this->assigningShift) {
@@ -459,15 +457,18 @@ new class extends Component {
                 return;
             }
 
-            $this->assignedStaffIds = Employee::where('shift_id', $shiftId)
-                ->pluck('id')
+            // Use pivot table to get assigned employees
+            $this->assignedStaffIds = \DB::table('employee_shifts')
+                ->where('shift_id', $shiftId)
+                ->pluck('employee_id')
                 ->toArray();
 
             $this->assignedStaff = Employee::whereIn('id', $this->assignedStaffIds)
-                ->with('shift')
+                ->with('shifts')
                 ->get();
 
             $this->searchEmployees();
+            $this->loadBreaks();
         }
     }
 
@@ -479,13 +480,13 @@ new class extends Component {
         $organizationId = auth()->user()->employee->organization_id;
 
         $query = Employee::query()
-            ->where('organization_id', $organizationId);
+            ->where('organization_id', $organizationId)
+            ->distinct(); // ← ADD THIS
 
-        // Apply search only if searchTerm exists and is not empty
         if (!empty($this->searchTerm)) {
             $query->where(function ($q) {
                 $q->where('name', 'like', '%' . $this->searchTerm . '%')
-                    ->orWhereHas('shift', function ($sq) {
+                    ->orWhereHas('shifts', function ($sq) { // ← 'shifts' not 'shift'
                         $sq->where('name', 'like', '%' . $this->searchTerm . '%');
                     })
                     ->orWhereHas('department', function ($sq) {
@@ -494,92 +495,187 @@ new class extends Component {
             });
         }
 
-        $this->availableStaff = $query->with('shift')->get();
+        $this->availableStaff = $query->with('shifts')->get();
     }
 
-    public function getAssignedStaff()
+    public function getAssignedStaff(): void
     {
+        $shiftId = $this->selectedShift['id'];
+        $this->assigningShift = Shift::findOrFail($shiftId);
 
-        $this->shiftId = $this->selectedShift['id'];
-        $this->assigningShift = Shift::findOrFail($this->shiftId);
+        // Load employees assigned to THIS specific shift via pivot
+        $this->assignedStaffIds = \DB::table('employee_shifts')
+            ->where('shift_id', $shiftId)
+            ->pluck('employee_id')
+            ->toArray();
 
         $this->assignedStaff = Employee::whereIn('id', $this->assignedStaffIds)
-            ->with('shift')
+            ->with('shifts')
             ->get();
-
     }
 
 
     public function assignStaff($staffId)
     {
-        if (!in_array($staffId, $this->assignedStaffIds)) {
-            $this->assignedStaffIds[] = $staffId;
+        if (in_array($staffId, $this->assignedStaffIds)) {
+            return; // already assigned
+        }
+
+        // Save to pivot immediately
+        \DB::table('employee_shifts')->insertOrIgnore([
+            'employee_id' => $staffId,
+            'shift_id' => $this->selectedShift['id'],
+            'is_primary' => false,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        // Set as primary if they have none
+        $hasPrimary = \DB::table('employee_shifts')
+            ->where('employee_id', $staffId)
+            ->where('is_primary', true)
+            ->exists();
+
+        if (!$hasPrimary) {
+            \DB::table('employee_shifts')
+                ->where('employee_id', $staffId)
+                ->where('shift_id', $this->selectedShift['id'])
+                ->update(['is_primary' => true]);
+
+            Employee::where('id', $staffId)->update([
+                'shift_id' => $this->selectedShift['id'],
+                'shift_status' => 'on_shift',
+            ]);
         }
 
         $this->getAssignedStaff();
-
+        $this->searchEmployees();
     }
 
     public function removeStaff($staffId)
     {
-        $this->assignedStaffIds = array_values(
-            array_filter($this->assignedStaffIds, fn($id) => $id != $staffId)
-        );
+        \DB::table('employee_shifts')
+            ->where('employee_id', $staffId)
+            ->where('shift_id', $this->selectedShift['id'])
+            ->delete();
+
+        // If no shifts left, clear shift_id
+        $remaining = \DB::table('employee_shifts')
+            ->where('employee_id', $staffId)
+            ->count();
+
+        if ($remaining === 0) {
+            Employee::where('id', $staffId)->update([
+                'shift_id' => null,
+                'shift_status' => 'off_shift',
+            ]);
+        } else {
+            // Promote another shift to primary if needed
+            $hasPrimary = \DB::table('employee_shifts')
+                ->where('employee_id', $staffId)
+                ->where('is_primary', true)
+                ->exists();
+
+            if (!$hasPrimary) {
+                \DB::table('employee_shifts')
+                    ->where('employee_id', $staffId)
+                    ->limit(1)
+                    ->update(['is_primary' => true]);
+            }
+        }
 
         $this->getAssignedStaff();
-
+        $this->searchEmployees();
+        $this->loadShifts(); // refresh count in sidebar
     }
 
-    public function saveAssignment()
+    public function saveAssignment(): void
     {
-
         $this->validate([
             'assignedStaffIds' => 'array',
             'assignedStaffIds.*' => 'exists:employees,id',
         ]);
 
         try {
-
-            // Get organization_id
             $organizationId = auth()->user()->employee->organization_id;
             $currentShiftId = $this->selectedShift['id'];
 
-
-            Employee::where('organization_id', $organizationId)
-                ->where('shift_id', $currentShiftId)
+            // Remove employees who were unassigned from this shift
+            $removedIds = Employee::where('organization_id', $organizationId)
+                ->whereHas('shifts', fn($q) => $q->where('shifts.id', $currentShiftId))
                 ->whereNotIn('id', $this->assignedStaffIds)
-                ->update([
-                    'shift_id' => null,
-                    'shift_status' => 'off_shift'
+                ->pluck('id')
+                ->toArray();
+
+            if (!empty($removedIds)) {
+                \DB::table('employee_shifts')
+                    ->whereIn('employee_id', $removedIds)
+                    ->where('shift_id', $currentShiftId)
+                    ->delete();
+
+                // If they have no more shifts, clear shift_id
+                foreach ($removedIds as $empId) {
+                    $remaining = \DB::table('employee_shifts')
+                        ->where('employee_id', $empId)
+                        ->count();
+                    if ($remaining === 0) {
+                        Employee::where('id', $empId)->update([
+                            'shift_id' => null,
+                            'shift_status' => 'off_shift',
+                        ]);
+                    }
+                }
+            }
+
+            // Add newly assigned employees to this shift
+            foreach ($this->assignedStaffIds as $staffId) {
+                // Insert into pivot (ignore if already exists)
+                \DB::table('employee_shifts')->insertOrIgnore([
+                    'employee_id' => $staffId,
+                    'shift_id' => $currentShiftId,
+                    'is_primary' => false,
+                    'created_at' => now(),
+                    'updated_at' => now(),
                 ]);
 
-            Employee::where('organization_id', $organizationId)
-                ->whereIn('id', $this->assignedStaffIds)
-                ->update([
-                    'shift_id' => $currentShiftId,
-                    'shift_status' => 'on_shift'
-                ]);
+                // Set as primary if they have no primary yet
+                $hasPrimary = \DB::table('employee_shifts')
+                    ->where('employee_id', $staffId)
+                    ->where('is_primary', true)
+                    ->exists();
+
+                if (!$hasPrimary) {
+                    \DB::table('employee_shifts')
+                        ->where('employee_id', $staffId)
+                        ->where('shift_id', $currentShiftId)
+                        ->update(['is_primary' => true]);
+                }
+
+                // Keep employees.shift_id in sync (primary shift)
+                $primaryShift = \DB::table('employee_shifts')
+                    ->where('employee_id', $staffId)
+                    ->where('is_primary', true)
+                    ->first();
+
+                if ($primaryShift) {
+                    Employee::where('id', $staffId)->update([
+                        'shift_id' => $primaryShift->shift_id,
+                        'shift_status' => 'on_shift',
+                    ]);
+                }
+            }
 
             $this->getAssignedStaff();
             $this->searchEmployees();
 
-
-            LivewireAlert::title('Awesome!')
-                ->text('Staff assignment saved successfully!')
-                ->success()
-                ->toast()
-                ->position('top-end')
-                ->show();
-
+            LivewireAlert::title('Saved!')
+                ->text('Staff assignment saved.')
+                ->success()->toast()->position('top-end')->show();
 
         } catch (\Exception $e) {
-
             LivewireAlert::title('Error!')
-                ->text('Failed to save assignment!')
-                ->error()
-                ->toast()
-                ->position('top-end')
-                ->show();
+                ->text('Failed to save: ' . $e->getMessage())
+                ->error()->toast()->position('top-end')->show();
         }
     }
 
@@ -850,7 +946,7 @@ new class extends Component {
                 break;
 
             case 'assign_employee':
-                $this->tabTitle = 'Assign'.' '.$this->entityLabel;
+                $this->tabTitle = 'Assign' . ' ' . $this->entityLabel;
                 $this->tabIcon = '<iconify-icon icon="mdi:account-multiple-check-outline" class="fs-5"></iconify-icon>';
                 $this->getAssignedStaff();
                 break;
@@ -2268,7 +2364,8 @@ new class extends Component {
                     <path d="M12 6v6l4 2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
                 </svg>
                 <div>
-                    <h1 class="h3 mb-0">{{ auth()->user()->employee?->organization?->is_student_record ? 'Session' : 'Shift' }} Configuration</h1>
+                    <h1 class="h3 mb-0">{{ auth()->user()->employee?->organization?->is_student_record ? 'Session' : 'Shift' }}
+                        Configuration</h1>
                     <p class="text-muted small mb-0">Manage automated clock-out and overtime settings</p>
                 </div>
             </div>
@@ -3253,10 +3350,59 @@ new class extends Component {
                                                 {{ $this->getInitials($staff->name) }}
                                             </div>
                                             <div class="staff-info">
-                                                <div class="staff-name">{{ $staff->name }}</div>
+                                                <div class="staff-name d-flex align-items-center gap-2">
+                                                    {{ $staff->name }}
+                                                    @if($staff->shifts && $staff->shifts->count() > 1)
+                                                        <span style="
+            background: #dbeafe;
+            color: #1d4ed8;
+            font-size: 0.6rem;
+            font-weight: 700;
+            padding: 1px 6px;
+            border-radius: 99px;
+        ">
+            {{ $staff->shifts->count() }} shifts
+        </span>
+                                                    @endif
+                                                </div>
                                                 <div class="staff-details">
-                                                    {{ $staff->shift?->name ?? 'No Shift' }}
-                                                    • {{ $staff->department->name }}
+                                                    {{-- Show all assigned shifts as badges --}}
+                                                    @if($staff->shifts && $staff->shifts->count() > 0)
+                                                        @foreach($staff->shifts as $assignedShift)
+                                                            @php
+                                                                $isThisShift = $assignedShift->id == $selectedShift['id'];
+                                                                $badgeBg     = match($assignedShift->shift_type ?? '') {
+                                                                    'night'    => '#1e1b4b',
+                                                                    'admin'    => '#1565C0',
+                                                                    'extended' => '#92400e',
+                                                                    default    => '#166534',
+                                                                };
+                                                                $isPrimary = $assignedShift->pivot->is_primary ?? false;
+                                                            @endphp
+                                                            <span style="
+                background: {{ $isThisShift ? $badgeBg : '#e5e7eb' }};
+                color: {{ $isThisShift ? '#fff' : '#374151' }};
+                font-size: 0.65rem;
+                font-weight: 600;
+                padding: 2px 7px;
+                border-radius: 99px;
+                display: inline-flex;
+                align-items: center;
+                gap: 3px;
+                margin-right: 2px;
+            ">
+                @if($isPrimary)
+                                                                    ★
+                                                                @endif
+                                                                {{ $assignedShift->name }}
+            </span>
+                                                        @endforeach
+                                                    @else
+                                                        <span class="text-muted"
+                                                              style="font-size:0.8rem;">No Shift</span>
+                                                    @endif
+                                                    <span
+                                                        class="text-muted"> • {{ $staff->department?->name ?? '—' }}</span>
                                                 </div>
                                             </div>
                                             @if(in_array($staff->id, $assignedStaffIds))
@@ -3303,8 +3449,42 @@ new class extends Component {
                                                     <div class="staff-info">
                                                         <div class="staff-name">{{ $staff->name }}</div>
                                                         <div class="staff-details">
-                                                            {{ $staff->shift?->name ?? 'No Shift' }}
-                                                            • {{ $staff->department->name }}
+                                                            {{-- Show all assigned shifts as badges --}}
+                                                            @if($staff->shifts && $staff->shifts->count() > 0)
+                                                                @foreach($staff->shifts as $assignedShift)
+                                                                    @php
+                                                                        $isThisShift = $assignedShift->id == $selectedShift['id'];
+                                                                        $badgeBg     = match($assignedShift->shift_type ?? '') {
+                                                                            'night'    => '#1e1b4b',
+                                                                            'admin'    => '#1565C0',
+                                                                            'extended' => '#92400e',
+                                                                            default    => '#166534',
+                                                                        };
+                                                                        $isPrimary = $assignedShift->pivot->is_primary ?? false;
+                                                                    @endphp
+                                                                    <span style="
+                background: {{ $isThisShift ? $badgeBg : '#e5e7eb' }};
+                color: {{ $isThisShift ? '#fff' : '#374151' }};
+                font-size: 0.65rem;
+                font-weight: 600;
+                padding: 2px 7px;
+                border-radius: 99px;
+                display: inline-flex;
+                align-items: center;
+                gap: 3px;
+                margin-right: 2px;
+            ">
+                @if($isPrimary)
+                                                                            ★
+                                                                        @endif
+                                                                        {{ $assignedShift->name }}
+            </span>
+                                                                @endforeach
+                                                            @else
+                                                                <span class="text-muted" style="font-size:0.8rem;">No Shift</span>
+                                                            @endif
+                                                            <span
+                                                                class="text-muted"> • {{ $staff->department?->name ?? '—' }}</span>
                                                         </div>
                                                     </div>
                                                     <button
@@ -3324,18 +3504,13 @@ new class extends Component {
                                     <div class="summary-box">
                                         <div class="summary-content">
                                             <div>
-                                                <div class="summary-label">Total Staff</div>
+                                                <div class="summary-label">Assigned
+                                                    to {{ $selectedShift['name'] }}</div>
                                                 <div class="summary-value">{{ count($assignedStaffIds) }}</div>
                                             </div>
-                                            <button
-                                                wire:click="saveAssignment"
-                                                wire:loading.attr="disabled"
-                                                class="save-button"
-                                            >
-                                                <span wire:loading.remove
-                                                      wire:target="saveAssignment">Save Assignment</span>
-                                                <span wire:loading wire:target="saveAssignment">Saving...</span>
-                                            </button>
+                                            <span class="badge bg-success px-3 py-2" style="font-size: 0.85rem;">
+            ✓ Auto-saved
+        </span>
                                         </div>
                                     </div>
                                 @endif
