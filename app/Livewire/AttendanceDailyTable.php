@@ -55,10 +55,7 @@ class AttendanceDailyTable extends DataTableComponent
         }
     }
 
-    public function configure(): void
-    {
-        $this->setPrimaryKey('id');
-    }
+    public function configure(): void { $this->setPrimaryKey('id'); }
 
     public function builder(): \Illuminate\Database\Eloquent\Builder
     {
@@ -70,15 +67,10 @@ class AttendanceDailyTable extends DataTableComponent
         $search    = $this->search;
         $grade     = $this->filterGrade ?? null;
 
-        if ($isSchool && $status === 'absent') {
-            return $this->buildSchoolAbsentQuery($orgId, $startDate, $grade, $search);
-        }
+        if ($isSchool && $status === 'absent') return $this->buildSchoolAbsentQuery($orgId, $startDate, $grade, $search);
 
         if ($status === 'inactive') {
-            $query = Attendance::query()
-                ->select('attendances.*')
-                // shift = attendance's resolved shift via shift_id
-                // employee.shifts = all assigned shifts via pivot (for display)
+            $query = Attendance::query()->select('attendances.*')
                 ->with(['employee', 'employee.shifts', 'shift'])
                 ->whereBetween('date', [$startDate, $endDate])
                 ->whereHas('employee', function ($q) use ($orgId, $grade, $isSchool) {
@@ -86,20 +78,12 @@ class AttendanceDailyTable extends DataTableComponent
                     if ($grade) $q->where('grade', $grade);
                     if ($this->departmentId && $this->departmentId !== 'all') $q->where('department_id', $this->departmentId);
                 });
-            if ($search) $query->where(function ($q) use ($search) {
-                $q->where('status', 'like', "%$search%")->orWhereHas('employee', fn($q) => $q->where('name', 'like', "%$search%"));
-            });
+            if ($search) $query->where(fn($q) => $q->where('status', 'like', "%$search%")->orWhereHas('employee', fn($q) => $q->where('name', 'like', "%$search%")));
             return $query->orderByDesc('date')->orderByRaw('check_in_time IS NULL')->orderByDesc(DB::raw('COALESCE(check_in_time, updated_at)'));
         }
 
-        // ── Normal active query ───────────────────────────────────────────
-        $query = Attendance::query()
-            ->select('attendances.*')
-            ->with([
-                'employee',
-                'employee.shifts',  // ← pivot shifts (for employee display)
-                'shift',            // ← attendance's OWN resolved shift via shift_id (most accurate)
-            ])
+        $query = Attendance::query()->select('attendances.*')
+            ->with(['employee', 'employee.shifts', 'shift'])
             ->whereBetween('date', [$startDate, $endDate])
             ->whereHas('employee', function ($q) use ($orgId, $grade, $isSchool) {
                 $q->where('organization_id', $orgId)->where('active', 1)->where('is_student', $isSchool ? 1 : 0);
@@ -108,10 +92,7 @@ class AttendanceDailyTable extends DataTableComponent
             });
 
         if ($isSchool) {
-            $query->where(function ($q) use ($startDate, $endDate) {
-                $q->whereBetween(DB::raw('DATE(check_in_time)'), [$startDate, $endDate])
-                    ->orWhereBetween(DB::raw('DATE(check_out_time)'), [$startDate, $endDate]);
-            });
+            $query->where(fn($q) => $q->whereBetween(DB::raw('DATE(check_in_time)'), [$startDate, $endDate])->orWhereBetween(DB::raw('DATE(check_out_time)'), [$startDate, $endDate]));
         } else {
             $query->whereBetween('date', [$startDate, $endDate]);
         }
@@ -124,11 +105,7 @@ class AttendanceDailyTable extends DataTableComponent
             };
         }
 
-        if ($search) {
-            $query->where(function ($q) use ($search) {
-                $q->where('status', 'like', "%$search%")->orWhereHas('employee', fn($q) => $q->where('name', 'like', "%$search%"));
-            });
-        }
+        if ($search) $query->where(fn($q) => $q->where('status', 'like', "%$search%")->orWhereHas('employee', fn($q) => $q->where('name', 'like', "%$search%")));
 
         return $query->orderByDesc('date')->orderByRaw('check_in_time IS NULL')->orderByDesc(DB::raw('COALESCE(check_in_time, updated_at)'));
     }
@@ -137,24 +114,17 @@ class AttendanceDailyTable extends DataTableComponent
     {
         $scannedIds = Attendance::whereHas('employee', fn($q) => $q->where('organization_id', $orgId)->where('active', 1)->where('is_student', 1))
             ->whereDate('date', $date)->whereIn('status', ['clocked_in', 'clocked_out'])->pluck('employee_id')->unique()->toArray();
-
         $unscannedQuery = Employee::where('organization_id', $orgId)->where('active', 1)->where('is_student', 1)->whereNotIn('id', $scannedIds);
         if ($grade)  $unscannedQuery->where('grade', $grade);
         if ($search) $unscannedQuery->where('name', 'like', "%$search%");
         $unscannedIds = $unscannedQuery->pluck('id')->toArray();
-
         $this->seedAbsentRecordsForStudents($unscannedIds, $date, $orgId);
-
-        return Attendance::query()
-            ->select('attendances.*')
-            ->with(['employee', 'employee.shifts', 'shift'])
-            ->whereIn('employee_id', $unscannedIds)
-            ->whereDate('date', $date)
+        return Attendance::query()->select('attendances.*')->with(['employee', 'employee.shifts', 'shift'])
+            ->whereIn('employee_id', $unscannedIds)->whereDate('date', $date)
             ->whereHas('employee', function ($q) use ($orgId, $grade) {
                 $q->where('organization_id', $orgId)->where('active', 1)->where('is_student', 1);
                 if ($grade) $q->where('grade', $grade);
-            })
-            ->orderByDesc(DB::raw('COALESCE(check_in_time, updated_at)'));
+            })->orderByDesc(DB::raw('COALESCE(check_in_time, updated_at)'));
     }
 
     private function seedAbsentRecordsForStudents(array $studentIds, string $date, ?int $orgId): void
@@ -166,10 +136,7 @@ class AttendanceDailyTable extends DataTableComponent
         $stillOnCampus = Attendance::whereIn('employee_id', $needsRecord)->where('status', 'clocked_in')->whereDate('check_in_time', '<', $date)->pluck('employee_id')->unique()->toArray();
         $needsRecord = array_diff($needsRecord, $stillOnCampus);
         foreach ($needsRecord as $studentId) {
-            Attendance::firstOrCreate(
-                ['employee_id' => $studentId, 'date' => $date],
-                ['status' => 'absent', 'check_in_time' => null, 'check_out_time' => null, 'organization_id' => $orgId]
-            );
+            Attendance::firstOrCreate(['employee_id' => $studentId, 'date' => $date], ['status' => 'absent', 'check_in_time' => null, 'check_out_time' => null, 'organization_id' => $orgId]);
         }
     }
 
@@ -177,7 +144,7 @@ class AttendanceDailyTable extends DataTableComponent
     {
         if (!$employeeId) return null;
         return Attendance::where('employee_id', $employeeId)->where('date', '<', $targetDate)
-            ->where(function ($q) { $q->whereNotNull('check_in_time')->orWhereNotNull('check_out_time'); })
+            ->where(fn($q) => $q->whereNotNull('check_in_time')->orWhereNotNull('check_out_time'))
             ->orderByDesc('date')->first();
     }
 
@@ -190,6 +157,28 @@ class AttendanceDailyTable extends DataTableComponent
         return $mins === 0 ? "{$hours}h" : "{$hours}h {$mins}m";
     }
 
+    /**
+     * Check if the shift for a given attendance row has ended.
+     * Returns true if shift end has passed, false if still running.
+     */
+    private function shiftHasEnded($row): bool
+    {
+        $resolvedShift = $row->shift
+            ?? $row->employee->shifts?->firstWhere('pivot.is_primary', true)
+            ?? $row->employee->shifts?->first();
+
+        if (!$resolvedShift) return true; // no shift info → assume ended
+
+        try {
+            $shiftEnd   = Carbon::parse($resolvedShift->end_time);
+            $shiftStart = Carbon::parse($resolvedShift->start_time);
+            if ($shiftEnd->lte($shiftStart)) $shiftEnd->addDay(); // overnight shift
+            return now()->gt($shiftEnd);
+        } catch (\Throwable) {
+            return true;
+        }
+    }
+
     public function columns(): array
     {
         $isSchool   = (bool)(auth()->user()->employee?->organization?->is_student_record ?? false);
@@ -200,9 +189,7 @@ class AttendanceDailyTable extends DataTableComponent
             Column::make($isSchool ? 'Student' : 'Employee')
                 ->label(fn($row) => view('livewire.admin.attendance.employee', ['attendance' => $row])),
 
-            // ── SHIFT COLUMN ─────────────────────────────────────────────────
-            // Uses attendance.shift (resolved via shift_id) for night shift workers
-            // Falls back to employee's primary shift if no shift_id set
+            // ── SHIFT COLUMN ──────────────────────────────────────────────────
             Column::make($isSchool ? 'Grade' : 'Shift')
                 ->label(function ($row) use ($isSchool) {
                     if ($isSchool) {
@@ -210,24 +197,16 @@ class AttendanceDailyTable extends DataTableComponent
                         return $grade ? "<strong>{$grade}</strong>" : '<span class="text-muted">-</span>';
                     }
 
-                    // 1. Use the attendance's resolved shift (set during sync via shift_id)
-                    $shift = $row->shift ?? null;
-
-                    // 2. Fallback to employee's primary assigned shift
-                    if (!$shift) {
-                        $shift = $row->employee->shifts?->firstWhere('pivot.is_primary', true)
-                            ?? $row->employee->shifts?->first();
-                    }
+                    $shift = $row->shift
+                        ?? $row->employee->shifts?->firstWhere('pivot.is_primary', true)
+                        ?? $row->employee->shifts?->first();
 
                     if (!$shift) return '<span class="text-muted">—</span>';
 
-                    $start = Carbon::parse($shift->start_time)->format('g:i A');
-                    $end   = Carbon::parse($shift->end_time)->format('g:i A');
-
-                    // Show Day/Night badge
-                    $shiftType  = $shift->shift_type ?? '';
-                    $isNight    = $shiftType === 'night';
-                    $typeBadge  = $isNight
+                    $start     = Carbon::parse($shift->start_time)->format('g:i A');
+                    $end       = Carbon::parse($shift->end_time)->format('g:i A');
+                    $isNight   = ($shift->shift_type ?? '') === 'night';
+                    $typeBadge = $isNight
                         ? "<span style='background:#1e1b4b;color:#fff;font-size:0.6rem;padding:1px 6px;border-radius:99px;margin-left:4px;'>Night</span>"
                         : "<span style='background:#d1fae5;color:#065f46;font-size:0.6rem;padding:1px 6px;border-radius:99px;margin-left:4px;'>Day</span>";
 
@@ -235,7 +214,7 @@ class AttendanceDailyTable extends DataTableComponent
                 })
                 ->html(),
 
-            // ── CLOCK IN ─────────────────────────────────────────────────────
+            // ── CLOCK IN ──────────────────────────────────────────────────────
             Column::make('Clock In', 'check_in_time')
                 ->format(function ($value, $row) use ($targetDate, $isSchool) {
                     $label = '';
@@ -247,7 +226,7 @@ class AttendanceDailyTable extends DataTableComponent
                         if ($value) $label = "<br><small class='text-muted'>(Last Clock-In)</small>";
                     }
 
-                    // Missed clock-in flag
+                    // Missed clock-in — only show if it's NOT a still-in situation
                     $scenario = $row->scenario ?? '';
                     if (str_starts_with($scenario, 'missed_clockin')) {
                         return "<span style='background:#fef3c7;color:#92400e;padding:3px 8px;border-radius:4px;font-size:.75rem;font-weight:600;'>⚠ Missed Clock-IN</span>";
@@ -257,8 +236,6 @@ class AttendanceDailyTable extends DataTableComponent
                         $formatted = "<span class='fw-semibold text-muted'>—</span>";
                     } else {
                         $formatted = "<span class='fw-semibold text-success'>" . Carbon::parse($value)->format('M d, Y g:i A') . "</span>";
-
-                        // Late badge — read stored flags directly, no need for shift
                         if (!$isSchool) {
                             if ($row->is_late_checkin && !$row->within_grace_period) {
                                 $badge = "<br><span style='background:#dc3545;color:#fff;padding:2px 8px;border-radius:12px;font-size:.7rem;font-weight:500;'>🔴 {$this->formatMinutes($row->minutes_late)} Late</span>";
@@ -272,7 +249,7 @@ class AttendanceDailyTable extends DataTableComponent
                 })
                 ->html(),
 
-            // ── CLOCK OUT ────────────────────────────────────────────────────
+            // ── CLOCK OUT ─────────────────────────────────────────────────────
             Column::make('Clock Out', 'check_out_time')
                 ->format(function ($value, $row) use ($targetDate, $isSchool) {
                     $label = '';
@@ -284,7 +261,18 @@ class AttendanceDailyTable extends DataTableComponent
                         if ($value) $label = "<br><small class='text-muted'>(Last Clock-Out)</small>";
                     }
 
-                    // Missed clock-out flag
+                    // ── STILL IN check — must come BEFORE missed_clockout ─────
+                    // The stored scenario may say missed_clockout (from a prior sync)
+                    // but if it's today and the shift hasn't ended, show "Still In".
+                    if (!$isSchool && $row->status === 'clocked_in' && $row->check_in_time && !$row->check_out_time) {
+                        $isToday = Carbon::parse($row->date)->isToday();
+                        if ($isToday && !$this->shiftHasEnded($row)) {
+                            return "<span style='background:green;color:#fff;padding:4px 12px;border-radius:4px;font-size:.75rem;'>Still In</span>";
+                        }
+                        // Past date OR shift has ended → fall through
+                    }
+
+                    // ── MISSED CLOCK-OUT (shift has ended, no clock-out punch) ─
                     $scenario = $row->scenario ?? '';
                     if (str_starts_with($scenario, 'missed_clockout')) {
                         $checkin = $row->check_in_time
@@ -293,7 +281,7 @@ class AttendanceDailyTable extends DataTableComponent
                         return "<span style='background:#fef3c7;color:#92400e;padding:3px 8px;border-radius:4px;font-size:.75rem;font-weight:600;'>⚠ Missed Clock-OUT</span>{$checkin}";
                     }
 
-                    // Still in
+                    // ── Generic still-in (school / no shift info) ────────────
                     if ($row->status === 'clocked_in' && $row->check_in_time && !$row->check_out_time) {
                         return "<span style='background:green;color:#fff;padding:4px 12px;border-radius:4px;font-size:.75rem;'>Still In</span>";
                     }
@@ -304,7 +292,6 @@ class AttendanceDailyTable extends DataTableComponent
                             ? "<span class='fw-semibold text-muted'>—</span>"
                             : "<span class='fw-semibold text-success'>" . Carbon::parse($value)->format('M d, Y g:i A') . "</span>");
 
-                    // Early out badge — read stored flag directly
                     if (!$isSchool && $row->is_early_checkout && $row->minutes_early > 0) {
                         $badge = "<br><span style='background:#ff6b6b;color:#fff;padding:2px 8px;border-radius:12px;font-size:.7rem;font-weight:500;'>⚠️ {$this->formatMinutes($row->minutes_early)} Early</span>";
                     }
