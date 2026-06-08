@@ -128,9 +128,17 @@ class SyncZKBioAttendance extends Command
                 $shiftStartDate = Carbon::parse($date)->subDay()->toDateString(); // default: yesterday
 
                 if ($nightShift) {
-                    for ($i = 1; $i <= 3; $i++) {
+                    for ($i = 1; $i <= 5; $i++) {
                         $candidate = Carbon::parse($date)->subDays($i)->toDateString();
-                        if ($nightShift->isScheduledOn($candidate)) {
+
+                        // Accept if scheduled OR if there's an open attendance row on that day
+                        $hasOpenRow = Attendance::where('employee_id', $employee->id)
+                            ->where('date', $candidate)
+                            ->whereIn('status', ['clocked_in', 'on_break'])
+                            ->whereNull('check_out_time')
+                            ->exists();
+
+                        if ($nightShift->isScheduledOn($candidate) || $hasOpenRow) {
                             $shiftStartDate = $candidate;
                             break;
                         }
