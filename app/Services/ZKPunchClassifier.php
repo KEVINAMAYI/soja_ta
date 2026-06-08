@@ -330,7 +330,7 @@ class ZKPunchClassifier
     //   5. Fallback to employee.shift_id (legacy)
     // =========================================================================
 
-    private function resolveShift(Employee $employee, Carbon $firstPunch, string $date): ?object
+    public function resolveShift(Employee $employee, Carbon $firstPunch, string $date): ?object
     {
         $punchHour    = (int) $firstPunch->format('H');
         $isNightPunch = $punchHour >= self::NIGHT_SHIFT_START_HOUR
