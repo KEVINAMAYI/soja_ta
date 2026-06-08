@@ -10,8 +10,9 @@ class ZKPunchClassifier
     const NOISE_GAP_MINUTES      = 1;
     const CHECKOUT_EARLY_WINDOW  = 60;
     const BREAK_TOLERANCE        = 20;
-    const NIGHT_SHIFT_START_HOUR = 16;
-    const DAY_SHIFT_START_HOUR   = 6;
+    const NIGHT_SHIFT_START_HOUR = 16;   // 16:00+ = night punch
+    const DAY_SHIFT_START_HOUR   = 6;    // before 06:00 = still night (early morning)
+    const OVERNIGHT_BOUNDARY_HOUR = 6;   // punches before 06:00 belong to previous day
 
     public function classify(array $rawPunches, Employee $employee, ?string $date = null): array
     {
@@ -48,18 +49,20 @@ class ZKPunchClassifier
         }
 
         if (!$shift->isScheduledOn($today)) {
-            // Night shift punch on an unscheduled day (e.g. General Night Shift Mon-Thu
-            // employee punching in at 18:xx on Friday) — still record as clocked_in
-            // so the overnight redirect can find and close it next morning.
+            // A punch before OVERNIGHT_BOUNDARY_HOUR (06:00) on an unscheduled day
+            // is an overnight clock-OUT from a night shift that started yesterday.
+            // A punch >= NIGHT_SHIFT_START_HOUR (16:00) is a clock-IN on an unscheduled day
+            // for a night shift that ends tomorrow — still record so overnight redirect finds it.
             $punchHour    = (int) $filtered[0]->format('H');
-            $isNightPunch = $punchHour >= self::NIGHT_SHIFT_START_HOUR;
+            $isNightPunch = $punchHour >= self::NIGHT_SHIFT_START_HOUR
+                || $punchHour < self::OVERNIGHT_BOUNDARY_HOUR;
 
             if ($isNightPunch && $shift->shift_type === 'night') {
                 $result['check_in']            = $filtered[0];
                 $result['within_grace_period'] = true;
                 $result['incomplete']          = true;
                 $result['scenario']            = 'checkin_only';
-                $result['notes'][]             = 'Night shift clock-in on unscheduled day — recording for overnight tracking.';
+                $result['notes'][]             = 'Night shift punch on unscheduled day — recording for overnight tracking.';
                 return $result;
             }
 
@@ -312,7 +315,10 @@ class ZKPunchClassifier
     public function resolveShift(Employee $employee, Carbon $firstPunch, string $date): ?object
     {
         $punchHour    = (int) $firstPunch->format('H');
-        $isNightPunch = $punchHour >= self::NIGHT_SHIFT_START_HOUR || $punchHour < self::DAY_SHIFT_START_HOUR;
+        // A punch is a "night punch" if it's in the evening (>= 16:00)
+        // OR in the early morning before 06:00 (overnight clock-out)
+        $isNightPunch = $punchHour >= self::NIGHT_SHIFT_START_HOUR
+            || $punchHour < self::DAY_SHIFT_START_HOUR;
 
         $assignedShifts = $employee->shifts()->with('breaks')->get();
 
