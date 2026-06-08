@@ -32,8 +32,7 @@ class SyncZKBioAttendance extends Command
         'clocked_out' => 3,
     ];
 
-    // Night shift clock-out window: punches between 00:00 and 05:59
-    // are treated as belonging to the PREVIOUS day's night shift
+    // Punches before this hour (06:00) belong to the PREVIOUS day's night shift
     const OVERNIGHT_BOUNDARY_HOUR = 6;
 
     public function __construct(
@@ -88,7 +87,7 @@ class SyncZKBioAttendance extends Command
                 continue;
             }
 
-            // Pull full day's punches
+            // Pull full day's punches from ZKBio
             $allPunches = $this->zkbio->getAllPunchesForEmployee($pin, $date);
 
             if (empty($allPunches)) {
@@ -96,58 +95,82 @@ class SyncZKBioAttendance extends Command
                 continue;
             }
 
-            // ── OVERNIGHT DETECTION ───────────────────────────────────────────
-            [$attendanceDate, $missedCheckin, $syntheticCheckin] =
-                $this->resolveAttendanceDate($employee, $allPunches, $date);
+            // =========================================================
+            // OVERNIGHT SPLIT
+            //
+            // Night shifts span two calendar days, e.g. 17:30 → 05:00.
+            // When syncing a given date, punches for that date may contain:
+            //
+            //   1. Early-morning punches (00:00–05:59) — these are
+            //      clock-OUTs from the PREVIOUS day's night shift.
+            //
+            //   2. Evening/daytime punches (06:00–23:59) — these
+            //      belong to TODAY's shift (day or night clock-IN).
+            //
+            // We split them and process each group against the correct
+            // attendance date so they never collide.
+            // =========================================================
+            $overnightPunches = array_values(array_filter($allPunches, function ($p) {
+                return (int) Carbon::parse($p)->format('H') < self::OVERNIGHT_BOUNDARY_HOUR;
+            }));
 
-            if ($attendanceDate !== $date) {
-                // Redirect overnight punch to yesterday
-                // If they also punched in yesterday (17:30), merge those punches
-                $yesterdayPunches = $this->zkbio->getAllPunchesForEmployee($pin, $attendanceDate);
-                $allPunches       = array_values(array_unique(array_merge($yesterdayPunches, $allPunches)));
-                sort($allPunches);
+            $todayPunches = array_values(array_filter($allPunches, function ($p) {
+                return (int) Carbon::parse($p)->format('H') >= self::OVERNIGHT_BOUNDARY_HOUR;
+            }));
 
-                $missedCheckin
-                    ? $this->line("  [{$pin}] {$employee->name} — overnight, no clock-in on {$attendanceDate} (missed). Clock-OUT only.")
-                    : $this->line("  [{$pin}] {$employee->name} — overnight punch redirected to {$attendanceDate}");
+            // ── OVERNIGHT CLOCK-OUT → save against YESTERDAY ─────────
+            if (!empty($overnightPunches)) {
+                $yesterday        = Carbon::parse($date)->subDay()->toDateString();
+                $yesterdayPunches = $this->zkbio->getAllPunchesForEmployee($pin, $yesterday);
+
+                // Only keep yesterday's evening punches (>= 06:00) so we
+                // don't double-count any early-morning punches from yesterday
+                $yesterdayEveningPunches = array_values(array_filter($yesterdayPunches, function ($p) {
+                    return (int) Carbon::parse($p)->format('H') >= self::OVERNIGHT_BOUNDARY_HOUR;
+                }));
+
+                // Merge: yesterday's clock-in punches + today's early-morning clock-out
+                $mergedPunches = array_values(array_unique(
+                    array_merge($yesterdayEveningPunches, $overnightPunches)
+                ));
+                sort($mergedPunches);
+
+                $this->line("  [{$pin}] {$employee->name} — overnight punch(es) redirected to {$yesterday}");
+
+                $classified = $this->classifier->classify($mergedPunches, $employee, $yesterday);
+
+                $this->printClassifiedLine($pin, $employee->name, $classified);
+
+                DB::beginTransaction();
+                try {
+                    $this->saveAttendance($employee, $yesterday, $classified);
+                    DB::commit();
+                    $processed++;
+                } catch (\Exception $e) {
+                    DB::rollBack();
+                    Log::error("ZKBio overnight save failed for PIN {$pin}", [
+                        'error' => $e->getMessage(),
+                        'trace' => $e->getTraceAsString(),
+                    ]);
+                    $this->error("  Failed overnight PIN {$pin}: " . $e->getMessage());
+                    $failed++;
+                }
             }
 
-            $classified = $this->classifier->classify($allPunches, $employee, $attendanceDate);
-
-            // ── Console output ────────────────────────────────────────────────
-            $flags = [];
-            if ($classified['incomplete'])                        $flags[] = '⚠  Incomplete';
-            if ($classified['check_out_synthetic'] ?? false)     $flags[] = '🤖 Auto clock-out';
-            if ($classified['missed_checkin_punch'] ?? false)    $flags[] = '🔴 Missed clock-IN';
-            if ($classified['missed_checkout_punch'] ?? false)   $flags[] = '🔴 Missed clock-OUT';
-            if ($classified['late_checkin'])                     $flags[] = "🕐 Late +{$classified['minutes_late']}min";
-            if ($classified['early_checkout'])                   $flags[] = "🚪 Early -{$classified['minutes_early']}min";
-            if ($classified['missed_break_return'])              $flags[] = '❓ Missed break punch';
-            if (($classified['lost_minutes'] ?? 0) > 0)         $flags[] = "⏳ Lost {$classified['lost_minutes']}min";
-            if (($classified['ot1_hours'] ?? 0) > 0)            $flags[] = "💰 OT1 {$classified['ot1_hours']}h";
-            if (($classified['ot2_hours'] ?? 0) > 0)            $flags[] = "💰 OT2 {$classified['ot2_hours']}h";
-            if (($classified['overtime_hours'] ?? 0) > 0)       $flags[] = "💰 OT {$classified['overtime_hours']}h";
-
-            $breakCount = collect($classified['segments'])->where('type', 'break')->count();
-            if ($breakCount > 0) $flags[] = "☕ {$breakCount} break(s)";
-
-            $this->line(sprintf(
-                '  [%s] %-22s | %d raw / %d filtered | %-38s | %s',
-                $pin,
-                $employee->name,
-                $classified['raw_count'],
-                $classified['filtered_count'],
-                $classified['scenario'],
-                $flags ? implode('  ', $flags) : '✅ Complete'
-            ));
-
-            foreach ($classified['notes'] as $note) {
-                $this->line("         → {$note}");
+            // ── TODAY'S PUNCHES → save against TODAY ─────────────────
+            if (empty($todayPunches)) {
+                // All punches were overnight — nothing for today itself
+                if (empty($overnightPunches)) $skipped++;
+                continue;
             }
+
+            $classified = $this->classifier->classify($todayPunches, $employee, $date);
+
+            $this->printClassifiedLine($pin, $employee->name, $classified);
 
             DB::beginTransaction();
             try {
-                $this->saveAttendance($employee, $attendanceDate, $classified);
+                $this->saveAttendance($employee, $date, $classified);
                 DB::commit();
                 $processed++;
             } catch (\Exception $e) {
@@ -168,78 +191,44 @@ class SyncZKBioAttendance extends Command
     }
 
     // =========================================================================
-    // OVERNIGHT DATE RESOLVER
-    //
-    // Problem: Night shift ends at 05:00 the NEXT day.
-    //   When syncing 2026-06-06, the 05:00 clock-out appears as a punch ON June 6.
-    //   Without this fix, it becomes a "clock-in" for June 6 day shift.
-    //
-    // Fix: If ALL punches for a given date fall before OVERNIGHT_BOUNDARY_HOUR (06:00),
-    //   AND the employee has a night shift,
-    //   AND there is an open (clocked_in) night shift record from yesterday,
-    //   → redirect to yesterday's date.
+    // Console output helper
     // =========================================================================
-
-    /**
-     * Resolve the correct attendance date for a set of punches.
-     *
-     * Returns an array:
-     *   [0] string  $attendanceDate  — the date the punches belong to
-     *   [1] bool    $missedCheckin   — true if employee forgot to punch in (synthetic clock-in needed)
-     *   [2] string|null $syntheticCheckin — the synthetic clock-in time to prepend (e.g. '2026-06-05 17:30:00')
-     */
-    private function resolveAttendanceDate(Employee $employee, array $punches, string $date): array
+    private function printClassifiedLine(string $pin, string $name, array $classified): void
     {
-        if (empty($punches)) return [$date, false, null];
+        $flags = [];
+        if ($classified['incomplete'])                        $flags[] = '⚠  Incomplete';
+        if ($classified['check_out_synthetic'] ?? false)     $flags[] = '🤖 Auto clock-out';
+        if ($classified['missed_checkin_punch'] ?? false)    $flags[] = '🔴 Missed clock-IN';
+        if ($classified['missed_checkout_punch'] ?? false)   $flags[] = '🔴 Missed clock-OUT';
+        if ($classified['late_checkin'])                     $flags[] = "🕐 Late +{$classified['minutes_late']}min";
+        if ($classified['early_checkout'])                   $flags[] = "🚪 Early -{$classified['minutes_early']}min";
+        if ($classified['missed_break_return'])              $flags[] = '❓ Missed break punch';
+        if (($classified['lost_minutes'] ?? 0) > 0)         $flags[] = "⏳ Lost {$classified['lost_minutes']}min";
+        if (($classified['ot1_hours'] ?? 0) > 0)            $flags[] = "💰 OT1 {$classified['ot1_hours']}h";
+        if (($classified['ot2_hours'] ?? 0) > 0)            $flags[] = "💰 OT2 {$classified['ot2_hours']}h";
+        if (($classified['overtime_hours'] ?? 0) > 0)       $flags[] = "💰 OT {$classified['overtime_hours']}h";
 
-        // Check if ALL punches are before 06:00
-        $allEarlyMorning = collect($punches)->every(function ($punchTime) {
-            $hour = (int) Carbon::parse($punchTime)->format('H');
-            return $hour < self::OVERNIGHT_BOUNDARY_HOUR;
-        });
+        $breakCount = collect($classified['segments'])->where('type', 'break')->count();
+        if ($breakCount > 0) $flags[] = "☕ {$breakCount} break(s)";
 
-        if (!$allEarlyMorning) return [$date, false, null];
+        $this->line(sprintf(
+            '  [%s] %-22s | %d raw / %d filtered | %-38s | %s',
+            $pin,
+            $name,
+            $classified['raw_count'],
+            $classified['filtered_count'],
+            $classified['scenario'],
+            $flags ? implode('  ', $flags) : '✅ Complete'
+        ));
 
-        // Does this employee have a night shift?
-        $assignedShifts = $employee->shifts;
-        if ($assignedShifts->isEmpty() && $employee->shift) {
-            $assignedShifts = collect([$employee->shift]);
+        foreach ($classified['notes'] as $note) {
+            $this->line("         → {$note}");
         }
-
-        $nightShift = $assignedShifts->firstWhere('shift_type', 'night');
-        if (!$nightShift) return [$date, false, null];
-
-        $yesterday = Carbon::parse($date)->subDay()->toDateString();
-
-        // Is there an open night shift record from yesterday?
-        $openNightRecord = Attendance::where('employee_id', $employee->id)
-            ->where('date', $yesterday)
-            ->where('status', 'clocked_in')
-            ->whereNotNull('check_in_time')
-            ->whereNull('check_out_time')
-            ->first();
-
-        if ($openNightRecord) {
-            $checkInHour = (int) Carbon::parse($openNightRecord->check_in_time)->format('H');
-            if ($checkInHour >= 16) {
-                // Normal case: open record exists, redirect to yesterday
-                return [$yesterday, false, null];
-            }
-        }
-
-        // ── MISSED CLOCK-IN CASE ─────────────────────────────────────────────
-        // No open record from yesterday means they forgot to punch in.
-        // BUT they clearly worked the night (punching out at 05:xx proves it).
-        // Redirect to yesterday regardless of whether the shift was "scheduled" —
-        // they may have worked overtime or a schedule exception.
-        // The 05:xx punch will be classified as clock-OUT with missing clock-IN.
-        return [$yesterday, true, null];
     }
 
     // =========================================================================
     // saveAttendance
     // =========================================================================
-
     private function saveAttendance(Employee $employee, string $date, array $c): void
     {
         $attendance = Attendance::firstOrNew([
@@ -363,9 +352,9 @@ class SyncZKBioAttendance extends Command
         foreach ($c['segments'] as $seg) {
             if ($seg['type'] === 'checkout') continue;
 
-            $isBreak     = $seg['type'] === 'break';
-            $isCompleted = $seg['in'] !== null;
-            $isMissed    = $seg['missed_punch'] ?? false;
+            $isBreak      = $seg['type'] === 'break';
+            $isCompleted  = $seg['in'] !== null;
+            $isMissed     = $seg['missed_punch'] ?? false;
             $shiftBreakId = null;
             $allowedDur   = null;
 
@@ -394,12 +383,12 @@ class SyncZKBioAttendance extends Command
             }
 
             $notes = match (true) {
-                $isMissed             => 'Missed punch — went on break but no return punch recorded. NOT overridden.',
+                $isMissed                  => 'Missed punch — went on break but no return punch recorded. NOT overridden.',
                 !$isCompleted && $isBreak  => 'Break started but no return punch before clock-out.',
                 !$isCompleted && !$isBreak => 'Employee left and did not return.',
-                !$isBreak             => "Unscheduled absence of {$seg['duration_minutes']} min.",
-                $excessMinutes > 0    => "Break exceeded allowed by {$excessMinutes} min (took {$seg['duration_minutes']} min, allowed {$allowedDur} min).",
-                default               => null,
+                !$isBreak                  => "Unscheduled absence of {$seg['duration_minutes']} min.",
+                $excessMinutes > 0         => "Break exceeded allowed by {$excessMinutes} min (took {$seg['duration_minutes']} min, allowed {$allowedDur} min).",
+                default                    => null,
             };
 
             AttendanceBreakLog::updateOrCreate(
@@ -446,7 +435,6 @@ class SyncZKBioAttendance extends Command
     // =========================================================================
     // Helpers
     // =========================================================================
-
     private function resolveWindow(string $date): array
     {
         if ($this->option('from') && $this->option('to')) {
