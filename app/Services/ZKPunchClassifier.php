@@ -59,7 +59,8 @@ class ZKPunchClassifier
             $isNightPunch = $punchHour >= self::NIGHT_SHIFT_START_HOUR
                 || $punchHour < self::OVERNIGHT_BOUNDARY_HOUR;
 
-            if ($isNightPunch && $shift->shift_type === 'night') {
+            if ($isNightPunch) {
+                // If it's a single punch, track it for overnight processing later
                 if (count($filtered) === 1) {
                     $result['check_in'] = $filtered[0];
                     $result['within_grace_period'] = true;
@@ -69,11 +70,9 @@ class ZKPunchClassifier
                     return $result;
                 }
 
-                // FIX: Let the execution bypass the "not_scheduled" early exit entirely
-                // if they completed an overnight shift lifecycle on this day!
+                // If they have multiple punches, unblock execution so it calculates the checkout
                 $result['notes'][] = 'Night shift punch on unscheduled day with multiple punches — processing full shift.';
             } else {
-                // Regular day shifts or non-night punches still fail out safely here
                 $result['scenario'] = 'not_scheduled';
                 $result['notes'][] = 'Not scheduled today.';
                 return $result;
