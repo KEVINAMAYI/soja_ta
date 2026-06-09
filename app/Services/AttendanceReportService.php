@@ -30,12 +30,13 @@ class AttendanceReportService
         ?string $startDate = null,
         ?string $endDate = null,
         ?string $status = null,
-    ) {
+    )
+    {
         $startDate = $startDate ?? now()->toDateString();
-        $endDate   = $endDate   ?? $startDate;
+        $endDate = $endDate ?? $startDate;
 
         $startDate = Carbon::parse($startDate)->toDateString();
-        $endDate   = Carbon::parse($endDate)->toDateString();
+        $endDate = Carbon::parse($endDate)->toDateString();
 
         $query = Attendance::with(['employee.shift'])
             ->whereHas('employee', fn($q) => $q->where('organization_id', $orgId))
@@ -76,7 +77,7 @@ class AttendanceReportService
         }
 
         if ($start_date) $query->where('attendances.date', '>=', $start_date);
-        if ($end_date)   $query->where('attendances.date', '<=', $end_date);
+        if ($end_date) $query->where('attendances.date', '<=', $end_date);
         if (!empty($ids)) $query->whereIn('attendances.employee_id', $ids);
 
         return $query;
@@ -100,31 +101,31 @@ class AttendanceReportService
         )->groupBy('attendances.employee_id');
 
         return $query->get()->map(fn($record) => (object)[
-            'employee_id'        => $record->employee_id,
-            'present_days'       => $record->present_days,
-            'absent_days'        => $record->absent_days,
-            'leave_days'         => $record->leave_days,
-            'sick_days'          => $record->sick_days,
-            'off_shift_days'     => $record->off_shift_days,
-            'total_days'         => $record->total_days,
+            'employee_id' => $record->employee_id,
+            'present_days' => $record->present_days,
+            'absent_days' => $record->absent_days,
+            'leave_days' => $record->leave_days,
+            'sick_days' => $record->sick_days,
+            'off_shift_days' => $record->off_shift_days,
+            'total_days' => $record->total_days,
             'total_worked_hours' => $record->total_worked_hours,
-            'total_ot_hours'     => $record->total_ot_hours,
-            'employee'           => $record->employee,
+            'total_ot_hours' => $record->total_ot_hours,
+            'employee' => $record->employee,
         ])->values();
     }
 
     public function getByDepartment($orgId, $ids, $start_date, $end_date)
     {
         $orgId = auth()->user()->employee->organization_id ?? $orgId;
-        $ids   = $ids ?? [];
+        $ids = $ids ?? [];
 
         $query = Attendance::query()
-            ->join('employees',   'attendances.employee_id',  '=', 'employees.id')
-            ->join('departments', 'employees.department_id',  '=', 'departments.id')
+            ->join('employees', 'attendances.employee_id', '=', 'employees.id')
+            ->join('departments', 'employees.department_id', '=', 'departments.id')
             ->where('employees.organization_id', $orgId);
 
         if ($start_date) $query->where('attendances.date', '>=', $start_date);
-        if ($end_date)   $query->where('attendances.date', '<=', $end_date);
+        if ($end_date) $query->where('attendances.date', '<=', $end_date);
         if (!empty($ids)) $query->whereIn('employees.id', $ids);
 
         $query->select(
@@ -142,17 +143,17 @@ class AttendanceReportService
         )->groupBy('employees.department_id', 'departments.name');
 
         return $query->get()->map(fn($record) => (object)[
-            'department_id'      => $record->department_id,
-            'department_name'    => $record->department_name,
-            'employee_count'     => $record->employee_count,
-            'present_days'       => $record->present_days,
-            'absent_days'        => $record->absent_days,
-            'leave_days'         => $record->leave_days,
-            'sick_days'          => $record->sick_days,
-            'off_shift_days'     => $record->off_shift_days,
-            'total_days'         => $record->total_days,
+            'department_id' => $record->department_id,
+            'department_name' => $record->department_name,
+            'employee_count' => $record->employee_count,
+            'present_days' => $record->present_days,
+            'absent_days' => $record->absent_days,
+            'leave_days' => $record->leave_days,
+            'sick_days' => $record->sick_days,
+            'off_shift_days' => $record->off_shift_days,
+            'total_days' => $record->total_days,
             'total_worked_hours' => $record->total_worked_hours,
-            'total_ot_hours'     => $record->total_ot_hours,
+            'total_ot_hours' => $record->total_ot_hours,
         ])->values();
     }
 
@@ -170,19 +171,25 @@ class AttendanceReportService
         ?string $startDate = null,
         ?string $endDate = null,
         ?int    $departmentId = null,
-    ) {
+    )
+    {
         $startDate = Carbon::parse($startDate ?? now()->toDateString())->toDateString();
-        $endDate   = Carbon::parse($endDate   ?? $startDate)->toDateString();
+        $endDate = Carbon::parse($endDate ?? $startDate)->toDateString();
 
-        $query = Attendance::with(['employee.shift', 'employee.department'])
-            ->join('employees', 'attendances.employee_id', '=', 'employees.id')
+        $query = Attendance::with([
+            'employee.shift',
+            'employee.department',
+            'employee.shifts',
+            'shift',
+            'breakLogs',
+        ])->join('employees', 'attendances.employee_id', '=', 'employees.id')
             ->where('employees.organization_id', $orgId)
             ->where('employees.active', 1)
             ->whereBetween('attendances.date', [$startDate, $endDate])
             ->select('attendances.*');
 
-        if (!empty($ids))    $query->whereIn('attendances.employee_id', $ids);
-        if ($departmentId)   $query->where('employees.department_id', $departmentId);
+        if (!empty($ids)) $query->whereIn('attendances.employee_id', $ids);
+        if ($departmentId) $query->where('employees.department_id', $departmentId);
 
         $query->orderBy('attendances.date')->orderBy('employees.name');
 
@@ -201,19 +208,25 @@ class AttendanceReportService
         ?string $startDate = null,
         ?string $endDate = null,
         ?int    $departmentId = null,
-    ) {
+    )
+    {
         $startDate = Carbon::parse($startDate ?? now()->toDateString())->toDateString();
-        $endDate   = Carbon::parse($endDate   ?? $startDate)->toDateString();
+        $endDate = Carbon::parse($endDate ?? $startDate)->toDateString();
 
-        $query = Attendance::with(['employee.shift', 'employee.department'])
-            ->join('employees', 'attendances.employee_id', '=', 'employees.id')
+        $query = Attendance::with([
+            'employee.shift',
+            'employee.department',
+            'employee.shifts',
+            'shift',
+            'breakLogs',
+        ])->join('employees', 'attendances.employee_id', '=', 'employees.id')
             ->where('employees.organization_id', $orgId)
             ->where('employees.active', 1)
             ->whereBetween('attendances.date', [$startDate, $endDate])
             ->whereIn('attendances.status', ['clocked_in', 'clocked_out'])
             ->select('attendances.*');
 
-        if (!empty($ids))  $query->whereIn('attendances.employee_id', $ids);
+        if (!empty($ids)) $query->whereIn('attendances.employee_id', $ids);
         if ($departmentId) $query->where('employees.department_id', $departmentId);
 
         $query->orderBy('attendances.date')->orderBy('attendances.check_in_time');
@@ -232,19 +245,25 @@ class AttendanceReportService
         ?string $startDate = null,
         ?string $endDate = null,
         ?int    $departmentId = null,
-    ) {
+    )
+    {
         $startDate = Carbon::parse($startDate ?? now()->toDateString())->toDateString();
-        $endDate   = Carbon::parse($endDate   ?? $startDate)->toDateString();
+        $endDate = Carbon::parse($endDate ?? $startDate)->toDateString();
 
-        $query = Attendance::with(['employee.shift', 'employee.department'])
-            ->join('employees', 'attendances.employee_id', '=', 'employees.id')
+        $query = Attendance::with([
+            'employee.shift',
+            'employee.department',
+            'employee.shifts',
+            'shift',
+            'breakLogs',
+        ])->join('employees', 'attendances.employee_id', '=', 'employees.id')
             ->where('employees.organization_id', $orgId)
             ->where('employees.active', 1)
             ->whereBetween('attendances.date', [$startDate, $endDate])
             ->whereIn('attendances.status', ['absent', 'unchecked_in', 'on_leave', 'sick_leave', 'sick_off'])
             ->select('attendances.*');
 
-        if (!empty($ids))  $query->whereIn('attendances.employee_id', $ids);
+        if (!empty($ids)) $query->whereIn('attendances.employee_id', $ids);
         if ($departmentId) $query->where('employees.department_id', $departmentId);
 
         $query->orderBy('attendances.date')->orderBy('employees.name');
@@ -264,12 +283,18 @@ class AttendanceReportService
         ?string $startDate = null,
         ?string $endDate = null,
         ?int    $departmentId = null,
-    ) {
+    )
+    {
         $startDate = Carbon::parse($startDate ?? now()->toDateString())->toDateString();
-        $endDate   = Carbon::parse($endDate   ?? $startDate)->toDateString();
+        $endDate = Carbon::parse($endDate ?? $startDate)->toDateString();
 
-        $query = Attendance::with(['employee.shift', 'employee.department'])
-            ->join('employees', 'attendances.employee_id', '=', 'employees.id')
+        $query = Attendance::with([
+            'employee.shift',
+            'employee.department',
+            'employee.shifts',
+            'shift',
+            'breakLogs',
+        ])->join('employees', 'attendances.employee_id', '=', 'employees.id')
             ->where('employees.organization_id', $orgId)
             ->where('employees.active', 1)
             ->whereBetween('attendances.date', [$startDate, $endDate])
@@ -277,7 +302,7 @@ class AttendanceReportService
             ->where('attendances.within_grace_period', 0)
             ->select('attendances.*');
 
-        if (!empty($ids))  $query->whereIn('attendances.employee_id', $ids);
+        if (!empty($ids)) $query->whereIn('attendances.employee_id', $ids);
         if ($departmentId) $query->where('employees.department_id', $departmentId);
 
         $query->orderBy('attendances.date')->orderBy('attendances.minutes_late', 'desc');
@@ -300,9 +325,10 @@ class AttendanceReportService
         ?string $startDate = null,
         ?string $endDate = null,
         ?int    $departmentId = null,
-    ) {
+    )
+    {
         $startDate = Carbon::parse($startDate ?? now()->startOfMonth()->toDateString());
-        $endDate   = Carbon::parse($endDate   ?? now()->toDateString());
+        $endDate = Carbon::parse($endDate ?? now()->toDateString());
 
         $query = $this->baseQuery($orgId, $ids, $startDate->toDateString(), $endDate->toDateString(), $departmentId)
             ->with(['employee', 'employee.department', 'employee.shift'])
@@ -326,20 +352,20 @@ class AttendanceReportService
         return $byEmployee->map(function ($employeeRows) {
             $first = $employeeRows->first();
             $weeks = $employeeRows->map(fn($r) => (object)[
-                'year_week'    => $r->year_week,
-                'week_start'   => $r->week_start,
-                'week_end'     => $r->week_end,
-                'week_label'   => Carbon::parse($r->week_start)->format('d M') . ' – ' . Carbon::parse($r->week_end)->format('d M'),
-                'worked_hours' => round((float) $r->worked_hours, 2),
-                'ot_hours'     => round((float) $r->ot_hours, 2),
+                'year_week' => $r->year_week,
+                'week_start' => $r->week_start,
+                'week_end' => $r->week_end,
+                'week_label' => Carbon::parse($r->week_start)->format('d M') . ' – ' . Carbon::parse($r->week_end)->format('d M'),
+                'worked_hours' => round((float)$r->worked_hours, 2),
+                'ot_hours' => round((float)$r->ot_hours, 2),
             ])->values();
 
             return (object)[
-                'employee_id'        => $first->employee_id,
-                'employee'           => $first->employee,
-                'weeks'              => $weeks,
+                'employee_id' => $first->employee_id,
+                'employee' => $first->employee,
+                'weeks' => $weeks,
                 'total_worked_hours' => round($weeks->sum('worked_hours'), 2),
-                'total_ot_hours'     => round($weeks->sum('ot_hours'), 2),
+                'total_ot_hours' => round($weeks->sum('ot_hours'), 2),
             ];
         })->values();
     }
@@ -352,12 +378,13 @@ class AttendanceReportService
         array   $ids = [],
         ?string $startDate = null,
         ?string $endDate = null,
-    ) {
+    )
+    {
         $startDate = Carbon::parse($startDate ?? now()->startOfMonth()->toDateString());
-        $endDate   = Carbon::parse($endDate   ?? now()->toDateString());
+        $endDate = Carbon::parse($endDate ?? now()->toDateString());
 
         $query = Attendance::query()
-            ->join('employees',   'attendances.employee_id', '=', 'employees.id')
+            ->join('employees', 'attendances.employee_id', '=', 'employees.id')
             ->join('departments', 'employees.department_id', '=', 'departments.id')
             ->where('employees.organization_id', $orgId)
             ->whereBetween('attendances.date', [$startDate->toDateString(), $endDate->toDateString()])
@@ -382,21 +409,21 @@ class AttendanceReportService
         return $rows->groupBy('department_id')->map(function ($deptRows) {
             $first = $deptRows->first();
             $weeks = $deptRows->map(fn($r) => (object)[
-                'year_week'      => $r->year_week,
-                'week_start'     => $r->week_start,
-                'week_end'       => $r->week_end,
-                'week_label'     => Carbon::parse($r->week_start)->format('d M') . ' – ' . Carbon::parse($r->week_end)->format('d M'),
+                'year_week' => $r->year_week,
+                'week_start' => $r->week_start,
+                'week_end' => $r->week_end,
+                'week_label' => Carbon::parse($r->week_start)->format('d M') . ' – ' . Carbon::parse($r->week_end)->format('d M'),
                 'employee_count' => $r->employee_count,
-                'worked_hours'   => round((float) $r->worked_hours, 2),
-                'ot_hours'       => round((float) $r->ot_hours, 2),
+                'worked_hours' => round((float)$r->worked_hours, 2),
+                'ot_hours' => round((float)$r->ot_hours, 2),
             ])->values();
 
             return (object)[
-                'department_id'      => $first->department_id,
-                'department_name'    => $first->department_name,
-                'weeks'              => $weeks,
+                'department_id' => $first->department_id,
+                'department_name' => $first->department_name,
+                'weeks' => $weeks,
                 'total_worked_hours' => round($weeks->sum('worked_hours'), 2),
-                'total_ot_hours'     => round($weeks->sum('ot_hours'), 2),
+                'total_ot_hours' => round($weeks->sum('ot_hours'), 2),
             ];
         })->values();
     }
