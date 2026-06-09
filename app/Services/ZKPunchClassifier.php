@@ -457,17 +457,43 @@ class ZKPunchClassifier
 
     private function classifyOut(Carbon $outPunch, $shiftBreaks, Carbon $checkOutStart, Carbon $checkOutEnd, string $today): string
     {
-        if ($outPunch->between($checkOutStart, $checkOutEnd)) return 'checkout';
+        // 1. Always check for the actual shift end clock-out window first
+        if ($outPunch->between($checkOutStart, $checkOutEnd)) {
+            return 'checkout';
+        }
+
+        // 2. Loop through scheduled breaks and apply the 1-hour early/late detection buffers
         foreach ($shiftBreaks as $break) {
             if (!$break->is_active || !$break->window_start_time) continue;
-            $windowStart = Carbon::parse($today . ' ' . Carbon::parse($break->window_start_time)->format('H:i:s'));
+
+            $punchDateStr = $outPunch->toDateString();
+            $windowStart  = Carbon::parse($punchDateStr . ' ' . Carbon::parse($break->window_start_time)->format('H:i:s'));
+
+            // Handle day/night crossover alignment safely
+            if ($outPunch->getTimestamp() < $windowStart->getTimestamp() && $outPunch->diffInHours($windowStart) > 12) {
+                $windowStart->subDay();
+            }
+
             $windowEnd = $break->window_end_time
-                ? Carbon::parse($today . ' ' . Carbon::parse($break->window_end_time)->format('H:i:s'))
+                ? Carbon::parse($windowStart->toDateString() . ' ' . Carbon::parse($break->window_end_time)->format('H:i:s'))
                 : $windowStart->copy()->addHours(2);
-            if ($outPunch->between($windowStart, $windowEnd))
+
+            if ($windowEnd->lt($windowStart)) {
+                $windowEnd->addDay();
+            }
+
+            // EXPAND THE WINDOW: 1 hour early and 1 hour late
+            $bufferedStart = $windowStart->copy()->subHour();
+            $bufferedEnd   = $windowEnd->copy()->addHour();
+
+            // If the punch lands inside this padded buffer zone, classify it as a break
+            if ($outPunch->between($bufferedStart, $bufferedEnd)) {
                 return 'break';
+            }
         }
-        return 'unscheduled_leave';
+
+        // Mid-shift activity outside the expanded buffer window is ignored
+        return 'untracked_punch';
     }
 
     private function getMaxBreakDuration(Carbon $outPunch, $shiftBreaks, string $today): int
