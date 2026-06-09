@@ -114,7 +114,7 @@ trait TaSheetHelpers
         return "Period: {$s} – {$e}  |  Generated: " . now()->format('d M Y H:i');
     }
 
-    private function staffCategory($shift): string
+    protected function staffCategory($shift): string
     {
         if (!$shift) return '';
         return match ($shift->department_type ?? '') {
@@ -125,7 +125,7 @@ trait TaSheetHelpers
         };
     }
 
-    private function shiftDayNight($shift): string
+    protected function shiftDayNight($shift): string
     {
         if (!$shift) return '';
         return match ($shift->shift_type ?? '') {
@@ -145,7 +145,7 @@ trait TaSheetHelpers
      *     been saved incorrectly during sync.
      *  3. Fall back to employee's primary/first shift.
      */
-    private function resolveShiftObject($r, array $shiftCache = []): ?object
+    protected function resolveShiftObject($r, array $shiftCache = []): ?object
     {
         $punchTime = $r->check_in_time ?? $r->check_out_time;
         $isPunchNight = false;
@@ -195,7 +195,7 @@ trait TaSheetHelpers
     /**
      * Resolve Day/Night label — uses resolveShiftObject internally.
      */
-    private function resolveShiftDisplay($r, array $shiftCache = []): string
+    protected function resolveShiftDisplay($r, array $shiftCache = []): string
     {
         $shift = $this->resolveShiftObject($r, $shiftCache);
         if (!$shift) {

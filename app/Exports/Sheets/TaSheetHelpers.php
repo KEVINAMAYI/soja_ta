@@ -93,7 +93,7 @@ trait TaSheetHelpers
     }
 
     // ── Uses Shift model department_type / shift_type if available ────────────
-    private function staffCategory($shift): string
+    protected function staffCategory($shift): string
     {
         if (!$shift) return '';
         return match ($shift->department_type ?? '') {
@@ -104,7 +104,7 @@ trait TaSheetHelpers
         };
     }
 
-    private function shiftDayNight($shift): string
+    protected function shiftDayNight($shift): string
     {
         if (!$shift) return '';
         return match ($shift->shift_type ?? '') {
