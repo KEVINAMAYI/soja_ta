@@ -242,15 +242,11 @@ class ZKPunchClassifier
             $result['notes'][] = "No break punches for full shift — flagged. No deduction.";
         }
 
-        // ── STEP 1: Always deduct 30 min break from gross worked time ──────────────
-// Whether or not the employee punched for break, 30 min is always deducted.
-// This is the mandatory break policy for both day and night shifts.
-        $workedMinutes = max(0, $workedMinutes - 30);
 
-// ── STEP 2: Expected minutes based on shift type ───────────────────────────
+        // ── STEP 2: Expected minutes based on shift type ───────────────────────────
 // Day shift  = 9h  = 540 min (08:00 → 17:30 minus 30min break)
 // Night shift = 11h = 660 min (17:30 → 05:00 minus 30min break)
-        $isNightShift    = ($shift->shift_type ?? '') === 'night';
+        $isNightShift = ($shift->shift_type ?? '') === 'night';
         $expectedMinutes = $isNightShift ? 660 : 540;
 
 // ── STEP 3: Lost minutes = shortfall against expected ─────────────────────
@@ -261,7 +257,7 @@ class ZKPunchClassifier
 // ── STEP 4: Build breakdown of WHY hours were lost ────────────────────────
         $breakdown = [];
 
-        $lateMin  = $result['late_checkin_lost_minutes'] ?? 0;
+        $lateMin = $result['late_checkin_lost_minutes'] ?? 0;
         $earlyMin = $result['minutes_early'] ?? 0;
 
         if ($lateMin > 0 && $earlyMin > 0) {
@@ -287,12 +283,12 @@ class ZKPunchClassifier
         }
 
         // ── STEP 5: Save results ──────────────────────────────────────────────────
-        $result['worked_hours']       = round($workedMinutes / 60, 2);
+        $result['worked_hours'] = round($workedMinutes / 60, 2);
         $result['break_lost_minutes'] = $breakLost;
-        $result['lost_minutes']       = $lostMinutes;
+        $result['lost_minutes'] = $result['late_checkin_lost_minutes'] + $breakLost + ($result['minutes_early'] ?? 0);
         $result['lost_hours_breakdown'] = $breakdown;
 
-        $result['notes'][] = "Worked hours (after 30min break deduction): {$result['worked_hours']}h.";
+        $result['notes'][] = "Worked hours: {$result['worked_hours']}h.";
         $result['notes'][] = "Expected: " . ($isNightShift ? '11h' : '9h') . " | Lost: " . round($lostMinutes / 60, 2) . "h.";
 
         if ($lostMinutes > 0) {
@@ -468,9 +464,9 @@ class ZKPunchClassifier
             if (!$break->is_active || !$break->window_start_time) continue;
             $windowStart = Carbon::parse($today . ' ' . Carbon::parse($break->window_start_time)->format('H:i:s'));
             if ($outPunch->between($windowStart->copy()->subMinutes(self::BREAK_TOLERANCE), $windowStart->copy()->addMinutes(self::BREAK_TOLERANCE)))
-                return $break->max_duration_minutes ?? $break->duration_minutes ?? 60;
+                return $break->max_duration_minutes ?? $break->duration_minutes ?? 30; // ← was 60
         }
-        return 60;
+        return 30; // ← was 60
     }
 
     private function isBreakPaid(Carbon $outPunch, $shiftBreaks, string $today): bool
