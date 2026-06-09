@@ -461,7 +461,10 @@ class ZKPunchClassifier
         foreach ($shiftBreaks as $break) {
             if (!$break->is_active || !$break->window_start_time) continue;
             $windowStart = Carbon::parse($today . ' ' . Carbon::parse($break->window_start_time)->format('H:i:s'));
-            if ($outPunch->between($windowStart->copy()->subMinutes(self::BREAK_TOLERANCE), $windowStart->copy()->addMinutes(self::BREAK_TOLERANCE)))
+            $windowEnd = $break->window_end_time
+                ? Carbon::parse($today . ' ' . Carbon::parse($break->window_end_time)->format('H:i:s'))
+                : $windowStart->copy()->addHours(2);
+            if ($outPunch->between($windowStart, $windowEnd))
                 return 'break';
         }
         return 'unscheduled_leave';
