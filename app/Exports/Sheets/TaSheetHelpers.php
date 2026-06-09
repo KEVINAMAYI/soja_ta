@@ -114,6 +114,55 @@ trait TaSheetHelpers
         };
     }
 
+
+    protected function resolveShiftObject($r, array $shiftCache = []): ?object
+    {
+        $punchTime = $r->check_in_time ?? $r->check_out_time;
+        $isPunchNight = false;
+        if ($punchTime) {
+            $hour = (int) Carbon::parse($punchTime)->format('H');
+            $isPunchNight = ($hour < 6 || $hour >= 17); // ← was 16, now 17
+        }
+
+        $shiftId = $r->shift_id ?? null;
+
+        // 1. Cache lookup
+        if ($shiftId && isset($shiftCache[$shiftId])) {
+            $shift = $shiftCache[$shiftId];
+            $shiftIsNight = ($shift->shift_type ?? '') === 'night';
+            if ($isPunchNight === $shiftIsNight) return $shift;
+        }
+
+        // 1b. Eager-loaded relation fallback for cache miss
+        if ($shiftId && ($r->shift ?? null)) {
+            $shiftIsNight = ($r->shift->shift_type ?? '') === 'night';
+            if ($isPunchNight === $shiftIsNight) return $r->shift;
+        }
+
+        // 2. Punch type doesn't match shift_id — look at employee's assigned shifts
+        $employee = $r->employee ?? null;
+        if ($employee) {
+            if ($isPunchNight) {
+                $nightShift = $employee->shifts?->firstWhere('shift_type', 'night');
+                if ($nightShift) return $nightShift;
+            } else {
+                $dayShift = $employee->shifts?->first(
+                    fn($s) => in_array($s->shift_type ?? '', ['day', 'admin', 'extended'])
+                );
+                if ($dayShift) return $dayShift;
+            }
+
+            // 3. Final fallback — primary or first assigned shift
+            return $employee->shifts?->firstWhere('pivot.is_primary', true)
+                ?? $employee->shifts?->first()
+                ?? $employee->shift
+                ?? null;
+        }
+
+        return null;
+    }
+
+
     // Always 9.0 per client requirement
     private function shiftDefinedHours($shift): string
     {
