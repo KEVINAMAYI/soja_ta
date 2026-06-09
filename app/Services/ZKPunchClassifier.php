@@ -91,11 +91,16 @@ class ZKPunchClassifier
         $onTimeDeadline = $shift->getGraceDeadline($today);
         $isExtended = $shift->shift_type === 'extended';
 
+        // If shift end is before shift start, it crosses midnight — push end to next day.
+        if ($shiftEnd->lte($shiftStart)) {
+            $shiftEnd->addDay();
+        }
+
         $maxOvertimeMinutes = ($shift->max_overtime_hours ?? 0) * 60;
         $earlyThreshold = $shift->early_checkout_threshold_minutes ?? 0;
         $checkOutStart = $shiftEnd->copy()->subMinutes(self::CHECKOUT_EARLY_WINDOW + $earlyThreshold);
 
-// Force the checkout window to stay open all the way until 6:00 AM for night shifts
+        // Force the checkout window to stay open all the way until 6:00 AM for night shifts
         if ($shift->shift_type === 'night') {
             $checkOutEnd = Carbon::parse($today)->addDay()->startOfDay()->addHours(self::OVERNIGHT_BOUNDARY_HOUR);
         } else {
@@ -236,10 +241,14 @@ class ZKPunchClassifier
 
         $breakCount = collect($segments)->where('type', 'break')->count();
         $totalShiftMin = $shiftStart->diffInMinutes($shiftEnd);
+
         if ($breakCount === 0 && $workedMinutes >= ($totalShiftMin * 0.6)) {
+            $scheduledBreakMinutes = $shiftBreaks->where('is_active', true)->sum('duration_minutes') ?: 30;
+            $workedMinutes = max(0, $workedMinutes - $scheduledBreakMinutes);
             $result['missed_break_return'] = true;
-            $result['break_enforced'] = false;
-            $result['notes'][] = "No break punches for full shift — flagged. No deduction.";
+            $result['break_enforced'] = true;
+            $result['enforced_break_minutes'] = $scheduledBreakMinutes;
+            $result['notes'][] = "No break taken — {$scheduledBreakMinutes} min deducted from worked hours.";
         }
 
 
