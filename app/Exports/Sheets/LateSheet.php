@@ -30,14 +30,20 @@ class LateSheet implements FromArray, WithTitle, WithStyles, WithColumnWidths
 {
     use TaSheetHelpers;
 
-    private const LAST_COL   = 'J';
-    private const TOTAL_COLS = 10;
+    private const LAST_COL   = 'L';  // was J
+    private const TOTAL_COLS = 12;   // was 10
+    private array $shiftCache = [];
 
     public function __construct(
         private readonly array   $records,
         private readonly ?string $startDate,
         private readonly ?string $endDate,
-    ) {}
+    ) {
+        $shiftIds = collect($records)->pluck('shift_id')->filter()->unique()->values()->toArray();
+        if (!empty($shiftIds)) {
+            $this->shiftCache = \App\Models\Shift::whereIn('id', $shiftIds)->get()->keyBy('id')->all();
+        }
+    }
 
     public function title(): string { return 'Late Report'; }
 
@@ -46,7 +52,8 @@ class LateSheet implements FromArray, WithTitle, WithStyles, WithColumnWidths
         return [
             'A' => 12, 'B' => 16, 'C' => 16,
             'D' => 24, 'E' => 18, 'F' => 14,
-            'G' => 11, 'H' => 11, 'I' => 16, 'J' => 13,
+            'G' => 16, 'H' => 10,            // new columns
+            'I' => 11, 'J' => 11, 'K' => 16, 'L' => 13,
         ];
     }
 
@@ -63,6 +70,8 @@ class LateSheet implements FromArray, WithTitle, WithStyles, WithColumnWidths
             'Name',                          // D
             'Department',                    // E
             'Section',                       // F
+            'Staff Category',                // G  ← new
+            "Shift\n(Day/Night)",            // H  ← new
             "Actual\nTime In",               // G
             "Actual\nTime Out",              // H
             "Expected Hours\n(Defined: 9h)", // I
@@ -71,6 +80,7 @@ class LateSheet implements FromArray, WithTitle, WithStyles, WithColumnWidths
 
         foreach ($this->records as $r) {
             $emp = $r->employee ?? null;
+            $shift = $this->resolveShiftObject($r, $this->shiftCache);
             $out[] = [
                 $this->fmtDate($r->date),                       // A
                 $emp?->employee_type ?? '',                      // B
@@ -78,12 +88,14 @@ class LateSheet implements FromArray, WithTitle, WithStyles, WithColumnWidths
                 $emp?->name ?? '',                               // D
                 $emp?->department?->name ?? '',                  // E
                 $emp?->section ?? '',                            // F
-                $this->fmtTime($r->check_in_time),              // G
-                $this->fmtTime($r->check_out_time),             // H
-                '9:00',                                          // I
+                $this->staffCategory($shift),                    // G  ← new
+                $this->shiftDayNight($shift),                    // H  ← new
+                $this->fmtTime($r->check_in_time),              // I
+                $this->fmtTime($r->check_out_time),             // J
+                '9:00',                                          // K
                 $r->minutes_late > 0
                     ? $this->minutesToHHMM((int) $r->minutes_late)
-                    : '',                                        // J
+                    : '',                                        // L
             ];
         }
 
@@ -139,17 +151,17 @@ class LateSheet implements FromArray, WithTitle, WithStyles, WithColumnWidths
             }
 
             // Lateness bold amber — col J (last)
-            $sheet->getStyle("J{$row}")->getFont()->setBold(true)->getColor()->setRGB('856404');
+            $sheet->getStyle("L{$row}")->getFont()->setBold(true)->getColor()->setRGB('856404');
         }
 
-        $sheet->mergeCells("A{$total}:I{$total}");
+        $sheet->mergeCells("A{$total}:K{$total}");
         $sheet->getStyle("A{$total}:{$lastCol}{$total}")->applyFromArray([
             'font'      => ['bold' => true, 'size' => 9, 'name' => 'Arial', 'color' => ['rgb' => 'FFFFFF']],
             'fill'      => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => '856404']],
             'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER],
         ]);
-        $sheet->getStyle("J{$total}")->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('FFF3CD');
-        $sheet->getStyle("J{$total}")->getFont()->setColor(new Color('000000'))->setBold(true);
+        $sheet->getStyle("L{$total}")->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('FFF3CD');
+        $sheet->getStyle("L{$total}")->getFont()->setColor(new Color('000000'))->setBold(true);
         $sheet->getRowDimension($total)->setRowHeight(18);
 
         $sheet->freezePane('A4');

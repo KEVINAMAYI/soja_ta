@@ -96,16 +96,22 @@ trait TaSheetHelpers
     private function staffCategory($shift): string
     {
         if (!$shift) return '';
-        if ($shift->department_type) return ucfirst($shift->department_type) . ' Shift';
-        return str_contains(strtolower($shift->name ?? ''), 'admin') ? 'Admin Shift' : 'General Shift';
+        return match ($shift->department_type ?? '') {
+            'admin'       => 'Admin',
+            'general'     => 'General',
+            'engineering' => 'Engineering',
+            default       => ucfirst($shift->department_type ?? '') ?: 'General',
+        };
     }
 
     private function shiftDayNight($shift): string
     {
         if (!$shift) return '';
-        if ($shift->shift_type) return ucfirst($shift->shift_type);
-        $start = (int) Carbon::parse($shift->start_time)->format('H');
-        return ($start >= 6 && $start < 18) ? 'Day' : 'Night';
+        return match ($shift->shift_type ?? '') {
+            'night'                    => 'Night',
+            'day', 'admin', 'extended' => 'Day',
+            default => (int) Carbon::parse($shift->start_time)->format('H') >= 17 ? 'Night' : 'Day',
+        };
     }
 
     // Always 9.0 per client requirement
