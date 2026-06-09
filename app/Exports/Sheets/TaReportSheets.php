@@ -212,9 +212,11 @@ trait TaSheetHelpers
 
     private function lostHours($r): string
     {
+        // Absent = full shift lost
         if (in_array($r->status ?? '', ['absent', 'unchecked_in'])) {
-            return '9.0';
+            return ($r->shift?->shift_type === 'night') ? '11.0' : '9.0';
         }
+
         $lostMinutes = (int) ($r->lost_minutes ?? 0);
         if ($lostMinutes <= 0) return '0.0';
         $h = (int) floor($lostMinutes / 60);

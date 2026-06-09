@@ -242,18 +242,62 @@ class ZKPunchClassifier
             $result['notes'][] = "No break punches for full shift — flagged. No deduction.";
         }
 
-        $result['worked_hours'] = round(max(0, $workedMinutes) / 60, 2);
-        $result['break_lost_minutes'] = $breakLost;
-        $result['lost_minutes'] = $result['late_checkin_lost_minutes'] + $breakLost;
-        $result['notes'][] = "Worked hours: {$result['worked_hours']}h.";
+        // ── STEP 1: Always deduct 30 min break from gross worked time ──────────────
+// Whether or not the employee punched for break, 30 min is always deducted.
+// This is the mandatory break policy for both day and night shifts.
+        $workedMinutes = max(0, $workedMinutes - 30);
 
+// ── STEP 2: Expected minutes based on shift type ───────────────────────────
+// Day shift  = 9h  = 540 min (08:00 → 17:30 minus 30min break)
+// Night shift = 11h = 660 min (17:30 → 05:00 minus 30min break)
+        $isNightShift    = ($shift->shift_type ?? '') === 'night';
+        $expectedMinutes = $isNightShift ? 660 : 540;
+
+// ── STEP 3: Lost minutes = shortfall against expected ─────────────────────
+// If worked >= expected → no lost hours (overtime covers any lateness)
+// If worked < expected  → lost = expected - worked
+        $lostMinutes = max(0, $expectedMinutes - $workedMinutes);
+
+// ── STEP 4: Build breakdown of WHY hours were lost ────────────────────────
         $breakdown = [];
-        if ($result['late_checkin_lost_minutes'] > 0) $breakdown[] = "Late check-in: {$result['late_checkin_lost_minutes']} min";
-        if ($breakLost > 0) $breakdown[] = "Break overstay: {$breakLost} min";
-        if ($result['missed_break_return']) $breakdown[] = "Missed punch flagged (no deduction)";
+
+        $lateMin  = $result['late_checkin_lost_minutes'] ?? 0;
+        $earlyMin = $result['minutes_early'] ?? 0;
+
+        if ($lateMin > 0 && $earlyMin > 0) {
+            // Both late in AND early out — show both but cap at total lost
+            $breakdown[] = "Late check-in: {$lateMin} min";
+            $breakdown[] = "Early checkout: {$earlyMin} min";
+        } elseif ($lateMin > 0) {
+            $breakdown[] = "Late check-in: {$lateMin} min";
+        } elseif ($earlyMin > 0) {
+            $breakdown[] = "Early checkout: {$earlyMin} min";
+        }
+
+        if ($breakLost > 0) {
+            $breakdown[] = "Break overstay: {$breakLost} min";
+        }
+
+        if ($result['missed_break_return']) {
+            $breakdown[] = "Missed punch flagged (no deduction)";
+        }
+
+        if ($lostMinutes === 0 && ($lateMin > 0 || $earlyMin > 0)) {
+            $breakdown[] = "Covered by overtime — no net loss";
+        }
+
+        // ── STEP 5: Save results ──────────────────────────────────────────────────
+        $result['worked_hours']       = round($workedMinutes / 60, 2);
+        $result['break_lost_minutes'] = $breakLost;
+        $result['lost_minutes']       = $lostMinutes;
         $result['lost_hours_breakdown'] = $breakdown;
 
-        if ($result['lost_minutes'] > 0) $result['notes'][] = "Total lost: {$result['lost_minutes']} min.";
+        $result['notes'][] = "Worked hours (after 30min break deduction): {$result['worked_hours']}h.";
+        $result['notes'][] = "Expected: " . ($isNightShift ? '11h' : '9h') . " | Lost: " . round($lostMinutes / 60, 2) . "h.";
+
+        if ($lostMinutes > 0) {
+            $result['notes'][] = "Total lost: {$lostMinutes} min (" . implode(', ', $breakdown) . ").";
+        }
 
         $result['scenario'] = $this->determineScenario($result);
         $result['incomplete'] = $this->isIncomplete($result);
