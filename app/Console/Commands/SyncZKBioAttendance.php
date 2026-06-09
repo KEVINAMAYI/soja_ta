@@ -302,6 +302,11 @@ class SyncZKBioAttendance extends Command
             if ($shift) {
                 $shiftStart     = $shift->getEffectiveStartTime($date);
                 $shiftEnd       = $shift->getEffectiveEndTime($date);
+
+                if ($shiftEnd->lte($shiftStart)) {
+                    $shiftEnd->addDay();
+                }
+
                 $graceMins      = $shift->grace_period_enabled ? ($shift->grace_period_minutes ?? 0) : 0;
                 $earlyThreshold = $shift->early_checkout_threshold_minutes ?? 0;
 
@@ -454,6 +459,10 @@ class SyncZKBioAttendance extends Command
         // Overtime records
         if ($c['overtime_hours'] > 0 && $c['check_out'] && !$c['check_out_synthetic'] && $shift) {
             $shiftEnd = $shift->getEffectiveEndTime($date);
+            if ($shiftEnd->lte(Carbon::parse($date . ' 12:00:00'))) {
+                $shiftEnd->addDay();
+            }
+
             Overtime::updateOrCreate(
                 ['employee_id' => $employee->id, 'attendance_id' => $attendance->id, 'date' => $date, 'type' => 'weekday'],
                 ['start_time' => $shiftEnd, 'end_time' => $c['check_out'], 'hours' => $c['overtime_hours'], 'reason' => 'Auto-calculated — weekday OT']
