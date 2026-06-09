@@ -330,7 +330,7 @@ class SyncZKBioAttendance extends Command
             $attendance->status              = 'clocked_out';
         }
 
-        $attendance->defined_hours = 9.0;
+        $attendance->defined_hours = ($shift?->shift_type === 'night') ? 11.0 : 9.0;
 
         // Break summary
         $segments      = collect($c['segments']);

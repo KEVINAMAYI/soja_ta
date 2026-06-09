@@ -182,7 +182,7 @@ trait TaSheetHelpers
     {
         // Absent = full shift lost
         if (in_array($r->status ?? '', ['absent', 'unchecked_in'])) {
-            return '9.0';
+            return ($r->shift?->shift_type === 'night') ? '11.0' : '9.0';
         }
 
         // Read directly from the DB column synced by ZKPunchClassifier
