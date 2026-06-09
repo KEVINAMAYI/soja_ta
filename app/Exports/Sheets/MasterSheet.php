@@ -45,11 +45,19 @@ class MasterSheet implements FromArray, WithTitle, WithStyles, WithColumnWidths
     private const LAST_COL   = 'U';
     private const TOTAL_COLS = 21;
 
+    private array $shiftCache = [];
+
+
     public function __construct(
         private readonly array   $records,
         private readonly ?string $startDate,
         private readonly ?string $endDate,
-    ) {}
+    ) {
+        $shiftIds = collect($records)->pluck('shift_id')->filter()->unique()->values()->toArray();
+        if (!empty($shiftIds)) {
+            $this->shiftCache = \App\Models\Shift::whereIn('id', $shiftIds)->get()->keyBy('id')->all();
+        }
+    }
 
     public function title(): string { return 'Master'; }
 
@@ -99,7 +107,7 @@ class MasterSheet implements FromArray, WithTitle, WithStyles, WithColumnWidths
 
         foreach ($this->records as $r) {
             $emp   = $r->employee ?? null;
-            $shift = $emp?->shift;
+            $shift = $this->resolveShiftObject($r, $this->shiftCache);
 
             $firstBreak = method_exists($r, 'breakLogs')
                 ? $r->breakLogs()->where('type', 'break')->orderBy('break_start_time')->first()

@@ -117,32 +117,22 @@ trait TaSheetHelpers
     private function staffCategory($shift): string
     {
         if (!$shift) return '';
-        if (!empty($shift->department_type)) {
-            return match ($shift->department_type) {
-                'admin'       => 'Admin',
-                'general'     => 'General',
-                'engineering' => 'Engineering',
-                default       => ucfirst($shift->department_type),
-            };
-        }
-        $name = strtolower($shift->name ?? '');
-        if (str_contains($name, 'admin'))       return 'Admin';
-        if (str_contains($name, 'engineering')) return 'Engineering';
-        return 'General';
+        return match ($shift->department_type ?? '') {
+            'admin'       => 'Admin',
+            'general'     => 'General',
+            'engineering' => 'Engineering',
+            default       => ucfirst($shift->department_type ?? '') ?: 'General',
+        };
     }
 
     private function shiftDayNight($shift): string
     {
         if (!$shift) return '';
-        if (!empty($shift->shift_type)) {
-            return match ($shift->shift_type) {
-                'night'                    => 'Night',
-                'day', 'admin', 'extended' => 'Day',
-                default                    => 'Day',
-            };
-        }
-        $startHour = (int) Carbon::parse($shift->start_time)->format('H');
-        return $startHour >= 17 ? 'Night' : 'Day';
+        return match ($shift->shift_type ?? '') {
+            'night'                    => 'Night',
+            'day', 'admin', 'extended' => 'Day',
+            default => (int) Carbon::parse($shift->start_time)->format('H') >= 17 ? 'Night' : 'Day',
+        };
     }
 
     /**
@@ -157,42 +147,46 @@ trait TaSheetHelpers
      */
     private function resolveShiftObject($r, array $shiftCache = []): ?object
     {
-        // Determine if the actual punch is a night punch
         $punchTime = $r->check_in_time ?? $r->check_out_time;
         $isPunchNight = false;
         if ($punchTime) {
             $hour = (int) Carbon::parse($punchTime)->format('H');
-            $isPunchNight = ($hour < 6 || $hour >= 16);
+            $isPunchNight = ($hour < 6 || $hour >= 17); // ← was 16, now 17
         }
 
-        // 1. Try attendance's own shift_id
         $shiftId = $r->shift_id ?? null;
+
+        // 1. Cache lookup
         if ($shiftId && isset($shiftCache[$shiftId])) {
             $shift = $shiftCache[$shiftId];
-            // If it's the right type for the punch, use it
-            $shiftType = $shift->shift_type ?? '';
-            $shiftIsNight = ($shiftType === 'night');
+            $shiftIsNight = ($shift->shift_type ?? '') === 'night';
             if ($isPunchNight === $shiftIsNight) return $shift;
         }
 
-        // 2. Punch is at night but shift_id points to day → find the employee's night shift
+        // 1b. Eager-loaded relation fallback for cache miss
+        if ($shiftId && ($r->shift ?? null)) {
+            $shiftIsNight = ($r->shift->shift_type ?? '') === 'night';
+            if ($isPunchNight === $shiftIsNight) return $r->shift;
+        }
+
+        // 2. Punch type doesn't match shift_id — look at employee's assigned shifts
         $employee = $r->employee ?? null;
         if ($employee) {
             if ($isPunchNight) {
-                // Try shifts pivot for a night shift
                 $nightShift = $employee->shifts?->firstWhere('shift_type', 'night');
                 if ($nightShift) return $nightShift;
             } else {
-                // Daytime punch → try day/admin/extended shift
-                $dayShift = $employee->shifts?->first(fn($s) => in_array($s->shift_type ?? '', ['day', 'admin', 'extended']));
+                $dayShift = $employee->shifts?->first(
+                    fn($s) => in_array($s->shift_type ?? '', ['day', 'admin', 'extended'])
+                );
                 if ($dayShift) return $dayShift;
             }
 
-            // 3. Fall back to primary shift or any shift
-            $primary = $employee->shifts?->firstWhere('pivot.is_primary', true)
+            // 3. Final fallback — primary or first assigned shift
+            return $employee->shifts?->firstWhere('pivot.is_primary', true)
                 ?? $employee->shifts?->first()
-                ?? $employee->shift;
-            if ($primary) return $primary;
+                ?? $employee->shift
+                ?? null;
         }
 
         return null;

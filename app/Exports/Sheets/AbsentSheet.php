@@ -27,14 +27,22 @@ class AbsentSheet implements FromArray, WithTitle, WithStyles, WithColumnWidths
 {
     use TaSheetHelpers;
 
-    private const LAST_COL   = 'G';
-    private const TOTAL_COLS = 7;
+    private const LAST_COL   = 'H';
+    private const TOTAL_COLS = 8;
+
+    private array $shiftCache = [];
+
 
     public function __construct(
         private readonly array   $records,
         private readonly ?string $startDate,
         private readonly ?string $endDate,
-    ) {}
+    ) {
+        $shiftIds = collect($records)->pluck('shift_id')->filter()->unique()->values()->toArray();
+        if (!empty($shiftIds)) {
+            $this->shiftCache = \App\Models\Shift::whereIn('id', $shiftIds)->get()->keyBy('id')->all();
+        }
+    }
 
     public function title(): string { return 'Absent Report'; }
 
@@ -43,7 +51,7 @@ class AbsentSheet implements FromArray, WithTitle, WithStyles, WithColumnWidths
         return [
             'A' => 12, 'B' => 16, 'C' => 16,
             'D' => 24, 'E' => 18, 'F' => 14,
-            'G' => 34,
+            'G' => 10, 'H' => 34,             // G=Shift, H=Reason
         ];
     }
 
@@ -60,23 +68,26 @@ class AbsentSheet implements FromArray, WithTitle, WithStyles, WithColumnWidths
             'Name',               // D
             'Department',         // E
             'Section',            // F
-            'Reason / Exception', // G
+            'Shift',              // G  ← new
+            'Reason / Exception', // H
         ];
 
         foreach ($this->records as $r) {
             $emp = $r->employee ?? null;
+            $shift = $this->resolveShiftObject($r, $this->shiftCache);
             $out[] = [
-                $this->fmtDate($r->date),                       // A
-                $emp?->employee_type ?? '',                      // B
-                $emp?->ad_employee_id ?? $emp?->id ?? '',        // C
-                $emp?->name ?? '',                               // D
-                $emp?->department?->name ?? '',                  // E
-                $emp?->section ?? '',                            // F
-                $this->absentReason($r),                         // G
+                $this->fmtDate($r->date),
+                $emp?->employee_type ?? '',
+                $emp?->ad_employee_id ?? $emp?->id ?? '',
+                $emp?->name ?? '',
+                $emp?->department?->name ?? '',
+                $emp?->section ?? '',
+                $this->shiftDayNight($shift),   // G ← new
+                $this->absentReason($r),        // H
             ];
         }
 
-        $out[] = ['TOTAL ABSENCES: ' . count($this->records), '', '', '', '', '', ''];
+        $out[] = ['TOTAL ABSENCES: ' . count($this->records), '', '', '', '', '', '', ''];
 
         return $out;
     }
@@ -113,7 +124,7 @@ class AbsentSheet implements FromArray, WithTitle, WithStyles, WithColumnWidths
                     ->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('FEF2F2');
             }
             $sheet->getStyle("A{$row}:{$lastCol}{$row}")->applyFromArray($this->dataStyle('center'));
-            $sheet->getStyle("D{$row}:G{$row}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_LEFT);
+            $sheet->getStyle("D{$row}:H{$row}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_LEFT);
 
             // Employee Type badge — col B
             $empType = (string) $sheet->getCell("B{$row}")->getValue();
@@ -123,13 +134,21 @@ class AbsentSheet implements FromArray, WithTitle, WithStyles, WithColumnWidths
             }
 
             // Reason badge — col G (last column)
-            $reason = strtolower((string) $sheet->getCell("G{$row}")->getValue());
+            $shiftType = (string) $sheet->getCell("G{$row}")->getValue();
+            if ($shiftType === 'Night') {
+                $sheet->getStyle("G{$row}")->applyFromArray($this->badgeStyle('1E1B4B', 'FFFFFF'));
+            } elseif ($shiftType === 'Day') {
+                $sheet->getStyle("G{$row}")->applyFromArray($this->badgeStyle('E8F5E9', '1B5E20'));
+            }
+
+           // Reason badge — col H
+            $reason = strtolower((string) $sheet->getCell("H{$row}")->getValue());
             if (str_contains($reason, 'leave') || str_contains($reason, 'sick')) {
-                $sheet->getStyle("G{$row}")->applyFromArray($this->badgeStyle('CCE5FF', '004085'));
+                $sheet->getStyle("H{$row}")->applyFromArray($this->badgeStyle('CCE5FF', '004085'));
             } elseif (str_contains($reason, 'gate') || str_contains($reason, 'pass')) {
-                $sheet->getStyle("G{$row}")->applyFromArray($this->badgeStyle('E2D9F3', '432E75'));
+                $sheet->getStyle("H{$row}")->applyFromArray($this->badgeStyle('E2D9F3', '432E75'));
             } else {
-                $sheet->getStyle("G{$row}")->applyFromArray($this->badgeStyle('F8D7DA', '721C24'));
+                $sheet->getStyle("H{$row}")->applyFromArray($this->badgeStyle('F8D7DA', '721C24'));
             }
         }
 

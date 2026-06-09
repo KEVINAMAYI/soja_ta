@@ -36,11 +36,18 @@ class PresentSheet implements FromArray, WithTitle, WithStyles, WithColumnWidths
     private const LAST_COL   = 'M';
     private const TOTAL_COLS = 13;
 
+    private array $shiftCache = [];
+
     public function __construct(
         private readonly array   $records,
         private readonly ?string $startDate,
         private readonly ?string $endDate,
-    ) {}
+    ) {
+        $shiftIds = collect($records)->pluck('shift_id')->filter()->unique()->values()->toArray();
+        if (!empty($shiftIds)) {
+            $this->shiftCache = \App\Models\Shift::whereIn('id', $shiftIds)->get()->keyBy('id')->all();
+        }
+    }
 
     public function title(): string { return 'Present'; }
 
@@ -79,7 +86,8 @@ class PresentSheet implements FromArray, WithTitle, WithStyles, WithColumnWidths
 
         foreach ($this->records as $r) {
             $emp   = $r->employee ?? null;
-            $shift = $emp?->shift;
+            $shift = $this->resolveShiftObject($r, $this->shiftCache);
+
             $out[] = [
                 $this->fmtDate($r->date),                          // A
                 $emp?->employee_type ?? '',                         // B
