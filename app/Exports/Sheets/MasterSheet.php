@@ -42,7 +42,7 @@ class MasterSheet implements FromArray, WithTitle, WithStyles, WithColumnWidths
 {
     use TaSheetHelpers;
 
-    private const LAST_COL   = 'U';
+    private const LAST_COL = 'U';
     private const TOTAL_COLS = 21;
 
     private array $shiftCache = [];
@@ -52,14 +52,18 @@ class MasterSheet implements FromArray, WithTitle, WithStyles, WithColumnWidths
         private readonly array   $records,
         private readonly ?string $startDate,
         private readonly ?string $endDate,
-    ) {
+    )
+    {
         $shiftIds = collect($records)->pluck('shift_id')->filter()->unique()->values()->toArray();
         if (!empty($shiftIds)) {
             $this->shiftCache = \App\Models\Shift::whereIn('id', $shiftIds)->get()->keyBy('id')->all();
         }
     }
 
-    public function title(): string { return 'Master'; }
+    public function title(): string
+    {
+        return 'Master';
+    }
 
     public function columnWidths(): array
     {
@@ -69,7 +73,7 @@ class MasterSheet implements FromArray, WithTitle, WithStyles, WithColumnWidths
             'G' => 18, 'H' => 10, 'I' => 11,
             'J' => 11, 'K' => 11, 'L' => 11,
             'M' => 11, 'N' => 11, 'O' => 10,
-            'P' => 11, 'Q' => 9,  'R' => 9,
+            'P' => 11, 'Q' => 9, 'R' => 9,
             'S' => 11, 'T' => 26, 'U' => 26,
         ];
     }
@@ -106,11 +110,11 @@ class MasterSheet implements FromArray, WithTitle, WithStyles, WithColumnWidths
         ];
 
         foreach ($this->records as $r) {
-            $emp   = $r->employee ?? null;
+            $emp = $r->employee ?? null;
             $shift = $this->resolveShiftObject($r, $this->shiftCache);
 
-            $firstBreak = method_exists($r, 'breakLogs')
-                ? $r->breakLogs()->where('type', 'break')->orderBy('break_start_time')->first()
+            $firstBreak = $r->relationLoaded('breakLogs')
+                ? $r->breakLogs->where('type', 'break')->sortBy('break_start_time')->first()
                 : null;
 
             $definedOut = '';
@@ -134,15 +138,15 @@ class MasterSheet implements FromArray, WithTitle, WithStyles, WithColumnWidths
                 $shift ? Carbon::parse($shift->start_time)->format('H:i') : '', // I
                 $this->fmtTime($r->check_in_time),                 // J
                 $firstBreak ? $this->fmtTime($firstBreak->break_start_time) : '', // K
-                $firstBreak ? $this->fmtTime($firstBreak->break_end_time)   : '', // L
+                $firstBreak ? $this->fmtTime($firstBreak->break_end_time) : '', // L
                 $definedOut,                                        // M
                 $this->fmtTime($r->check_out_time),                // N
-                '9.0',                                              // O
+                $shift ? (string)($shift->shift_type === 'night' ? '11.0' : '9.0') : '9.0',  // O
                 $this->fmtHours((float)($r->worked_hours ?? 0)),   // P
                 $this->fmtHours((float)($r->ot1_hours ?? 0)),      // Q
                 $this->fmtHours((float)($r->ot2_hours ?? 0)),      // R
                 $this->lostHours($r),                              // S
-                $r->exception_note ?? '',                           // T
+                '',                           // T
                 $r->interpretation ?? '',                           // U
             ];
         }
@@ -166,21 +170,21 @@ class MasterSheet implements FromArray, WithTitle, WithStyles, WithColumnWidths
     public function styles(Worksheet $sheet): array
     {
         $lastDataRow = 3 + count($this->records);
-        $totalRow    = $lastDataRow + 1;
-        $lastCol     = self::LAST_COL;
+        $totalRow = $lastDataRow + 1;
+        $lastCol = self::LAST_COL;
 
         $sheet->mergeCells("A1:{$lastCol}1");
         $sheet->getStyle('A1')->applyFromArray([
-            'font'      => ['bold' => true, 'size' => 13, 'name' => 'Arial', 'color' => ['rgb' => '1F3864']],
-            'fill'      => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => 'EBF3FB']],
+            'font' => ['bold' => true, 'size' => 13, 'name' => 'Arial', 'color' => ['rgb' => '1F3864']],
+            'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => 'EBF3FB']],
             'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER],
-            'borders'   => ['outline' => ['borderStyle' => Border::BORDER_MEDIUM, 'color' => ['rgb' => '999999']]],
+            'borders' => ['outline' => ['borderStyle' => Border::BORDER_MEDIUM, 'color' => ['rgb' => '999999']]],
         ]);
         $sheet->getRowDimension(1)->setRowHeight(22);
 
         $sheet->mergeCells("A2:{$lastCol}2");
         $sheet->getStyle('A2')->applyFromArray([
-            'font'      => ['name' => 'Arial', 'size' => 8, 'color' => ['rgb' => '555555']],
+            'font' => ['name' => 'Arial', 'size' => 8, 'color' => ['rgb' => '555555']],
             'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER],
         ]);
         $sheet->getRowDimension(2)->setRowHeight(15);
@@ -214,28 +218,28 @@ class MasterSheet implements FromArray, WithTitle, WithStyles, WithColumnWidths
             $sheet->getStyle("D{$row}:F{$row}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_LEFT);
             $sheet->getStyle("T{$row}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_LEFT);
 
-            $empType = (string) $sheet->getCell("B{$row}")->getValue();
+            $empType = (string)$sheet->getCell("B{$row}")->getValue();
             if ($empType) {
                 [$bg, $fg] = $this->employeeTypeBadge($empType);
                 $sheet->getStyle("B{$row}")->applyFromArray($this->badgeStyle($bg, $fg));
             }
 
-            $interpVal = (string) $sheet->getCell("U{$row}")->getValue();
+            $interpVal = (string)$sheet->getCell("U{$row}")->getValue();
             if ($interpVal) {
                 [$bg, $fg] = $this->interpretationBadge($interpVal);
                 $sheet->getStyle("U{$row}")->applyFromArray($this->badgeStyle($bg, $fg));
             }
 
             $lostVal = $sheet->getCell("S{$row}")->getValue();
-            if (is_numeric($lostVal) && (float) $lostVal > 0) {
+            if (is_numeric($lostVal) && (float)$lostVal > 0) {
                 $sheet->getStyle("S{$row}")->getFont()->setBold(true)->getColor()->setRGB('C00000');
             }
         }
 
         $sheet->mergeCells("A{$totalRow}:N{$totalRow}");
         $sheet->getStyle("A{$totalRow}:{$lastCol}{$totalRow}")->applyFromArray([
-            'font'      => ['bold' => true, 'size' => 9, 'name' => 'Arial', 'color' => ['rgb' => 'FFFFFF']],
-            'fill'      => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => '1F3864']],
+            'font' => ['bold' => true, 'size' => 9, 'name' => 'Arial', 'color' => ['rgb' => 'FFFFFF']],
+            'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => '1F3864']],
             'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER],
         ]);
         foreach (['O', 'P', 'Q', 'R', 'S'] as $col) {
