@@ -79,11 +79,16 @@ class Attendance extends Model
     {
         return $this->belongsTo(WorkLocation::class, 'work_location_id');
     }
-    
+
 
     // Add to app/Models/Attendance.php
     public function shift()
     {
         return $this->belongsTo(\App\Models\Shift::class, 'shift_id');
+    }
+
+    public function breakLogs(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(\App\Models\AttendanceBreakLog::class, 'attendance_id');
     }
 }
