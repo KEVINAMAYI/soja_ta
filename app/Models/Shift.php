@@ -216,24 +216,15 @@ class Shift extends Model
         $isFriday  = $carbon->format('l') === 'Friday';
         $isWeekend = in_array($carbon->format('l'), ['Saturday', 'Sunday']);
 
-        // Use attributes directly — casts return Carbon, just extract H:i:s
-        $rawEnd   = $this->end_time instanceof \Carbon\Carbon
-            ? $this->end_time->format('H:i:s')
-            : Carbon::parse($this->attributes['end_time'])->format('H:i:s');
+        $end   = Carbon::parse($date)->setTimeFromTimeString(
+            ($isFriday || $isWeekend) && $this->friday_end_time
+                ? Carbon::parse($this->friday_end_time)->format('H:i:s')
+                : Carbon::parse($this->end_time)->format('H:i:s')
+        );
 
-        $rawStart = $this->start_time instanceof \Carbon\Carbon
-            ? $this->start_time->format('H:i:s')
-            : Carbon::parse($this->attributes['start_time'])->format('H:i:s');
-
-        $rawFridayEnd = null;
-        if (!empty($this->attributes['friday_end_time'])) {
-            $rawFridayEnd = Carbon::parse($this->attributes['friday_end_time'])->format('H:i:s');
-        }
-
-        $endTime = (($isFriday || $isWeekend) && $rawFridayEnd) ? $rawFridayEnd : $rawEnd;
-
-        $end   = Carbon::createFromFormat('Y-m-d H:i:s', $date . ' ' . $endTime);
-        $start = Carbon::createFromFormat('Y-m-d H:i:s', $date . ' ' . $rawStart);
+        $start = Carbon::parse($date)->setTimeFromTimeString(
+            Carbon::parse($this->start_time)->format('H:i:s')
+        );
 
         if ($end->lte($start)) {
             $end->addDay();
