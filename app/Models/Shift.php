@@ -216,19 +216,18 @@ class Shift extends Model
         $isFriday  = $carbon->format('l') === 'Friday';
         $isWeekend = in_array($carbon->format('l'), ['Saturday', 'Sunday']);
 
-        $end   = Carbon::parse($date)->setTimeFromTimeString(
-            ($isFriday || $isWeekend) && $this->friday_end_time
-                ? Carbon::parse($this->friday_end_time)->format('H:i:s')
-                : Carbon::parse($this->end_time)->format('H:i:s')
-        );
+        $endHis    = substr($this->attributes['end_time'] ?? '17:30:00', 0, 8);
+        $startHis  = substr($this->attributes['start_time'] ?? '08:00:00', 0, 8);
+        $fridayHis = !empty($this->attributes['friday_end_time'])
+            ? substr($this->attributes['friday_end_time'], 0, 8)
+            : null;
 
-        $start = Carbon::parse($date)->setTimeFromTimeString(
-            Carbon::parse($this->start_time)->format('H:i:s')
-        );
+        $useHis = (($isFriday || $isWeekend) && $fridayHis) ? $fridayHis : $endHis;
 
-        if ($end->lte($start)) {
-            $end->addDay();
-        }
+        $end   = Carbon::parse($date)->setTimeFromTimeString($useHis);
+        $start = Carbon::parse($date)->setTimeFromTimeString($startHis);
+
+        if ($end->lte($start)) $end->addDay();
 
         return $end;
     }
