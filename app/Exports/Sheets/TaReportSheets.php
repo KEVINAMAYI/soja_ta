@@ -283,7 +283,6 @@ class MasterSheet implements FromArray, WithTitle, WithStyles, WithColumnWidths
         // Pre-load all shifts used in these records to avoid N+1
         $shiftIds = collect($records)->pluck('shift_id')->filter()->unique()->values()->toArray();
         if (!empty($shiftIds)) {
-            $this->shiftCache = Shift::whereIn('id', $shiftIds)->get()->keyBy('id')->toArray();
             $this->shiftCache = Shift::whereIn('id', $shiftIds)->get()->keyBy('id')->all();
         }
     }
@@ -337,8 +336,8 @@ class MasterSheet implements FromArray, WithTitle, WithStyles, WithColumnWidths
             // Use punch-time-aware shift for ALL shift-dependent columns
             $shift = $this->resolveShiftObject($r, $this->shiftCache);
 
-            $firstBreak = method_exists($r, 'breakLogs')
-                ? $r->breakLogs()->where('type', 'break')->orderBy('break_start_time')->first()
+            $firstBreak = $r->relationLoaded('breakLogs')
+                ? $r->breakLogs->where('type', 'break')->sortBy('break_start_time')->first()
                 : null;
 
             $definedIn  = $shift ? Carbon::parse($shift->start_time)->format('H:i') : '';
@@ -366,7 +365,7 @@ class MasterSheet implements FromArray, WithTitle, WithStyles, WithColumnWidths
                 $firstBreak ? $this->fmtTime($firstBreak->break_end_time)   : '', // L
                 $definedOut,                                        // M
                 $this->fmtTime($r->check_out_time),                // N
-                '9.0',                                              // O
+                $shift ? ($shift->shift_type === 'night' ? '11.0' : '9.0') : '9.0',  // O
                 $this->fmtHours((float)($r->worked_hours ?? 0)),   // P
                 $this->fmtHours((float)($r->ot1_hours ?? 0)),      // Q
                 $this->fmtHours((float)($r->ot2_hours ?? 0)),      // R
@@ -553,8 +552,7 @@ class PresentSheet implements FromArray, WithTitle, WithStyles, WithColumnWidths
                 $this->resolveShiftDisplay($r, $this->shiftCache),
                 $shift ? Carbon::parse($shift->start_time)->format('H:i') : '',
                 $this->fmtTime($r->check_in_time),
-                $shift ? Carbon::parse($shift->end_time)->format('H:i') : '',
-                $this->fmtTime($r->check_out_time),
+                $shift ? $shift->getEffectiveEndTime($r->date ?? now()->toDateString())->format('H:i') : '',                $this->fmtTime($r->check_out_time),
                 $this->fmtHours((float)($r->worked_hours ?? 0)),
             ];
         }
