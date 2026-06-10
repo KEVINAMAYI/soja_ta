@@ -180,9 +180,16 @@ trait TaSheetHelpers
      */
     private function lostHours($r): string
     {
-        // Absent = full shift lost
+
+        $dow     = \Carbon\Carbon::parse($r->date ?? now()->toDateString())->format('l');
+        $isNight = ($r->shift?->shift_type ?? '') === 'night';
+
+        // No lost hours on OT days
+        if (in_array($dow, ['Saturday', 'Sunday'])) return '0.0';
+        if ($dow === 'Friday' && $isNight) return '0.0';
+
         if (in_array($r->status ?? '', ['absent', 'unchecked_in'])) {
-            return ($r->shift?->shift_type === 'night') ? '11.0' : '9.0';
+            return $dow === 'Friday' ? '8.0' : ($isNight ? '11.0' : '9.0');
         }
 
         // Read directly from the DB column synced by ZKPunchClassifier

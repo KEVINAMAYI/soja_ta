@@ -50,8 +50,11 @@ class ZKPunchClassifier
         $employee->setRelation('shift', $shift);
         $result['notes'][] = "Resolved shift: {$shift->name}";
 
-        if ($isWeekend) {
-            return $this->classifyWeekendOt($filtered, $shift, $today, $isSaturday, $result);
+        $isFriday = Carbon::parse($today)->format('l') === 'Friday';
+        $isFridayNight = $isFriday && ($shift->shift_type === 'night');
+
+        if ($isWeekend || $isFridayNight) {
+            return $this->classifyWeekendOt($filtered, $shift, $today, $isSaturday, $result, $isFridayNight);
         }
 
         if (!$shift->isScheduledOn($today)) {
@@ -253,10 +256,13 @@ class ZKPunchClassifier
 
 
         // ── STEP 2: Expected minutes based on shift type ───────────────────────────
-// Day shift  = 9h  = 540 min (08:00 → 17:30 minus 30min break)
-// Night shift = 11h = 660 min (17:30 → 05:00 minus 30min break)
-        $isNightShift = ($shift->shift_type ?? '') === 'night';
-        $expectedMinutes = $isNightShift ? 660 : 540;
+        $isNightShift    = ($shift->shift_type ?? '') === 'night';
+        $carbon          = \Carbon\Carbon::parse($today);
+        $isShortDay      = in_array($carbon->format('l'), ['Friday', 'Saturday', 'Sunday']);
+
+        $expectedMinutes = $isNightShift
+            ? ($isShortDay ? 600 : 660)  // night: 10h on short days, 11h normal
+            : ($isShortDay ? 480 : 540); // day: 8h on short days, 9h normal
 
 // ── STEP 3: Lost minutes = shortfall against expected ─────────────────────
 // If worked >= expected → no lost hours (overtime covers any lateness)
@@ -354,17 +360,22 @@ class ZKPunchClassifier
     // =========================================================================
     // Weekend OT
     // =========================================================================
-    private function classifyWeekendOt(array $filtered, object $shift, string $today, bool $isSaturday, array $result): array
+    private function classifyWeekendOt(array $filtered, object $shift, string $today, bool $isSaturday, array $result, bool $isFridayNight = false): array
     {
-        $result['check_in'] = $filtered[0];
+        $result['check_in']  = $filtered[0];
         $result['check_out'] = count($filtered) > 1 ? end($filtered) : null;
         $result['within_grace_period'] = true;
-        $result['notes'][] = $isSaturday ? "Saturday — all hours are OT1." : "Sunday — all hours are OT2.";
+
+        if ($isFridayNight) {
+            $result['notes'][] = "Friday Night — all hours are OT1.";
+        } else {
+            $result['notes'][] = $isSaturday ? "Saturday — all hours are OT1." : "Sunday — all hours are OT2.";
+        }
 
         if (count($filtered) < 2) {
             $result['missed_checkout_punch'] = true;
             $result['incomplete'] = true;
-            $result['scenario'] = $isSaturday ? 'missed_clockout_ot1' : 'missed_clockout_ot2';
+            $result['scenario'] = $isFridayNight || $isSaturday ? 'missed_clockout_ot1' : 'missed_clockout_ot2';
             $result['notes'][] = "Single punch — clock-OUT missing. Flagged for HR review.";
             return $result;
         }
@@ -382,15 +393,19 @@ class ZKPunchClassifier
         }
 
         $otHours = round(max(0, $workedMinutes) / 60, 2);
-        if ($isSaturday) {
+
+        // Friday night and Saturday = OT1, Sunday = OT2
+        if ($isFridayNight || $isSaturday) {
             $result['ot1_hours'] = $otHours;
         } else {
             $result['ot2_hours'] = $otHours;
         }
+
         $result['worked_hours'] = $otHours;
-        $result['notes'][] = "Total OT hours: {$otHours}h.";
+        $result['lost_minutes'] = 0; // No lost hours on OT days
+        $result['notes'][] = "Total OT1 hours: {$otHours}h.";
         $result['incomplete'] = false;
-        $result['scenario'] = $isSaturday ? 'complete_ot1' : 'complete_ot2';
+        $result['scenario'] = ($isFridayNight || $isSaturday) ? 'complete_ot1' : 'complete_ot2';
         return $result;
     }
 

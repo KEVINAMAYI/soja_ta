@@ -96,8 +96,8 @@ class MasterSheet implements FromArray, WithTitle, WithStyles, WithColumnWidths
             "Shift\n(Day/Night)",               // H
             "Defined\nTime In",                 // I
             "Actual\nTime In",                  // J
-            "Start of\nBreak",                  // K
-            "End of\nBreak",                    // L                    // L
+            "Meal Time\nOut",                  // K
+            "Meal Time\nIn",                  // K
             "Defined\nTime Out",                // M
             "Actual\nTime Out",                 // N
             "Defined\nHours",                   // O

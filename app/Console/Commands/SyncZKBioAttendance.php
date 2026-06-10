@@ -26,9 +26,9 @@ class SyncZKBioAttendance extends Command
     protected $description = 'Sync ZKBio punch transactions and write attendance records';
 
     const STATUS_PRIORITY = [
-        'absent'      => 0,
-        'clocked_in'  => 1,
-        'on_break'    => 2,
+        'absent' => 0,
+        'clocked_in' => 1,
+        'on_break' => 2,
         'clocked_out' => 3,
     ];
 
@@ -39,7 +39,8 @@ class SyncZKBioAttendance extends Command
         protected ZKBioAttendanceSyncService $zkbio,
         protected ZKPunchClassifier          $classifier,
         protected InterpretationService      $interpretation
-    ) {
+    )
+    {
         parent::__construct();
     }
 
@@ -71,8 +72,8 @@ class SyncZKBioAttendance extends Command
         $this->line('');
 
         $processed = 0;
-        $skipped   = 0;
-        $failed    = 0;
+        $skipped = 0;
+        $failed = 0;
 
         foreach ($grouped as $pin => $employeeData) {
 
@@ -111,11 +112,11 @@ class SyncZKBioAttendance extends Command
             // attendance date so they never collide.
             // =========================================================
             $overnightPunches = array_values(array_filter($allPunches, function ($p) {
-                return (int) Carbon::parse($p)->format('H') < self::OVERNIGHT_BOUNDARY_HOUR;
+                return (int)Carbon::parse($p)->format('H') < self::OVERNIGHT_BOUNDARY_HOUR;
             }));
 
             $todayPunches = array_values(array_filter($allPunches, function ($p) {
-                return (int) Carbon::parse($p)->format('H') >= self::OVERNIGHT_BOUNDARY_HOUR;
+                return (int)Carbon::parse($p)->format('H') >= self::OVERNIGHT_BOUNDARY_HOUR;
             }));
 
             // ── OVERNIGHT CLOCK-OUT → save against LAST SCHEDULED DAY ──
@@ -124,7 +125,7 @@ class SyncZKBioAttendance extends Command
                 // "Yesterday" may not be scheduled (e.g. syncing Sat Jun 6, yesterday
                 // is Fri Jun 5 but the night shift pattern is Mon–Thu).
                 // Walk back up to 3 days to find the last day the night shift was scheduled.
-                $nightShift     = $employee->shifts->firstWhere('shift_type', 'night');
+                $nightShift = $employee->shifts->firstWhere('shift_type', 'night');
                 $shiftStartDate = Carbon::parse($date)->subDay()->toDateString(); // default: yesterday
 
                 if ($nightShift) {
@@ -149,7 +150,7 @@ class SyncZKBioAttendance extends Command
 
                 // Only keep that day's evening punches (>= 06:00) — the clock-IN punches
                 $shiftStartEveningPunches = array_values(array_filter($shiftStartPunches, function ($p) {
-                    return (int) Carbon::parse($p)->format('H') >= self::OVERNIGHT_BOUNDARY_HOUR;
+                    return (int)Carbon::parse($p)->format('H') >= self::OVERNIGHT_BOUNDARY_HOUR;
                 }));
 
                 // Merge: shift-start-day clock-in punches + today's early-morning clock-out
@@ -185,7 +186,7 @@ class SyncZKBioAttendance extends Command
             // so they do not pollute today's real evening clock-in timeline data array!
             if ($employee->shifts->firstWhere('shift_type', 'night') || ($employee->shift && $employee->shift->shift_type === 'night')) {
                 $todayPunches = array_values(array_filter($todayPunches, function ($p) {
-                    return (int) Carbon::parse($p)->format('H') >= self::OVERNIGHT_BOUNDARY_HOUR;
+                    return (int)Carbon::parse($p)->format('H') >= self::OVERNIGHT_BOUNDARY_HOUR;
                 }));
             }
 
@@ -225,17 +226,17 @@ class SyncZKBioAttendance extends Command
     private function printClassifiedLine(string $pin, string $name, array $classified): void
     {
         $flags = [];
-        if ($classified['incomplete'])                        $flags[] = '⚠  Incomplete';
-        if ($classified['check_out_synthetic'] ?? false)     $flags[] = '🤖 Auto clock-out';
-        if ($classified['missed_checkin_punch'] ?? false)    $flags[] = '🔴 Missed clock-IN';
-        if ($classified['missed_checkout_punch'] ?? false)   $flags[] = '🔴 Missed clock-OUT';
-        if ($classified['late_checkin'])                     $flags[] = "🕐 Late +{$classified['minutes_late']}min";
-        if ($classified['early_checkout'])                   $flags[] = "🚪 Early -{$classified['minutes_early']}min";
-        if ($classified['missed_break_return'])              $flags[] = '❓ Missed break punch';
-        if (($classified['lost_minutes'] ?? 0) > 0)         $flags[] = "⏳ Lost {$classified['lost_minutes']}min";
-        if (($classified['ot1_hours'] ?? 0) > 0)            $flags[] = "💰 OT1 {$classified['ot1_hours']}h";
-        if (($classified['ot2_hours'] ?? 0) > 0)            $flags[] = "💰 OT2 {$classified['ot2_hours']}h";
-        if (($classified['overtime_hours'] ?? 0) > 0)       $flags[] = "💰 OT {$classified['overtime_hours']}h";
+        if ($classified['incomplete']) $flags[] = '⚠  Incomplete';
+        if ($classified['check_out_synthetic'] ?? false) $flags[] = '🤖 Auto clock-out';
+        if ($classified['missed_checkin_punch'] ?? false) $flags[] = '🔴 Missed clock-IN';
+        if ($classified['missed_checkout_punch'] ?? false) $flags[] = '🔴 Missed clock-OUT';
+        if ($classified['late_checkin']) $flags[] = "🕐 Late +{$classified['minutes_late']}min";
+        if ($classified['early_checkout']) $flags[] = "🚪 Early -{$classified['minutes_early']}min";
+        if ($classified['missed_break_return']) $flags[] = '❓ Missed break punch';
+        if (($classified['lost_minutes'] ?? 0) > 0) $flags[] = "⏳ Lost {$classified['lost_minutes']}min";
+        if (($classified['ot1_hours'] ?? 0) > 0) $flags[] = "💰 OT1 {$classified['ot1_hours']}h";
+        if (($classified['ot2_hours'] ?? 0) > 0) $flags[] = "💰 OT2 {$classified['ot2_hours']}h";
+        if (($classified['overtime_hours'] ?? 0) > 0) $flags[] = "💰 OT {$classified['overtime_hours']}h";
 
         $breakCount = collect($classified['segments'])->where('type', 'break')->count();
         if ($breakCount > 0) $flags[] = "☕ {$breakCount} break(s)";
@@ -262,7 +263,7 @@ class SyncZKBioAttendance extends Command
     {
         $attendance = Attendance::firstOrNew([
             'employee_id' => $employee->id,
-            'date'        => $date,
+            'date' => $date,
         ]);
 
         $isNew = !$attendance->exists;
@@ -274,13 +275,13 @@ class SyncZKBioAttendance extends Command
         ) {
             Log::info('Skipping update — already clocked out, no new checkout.', [
                 'employee_id' => $employee->id,
-                'date'        => $date,
+                'date' => $date,
             ]);
             return;
         }
 
         $firstPunch = $c['check_in'] ?? Carbon::parse($date . ' 00:00:00');
-        $shift      = $this->classifier->resolveShift($employee, $firstPunch, $date);
+        $shift = $this->classifier->resolveShift($employee, $firstPunch, $date);
 
         // Clock-in
         // Clock-in (FIXED: Populate shift definitions even if check_in_time already exists from an open row state)
@@ -289,8 +290,8 @@ class SyncZKBioAttendance extends Command
                 $attendance->check_in_time = $c['check_in'];
             }
 
-            $attendance->is_late_checkin     = $c['late_checkin'];
-            $attendance->minutes_late        = $c['minutes_late'];
+            $attendance->is_late_checkin = $c['late_checkin'];
+            $attendance->minutes_late = $c['minutes_late'];
             $attendance->within_grace_period = !$c['late_checkin'];
 
             if ($attendance->status !== 'clocked_out') {
@@ -300,66 +301,78 @@ class SyncZKBioAttendance extends Command
             $attendance->shift_id = $shift?->id;
 
             if ($shift) {
-                $shiftStart     = $shift->getEffectiveStartTime($date);
-                $shiftEnd       = $shift->getEffectiveEndTime($date);
+                $shiftStart = $shift->getEffectiveStartTime($date);
+                $shiftEnd = $shift->getEffectiveEndTime($date);
 
                 if ($shiftEnd->lte($shiftStart)) {
                     $shiftEnd->addDay();
                 }
 
-                $graceMins      = $shift->grace_period_enabled ? ($shift->grace_period_minutes ?? 0) : 0;
+                $graceMins = $shift->grace_period_enabled ? ($shift->grace_period_minutes ?? 0) : 0;
                 $earlyThreshold = $shift->early_checkout_threshold_minutes ?? 0;
 
-                $attendance->expected_check_in_time        = $shiftStart;
-                $attendance->grace_period_end_time         = $shiftStart->copy()->addMinutes($graceMins);
-                $attendance->expected_check_out_time       = $shiftEnd;
+                $attendance->expected_check_in_time = $shiftStart;
+                $attendance->grace_period_end_time = $shiftStart->copy()->addMinutes($graceMins);
+                $attendance->expected_check_out_time = $shiftEnd;
                 $attendance->early_checkout_threshold_time = $shiftEnd->copy()->subMinutes($earlyThreshold);
             }
         }
 
         // Clock-out
         if ($c['check_out']) {
-            $attendance->check_out_time          = $c['check_out'];
-            $attendance->auto_clocked_out        = $c['check_out_synthetic'];
+            $attendance->check_out_time = $c['check_out'];
+            $attendance->auto_clocked_out = $c['check_out_synthetic'];
             $attendance->auto_clocked_out_reason = $c['check_out_synthetic']
                 ? "No clock-out punch — auto-closed at shift end [{$c['scenario']}]"
                 : null;
-            $attendance->is_early_checkout   = $c['early_checkout'];
-            $attendance->minutes_early       = $c['minutes_early'];
-            $attendance->worked_hours        = $c['worked_hours'];
-            $attendance->overtime_hours      = $c['overtime_hours'];
-            $attendance->ot1_hours           = $c['ot1_hours'];
-            $attendance->ot2_hours           = $c['ot2_hours'];
-            $attendance->is_late_checkout    = $c['overtime_hours'] > 0;
+            $attendance->is_early_checkout = $c['early_checkout'];
+            $attendance->minutes_early = $c['minutes_early'];
+            $attendance->worked_hours = $c['worked_hours'];
+            $attendance->overtime_hours = $c['overtime_hours'];
+            $attendance->ot1_hours = $c['ot1_hours'];
+            $attendance->ot2_hours = $c['ot2_hours'];
+            $attendance->is_late_checkout = $c['overtime_hours'] > 0;
             $attendance->late_checkout_hours = $c['overtime_hours'] > 0 ? $c['overtime_hours'] : 0.00;
-            $attendance->status              = 'clocked_out';
+            $attendance->status = 'clocked_out';
         }
 
-        $attendance->defined_hours = ($shift?->shift_type === 'night') ? 11.0 : 9.0;
+        $carbon = \Carbon\Carbon::parse($date);
+        $dow = $carbon->format('l');
+        $isNight = $shift?->shift_type === 'night';
+        $isFridayNight = $dow === 'Friday' && $isNight;
+        $isWeekendDay = in_array($dow, ['Saturday', 'Sunday']);
+
+        $attendance->defined_hours = match (true) {
+            $isWeekendDay => 8.0,  // Sat/Sun = 8h reference (OT)
+            $dow === 'Friday' && $isNight => 11.0, // Friday night = OT1 but still 11h
+            $dow === 'Friday' => 8.0,  // Friday day = 8h
+            $isNight => 11.0, // Normal night = 11h
+            default => 9.0,  // Normal day = 9h
+        };
 
         // Break summary
-        $segments      = collect($c['segments']);
+        $segments = collect($c['segments']);
         $breakSegments = $segments->where('type', 'break');
 
-        $attendance->break_count          = $breakSegments->count();
-        $attendance->total_break_minutes  = (int) $breakSegments->sum('duration_minutes');
-        $attendance->paid_break_minutes   = (int) $breakSegments->where('paid', true)->sum('duration_minutes');
+        $attendance->break_count = $breakSegments->count();
+        $attendance->total_break_minutes = (int)$breakSegments->sum('duration_minutes');
+        $attendance->paid_break_minutes = (int)$breakSegments->where('paid', true)->sum('duration_minutes');
         $attendance->excess_break_minutes = max(0, $attendance->total_break_minutes - $attendance->paid_break_minutes);
 
-        $lastSeg                       = $segments->last();
+        $lastSeg = $segments->last();
         $attendance->is_break_checkout = $lastSeg && $lastSeg['type'] === 'break' && $lastSeg['in'] === null;
 
-        $attendance->lost_minutes              = $c['lost_minutes'];
+        $attendance->lost_minutes = $c['lost_minutes'];
         $attendance->late_checkin_lost_minutes = $c['late_checkin_lost_minutes'];
-        $attendance->break_lost_minutes        = $c['break_lost_minutes'];
-        $attendance->enforced_break_minutes    = $c['enforced_break_minutes'];
-        $attendance->break_enforced            = $c['break_enforced'];
-        $attendance->missed_break_return       = $c['missed_break_return'];
-        $attendance->lost_hours_breakdown      = !empty($c['lost_hours_breakdown'])
+        $attendance->break_lost_minutes = $c['break_lost_minutes'];
+        $attendance->enforced_break_minutes = $c['enforced_break_minutes'];
+        $attendance->break_enforced = $c['break_enforced'];
+        $attendance->missed_break_return = $c['missed_break_return'];
+        $attendance->lost_hours_breakdown = !empty($c['lost_hours_breakdown'])
             ? implode(' | ', $c['lost_hours_breakdown'])
             : null;
 
-        $attendance->scenario   = $c['scenario'];
+        $attendance->scenario = $c['scenario'];
         $attendance->incomplete = $c['incomplete'];
 
         // Missed punch flags — flag only, never override with fake data
@@ -370,9 +383,9 @@ class SyncZKBioAttendance extends Command
             $attendance->exception_note = trim(($attendance->exception_note ?? '') . ' | Missed clock-OUT punch — HR review required.', ' |');
         }
 
-        $newStatus       = $this->scenarioToStatus($c['scenario']);
+        $newStatus = $this->scenarioToStatus($c['scenario']);
         $currentPriority = self::STATUS_PRIORITY[$attendance->status ?? 'absent'] ?? 0;
-        $newPriority     = self::STATUS_PRIORITY[$newStatus] ?? 0;
+        $newPriority = self::STATUS_PRIORITY[$newStatus] ?? 0;
 
         if ($c['scenario'] === 'checkin_only') {
             // ✅ FIXED: Never wipe a checkout that was already saved
@@ -383,12 +396,12 @@ class SyncZKBioAttendance extends Command
                 return; // ← bail out early, don't touch status or checkout
             }
 
-            $attendance->status                  = 'clocked_in';
-            $attendance->check_out_time          = null;
-            $attendance->auto_clocked_out        = false;
+            $attendance->status = 'clocked_in';
+            $attendance->check_out_time = null;
+            $attendance->auto_clocked_out = false;
             $attendance->auto_clocked_out_reason = null;
-            $attendance->is_early_checkout       = false;
-            $attendance->minutes_early           = 0;
+            $attendance->is_early_checkout = false;
+            $attendance->minutes_early = 0;
         }
 
         $attendance->save();
@@ -400,11 +413,11 @@ class SyncZKBioAttendance extends Command
         foreach ($c['segments'] as $seg) {
             if ($seg['type'] === 'checkout') continue;
 
-            $isBreak      = $seg['type'] === 'break';
-            $isCompleted  = $seg['in'] !== null;
-            $isMissed     = $seg['missed_punch'] ?? false;
+            $isBreak = $seg['type'] === 'break';
+            $isCompleted = $seg['in'] !== null;
+            $isMissed = $seg['missed_punch'] ?? false;
             $shiftBreakId = null;
-            $allowedDur   = null;
+            $allowedDur = null;
 
             if ($isBreak && $shift) {
                 foreach ($shift->breaks ?? [] as $shiftBreak) {
@@ -412,46 +425,46 @@ class SyncZKBioAttendance extends Command
                     $windowStart = Carbon::parse($date . ' ' . Carbon::parse($shiftBreak->window_start_time)->format('H:i:s'));
                     if ($seg['out']->between($windowStart->copy()->subMinutes(20), $windowStart->copy()->addMinutes(20))) {
                         $shiftBreakId = $shiftBreak->id;
-                        $allowedDur   = $shiftBreak->duration_minutes ?? null;
+                        $allowedDur = $shiftBreak->duration_minutes ?? null;
                         break;
                     }
                 }
             }
 
             $excessMinutes = 0;
-            $isCompliant   = false;
+            $isCompliant = false;
 
             if ($isBreak && $isCompleted) {
                 if ($allowedDur !== null) {
                     $excessMinutes = max(0, $seg['duration_minutes'] - $allowedDur);
-                    $isCompliant   = $excessMinutes === 0;
+                    $isCompliant = $excessMinutes === 0;
                 } else {
                     $isCompliant = true;
                 }
             }
 
             $notes = match (true) {
-                $isMissed                  => 'Missed punch — went on break but no return punch recorded. NOT overridden.',
-                !$isCompleted && $isBreak  => 'Break started but no return punch before clock-out.',
+                $isMissed => 'Missed punch — went on break but no return punch recorded. NOT overridden.',
+                !$isCompleted && $isBreak => 'Break started but no return punch before clock-out.',
                 !$isCompleted && !$isBreak => 'Employee left and did not return.',
-                !$isBreak                  => "Unscheduled absence of {$seg['duration_minutes']} min.",
-                $excessMinutes > 0         => "Break exceeded allowed by {$excessMinutes} min (took {$seg['duration_minutes']} min, allowed {$allowedDur} min).",
-                default                    => null,
+                !$isBreak => "Unscheduled absence of {$seg['duration_minutes']} min.",
+                $excessMinutes > 0 => "Break exceeded allowed by {$excessMinutes} min (took {$seg['duration_minutes']} min, allowed {$allowedDur} min).",
+                default => null,
             };
 
             AttendanceBreakLog::updateOrCreate(
                 ['attendance_id' => $attendance->id, 'break_start_time' => $seg['out']],
                 [
-                    'shift_break_id'          => $shiftBreakId,
-                    'type'                    => $seg['type'],
-                    'is_auto_detected'        => true,
-                    'break_end_time'          => $seg['in'],
+                    'shift_break_id' => $shiftBreakId,
+                    'type' => $seg['type'],
+                    'is_auto_detected' => true,
+                    'break_end_time' => $seg['in'],
                     'actual_duration_minutes' => $seg['duration_minutes'],
-                    'excess_minutes'          => $excessMinutes,
-                    'is_compliant'            => $isCompliant,
-                    'is_taken'                => true,
-                    'status'                  => $isCompleted ? 'completed' : 'in_progress',
-                    'notes'                   => $notes,
+                    'excess_minutes' => $excessMinutes,
+                    'is_compliant' => $isCompliant,
+                    'is_taken' => true,
+                    'status' => $isCompleted ? 'completed' : 'in_progress',
+                    'notes' => $notes,
                 ]
             );
         }
@@ -510,9 +523,9 @@ class SyncZKBioAttendance extends Command
     private function saveCheckpoint(string $date, string $until): void
     {
         ZKBioSyncLog::create([
-            'sync_date'    => $date,
+            'sync_date' => $date,
             'synced_until' => $until,
-            'synced_at'    => now(),
+            'synced_at' => now(),
         ]);
     }
 
