@@ -33,16 +33,18 @@ new class extends Component {
 
     public function rules()
     {
-        return [
-            'name' => ['required', 'string', 'max:255',
+        $nameRule = $this->editId
+            ? ['required', 'string', 'max:255']
+            : ['required', 'string', 'max:255',
                 \Illuminate\Validation\Rule::unique('roles', 'name')
-                    ->ignore($this->editId)
                     ->where('guard_name', 'web')
-            ],
+            ];
+
+        return [
+            'name'                => $nameRule,
             'selectedPermissions' => 'required|array|min:1',
         ];
     }
-
 
     public function store()
     {
