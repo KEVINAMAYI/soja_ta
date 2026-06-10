@@ -320,6 +320,8 @@ class AttendanceDailyTable extends DataTableComponent
     #[On('export-full-excel')]
     public function exportFullExcel()
     {
+        ini_set('memory_limit', '512M');
+
         $orgId    = auth()->user()->employee->organization_id ?? null;
         $filename = 'T_A_Report_' . now()->format('Y-m-d') . '.xlsx';
         return Excel::download(new AttendanceFullExport(orgId: $orgId, ids: $this->getSelected(), startDate: $this->startDate, endDate: $this->endDate, departmentId: $this->departmentId !== 'all' ? (int) $this->departmentId : null), $filename);

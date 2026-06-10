@@ -33,9 +33,10 @@ class AttendanceFullExport implements WithMultipleSheets
 
     public function sheets(): array
     {
+        ini_set('memory_limit', '512M');
+
         /** @var AttendanceReportService $svc */
         $svc = app(AttendanceReportService::class);
-
         $args = [
             $this->orgId,
             $this->ids,
@@ -44,11 +45,17 @@ class AttendanceFullExport implements WithMultipleSheets
             $this->departmentId,
         ];
 
+        // Load master records once — derive other sheets from it
+        $master  = $svc->getMaster(...$args);
+        $present = array_values(array_filter($master, fn($r) => in_array($r->status ?? '', ['clocked_in', 'clocked_out'])));
+        $late    = array_values(array_filter($master, fn($r) => ($r->is_late_checkin ?? false) && !($r->within_grace_period ?? false)));
+        $absent  = array_values(array_filter($master, fn($r) => in_array($r->status ?? '', ['absent', 'unchecked_in', 'on_leave', 'sick_leave', 'sick_off'])));
+
         return [
-            new MasterSheet($svc->getMaster(...$args),   $this->startDate, $this->endDate),
-            new PresentSheet($svc->getPresent(...$args), $this->startDate, $this->endDate),
-            new LateSheet($svc->getLateness(...$args),   $this->startDate, $this->endDate),
-            new AbsentSheet($svc->getAbsent(...$args),   $this->startDate, $this->endDate),
+            new MasterSheet($master,  $this->startDate, $this->endDate),
+            new PresentSheet($present, $this->startDate, $this->endDate),
+            new LateSheet($late,      $this->startDate, $this->endDate),
+            new AbsentSheet($absent,  $this->startDate, $this->endDate),
         ];
     }
 }
