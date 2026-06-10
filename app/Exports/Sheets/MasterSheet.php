@@ -141,7 +141,17 @@ class MasterSheet implements FromArray, WithTitle, WithStyles, WithColumnWidths
                 $firstBreak ? $this->fmtTime($firstBreak->break_end_time) : '', // L
                 $definedOut,                                        // M
                 $this->fmtTime($r->check_out_time),                // N
-                $shift ? (string)($shift->shift_type === 'night' ? '11.0' : '9.0') : '9.0',  // O
+                (function() use ($r, $shift) {
+                    $dow     = \Carbon\Carbon::parse($r->date)->format('l');
+                    $isNight = ($shift?->shift_type ?? '') === 'night';
+                    return match(true) {
+                        in_array($dow, ['Saturday', 'Sunday']) => '8.0',
+                        $dow === 'Friday' && $isNight          => '11.0',
+                        $dow === 'Friday'                      => '8.0',
+                        $isNight                               => '11.0',
+                        default                                => '9.0',
+                    };
+                })(),  // O
                 $this->fmtHours((float)($r->worked_hours ?? 0)),   // P
                 $this->fmtHours((float)($r->ot1_hours ?? 0)),      // Q
                 $this->fmtHours((float)($r->ot2_hours ?? 0)),      // R
