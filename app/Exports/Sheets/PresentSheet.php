@@ -99,8 +99,7 @@ class PresentSheet implements FromArray, WithTitle, WithStyles, WithColumnWidths
                 $this->shiftDayNight($shift),                       // H
                 $shift ? Carbon::parse($shift->start_time)->format('H:i') : '', // I
                 $this->fmtTime($r->check_in_time),                 // J
-                $shift ? Carbon::parse($shift->end_time)->format('H:i') : '',   // K
-                $this->fmtTime($r->check_out_time),                // L
+                $shift ? $shift->getEffectiveEndTime($r->date ?? now()->toDateString())->format('H:i') : '',                $this->fmtTime($r->check_out_time),                // L
                 $this->fmtHours((float)($r->worked_hours ?? 0)),   // M
             ];
         }
