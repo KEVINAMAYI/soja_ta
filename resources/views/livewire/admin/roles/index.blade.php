@@ -26,7 +26,9 @@ new class extends Component {
         $permissions = Permission::query()->get()->toBase();
         $this->permissions = $permissions;
 
-        $this->groupedPermissions = $this->permissions->groupBy('category');
+        $this->groupedPermissions = $this->permissions
+            ->groupBy('category')
+            ->except(['Organizations', 'School']);
     }
 
     public function rules()
