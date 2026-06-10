@@ -34,7 +34,9 @@ new class extends Component {
     public function rules()
     {
         return [
-            'name' => 'required|string|max:255|unique:roles,name' . ($this->editId ? ',' . $this->editId : ''),
+            'name' => ['required', 'string', 'max:255',
+                \Illuminate\Validation\Rule::unique('roles', 'name')->ignore($this->editId)
+            ],
             'selectedPermissions' => 'required|array|min:1',
         ];
     }
