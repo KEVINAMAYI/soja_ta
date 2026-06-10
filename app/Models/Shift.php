@@ -213,7 +213,7 @@ class Shift extends Model
     public function getEffectiveEndTime(string $date): Carbon
     {
         $carbon   = Carbon::parse($date);
-        $isFriday = $carbon->dayOfWeek === Carbon::FRIDAY;
+        $isFriday = $carbon->format('l') === 'Friday';
 
         $rawEnd   = $this->getRawOriginal('end_time');
         $rawStart = $this->getRawOriginal('start_time');
