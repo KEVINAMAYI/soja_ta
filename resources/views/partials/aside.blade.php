@@ -1,16 +1,72 @@
 <style>
-    .sidebar-item.has-dropdown { position: relative; }
-    .sidebar-item.has-dropdown > .sidebar-link { display: flex; align-items: center; gap: 10px; padding: 12px 16px; cursor: pointer; transition: all 0.3s ease; }
-    .dropdown-icon { margin-left: auto; transition: transform 0.3s ease; }
-    .sidebar-item.has-dropdown.active .dropdown-icon { transform: rotate(180deg); }
-    .sidebar-dropdown { list-style: none; padding: 0; margin: 0; max-height: 0; overflow: hidden; transition: max-height 0.3s ease; background-color: transparent; }
-    .sidebar-item.has-dropdown.active .sidebar-dropdown { max-height: 500px; }
-    .sidebar-dropdown li { list-style: disc; margin-left: 45px; }
-    .sidebar-sublink { display: inline-block; padding: 8px 10px; text-decoration: none; color: grey !important; transition: all 0.3s ease; font-size: 14px; }
-    .sidebar-sublink:hover { color: var(--primary-color) !important; font-weight: 500; padding-left: 15px; }
-    .sidebar-sublink.active { color: var(--primary-color) !important; font-weight: 600; }
-    .sidebar-item.has-dropdown > .sidebar-link:hover { background-color: rgba(93, 135, 255, 0.1); }
-    .sidebar-item.has-dropdown.active > .sidebar-link { background-color: rgba(93, 135, 255, 0.15); }
+    .sidebar-item.has-dropdown {
+        position: relative;
+    }
+
+    .sidebar-item.has-dropdown > .sidebar-link {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 12px 16px;
+        cursor: pointer;
+        transition: all 0.3s ease;
+    }
+
+    .dropdown-icon {
+        margin-left: auto;
+        transition: transform 0.3s ease;
+    }
+
+    .sidebar-item.has-dropdown.active .dropdown-icon {
+        transform: rotate(180deg);
+    }
+
+    .sidebar-dropdown {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+        max-height: 0;
+        overflow: hidden;
+        transition: max-height 0.3s ease;
+        background-color: transparent;
+    }
+
+    .sidebar-item.has-dropdown.active .sidebar-dropdown {
+        max-height: 500px;
+    }
+
+    .sidebar-dropdown li {
+        list-style: disc;
+        margin-left: 45px;
+    }
+
+    .sidebar-sublink {
+        display: inline-block;
+        padding: 8px 10px;
+        text-decoration: none;
+        color: grey !important;
+        transition: all 0.3s ease;
+        font-size: 14px;
+    }
+
+    .sidebar-sublink:hover {
+        color: var(--primary-color) !important;
+        font-weight: 500;
+        padding-left: 15px;
+    }
+
+    .sidebar-sublink.active {
+        color: var(--primary-color) !important;
+        font-weight: 600;
+    }
+
+    .sidebar-item.has-dropdown > .sidebar-link:hover {
+        background-color: rgba(93, 135, 255, 0.1);
+    }
+
+    .sidebar-item.has-dropdown.active > .sidebar-link {
+        background-color: rgba(93, 135, 255, 0.15);
+    }
 
     /* Section labels (MAIN, EVENTS, REPORTS) */
     .sidebar-section-label {
@@ -31,7 +87,6 @@
             <div class="brand-logo mb-3 mt-3 d-flex justify-content-center align-items-center" style="height: 100px;">
                 <livewire:admin.account-settings.org_logo/>
             </div>
-
 
 
             <nav class="sidebar-nav scroll-sidebar" data-simplebar>
@@ -150,7 +205,7 @@
                             </li>
                         @endcan
 
-                        @can('view-employees')
+                        @canany(['create-leave-request', 'approve-leave-request'])
                             <li class="sidebar-item">
                                 <a class="sidebar-link {{ request()->routeIs('leaves.index') ? 'active' : '' }}"
                                    href="{{ route('leaves.index') }}">
@@ -158,9 +213,9 @@
                                     <span class="hide-menu">Leave Requests</span>
                                 </a>
                             </li>
-                        @endcan
+                        @endcanany
 
-                        @can('view-employees')
+                        @can('view-shift-monitoring')
                             <li class="sidebar-item">
                                 <a class="sidebar-link {{ request()->routeIs('shifts.coverage') ? 'active' : '' }}"
                                    href="{{ route('shifts.coverage') }}">
@@ -210,9 +265,12 @@
                                     <iconify-icon class="dropdown-icon" icon="mdi:chevron-down"></iconify-icon>
                                 </a>
                                 <ul class="sidebar-dropdown">
-                                    <li><a href="{{ route('reports.detailed') }}" class="sidebar-sublink">Detailed Reports</a></li>
-                                    <li><a href="{{ route('reports.summary') }}" class="sidebar-sublink">Summary Reports</a></li>
-                                    <li><a href="{{ route('reports.scheduled') }}" class="sidebar-sublink">Report Schedules</a></li>
+                                    <li><a href="{{ route('reports.detailed') }}" class="sidebar-sublink">Detailed
+                                            Reports</a></li>
+                                    <li><a href="{{ route('reports.summary') }}" class="sidebar-sublink">Summary
+                                            Reports</a></li>
+                                    <li><a href="{{ route('reports.scheduled') }}" class="sidebar-sublink">Report
+                                            Schedules</a></li>
                                 </ul>
                             </li>
                         @endcan
