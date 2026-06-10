@@ -35,7 +35,9 @@ new class extends Component {
     {
         return [
             'name' => ['required', 'string', 'max:255',
-                \Illuminate\Validation\Rule::unique('roles', 'name')->ignore($this->editId)
+                \Illuminate\Validation\Rule::unique('roles', 'name')
+                    ->ignore($this->editId)
+                    ->where('guard_name', 'web')
             ],
             'selectedPermissions' => 'required|array|min:1',
         ];
