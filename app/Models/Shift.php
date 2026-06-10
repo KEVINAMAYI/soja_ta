@@ -212,21 +212,25 @@ class Shift extends Model
 
     public function getEffectiveEndTime(string $date): Carbon
     {
-        $carbon   = Carbon::parse($date);
-        $isFriday   = $carbon->format('l') === 'Friday';
-        $isWeekend  = in_array($carbon->format('l'), ['Saturday', 'Sunday']);
+        $carbon    = Carbon::parse($date);
+        $isFriday  = $carbon->format('l') === 'Friday';
+        $isWeekend = in_array($carbon->format('l'), ['Saturday', 'Sunday']);
 
-        $rawEnd   = $this->getRawOriginal('end_time');
-        $rawStart = $this->getRawOriginal('start_time');
+        // Always use getRawOriginal to avoid datetime cast interference
+        $rawEnd          = Carbon::parse($this->getRawOriginal('end_time'))->format('H:i:s');
+        $rawStart        = Carbon::parse($this->getRawOriginal('start_time'))->format('H:i:s');
+        $rawFridayEnd    = $this->getRawOriginal('friday_end_time')
+            ? Carbon::parse($this->getRawOriginal('friday_end_time'))->format('H:i:s')
+            : null;
 
-        $endTime = (($isFriday || $isWeekend) && $this->friday_end_time)
-            ? Carbon::parse($this->getRawOriginal('friday_end_time') ?? $this->friday_end_time)->format('H:i:s')
-            : Carbon::parse($rawEnd)->format('H:i:s');
+        $endTime = (($isFriday || $isWeekend) && $rawFridayEnd)
+            ? $rawFridayEnd
+            : $rawEnd;
 
         $end   = Carbon::parse($date . ' ' . $endTime);
-        $start = Carbon::parse($date . ' ' . Carbon::parse($rawStart)->format('H:i:s'));
+        $start = Carbon::parse($date . ' ' . $rawStart);
 
-        // Overnight shift
+        // Overnight shift — push end to next day
         if ($end->lte($start)) {
             $end->addDay();
         }
