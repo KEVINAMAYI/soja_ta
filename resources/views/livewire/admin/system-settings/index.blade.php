@@ -16,6 +16,8 @@ new class extends Component {
     public string $tabTitle = '';
     public string $tabIcon = '';
     public array $breadcrumbItems = [];
+    public array $availableRoles = [];
+
 
     // ── Check-in Approval tab state ──────────────────────────────────────
     public array $approval = [];
@@ -47,6 +49,11 @@ new class extends Component {
             ->toArray();
 
         $this->changeSystemSettingsBreadcrumb();
+
+        $this->availableRoles = \Spatie\Permission\Models\Role::where('organization_id', $orgId)
+            ->orderBy('name')
+            ->pluck('name')
+            ->toArray();
     }
 
     #[On('systemSettingsTabChanged')]
@@ -442,10 +449,14 @@ new class extends Component {
                                                         <label
                                                             class="form-label small text-uppercase text-muted fw-semibold">Approver
                                                             Role</label>
-                                                        <input type="text" class="form-control form-control-sm"
-                                                               placeholder="{{ $isLast ? 'Department Head' : '' }}"
-                                                               wire:model="approval.windows.{{ $i }}.approver_role"
+                                                        <select class="form-select form-select-sm"
+                                                                wire:model="approval.windows.{{ $i }}.approver_role"
                                                             {{ $window['enabled'] ? '' : 'disabled' }}>
+                                                            <option value="">— Select Role —</option>
+                                                            @foreach($availableRoles as $role)
+                                                                <option value="{{ $role }}">{{ $role }}</option>
+                                                            @endforeach
+                                                        </select>
                                                     </div>
 
                                                     <div class="mb-2">
