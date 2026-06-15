@@ -127,7 +127,6 @@ new class extends Component {
     {
         $this->validate([
             'approval.enabled' => 'boolean',
-            'approval.grace_period_minutes' => 'required|integer|min:0|max:480',
             'approval.department_ids' => 'array',
             'approval.windows' => 'array|size:3',
             'approval.windows.*.enabled' => 'boolean',
