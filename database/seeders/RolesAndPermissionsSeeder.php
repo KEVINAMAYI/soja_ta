@@ -17,63 +17,66 @@ class RolesAndPermissionsSeeder extends Seeder
         $permissions = [
 
             // Organizations
-            ['name' => 'view-organizations',   'category' => 'Organizations'],
-            ['name' => 'add-organizations',    'category' => 'Organizations'],
-            ['name' => 'edit-organizations',   'category' => 'Organizations'],
+            ['name' => 'view-organizations', 'category' => 'Organizations'],
+            ['name' => 'add-organizations', 'category' => 'Organizations'],
+            ['name' => 'edit-organizations', 'category' => 'Organizations'],
             ['name' => 'delete-organizations', 'category' => 'Organizations'],
 
             // Departments
-            ['name' => 'view-departments',     'category' => 'Departments'],
-            ['name' => 'add-departments',      'category' => 'Departments'],
-            ['name' => 'edit-departments',     'category' => 'Departments'],
-            ['name' => 'delete-departments',   'category' => 'Departments'],
+            ['name' => 'view-departments', 'category' => 'Departments'],
+            ['name' => 'add-departments', 'category' => 'Departments'],
+            ['name' => 'edit-departments', 'category' => 'Departments'],
+            ['name' => 'delete-departments', 'category' => 'Departments'],
 
             // Employees
-            ['name' => 'view-employees',       'category' => 'Employees'],
-            ['name' => 'add-employees',        'category' => 'Employees'],
-            ['name' => 'edit-employees',       'category' => 'Employees'],
-            ['name' => 'delete-employees',     'category' => 'Employees'],
+            ['name' => 'view-employees', 'category' => 'Employees'],
+            ['name' => 'add-employees', 'category' => 'Employees'],
+            ['name' => 'edit-employees', 'category' => 'Employees'],
+            ['name' => 'delete-employees', 'category' => 'Employees'],
 
             // Roles
-            ['name' => 'view-roles',           'category' => 'Roles'],
-            ['name' => 'add-roles',            'category' => 'Roles'],
-            ['name' => 'edit-roles',           'category' => 'Roles'],
-            ['name' => 'delete-roles',         'category' => 'Roles'],
+            ['name' => 'view-roles', 'category' => 'Roles'],
+            ['name' => 'add-roles', 'category' => 'Roles'],
+            ['name' => 'edit-roles', 'category' => 'Roles'],
+            ['name' => 'delete-roles', 'category' => 'Roles'],
 
             // Timesheets
-            ['name' => 'checkin-other-employees',   'category' => 'Timesheets'],
+            ['name' => 'checkin-other-employees', 'category' => 'Timesheets'],
             ['name' => 'approve-manual-timesheets', 'category' => 'Timesheets'],
-            ['name' => 'view-all-attendance',       'category' => 'Timesheets'],
-            ['name' => 'enroll-employee',           'category' => 'Timesheets'],
+            ['name' => 'view-all-attendance', 'category' => 'Timesheets'],
+            ['name' => 'enroll-employee', 'category' => 'Timesheets'],
 
             // Reports
-            ['name' => 'view-own-reports',     'category' => 'Reports'],
-            ['name' => 'view-all-reports',     'category' => 'Reports'],
+            ['name' => 'view-own-reports', 'category' => 'Reports'],
+            ['name' => 'view-all-reports', 'category' => 'Reports'],
 
             // Shifts
-            ['name' => 'manage-shifts',        'category' => 'Shifts'],
+            ['name' => 'manage-shifts', 'category' => 'Shifts'],
+
+            //check in request
+            ['name' => 'approve-checkin-requests', 'category' => 'Requests'],
 
             // Locations
-            ['name' => 'manage-work-locations','category' => 'Locations'],
-            ['name' => 'assign-locations',     'category' => 'Locations'],
+            ['name' => 'manage-work-locations', 'category' => 'Locations'],
+            ['name' => 'assign-locations', 'category' => 'Locations'],
 
             // Dashboard
-            ['name' => 'view-dashboard',       'category' => 'Dashboard'],
+            ['name' => 'view-dashboard', 'category' => 'Dashboard'],
 
             // Settings
-            ['name' => 'view-settings',        'category' => 'Settings'],
+            ['name' => 'view-settings', 'category' => 'Settings'],
 
             // School-specific
-            ['name' => 'view-students',             'category' => 'School'],
-            ['name' => 'add-students',              'category' => 'School'],
-            ['name' => 'edit-students',             'category' => 'School'],
-            ['name' => 'delete-students',           'category' => 'School'],
-            ['name' => 'mark-student-attendance',   'category' => 'School'],
-            ['name' => 'mark-staff-attendance',     'category' => 'School'],
-            ['name' => 'view-school-attendance',    'category' => 'School'],
-            ['name' => 'manage-boarding-status',    'category' => 'School'],
+            ['name' => 'view-students', 'category' => 'School'],
+            ['name' => 'add-students', 'category' => 'School'],
+            ['name' => 'edit-students', 'category' => 'School'],
+            ['name' => 'delete-students', 'category' => 'School'],
+            ['name' => 'mark-student-attendance', 'category' => 'School'],
+            ['name' => 'mark-staff-attendance', 'category' => 'School'],
+            ['name' => 'view-school-attendance', 'category' => 'School'],
+            ['name' => 'manage-boarding-status', 'category' => 'School'],
             ['name' => 'manage-special-activities', 'category' => 'School'],
-            ['name' => 'view-own-attendance',       'category' => 'School'],
+            ['name' => 'view-own-attendance', 'category' => 'School'],
         ];
 
         foreach ($permissions as $permission) {
@@ -119,9 +122,9 @@ class RolesAndPermissionsSeeder extends Seeder
 
         foreach ($standardRoles as $roleName => $perms) {
             $role = Role::firstOrCreate([
-                'name'            => $roleName,
+                'name' => $roleName,
                 'organization_id' => 1,
-                'guard_name'      => 'web',
+                'guard_name' => 'web',
             ]);
 
             if ($perms === 'all') {
@@ -151,12 +154,12 @@ class RolesAndPermissionsSeeder extends Seeder
 
             'school-admin' => [
                 'view-employees', 'add-employees', 'edit-employees', 'delete-employees',
-                'view-students',  'add-students',  'edit-students',  'delete-students',
+                'view-students', 'add-students', 'edit-students', 'delete-students',
                 'view-departments', 'add-departments', 'edit-departments',
                 'view-roles',
                 'mark-student-attendance', 'mark-staff-attendance',
-                'view-school-attendance',  'view-all-attendance',
-                'manage-boarding-status',  'manage-special-activities',
+                'view-school-attendance', 'view-all-attendance',
+                'manage-boarding-status', 'manage-special-activities',
                 'approve-manual-timesheets',
                 'view-all-reports', 'view-own-reports',
                 'manage-shifts', 'manage-work-locations', 'assign-locations',
@@ -182,9 +185,9 @@ class RolesAndPermissionsSeeder extends Seeder
 
         foreach ($schoolRoles as $roleName => $perms) {
             $role = Role::firstOrCreate([
-                'name'            => $roleName,
+                'name' => $roleName,
                 'organization_id' => $organizationId,
-                'guard_name'      => 'web',
+                'guard_name' => 'web',
             ]);
             $role->syncPermissions($perms);
         }

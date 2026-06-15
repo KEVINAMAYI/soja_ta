@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\APIs\AttendanceController;
 use App\Http\Controllers\APIs\AuthController;
+use App\Http\Controllers\APIs\CheckInApprovalController;
 use App\Http\Controllers\APIs\DeviceController;
 use App\Http\Controllers\APIs\LeaveController;
 use App\Http\Controllers\APIs\OrganizationController;
@@ -50,6 +51,17 @@ Route::middleware(['auth:sanctum'])->group(function () {
     });
 
     Route::post('/devices/verify', [DeviceController::class, 'verify']);
+
+
+    Route::prefix('checkin-requests')->group(function () {
+        // Approver routes
+        Route::get('/', [CheckInApprovalController::class, 'index']);
+        Route::get('/{id}', [CheckInApprovalController::class, 'show']);
+        Route::post('/{id}/action', [CheckInApprovalController::class, 'action']);
+
+        // Employee's own requests
+        Route::get('/my-requests', [CheckInApprovalController::class, 'myRequests']);
+    });
 
 });
 

@@ -5,6 +5,7 @@ namespace App\Http\Controllers\APIs;
 use App\Helpers\ServerTime;
 use App\Models\AttendanceBreakLog;
 use App\Services\BreakDetector;
+use App\Services\CheckInApprovalService;
 use Firebase\JWT\JWT;
 use Firebase\JWT\Key;
 use Illuminate\Support\Facades\Auth;
@@ -273,6 +274,58 @@ class AttendanceController extends Controller
                 $withinGracePeriod = $shift->isWithinGracePeriod($checkInTimeCarbon);
                 $isLateCheckin = $shift->isLateCheckIn($checkInTimeCarbon);
                 $minutesLate = $shift->getMinutesLate($checkInTimeCarbon);
+            }
+
+
+            /* 9b. ---------------------------------------------------------------
+                APPROVAL GATE
+                 If the org has check-in approval enabled and this employee's
+                 lateness exceeds the configured grace period (org-level, independent
+                 of the shift's own grace settings), HOLD the check-in.
+
+                 No attendance record is created or modified. Only a
+                 CheckInApprovalRequest is stored, carrying everything needed to
+                 finalize the check-in later (on approval) with the ORIGINAL scan
+                 timestamp.
+            --------------------------------------------------------------------*/
+            $approvalService = app(CheckInApprovalService::class);
+            $approvalSettings = $approvalService->shouldRequireApproval($employee, $minutesLate);
+
+            if ($approvalSettings !== null) {
+                $request = $approvalService->createRequest(
+                    employee: $employee,
+                    checkInTime: $checkInTimeCarbon,
+                    minutesLate: $minutesLate,
+                    isLateCheckin: $isLateCheckin,
+                    withinGracePeriod: $withinGracePeriod,
+                    shiftTimes: [
+                        'expected_check_in_time' => $expectedCheckInTime->format('H:i:s'),
+                        'grace_period_end_time' => $gracePeriodEndTime->format('H:i:s'),
+                        'expected_check_out_time' => $expectedCheckOutTime->format('H:i:s'),
+                        'early_checkout_threshold_time' => $earlyCheckoutThresholdTime->format('H:i:s'),
+                    ],
+                    latitude: (float)$latitude,
+                    longitude: (float)$longitude,
+                    deviceId: $deviceId,
+                    workLocationId: $work_location_id,
+                    settings: $approvalSettings,
+                );
+
+                DB::commit();
+
+                return response()->json([
+                    'code' => 1002, // "pending" — not success (1000/1001), not failure (1003)
+                    'message' => "You are {$minutesLate} minute(s) late, which exceeds the grace period. "
+                        . "Your check-in has been submitted to your {$approvalSettings['windows'][0]['approver_role']} for approval. "
+                        . "You are NOT checked in yet.",
+                    'type' => 'check_in_held_for_approval',
+                    'data' => [
+                        'request_id' => $request->id,
+                        'status' => 'pending',
+                        'submitted_at' => $request->submitted_at->toIso8601String(),
+                        'current_window' => $request->current_window,
+                    ],
+                ], 202);
             }
 
             /* 10. Create / fill attendance record ------------------------------ */

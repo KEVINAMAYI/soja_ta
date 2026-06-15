@@ -38,6 +38,9 @@
 
                 @php
                     $isSchool = auth()->user()->employee?->organization?->is_student_record;
+                    $pendingCheckinCount = \App\Models\CheckInApprovalRequest::where('organization_id', auth()->user()->employee?->organization_id)
+                        ->where('status', 'pending')
+                        ->count();
                 @endphp
 
                 {{-- ══════════════════════════════════════════════════════ --}}
@@ -87,6 +90,19 @@
                             </li>
                         @endcan
 
+                        @can('approve-checkin-requests')
+                            <li class="sidebar-item">
+                                <a class="sidebar-link d-flex align-items-center {{ request()->routeIs('checkin-requests.index') ? 'active' : '' }}"
+                                   href="{{ route('checkin-requests.index') }}">
+                                    <iconify-icon icon="mdi:clock-alert-outline" class="fs-5"></iconify-icon>
+                                    <span class="hide-menu">Check-in Requests</span>
+                                    @if($pendingCheckinCount > 0)
+                                        <span class="badge bg-danger rounded-pill ms-auto">{{ $pendingCheckinCount }}</span>
+                                    @endif
+                                </a>
+                            </li>
+                        @endcan
+
                         {{-- EVENTS section --}}
                         @can('manage-special-activities')
                             <p class="sidebar-section-label">Events</p>
@@ -114,7 +130,7 @@
                     </ul>
 
                     {{-- ══════════════════════════════════════════════════════ --}}
-                    {{-- REGULAR ORG SIDEBAR (unchanged)                        --}}
+                    {{-- REGULAR ORG SIDEBAR                                     --}}
                     {{-- ══════════════════════════════════════════════════════ --}}
                 @else
 
@@ -176,6 +192,19 @@
                                    href="{{ route('attendance.index') }}">
                                     <iconify-icon icon="mdi:clock-time-eight-outline"></iconify-icon>
                                     <span class="hide-menu">Attendance</span>
+                                </a>
+                            </li>
+                        @endcan
+
+                        @can('approve-checkin-requests')
+                            <li class="sidebar-item">
+                                <a class="sidebar-link d-flex align-items-center {{ request()->routeIs('checkin-requests.index') ? 'active' : '' }}"
+                                   href="{{ route('checkin-requests.index') }}">
+                                    <iconify-icon icon="mdi:clock-alert-outline" class="fs-5"></iconify-icon>
+                                    <span class="hide-menu">Check-in Requests</span>
+                                    @if($pendingCheckinCount > 0)
+                                        <span class="badge bg-danger rounded-pill ms-auto">{{ $pendingCheckinCount }}</span>
+                                    @endif
                                 </a>
                             </li>
                         @endcan
