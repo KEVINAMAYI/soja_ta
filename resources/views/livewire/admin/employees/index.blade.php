@@ -56,6 +56,9 @@ new class extends Component {
     #[Url(as: 'type')]
     public string $personType = 'student';
 
+    #[Url]   // ← no alias, maps to ?attendance_status= in the URL
+    public ?string $attendance_status = null;
+
     public string $userType = '';
 
     public $totalEmployees = 0;
@@ -298,7 +301,7 @@ new class extends Component {
                         'name' => $row['name'],
                         'email' => $row['email'],
                         'status' => 'updated',
-                        'zk'      => $zkStatus,
+                        'zk' => $zkStatus,
                         'message' => 'Details updated from AD',
                     ];
                     $updated++;
@@ -754,7 +757,15 @@ new class extends Component {
         $this->presentCount = $attendances->where('status', 'clocked_in')->pluck('employee_id')->unique()->count();
         $this->leftSchoolCount = $attendances->where('status', 'clocked_out')->pluck('employee_id')->unique()->count();
         $reportedIds = $attendances->whereIn('status', ['clocked_in', 'clocked_out'])->pluck('employee_id')->unique();
-        $this->notReportedCount = max(0, $students->count() - $reportedIds->count());
+
+        // Replace the notReportedCount calculation in both methods
+        $this->notReportedCount = max(0, $this->totalStudents -
+            Employee::where('organization_id', $orgId)
+                ->where('active', 1)
+                ->where('is_student', 1)
+                ->whereHas('attendances')
+                ->count()
+        );
     }
 
 
@@ -774,8 +785,15 @@ new class extends Component {
 
             $this->presentCount = $studentAttendance->where('status', 'clocked_in')->pluck('employee_id')->unique()->count();
             $this->leftSchoolCount = $studentAttendance->where('status', 'clocked_out')->pluck('employee_id')->unique()->count();
-            $this->notReportedCount = max(0, $this->totalStudents - $studentAttendance
-                    ->whereIn('status', ['clocked_in', 'clocked_out'])->pluck('employee_id')->unique()->count());
+
+            // Replace the notReportedCount calculation in both methods
+            $this->notReportedCount = max(0, $this->totalStudents -
+                Employee::where('organization_id', $orgId)
+                    ->where('active', 1)
+                    ->where('is_student', 1)
+                    ->whereHas('attendances')
+                    ->count()
+            );
 
             // ── Staff Stats ──
             $this->totalStaff = $allPeople->where('is_student', 0)->count();
@@ -1724,54 +1742,62 @@ new class extends Component {
                     </div>
                 </div>
 
-                {{-- On Campus / Clocked In --}}
+                {{-- On Campus --}}
                 <div class="col-lg-3 col-md-6 col-12">
-                    <div class="summary-card">
-                        <div class="summary-card-icon" style="background:#dcfce7; color:#16a34a;">
-                            <iconify-icon icon="mdi:account-check"></iconify-icon>
+                    <a href="{{ route('employees.index', ['type' => 'student', 'attendance_status' => 'present']) }}"
+                       style="text-decoration:none; color:inherit; display:block; height:100%;">
+                        <div class="summary-card">
+                            <div class="summary-card-icon" style="background:#dcfce7; color:#16a34a;">
+                                <iconify-icon icon="mdi:account-check"></iconify-icon>
+                            </div>
+                            <p class="summary-card-title">On Campus</p>
+                            <div class="summary-card-value">{{ $present }}</div>
+                            <p class="summary-card-subtitle">Currently present</p>
+                            <div class="summary-card-bar">
+                                <div class="summary-card-bar-fill"
+                                     style="width:{{ $total > 0 ? ($present/$total)*100 : 0 }}%; background:#22c55e;"></div>
+                            </div>
                         </div>
-                        <p class="summary-card-title">{{ $isShowingStudent ? 'On Campus' : 'On Campus' }}</p>
-                        <div class="summary-card-value">{{ $present }}</div>
-                        <p class="summary-card-subtitle">Currently present</p>
-                        <div class="summary-card-bar">
-                            <div class="summary-card-bar-fill"
-                                 style="width:{{ $total > 0 ? ($present/$total)*100 : 0 }}%; background:#22c55e;"></div>
-                        </div>
-                    </div>
+                    </a>
                 </div>
 
-                {{-- Off Campus / Left --}}
+                {{-- Off Campus --}}
                 <div class="col-lg-3 col-md-6 col-12">
-                    <div class="summary-card">
-                        <div class="summary-card-icon" style="background:#e0f2fe; color:#0284c7;">
-                            <iconify-icon icon="mdi:exit-run"></iconify-icon>
+                    <a href="{{ route('employees.index', ['type' => 'student', 'attendance_status' => 'left']) }}"
+                       style="text-decoration:none; color:inherit; display:block; height:100%;">
+                        <div class="summary-card">
+                            <div class="summary-card-icon" style="background:#e0f2fe; color:#0284c7;">
+                                <iconify-icon icon="mdi:exit-run"></iconify-icon>
+                            </div>
+                            <p class="summary-card-title">Off Campus</p>
+                            <div class="summary-card-value">{{ $left }}</div>
+                            <p class="summary-card-subtitle">{{ $isShowingStudent ? 'Signed out today' : 'Clocked out today' }}</p>
+                            <div class="summary-card-bar">
+                                <div class="summary-card-bar-fill"
+                                     style="width:{{ $total > 0 ? ($left/$total)*100 : 0 }}%; background:#0ea5e9;"></div>
+                            </div>
                         </div>
-                        <p class="summary-card-title">{{ $isShowingStudent ? 'Left School' : 'Left School' }}</p>
-                        <div class="summary-card-value">{{ $left }}</div>
-                        <p class="summary-card-subtitle">{{ $isShowingStudent ? 'Signed out today' : 'Clocked out today' }}</p>
-                        <div class="summary-card-bar">
-                            <div class="summary-card-bar-fill"
-                                 style="width:{{ $total > 0 ? ($left/$total)*100 : 0 }}%; background:#0ea5e9;"></div>
-                        </div>
-                    </div>
+                    </a>
                 </div>
 
-                {{-- Unscanned --}}
+                {{-- Never Scanned --}}
                 <div class="col-lg-3 col-md-6 col-12">
-                    <div class="summary-card">
-                        <div class="summary-card-icon" style="background:#fee2e2; color:#dc2626;">
-                            <iconify-icon icon="mdi:account-alert"></iconify-icon>
+                    <a href="{{ route('employees.index', ['type' => 'student', 'attendance_status' => 'not_reported']) }}"
+                       style="text-decoration:none; color:inherit; display:block; height:100%;">
+                        <div class="summary-card">
+                            <div class="summary-card-icon" style="background:#fee2e2; color:#dc2626;">
+                                <iconify-icon icon="mdi:account-alert"></iconify-icon>
+                            </div>
+                            <p class="summary-card-title">Never Scanned</p>
+                            <div class="summary-card-value">{{ $missing }}</div>
+                            <p class="summary-card-subtitle">No attendance records ever</p>
+                            <div class="summary-card-bar">
+                                <div class="summary-card-bar-fill"
+                                     style="width:{{ $total > 0 ? ($missing/$total)*100 : 0 }}%; background:#ef4444;"></div>
+                            </div>
                         </div>
-                        <p class="summary-card-title">Not Enrolled</p>
-                        <div class="summary-card-value">{{ $missing }}</div>
-                        <p class="summary-card-subtitle">No logs today</p>
-                        <div class="summary-card-bar">
-                            <div class="summary-card-bar-fill"
-                                 style="width:{{ $total > 0 ? ($missing/$total)*100 : 0 }}%; background:#ef4444;"></div>
-                        </div>
-                    </div>
+                    </a>
                 </div>
-
             @else
                 {{-- ── REGULAR (non-school) ORG ── --}}
 
@@ -2609,8 +2635,32 @@ new class extends Component {
             @endif
             {{-- /AD sync panel --}}
 
+
+            @if($attendance_status)
+                <div class="d-flex align-items-center mb-3">
+        <span class="me-2 text-muted" style="font-size:0.85rem;">
+            Filtering by:
+            <strong class="text-dark">
+                {{ match($attendance_status) {
+                    'present' => 'On Campus',
+                    'left' => 'Left School',
+                    'not_reported' => 'Unscanned',
+                    default => $attendance_status
+                } }}
+            </strong>
+        </span>
+                    <a href="{{ route('employees.index', ['type' => $personType]) }}"
+                       class="btn btn-sm btn-outline-danger d-flex align-items-center gap-1"
+                       style="border-radius:7px; font-size:0.8rem;">
+                        <iconify-icon icon="mdi:close-circle-outline" style="font-size:14px;"></iconify-icon>
+                        Clear Filter
+                    </a>
+                </div>
+            @endif
+
             <livewire:employee-table
                 :type="$userType ?? null"
+                :initialAttendanceStatus="request()->query('attendance_status')"
                 theme="bootstrap-4"
                 :key="'emp-table-' . $userType"
             />

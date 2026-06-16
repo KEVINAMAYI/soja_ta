@@ -395,16 +395,24 @@ new class extends Component {
             ->count();
 
         // Off campus = had a clocked_out record today
-        $this->leftSchoolCount = $attendances
-            ->where('status', 'clocked_out')
-            ->pluck('employee_id')->unique()->count();
+        $this->leftSchoolCount = Employee::where('organization_id', $orgId)
+            ->where('active', 1)
+            ->where('is_student', 1)
+            ->whereHas('lastAttendance', fn($q) => $q->where('status', 'clocked_out'))
+            ->count();
 
         // Unscanned = no clocked_in or clocked_out record today at all
         $scannedIds = $attendances
             ->whereIn('status', ['clocked_in', 'clocked_out'])
             ->pluck('employee_id')->unique();
 
-        $this->absentCount = max(0, $this->totalEmployees - $scannedIds->count());
+        $this->absentCount = max(0, $this->totalEmployees -
+            Employee::where('organization_id', $orgId)
+                ->where('active', 1)
+                ->where('is_student', 1)
+                ->whereHas('attendances')
+                ->count()
+        );
 
         // Not used in school view but reset to avoid stale data
         $this->sickOffCount = 0;
@@ -449,7 +457,7 @@ new class extends Component {
 
         // Absent = not present AND no other status record
         $accountedForIds = $attendances
-            ->whereIn('status', ['clocked_in', 'clocked_out', 'on_leave', 'sick_off', 'off_shift', 'on_break','not_scheduled'])
+            ->whereIn('status', ['clocked_in', 'clocked_out', 'on_leave', 'sick_off', 'off_shift', 'on_break', 'not_scheduled'])
             ->pluck('employee_id')->unique();
 
         $this->absentCount = max(0, $this->totalEmployees - $accountedForIds->count());
@@ -877,7 +885,10 @@ new class extends Component {
             </div>
 
             {{-- 3 summary cards --}}
+            // REPLACE WITH:
+            {{-- 4 summary cards --}}
             <div class="row g-3 mb-4">
+
                 {{-- Total Enrolled --}}
                 <div class="col-lg-3 col-md-6 col-12">
                     <div class="summary-card">
@@ -890,59 +901,63 @@ new class extends Component {
                     </div>
                 </div>
 
-                {{-- Present (In School) --}}
+                {{-- On Campus --}}
                 <div class="col-lg-3 col-md-6 col-12">
-                    <div class="summary-card">
-                        <div class="summary-card-icon" style="background:#dcfce7; color:#16a34a;">
-                            <iconify-icon icon="mdi:account-check"></iconify-icon>
+                    <a href="{{ route('employees.index', ['type' => 'student', 'attendance_status' => 'present']) }}"
+                       style="text-decoration:none; color:inherit; display:block; height:100%;">
+                        <div class="summary-card">
+                            <div class="summary-card-icon" style="background:#dcfce7; color:#16a34a;">
+                                <iconify-icon icon="mdi:account-check"></iconify-icon>
+                            </div>
+                            <p class="summary-card-title">On Campus</p>
+                            <div class="summary-card-value">{{ $presentCount }}</div>
+                            <p class="summary-card-subtitle">Currently in school</p>
+                            <div class="summary-card-bar">
+                                <div class="summary-card-bar-fill"
+                                     style="width:{{ $totalEmployees > 0 ? ($presentCount/$totalEmployees)*100 : 0 }}%; background:#22c55e;"></div>
+                            </div>
                         </div>
-                        <p class="summary-card-title">On Campus</p>
-                        <div class="summary-card-value">
-                            {{ $presentCount }}
-                        </div>
-                        <p class="summary-card-subtitle">Currently in school</p>
-                        <div class="summary-card-bar">
-                            <div class="summary-card-bar-fill"
-                                 style="width:{{ $totalEmployees > 0 ? ($presentCount/$totalEmployees)*100 : 0 }}%; background:#22c55e;"></div>
-                        </div>
-                    </div>
+                    </a>
                 </div>
 
-                {{-- Left School --}}
+                {{-- Off Campus --}}
                 <div class="col-lg-3 col-md-6 col-12">
-                    <div class="summary-card">
-                        <div class="summary-card-icon" style="background:#e0f2fe; color:#0284c7;">
-                            <iconify-icon icon="mdi:exit-run"></iconify-icon>
+                    <a href="{{ route('employees.index', ['type' => 'student', 'attendance_status' => 'left']) }}"
+                       style="text-decoration:none; color:inherit; display:block; height:100%;">
+                        <div class="summary-card">
+                            <div class="summary-card-icon" style="background:#e0f2fe; color:#0284c7;">
+                                <iconify-icon icon="mdi:exit-run"></iconify-icon>
+                            </div>
+                            <p class="summary-card-title">Off Campus</p>
+                            <div class="summary-card-value">{{ $leftSchoolCount }}</div>
+                            <p class="summary-card-subtitle">Left School</p>
+                            <div class="summary-card-bar">
+                                <div class="summary-card-bar-fill"
+                                     style="width:{{ $totalEmployees > 0 ? ($leftSchoolCount/$totalEmployees)*100 : 0 }}%; background:#0ea5e9;"></div>
+                            </div>
                         </div>
-                        <p class="summary-card-title">Off Campus</p>
-                        <div class="summary-card-value">
-                            {{ $leftSchoolCount }}
-                        </div>
-                        <p class="summary-card-subtitle">Clocked out today</p>
-                        <div class="summary-card-bar">
-                            <div class="summary-card-bar-fill"
-                                 style="width:{{ $totalEmployees > 0 ? ($leftSchoolCount/$totalEmployees)*100 : 0 }}%; background:#0ea5e9;"></div>
-                        </div>
-                    </div>
+                    </a>
                 </div>
 
-                {{-- Not Reported --}}
+                {{-- Never Scanned --}}
                 <div class="col-lg-3 col-md-6 col-12">
-                    <div class="summary-card">
-                        <div class="summary-card-icon" style="background:#fee2e2; color:#dc2626;">
-                            <iconify-icon icon="mdi:account-alert"></iconify-icon>
+                    <a href="{{ route('employees.index', ['type' => 'student', 'attendance_status' => 'not_reported']) }}"
+                       style="text-decoration:none; color:inherit; display:block; height:100%;">
+                        <div class="summary-card">
+                            <div class="summary-card-icon" style="background:#fee2e2; color:#dc2626;">
+                                <iconify-icon icon="mdi:account-alert"></iconify-icon>
+                            </div>
+                            <p class="summary-card-title">Never Scanned</p>
+                            <div class="summary-card-value">{{ $absentCount }}</div>
+                            <p class="summary-card-subtitle">No attendance records ever</p>
+                            <div class="summary-card-bar">
+                                <div class="summary-card-bar-fill"
+                                     style="width:{{ $totalEmployees > 0 ? ($absentCount/$totalEmployees)*100 : 0 }}%; background:#ef4444;"></div>
+                            </div>
                         </div>
-                        <p class="summary-card-title">Unscanned</p>
-                        <div class="summary-card-value">
-                            {{ $absentCount }}
-                        </div>
-                        <p class="summary-card-subtitle">No logs yet today</p>
-                        <div class="summary-card-bar">
-                            <div class="summary-card-bar-fill"
-                                 style="width:{{ $totalEmployees > 0 ? ($absentCount/$totalEmployees)*100 : 0 }}%; background:#ef4444;"></div>
-                        </div>
-                    </div>
+                    </a>
                 </div>
+
             </div>
 
 

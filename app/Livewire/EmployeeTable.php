@@ -20,9 +20,14 @@ class EmployeeTable extends DataTableComponent
     protected $model = Employee::class;
     public $entityLabel = 'Employee';
     public ?string $activePersonType = '';
+    public ?string $initialAttendanceStatus = null;
 
-    public function mount($type = 'student'): void
+
+    public function mount($type = 'student', $initialAttendanceStatus = null): void
     {
+
+        $this->initialAttendanceStatus = $initialAttendanceStatus;
+
         $isStudentOrg = Auth::user()->employee?->organization?->is_student_record ?? false;
 
         $this->activePersonType = $isStudentOrg ? ($type ?? 'student') : '';
@@ -33,6 +38,7 @@ class EmployeeTable extends DataTableComponent
             $this->setFilter('active', request()->query('active'));
         }
     }
+
 
     #[On('filter-by-type')]
     public function filterByType($type)
@@ -84,6 +90,26 @@ class EmployeeTable extends DataTableComponent
                     ->orWhere('phone', 'like', '%' . $this->search . '%');
             });
         }
+
+
+        // ── Apply attendance_status directly here ──────────────────────────
+        // Rappasoft filter closures only fire when user actively picks a filter
+        // in the UI. For the initial load from URL param, we apply it here.
+        if ($this->initialAttendanceStatus) {
+            match ($this->initialAttendanceStatus) {
+                'present' => $query->whereHas('lastAttendance',
+                    fn($q) => $q->where('status', 'clocked_in')),
+
+                'left' => $query->whereHas('lastAttendance',
+                    fn($q) => $q->where('status', 'clocked_out')),
+
+                'not_reported' => $query->whereDoesntHave('attendances'),
+
+
+                default => null,
+            };
+        }
+
 
         return $query;
     }
@@ -192,13 +218,13 @@ class EmployeeTable extends DataTableComponent
 
                     $last = $row->lastAttendance;
 
+                    // REPLACE WITH:
                     if (!$last) {
-                        // No attendance record at all
                         return "
-                            <span class='badge' style='background:var(--primary-color) !important; color:white; padding:5px 10px; border-radius:8px; font-size:0.75rem; font-weight:600;'>
-                                <i class='ti ti-circle-x me-1'></i>Not Enrolled
-                            </span>
-                        ";
+        <span class='badge' style='background:#f1f5f9; color:#64748b; padding:5px 10px; border-radius:8px; font-size:0.75rem; font-weight:600;'>
+            <i class='ti ti-scan me-1'></i>Never Scanned
+        </span>
+    ";
                     }
 
                     if ($last->status === 'clocked_in') {
@@ -226,11 +252,12 @@ class EmployeeTable extends DataTableComponent
                     }
 
                     // Any other status (absent, on_leave, etc.) — treat as not reported
+                    // REPLACE WITH:
                     return "
-                        <span class='badge' style='background:var(--primary-color) !important; color:#white; padding:5px 10px; border-radius:8px; font-size:0.75rem; font-weight:600;'>
-                            <i class='ti ti-circle-x me-1'></i>Not Enrolled
-                        </span>
-                    ";
+    <span class='badge' style='background:#fff3cd; color:#856404; padding:5px 10px; border-radius:8px; font-size:0.75rem; font-weight:600;'>
+        <i class='ti ti-clock me-1'></i>Not On Campus
+    </span>
+";
                 })
                 ->html();
         }
@@ -327,25 +354,21 @@ class EmployeeTable extends DataTableComponent
                     '' => 'All',
                     'present' => 'Present (Still In)',
                     'left' => 'Left School',
-                    'not_reported' => 'Unscanned',
+                    'not_reported' => 'Never Scanned',
                 ])
                 ->filter(function ($builder, $value) {
-                    if ($value === '' || $value === null) return;
+                    // Use prop as fallback on initial load
+                    $effective = ($value !== '' && $value !== null) ? $value : $this->initialAttendanceStatus;
 
-                    if ($value === 'present') {
-                        // Has a last attendance record with clocked_in
-                        $builder->whereHas('lastAttendance', fn($q) => $q->where('status', 'clocked_in')
-                        );
-                    } elseif ($value === 'left') {
-                        $builder->whereHas('lastAttendance', fn($q) => $q->where('status', 'clocked_out')
-                        );
-                    } elseif ($value === 'not_reported') {
-                        // Either no attendance at all, or last record is not clocked_in/out
-                        $builder->where(function ($q) {
-                            $q->doesntHave('lastAttendance')
-                                ->orWhereHas('lastAttendance', fn($q2) => $q2->whereNotIn('status', ['clocked_in', 'clocked_out'])
-                                );
-                        });
+                    if (!$effective) return;
+
+                    if ($effective === 'present') {
+                        $builder->whereHas('lastAttendance', fn($q) => $q->where('status', 'clocked_in'));
+                    } elseif ($effective === 'left') {
+                        $builder->whereHas('lastAttendance', fn($q) => $q->where('status', 'clocked_out'));
+                        // REPLACE WITH:
+                    } elseif ($effective === 'not_reported') {
+                        $builder->whereDoesntHave('attendances');
                     }
                 });
         }

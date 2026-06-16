@@ -12,7 +12,7 @@ new class extends Component {
     use WithPagination;
 
     #[Url]
-    public string $filter = 'all'; // all | pending | approved | rejected
+    public string $filter = 'all';
 
     public string $search = '';
 
@@ -35,7 +35,6 @@ new class extends Component {
     public function getCountsProperty(): array
     {
         $orgId = auth()->user()->employee?->organization_id;
-
         $base = CheckInApprovalRequest::where('organization_id', $orgId);
 
         return [
@@ -80,10 +79,7 @@ new class extends Component {
     private function actOn(int $requestId, string $decision): void
     {
         $orgId = auth()->user()->employee?->organization_id;
-
-        $request = CheckInApprovalRequest::where('organization_id', $orgId)
-            ->where('id', $requestId)
-            ->first();
+        $request = CheckInApprovalRequest::where('organization_id', $orgId)->where('id', $requestId)->first();
 
         if (!$request) {
             LivewireAlert::title('Error!')->text('Request not found.')->error()->toast()->position('top-end')->show();
@@ -97,12 +93,9 @@ new class extends Component {
 
         app(CheckInApprovalService::class)->resolve($request, $decision, auth()->id());
 
-        LivewireAlert::title($decision === 'approved' ? 'Approved' : 'Rejected')
+        LivewireAlert::title($decision === 'approved' ? 'Approved ✓' : 'Rejected')
             ->text('The check-in request has been ' . $decision . '.')
-            ->success()
-            ->toast()
-            ->position('top-end')
-            ->show();
+            ->success()->toast()->position('top-end')->show();
     }
 
 }; ?>
@@ -112,189 +105,250 @@ new class extends Component {
 
         <livewire:admin.system-settings.bread-crumb title="Check-in Requests" :items="$breadcrumbItems"/>
 
-        {{-- Summary cards --}}
+        {{-- ── Summary cards ─────────────────────────────────────────────── --}}
         <div class="row g-3 mb-4">
-            <div class="col-lg-3 col-md-6 col-12">
-                <div class="summary-card"
-                     style="background:#fff;border:1px solid rgba(0,0,0,.06);border-radius:14px;padding:1.2rem 1.4rem;">
-                    <p class="text-uppercase small fw-semibold text-muted mb-1"
-                       style="font-size:.72rem;letter-spacing:.6px;">Total Requests</p>
-                    <div class="fw-bold" style="font-size:2rem;color:#1e293b;">{{ $this->counts['total'] }}</div>
-                    <p class="small text-muted mb-0">This week</p>
+
+            @php
+                $cards = [
+                    ['label' => 'Total',    'value' => $this->counts['total'],    'color' => '#3b82f6', 'bg' => '#eff6ff', 'icon' => 'mdi:clipboard-list-outline',   'filter' => 'all'],
+                    ['label' => 'Pending',  'value' => $this->counts['pending'],  'color' => '#d97706', 'bg' => '#fffbeb', 'icon' => 'mdi:timer-sand',               'filter' => 'pending'],
+                    ['label' => 'Approved', 'value' => $this->counts['approved'], 'color' => '#16a34a', 'bg' => '#f0fdf4', 'icon' => 'mdi:check-circle-outline',     'filter' => 'approved'],
+                    ['label' => 'Rejected', 'value' => $this->counts['rejected'], 'color' => '#dc2626', 'bg' => '#fef2f2', 'icon' => 'mdi:close-circle-outline',     'filter' => 'rejected'],
+                ];
+            @endphp
+
+            @foreach($cards as $card)
+                <div class="col-lg-3 col-md-6 col-12">
+                    <div wire:click="setFilter('{{ $card['filter'] }}')"
+                         class="summary-card d-flex align-items-center gap-3"
+                         style="background:#fff;border:1.5px solid {{ $filter === $card['filter'] ? $card['color'] : 'rgba(0,0,0,.06)' }};
+                                border-radius:14px;padding:1.1rem 1.3rem;cursor:pointer;transition:border-color .2s;">
+                        <div class="d-flex align-items-center justify-content-center rounded-circle flex-shrink-0"
+                             style="width:44px;height:44px;background:{{ $card['bg'] }};">
+                            <iconify-icon icon="{{ $card['icon'] }}"
+                                          style="font-size:1.4rem;color:{{ $card['color'] }};"></iconify-icon>
+                        </div>
+                        <div>
+                            <p class="text-uppercase fw-semibold text-muted mb-0"
+                               style="font-size:.68rem;letter-spacing:.6px;">{{ $card['label'] }}</p>
+                            <div class="fw-bold lh-1 mt-1"
+                                 style="font-size:1.8rem;color:#1e293b;">{{ $card['value'] }}</div>
+                        </div>
+                    </div>
                 </div>
-            </div>
-            <div class="col-lg-3 col-md-6 col-12">
-                <div class="summary-card"
-                     style="background:#fff;border:1px solid rgba(0,0,0,.06);border-radius:14px;padding:1.2rem 1.4rem;">
-                    <p class="text-uppercase small fw-semibold text-muted mb-1"
-                       style="font-size:.72rem;letter-spacing:.6px;">Pending</p>
-                    <div class="fw-bold" style="font-size:2rem;color:#d97706;">{{ $this->counts['pending'] }}</div>
-                    <p class="small text-muted mb-0">Awaiting action</p>
-                </div>
-            </div>
-            <div class="col-lg-3 col-md-6 col-12">
-                <div class="summary-card"
-                     style="background:#fff;border:1px solid rgba(0,0,0,.06);border-radius:14px;padding:1.2rem 1.4rem;">
-                    <p class="text-uppercase small fw-semibold text-muted mb-1"
-                       style="font-size:.72rem;letter-spacing:.6px;">Approved</p>
-                    <div class="fw-bold" style="font-size:2rem;color:#16a34a;">{{ $this->counts['approved'] }}</div>
-                    <p class="small text-muted mb-0">This week</p>
-                </div>
-            </div>
-            <div class="col-lg-3 col-md-6 col-12">
-                <div class="summary-card"
-                     style="background:#fff;border:1px solid rgba(0,0,0,.06);border-radius:14px;padding:1.2rem 1.4rem;">
-                    <p class="text-uppercase small fw-semibold text-muted mb-1"
-                       style="font-size:.72rem;letter-spacing:.6px;">Rejected</p>
-                    <div class="fw-bold" style="font-size:2rem;color:#dc2626;">{{ $this->counts['rejected'] }}</div>
-                    <p class="small text-muted mb-0">This week</p>
-                </div>
-            </div>
+            @endforeach
         </div>
 
-        {{-- Table card --}}
-        <div class="card card-body">
+        {{-- ── Table card ─────────────────────────────────────────────────── --}}
+        <div class="card border-0 shadow-sm">
+            <div class="card-body p-0">
 
-            <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
-                <div class="flex-grow-1" style="max-width:360px;">
-                    <div class="input-group">
-                        <span class="input-group-text bg-white"><iconify-icon icon="mdi:magnify"></iconify-icon></span>
-                        <input type="text" class="form-control" placeholder="Search by name or employee ID..."
-                               wire:model.live.debounce.400ms="search">
+                {{-- Toolbar --}}
+                <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 px-4 pt-4 pb-3">
+                    <div>
+                        <h6 class="fw-bold mb-0" style="color:#1e293b;">Check-in Approval Requests</h6>
+                        <span class="text-muted"
+                              style="font-size:.78rem;">{{ $this->requests->total() }} total results</span>
+                    </div>
+
+                    <div class="d-flex gap-2 align-items-center flex-wrap">
+                        {{-- Search --}}
+                        <div class="input-group input-group-sm" style="width:240px;">
+                            <span class="input-group-text bg-white border-end-0">
+                                <iconify-icon icon="mdi:magnify" class="text-muted"></iconify-icon>
+                            </span>
+                            <input type="text" class="form-control border-start-0 ps-0"
+                                   placeholder="Search employee..."
+                                   wire:model.live.debounce.400ms="search">
+                        </div>
+
+                        {{-- Filter pills --}}
+                        <div class="d-flex gap-1">
+                            @foreach(['all' => 'All', 'pending' => 'Pending', 'approved' => 'Approved', 'rejected' => 'Rejected'] as $val => $label)
+                                <button type="button"
+                                        wire:click="setFilter('{{ $val }}')"
+                                        class="btn btn-sm px-3"
+                                        style="{{ $filter === $val
+                                            ? 'background:#072639;color:#fff;border-color:#072639;'
+                                            : 'background:#fff;color:#64748b;border:1px solid #e2e8f0;' }}">
+                                    {{ $label }}
+                                    @if($val !== 'all')
+                                        <span class="ms-1 badge rounded-pill"
+                                              style="{{ $filter === $val ? 'background:rgba(255,255,255,.25);color:#fff;' : 'background:#f1f5f9;color:#64748b;' }}">
+                                            {{ $this->counts[$val] }}
+                                        </span>
+                                    @endif
+                                </button>
+                            @endforeach
+                        </div>
+
+                        {{-- Export --}}
+                        <button class="btn btn-sm d-flex align-items-center gap-1"
+                                style="background:#072639;color:#fff;border-color:#072639;">
+                            <iconify-icon icon="mdi:download-outline"></iconify-icon>
+                            Export
+                        </button>
                     </div>
                 </div>
 
-                <div class="d-flex gap-2 align-items-center">
-                    <div class="btn-group btn-group-sm" role="group">
-                        <button type="button"
-                                class="btn {{ $filter === 'all' ? 'btn-danger' : 'btn-outline-secondary' }}"
-                                wire:click="setFilter('all')">All
-                        </button>
-                        <button type="button"
-                                class="btn {{ $filter === 'pending' ? 'btn-danger' : 'btn-outline-secondary' }}"
-                                wire:click="setFilter('pending')">Pending
-                        </button>
-                        <button type="button"
-                                class="btn {{ $filter === 'approved' ? 'btn-danger' : 'btn-outline-secondary' }}"
-                                wire:click="setFilter('approved')">Approved
-                        </button>
-                        <button type="button"
-                                class="btn {{ $filter === 'rejected' ? 'btn-danger' : 'btn-outline-secondary' }}"
-                                wire:click="setFilter('rejected')">Rejected
-                        </button>
-                    </div>
+                {{-- Table --}}
+                <div class="table-responsive">
+                    <table class="table mb-0" style="font-size:.85rem;">
+                        <thead style="background:#f8fafc;border-top:1px solid #f1f5f9;border-bottom:1px solid #f1f5f9;">
+                        <tr class="text-uppercase" style="font-size:.68rem;letter-spacing:.5px;color:#94a3b8;">
+                            <th class="px-4 py-3 fw-semibold">Employee</th>
+                            <th class="py-3 fw-semibold">Date</th>
+                            <th class="py-3 fw-semibold">Check-in</th>
+                            <th class="py-3 fw-semibold">Submitted</th>
+                            <th class="py-3 fw-semibold">Window</th>
+                            <th class="py-3 fw-semibold">Status</th>
+                            <th class="py-3 pe-4 fw-semibold text-end">Action</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        @forelse($this->requests as $req)
+                            @php
+                                $emp      = $req->employee;
+                                $initials = collect(explode(' ', $emp->name ?? ''))->map(fn($p) => mb_substr($p,0,1))->take(2)->implode('');
+                                $avatarColors = [
+                                    ['bg'=>'#fee2e2','color'=>'#b91c1c'],
+                                    ['bg'=>'#dbeafe','color'=>'#1d4ed8'],
+                                    ['bg'=>'#dcfce7','color'=>'#15803d'],
+                                    ['bg'=>'#fef9c3','color'=>'#92400e'],
+                                    ['bg'=>'#ede9fe','color'=>'#6d28d9'],
+                                ];
+                                $ac = $avatarColors[$emp->id % count($avatarColors)];
+                            @endphp
+                            <tr wire:key="req-{{ $req->id }}"
+                                style="border-bottom:1px solid #f1f5f9;transition:background .15s;"
+                                onmouseover="this.style.background='#fafafa'" onmouseout="this.style.background=''">
 
-                    <button class="btn btn-sm d-flex align-items-center gap-2" style="background:#072639;color:#fff;">
-                        <iconify-icon icon="mdi:download"></iconify-icon>
-                        Export
-                    </button>
-                </div>
-            </div>
+                                {{-- Employee --}}
+                                <td class="px-4 py-3">
+                                    <div class="d-flex align-items-center gap-2">
+                                        <div
+                                            class="d-flex align-items-center justify-content-center rounded-circle fw-bold flex-shrink-0"
+                                            style="width:34px;height:34px;background:{{ $ac['bg'] }};color:{{ $ac['color'] }};font-size:.72rem;">
+                                            {{ $initials ?: '?' }}
+                                        </div>
+                                        <div>
+                                            <div class="fw-semibold"
+                                                 style="color:#1e293b;">{{ $emp->name ?? '—' }}</div>
+                                            <div style="font-size:.72rem;color:#94a3b8;">
+                                                {{ $emp->employee_number ?? $emp->id_number ?? ('EMP'.str_pad((string)$emp->id, 3, '0', STR_PAD_LEFT)) }}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </td>
 
-            <div class="d-flex align-items-center justify-content-between mb-2">
-                <h6 class="mb-0 fw-bold" style="color:#1e293b;">Check-in Approval Requests</h6>
-                <span class="text-muted small">{{ $this->requests->total() }} results</span>
-            </div>
+                                {{-- Date --}}
+                                <td class="py-3" style="color:#475569;">{{ $req->date->format('d M Y') }}</td>
 
-            <div class="table-responsive">
-                <table class="table align-middle">
-                    <thead>
-                    <tr class="text-muted small text-uppercase">
-                        <th>Employee</th>
-                        <th>Date</th>
-                        <th>Check-in Time</th>
-                        <th>Submitted</th>
-                        <th>Status</th>
-                        <th class="text-end">Action</th>
-                    </tr>
-                    </thead>
-                    <tbody>
-                    @forelse($this->requests as $req)
-                        @php
-                            $emp = $req->employee;
-                            $initials = collect(explode(' ', $emp->name ?? ''))->map(fn($p) => mb_substr($p, 0, 1))->take(2)->implode('');
-                        @endphp
-                        <tr wire:key="checkin-req-{{ $req->id }}">
-                            <td>
-                                <div class="d-flex align-items-center gap-2">
-                                    <div
-                                        class="d-flex align-items-center justify-content-center rounded-circle fw-semibold text-danger"
-                                        style="width:34px;height:34px;background:#fee2e2;font-size:.75rem;">
-                                        {{ $initials ?: '?' }}
-                                    </div>
-                                    <div>
-                                        <div class="fw-semibold"
-                                             style="font-size:.85rem;color:#1e293b;">{{ $emp->name ?? '—' }}</div>
-                                        <div class="text-muted"
-                                             style="font-size:.72rem;">{{ $emp->employee_number ?? $emp->id_number ?? ('EMP'.str_pad((string)$emp->id, 3, '0', STR_PAD_LEFT)) }}</div>
-                                    </div>
-                                </div>
-                            </td>
-                            <td class="small">{{ $req->date->format('d M Y') }}</td>
-                            <td class="small">
-                                {{ $req->check_in_time->format('h:i A') }}
-                                <div class="text-muted" style="font-size:.7rem;">{{ $req->minutes_late }}m late</div>
-                            </td>
-                            <td class="small">{{ $req->submitted_at->format('d M Y · h:i A') }}</td>
-                            <td>
-                                @if($req->status === 'pending')
-                                    <span class="badge rounded-pill"
-                                          style="background:#fef9c3;color:#92400e;font-weight:500;">
-                                            <iconify-icon icon="mdi:timer-sand"></iconify-icon> Pending
-                                            <span class="text-muted">(W{{ $req->current_window }})</span>
+                                {{-- Check-in time --}}
+                                <td class="py-3">
+                                    <span
+                                        style="color:#1e293b;font-weight:500;">{{ $req->check_in_time->format('h:i A') }}</span>
+                                    <span class="ms-1 badge rounded-pill"
+                                          style="background:#fef2f2;color:#b91c1c;font-size:.68rem;">
+                                        +{{ $req->minutes_late }}m
+                                    </span>
+                                </td>
+
+                                {{-- Submitted --}}
+                                <td class="py-3" style="color:#64748b;font-size:.8rem;">
+                                    {{ $req->submitted_at->format('d M · h:i A') }}
+                                </td>
+
+                                {{-- Window --}}
+                                <td class="py-3">
+                                    @if($req->status === 'pending')
+                                        <span class="badge rounded-pill"
+                                              style="background:#eff6ff;color:#1d4ed8;font-size:.72rem;">
+                                            W{{ $req->current_window }}
                                         </span>
-                                @elseif($req->status === 'approved')
-                                    <span class="badge rounded-pill"
-                                          style="background:#dcfce7;color:#15803d;font-weight:500;">
-                                            <iconify-icon icon="mdi:check-circle-outline"></iconify-icon> Approved
+                                    @else
+                                        <span style="color:#cbd5e1;font-size:.8rem;">—</span>
+                                    @endif
+                                </td>
+
+                                {{-- Status --}}
+                                <td class="py-3">
+                                    @if($req->status === 'pending')
+                                        <span class="badge rounded-pill d-inline-flex align-items-center gap-1"
+                                              style="background:#fffbeb;color:#92400e;font-weight:500;padding:.35em .75em;">
+                                            <iconify-icon icon="mdi:timer-sand"
+                                                          style="font-size:.85rem;"></iconify-icon> Pending
                                         </span>
-                                @else
-                                    <span class="badge rounded-pill"
-                                          style="background:#fee2e2;color:#b91c1c;font-weight:500;">
-                                            <iconify-icon icon="mdi:close-circle-outline"></iconify-icon> Rejected
+                                    @elseif($req->status === 'approved')
+                                        <span class="badge rounded-pill d-inline-flex align-items-center gap-1"
+                                              style="background:#f0fdf4;color:#15803d;font-weight:500;padding:.35em .75em;">
+                                            <iconify-icon icon="mdi:check-circle-outline"
+                                                          style="font-size:.85rem;"></iconify-icon> Approved
                                         </span>
-                                @endif
-                            </td>
-                            <td class="text-end">
-                                @if($req->status === 'pending')
-                                    <div class="d-flex gap-2 justify-content-end">
-                                        <button wire:click="approve({{ $req->id }})"
-                                                wire:confirm="Approve this check-in request?"
-                                                class="btn btn-sm btn-outline-success">
-                                            <iconify-icon icon="mdi:check"></iconify-icon>
-                                            Approve
-                                        </button>
-                                        <button wire:click="reject({{ $req->id }})"
-                                                wire:confirm="Reject this check-in request?"
-                                                class="btn btn-sm btn-outline-danger">
-                                            <iconify-icon icon="mdi:close"></iconify-icon>
-                                            Reject
-                                        </button>
-                                    </div>
-                                @else
-                                    <span class="text-muted small">
+                                    @else
+                                        <span class="badge rounded-pill d-inline-flex align-items-center gap-1"
+                                              style="background:#fef2f2;color:#b91c1c;font-weight:500;padding:.35em .75em;">
+                                            <iconify-icon icon="mdi:close-circle-outline"
+                                                          style="font-size:.85rem;"></iconify-icon> Rejected
+                                        </span>
+                                    @endif
+                                </td>
+
+                                {{-- Action --}}
+                                <td class="py-3 pe-4 text-end">
+                                    @if($req->status === 'pending')
+                                        <div class="d-flex gap-2 justify-content-end">
+                                            <button wire:click="approve({{ $req->id }})"
+                                                    wire:confirm="Approve this check-in request?"
+                                                    class="btn btn-sm d-flex align-items-center gap-1"
+                                                    style="background:#f0fdf4;color:#15803d;border:1px solid #bbf7d0;">
+                                                <iconify-icon icon="mdi:check"></iconify-icon>
+                                                Approve
+                                            </button>
+                                            <button wire:click="reject({{ $req->id }})"
+                                                    wire:confirm="Reject this check-in request?"
+                                                    class="btn btn-sm d-flex align-items-center gap-1"
+                                                    style="background:#fef2f2;color:#b91c1c;border:1px solid #fecaca;">
+                                                <iconify-icon icon="mdi:close"></iconify-icon>
+                                                Reject
+                                            </button>
+                                        </div>
+                                    @else
+                                        <span style="font-size:.78rem;color:#94a3b8;">
                                             {{ ucfirst($req->status) }}
-                                        @if($req->resolvedBy)
-                                            by {{ $req->resolvedBy->name }}
-                                        @endif
+                                            @if($req->resolvedBy)
+                                                by {{ $req->resolvedBy->name }}
+                                            @endif
                                         </span>
-                                @endif
-                            </td>
-                        </tr>
-                    @empty
-                        <tr>
-                            <td colspan="7" class="text-center text-muted py-4">No check-in requests found.</td>
-                        </tr>
-                    @endforelse
-                    </tbody>
-                </table>
-            </div>
+                                    @endif
+                                </td>
 
-            <div class="d-flex justify-content-between align-items-center mt-2">
-                <span class="text-muted small">Showing {{ $this->requests->count() }} of {{ $this->requests->total() }} requests</span>
-                {{ $this->requests->links() }}
-            </div>
+                            </tr>
+                        @empty
+                            <tr>
+                                <td colspan="7" class="text-center py-5">
+                                    <iconify-icon icon="mdi:clock-check-outline"
+                                                  style="font-size:2.5rem;color:#cbd5e1;"></iconify-icon>
+                                    <p class="text-muted mt-2 mb-0">No check-in requests found.</p>
+                                </td>
+                            </tr>
+                        @endforelse
+                        </tbody>
+                    </table>
+                </div>
 
+                {{-- Pagination — single location --}}
+                @if($this->requests->hasPages())
+                    <div class="px-4 py-3 border-top d-flex align-items-center justify-content-between"
+                         style="background:#fafafa;">
+                        <span class="text-muted" style="font-size:.78rem;">
+                            Showing {{ $this->requests->firstItem() }}–{{ $this->requests->lastItem() }} of {{ $this->requests->total() }}
+                        </span>
+                        {{ $this->requests->links() }}
+                    </div>
+                @endif
+
+            </div>
         </div>
 
     </div>

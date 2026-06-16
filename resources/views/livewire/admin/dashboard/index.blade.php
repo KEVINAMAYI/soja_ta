@@ -775,7 +775,8 @@ new class extends Component {
 
         {{-- Row 1: 4 stat cards --}}
         <div class="col-lg-3 col-md-6 col-12">
-            <a href="{{ route('attendance.index', ['filterStatus' => 'present']) }}" class="stat-card-link">
+            <a href="{{route('employees.index', ['type' => 'student', 'attendance_status' => 'present'])
+ }}" class="stat-card-link">
                 <div class="stat-card">
                     <div class="stat-card-icon icon-success">
                         <iconify-icon icon="mdi:school"></iconify-icon>
@@ -791,7 +792,8 @@ new class extends Component {
         </div>
 
         <div class="col-lg-3 col-md-6 col-12">
-            <a href="{{ route('attendance.index', ['filterStatus' => 'clocked_out']) }}" class="stat-card-link">
+            <a href="{{ route('employees.index', ['type' => 'student', 'attendance_status' => 'left'])
+  }}" class="stat-card-link">
                 <div class="stat-card">
                     <div class="stat-card-icon icon-sky">
                         <iconify-icon icon="mdi:exit-run"></iconify-icon>
@@ -807,31 +809,37 @@ new class extends Component {
         </div>
 
         <div class="col-lg-3 col-md-6 col-12">
-            <div class="stat-card">
-                <div class="stat-card-icon icon-indigo">
-                    <iconify-icon icon="mdi:login"></iconify-icon>
+            <a href="{{route('attendance.index', ['filterStatus' => 'clocked_in']) }}" class="stat-card-link">
+                <div class="stat-card">
+                    <div class="stat-card-icon icon-indigo">
+                        <iconify-icon icon="mdi:login"></iconify-icon>
+                    </div>
+                    <h6 class="stat-card-title">Checked In Today</h6>
+                    <div class="stat-card-value">
+                        {{ $checkedInTodayCount }}
+                        <span class="stat-card-total">/ {{ $totalStudents }}</span>
+                    </div>
+                    <p class="stat-card-subtitle">Scanned in today</p>
                 </div>
-                <h6 class="stat-card-title">Checked In Today</h6>
-                <div class="stat-card-value">
-                    {{ $checkedInTodayCount }}
-                    <span class="stat-card-total">/ {{ $totalStudents }}</span>
-                </div>
-                <p class="stat-card-subtitle">Scanned in today</p>
-            </div>
+            </a>
         </div>
 
         <div class="col-lg-3 col-md-6 col-12">
-            <div class="stat-card">
-                <div class="stat-card-icon icon-warning">
-                    <iconify-icon icon="mdi:logout"></iconify-icon>
+            <a href="{{route('attendance.index', ['filterStatus' => 'clocked_out']) }}" class="stat-card-link">
+                <div class="stat-card">
+                    <div class="stat-card-icon icon-warning">
+                        <iconify-icon icon="mdi:logout"></iconify-icon>
+                    </div>
+                    <h6 class="stat-card-title">Checked Out Today</h6>
+                    <div class="stat-card-value">
+                        {{ $checkedOutTodayCount }}
+                        <span class="stat-card-total">/ {{ $totalStudents }}</span>
+                    </div>
+                    <p class="stat-card-subtitle">Scanned out today</p>
                 </div>
-                <h6 class="stat-card-title">Checked Out Today</h6>
-                <div class="stat-card-value">
-                    {{ $checkedOutTodayCount }}
-                    <span class="stat-card-total">/ {{ $totalStudents }}</span>
-                </div>
-                <p class="stat-card-subtitle">Scanned out today</p>
-            </div>
+
+            </a>
+
         </div>
 
         {{-- Row 2: Map (full width) --}}
