@@ -292,6 +292,48 @@ class AttendanceController extends Controller
             $approvalSettings = $approvalService->shouldRequireApproval($employee, $minutesLate);
 
             if ($approvalSettings !== null) {
+
+                // Add this BEFORE $approvalService->createRequest(...)
+                $existingPending = \App\Models\CheckInApprovalRequest::where('employee_id', $employee->id)
+                    ->where('date', $checkInTimeCarbon->toDateString())
+                    ->where('status', 'pending')
+                    ->first();
+
+                if ($existingPending) {
+                    DB::commit();
+                    return response()->json([
+                        'code' => 1002,
+                        'message' => 'You already have a pending check-in approval request. Please wait for approval.',
+                        'type' => 'check_in_held_for_approval',
+                        'data' => [
+                            'request_id' => $existingPending->id,
+                            'status' => 'pending',
+                            'submitted_at' => $existingPending->submitted_at->toIso8601String(),
+                            'current_window' => $existingPending->current_window,
+                        ],
+                    ], 202);
+                }
+
+                $lastRejected = \App\Models\CheckInApprovalRequest::where('employee_id', $employee->id)
+                    ->where('date', $checkInTimeCarbon->toDateString())
+                    ->where('status', 'rejected')
+                    ->latest()
+                    ->first();
+
+                if ($lastRejected) {
+                    DB::commit();
+                    return response()->json([
+                        'code' => 1003,
+                        'message' => 'Your check-in request was rejected. Please contact your manager.',
+                        'type' => 'check_in_rejected',
+                        'data' => [
+                            'request_id' => $lastRejected->id,
+                            'status' => 'rejected',
+                            'notes' => $lastRejected->notes,
+                        ],
+                    ], 403);
+                }
+
                 $request = $approvalService->createRequest(
                     employee: $employee,
                     checkInTime: $checkInTimeCarbon,
