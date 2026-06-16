@@ -2,7 +2,6 @@
 
 namespace App\Services;
 
-use App\Models\Organization;
 use App\Models\OrganizationSetting;
 
 class CheckInApprovalSettings
@@ -12,56 +11,67 @@ class CheckInApprovalSettings
     /**
      * Default shape of the settings JSON, matching the UI:
      *
-     * - enabled: bool — master toggle ("Enabled for this tenant")
-     * - grace_period_minutes: int — late clock-in grace period
+     * - enabled: bool — master toggle
+     * - auto_reject_after_minutes: int|null — if lateness >= this, skip all
+     *   windows and auto-reject immediately (null = disabled)
      * - department_ids: int[] — policy scope (empty = all departments)
      * - windows: array of up to 3 windows:
      *     [
-     *       'enabled' => bool,
-     *       'approver_role' => string,   // Line Manager / HR Manager / Department Head / custom
-     *       'timeout_minutes' => int,
-     *       'on_timeout' => 'approve' | 'reject' | 'escalate',
-     *       'notify_email' => bool,
+     *       'enabled'              => bool,
+     *       'min_minutes_late'     => int,   // NEW — entry threshold for this window
+     *       'approver_role'        => string,
+     *       'timeout_minutes'      => int,
+     *       'on_timeout'           => 'approve' | 'reject' | 'escalate',
+     *       'notify_email'         => bool,
      *       'notify_email_addresses' => string[],
-     *       'notify_sms' => bool,
-     *       'notify_sms_numbers' => string[],
+     *       'notify_sms'           => bool,
+     *       'notify_sms_numbers'   => string[],
      *     ]
+     *
+     * Window routing logic (in CheckInApprovalService::resolveEntryWindow):
+     *   1. If $minutesLate >= auto_reject_after_minutes → immediate rejection
+     *   2. Find the LAST enabled window whose min_minutes_late <= $minutesLate
+     *   3. Fall back to the first enabled window if none match
      */
     public static function defaults(): array
     {
         return [
-            'enabled' => false,
-            'department_ids' => [],
-            'windows' => [
+            'enabled'                    => false,
+            'auto_reject_after_minutes'  => null,   // null = disabled
+            'department_ids'             => [],
+            'windows'                    => [
                 [
-                    'enabled' => true,
-                    'approver_role' => 'Line Manager',
-                    'timeout_minutes' => 15,
-                    'on_timeout' => 'escalate',
-                    'notify_email' => true,
-                    'notify_email_addresses' => [],
-                    'notify_sms' => false,
-                    'notify_sms_numbers' => [],
+                    'enabled'                 => true,
+                    'min_minutes_late'        => 0,    // catches everything from 0+ min late
+                    'approver_role'           => 'Line Manager',
+                    'timeout_minutes'         => 15,
+                    'on_timeout'              => 'escalate',
+                    'notify_email'            => true,
+                    'notify_email_addresses'  => [],
+                    'notify_sms'              => false,
+                    'notify_sms_numbers'      => [],
                 ],
                 [
-                    'enabled' => false,
-                    'approver_role' => 'HR Manager',
-                    'timeout_minutes' => 30,
-                    'on_timeout' => 'reject',
-                    'notify_email' => true,
-                    'notify_email_addresses' => [],
-                    'notify_sms' => false,
-                    'notify_sms_numbers' => [],
+                    'enabled'                 => false,
+                    'min_minutes_late'        => 20,   // catches 20+ min late
+                    'approver_role'           => 'HR Manager',
+                    'timeout_minutes'         => 30,
+                    'on_timeout'              => 'reject',
+                    'notify_email'            => true,
+                    'notify_email_addresses'  => [],
+                    'notify_sms'              => false,
+                    'notify_sms_numbers'      => [],
                 ],
                 [
-                    'enabled' => false,
-                    'approver_role' => 'Department Head',
-                    'timeout_minutes' => 60,
-                    'on_timeout' => 'approve',
-                    'notify_email' => false,
-                    'notify_email_addresses' => [],
-                    'notify_sms' => false,
-                    'notify_sms_numbers' => [],
+                    'enabled'                 => false,
+                    'min_minutes_late'        => 40,   // catches 40+ min late
+                    'approver_role'           => 'Department Head',
+                    'timeout_minutes'         => 60,
+                    'on_timeout'              => 'approve',
+                    'notify_email'            => false,
+                    'notify_email_addresses'  => [],
+                    'notify_sms'              => false,
+                    'notify_sms_numbers'      => [],
                 ],
             ],
         ];
@@ -77,7 +87,9 @@ class CheckInApprovalSettings
             ->where('key', self::SETTING_KEY)
             ->first();
 
-        $stored = $row ? (is_array($row->value) ? $row->value : (json_decode($row->value, true) ?? [])) : [];
+        $stored = $row
+            ? (is_array($row->value) ? $row->value : (json_decode($row->value, true) ?? []))
+            : [];
 
         return self::mergeWithDefaults($stored);
     }
@@ -88,17 +100,17 @@ class CheckInApprovalSettings
 
         $setting = OrganizationSetting::firstOrNew([
             'organization_id' => $organizationId,
-            'key' => self::SETTING_KEY,
+            'key'             => self::SETTING_KEY,
         ]);
 
-        $setting->type = 'json';
+        $setting->type  = 'json';
         $setting->value = json_encode($merged);
         $setting->save();
     }
 
     public static function isEnabled(int $organizationId): bool
     {
-        return (bool)self::get($organizationId)['enabled'];
+        return (bool) self::get($organizationId)['enabled'];
     }
 
     /**
@@ -118,22 +130,32 @@ class CheckInApprovalSettings
     private static function mergeWithDefaults(array $stored): array
     {
         $defaults = self::defaults();
+        $merged   = array_merge($defaults, $stored);
 
-        $merged = array_merge($defaults, $stored);
+        // Normalize auto_reject_after_minutes (null = disabled, else positive int)
+        if (isset($merged['auto_reject_after_minutes']) && $merged['auto_reject_after_minutes'] !== null) {
+            $merged['auto_reject_after_minutes'] = max(1, (int) $merged['auto_reject_after_minutes']);
+        } else {
+            $merged['auto_reject_after_minutes'] = null;
+        }
 
         $mergedWindows = [];
         for ($i = 0; $i < 3; $i++) {
             $w = array_merge($defaults['windows'][$i], $stored['windows'][$i] ?? []);
-            $w['enabled'] = (bool)$w['enabled'];
-            $w['timeout_minutes'] = (int)$w['timeout_minutes'];
-            $w['notify_email'] = (bool)$w['notify_email'];
-            $w['notify_sms'] = (bool)$w['notify_sms'];
+
+            // Normalize types
+            $w['enabled']          = (bool) $w['enabled'];
+            $w['min_minutes_late'] = max(0, (int) ($w['min_minutes_late'] ?? 0));
+            $w['timeout_minutes']  = (int) $w['timeout_minutes'];
+            $w['notify_email']     = (bool) $w['notify_email'];
+            $w['notify_sms']       = (bool) $w['notify_sms'];
+
             $mergedWindows[$i] = $w;
         }
         $merged['windows'] = $mergedWindows;
 
-        // normalize types
-        $merged['enabled'] = (bool)$merged['enabled'];
+        // Normalize other types
+        $merged['enabled']        = (bool) $merged['enabled'];
         $merged['department_ids'] = array_values(array_map('intval', $merged['department_ids'] ?? []));
 
         return $merged;

@@ -133,17 +133,19 @@ new class extends Component {
     public function saveApprovalSettings(): void
     {
         $this->validate([
-            'approval.enabled' => 'boolean',
-            'approval.department_ids' => 'array',
-            'approval.windows' => 'array|size:3',
-            'approval.windows.*.enabled' => 'boolean',
-            'approval.windows.*.approver_role' => 'nullable|string|max:100',
-            'approval.windows.*.timeout_minutes' => 'required|integer|min:1|max:1440',
-            'approval.windows.*.on_timeout' => 'required|in:approve,reject,escalate',
-            'approval.windows.*.notify_email' => 'boolean',
+            'approval.enabled'                          => 'boolean',
+            'approval.auto_reject_after_minutes'        => 'nullable|integer|min:1|max:1440',
+            'approval.department_ids'                   => 'array',
+            'approval.windows'                          => 'array|size:3',
+            'approval.windows.*.enabled'                => 'boolean',
+            'approval.windows.*.min_minutes_late'       => 'required|integer|min:0|max:1440',
+            'approval.windows.*.approver_role'          => 'nullable|string|max:100',
+            'approval.windows.*.timeout_minutes'        => 'required|integer|min:1|max:1440',
+            'approval.windows.*.on_timeout'             => 'required|in:approve,reject,escalate',
+            'approval.windows.*.notify_email'           => 'boolean',
             'approval.windows.*.notify_email_addresses.*' => 'nullable|email',
-            'approval.windows.*.notify_sms' => 'boolean',
-            'approval.windows.*.notify_sms_numbers.*' => 'nullable|string|max:20',
+            'approval.windows.*.notify_sms'             => 'boolean',
+            'approval.windows.*.notify_sms_numbers.*'   => 'nullable|string|max:20',
         ]);
 
         $orgId = auth()->user()->employee?->organization_id;
@@ -414,41 +416,127 @@ new class extends Component {
                             {{-- Approval windows --}}
                             <div class="card border shadow-none mb-4">
                                 <div class="card-body p-4">
-                                    <div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
+                                    <div class="d-flex align-items-center justify-content-between mb-1 flex-wrap gap-2">
                                         <h5 class="mb-0 d-flex align-items-center gap-2">
-                                            <iconify-icon icon="mdi:clock-outline"
-                                                          class="fs-4 text-primary"></iconify-icon>
+                                            <iconify-icon icon="mdi:clock-outline" class="fs-4 text-primary"></iconify-icon>
                                             Approval windows
                                         </h5>
-                                        <span class="text-muted small">Sequential — window 2 triggers only if window 1 expires</span>
+                                        <span class="text-muted small">Entry window is chosen by how late the employee is</span>
                                     </div>
 
+                                    {{-- ── Routing explainer ── --}}
+                                    <div class="alert alert-light border mb-4 py-2 px-3 d-flex gap-2 align-items-start small">
+                                        <iconify-icon icon="mdi:information-outline" class="fs-5 flex-shrink-0 text-primary mt-1"></iconify-icon>
+                                        <span>
+                When someone checks in late, the system picks the <strong>highest-threshold enabled window</strong>
+                whose <em>Min. minutes late</em> is still ≤ their actual lateness.
+                If lateness reaches the <strong>Auto-reject</strong> ceiling, the request is rejected immediately
+                with no window opened.
+            </span>
+                                    </div>
+
+                                    {{-- ── Auto-reject ceiling ── --}}
+                                    <div class="row g-3 mb-4">
+                                        <div class="col-md-4">
+                                            <label class="form-label fw-semibold text-uppercase small text-muted d-flex align-items-center gap-1">
+                                                <iconify-icon icon="mdi:cancel" class="text-danger"></iconify-icon>
+                                                Auto-reject if late by (minutes)
+                                            </label>
+                                            <div class="input-group input-group-sm">
+                                                <input type="number" min="1" max="1440"
+                                                       class="form-control"
+                                                       placeholder="e.g. 60 — leave blank to disable"
+                                                       wire:model="approval.auto_reject_after_minutes">
+                                                <span class="input-group-text">min</span>
+                                            </div>
+                                            <small class="text-muted">
+                                                Leave blank to disable. When set, any check-in at or beyond this threshold is
+                                                <span class="text-danger fw-semibold">auto-rejected</span> immediately — no window is opened.
+                                            </small>
+                                        </div>
+                                    </div>
+
+                                    {{-- ── Three window columns ── --}}
                                     <div class="row g-3">
                                         @foreach($approval['windows'] as $i => $window)
                                             @php
                                                 $windowLabel = 'WINDOW ' . ($i + 1);
-                                                $isLast = $i === 2;
-                                            @endphp
-                                            <div class="col-lg-4 col-12">
-                                                <div
-                                                    class="border rounded-3 p-3 h-100 {{ $window['enabled'] ? 'border-danger-subtle' : '' }}"
-                                                    style="{{ $window['enabled'] ? 'border-color:#dc3545 !important;' : '' }}">
+                                                $isLast      = $i === 2;
+                                                $autoReject  = $approval['auto_reject_after_minutes'] ?? null;
+                                                $thisMin     = $window['min_minutes_late'] ?? 0;
 
-                                                    <div class="d-flex align-items-center justify-content-between mb-3">
-                                                        <span
-                                                            class="fw-bold small {{ $window['enabled'] ? 'text-danger' : 'text-muted' }}">{{ $windowLabel }}</span>
+                                                // Build a human-readable routing hint for this window
+                                                // e.g. "Handles 20 – 39 min late" or "Handles 40+ min late"
+                                                $nextMin  = null;
+                                                for ($j = $i + 1; $j < 3; $j++) {
+                                                    if (!empty($approval['windows'][$j]['enabled'])) {
+                                                        $nextMin = $approval['windows'][$j]['min_minutes_late'] ?? null;
+                                                        break;
+                                                    }
+                                                }
+                                                $ceiling = $autoReject ?? null;
+
+                                                if ($nextMin !== null) {
+                                                    $rangeHint = "Handles {$thisMin} – " . ($nextMin - 1) . " min late";
+                                                } elseif ($ceiling !== null) {
+                                                    $rangeHint = "Handles {$thisMin} – " . ($ceiling - 1) . " min late";
+                                                } else {
+                                                    $rangeHint = "Handles {$thisMin}+ min late";
+                                                }
+                                            @endphp
+
+                                            <div class="col-lg-4 col-12">
+                                                <div class="border rounded-3 p-3 h-100 {{ $window['enabled'] ? 'border-danger-subtle' : '' }}"
+                                                     style="{{ $window['enabled'] ? 'border-color:#dc3545 !important;' : '' }}">
+
+                                                    {{-- Window header --}}
+                                                    <div class="d-flex align-items-center justify-content-between mb-1">
+                            <span class="fw-bold small {{ $window['enabled'] ? 'text-danger' : 'text-muted' }}">
+                                {{ $windowLabel }}
+                            </span>
                                                         <div class="form-check form-switch m-0">
-                                                            <input class="form-check-input" type="checkbox"
-                                                                   role="switch"
+                                                            <input class="form-check-input" type="checkbox" role="switch"
                                                                    id="window{{ $i }}Enabled"
                                                                    wire:model="approval.windows.{{ $i }}.enabled">
                                                         </div>
                                                     </div>
 
+                                                    {{-- Routing hint badge --}}
+                                                    @if($window['enabled'])
+                                                        <div class="mb-3">
+                                <span class="badge bg-primary-subtle text-primary fw-normal small">
+                                    <iconify-icon icon="mdi:clock-fast" class="me-1"></iconify-icon>
+                                    {{ $rangeHint }}
+                                </span>
+                                                        </div>
+                                                    @else
+                                                        <div class="mb-3">
+                                                            <span class="badge bg-secondary-subtle text-secondary fw-normal small">Disabled</span>
+                                                        </div>
+                                                    @endif
+
+                                                    {{-- ── Min. minutes late (entry threshold) ── --}}
                                                     <div class="mb-2">
-                                                        <label
-                                                            class="form-label small text-uppercase text-muted fw-semibold">Approver
-                                                            Role</label>
+                                                        <label class="form-label small text-uppercase text-muted fw-semibold d-flex align-items-center gap-1">
+                                                            <iconify-icon icon="mdi:clock-start"></iconify-icon>
+                                                            Min. minutes late
+                                                        </label>
+                                                        <div class="input-group input-group-sm">
+                                                            <input type="number" min="0" max="1440"
+                                                                   class="form-control"
+                                                                   wire:model="approval.windows.{{ $i }}.min_minutes_late"
+                                                                {{ $window['enabled'] ? '' : 'disabled' }}>
+                                                            <span class="input-group-text">min</span>
+                                                        </div>
+                                                        <small class="text-muted">
+                                                            Route here when late by <strong>≥ {{ $thisMin }} min</strong>
+                                                            @if($i === 0)(catch-all if no higher window matches)@endif.
+                                                        </small>
+                                                    </div>
+
+                                                    {{-- Approver Role --}}
+                                                    <div class="mb-2">
+                                                        <label class="form-label small text-uppercase text-muted fw-semibold">Approver Role</label>
                                                         <select class="form-select form-select-sm"
                                                                 wire:model="approval.windows.{{ $i }}.approver_role"
                                                             {{ $window['enabled'] ? '' : 'disabled' }}>
@@ -459,20 +547,20 @@ new class extends Component {
                                                         </select>
                                                     </div>
 
+                                                    {{-- Timeout --}}
                                                     <div class="mb-2">
-                                                        <label
-                                                            class="form-label small text-uppercase text-muted fw-semibold">Timeout
-                                                            (minutes)</label>
+                                                        <label class="form-label small text-uppercase text-muted fw-semibold">
+                                                            Timeout (minutes)
+                                                        </label>
                                                         <input type="number" min="1" max="1440"
                                                                class="form-control form-control-sm"
                                                                wire:model="approval.windows.{{ $i }}.timeout_minutes"
                                                             {{ $window['enabled'] ? '' : 'disabled' }}>
                                                     </div>
 
+                                                    {{-- On Timeout --}}
                                                     <div class="mb-3">
-                                                        <label
-                                                            class="form-label small text-uppercase text-muted fw-semibold">On
-                                                            Timeout</label>
+                                                        <label class="form-label small text-uppercase text-muted fw-semibold">On Timeout</label>
                                                         <div class="btn-group btn-group-sm w-100" role="group">
                                                             @php
                                                                 $options = $isLast
@@ -481,11 +569,11 @@ new class extends Component {
                                                             @endphp
                                                             @foreach($options as $value => $optLabel)
                                                                 @php
-                                                                    $active = $window['on_timeout'] === $value;
+                                                                    $active     = $window['on_timeout'] === $value;
                                                                     $colorClass = match($value) {
-                                                                        'approve' => $active ? 'btn-success' : 'btn-outline-success',
-                                                                        'reject' => $active ? 'btn-danger' : 'btn-outline-danger',
-                                                                        'escalate' => $active ? 'btn-primary' : 'btn-outline-primary',
+                                                                        'approve'  => $active ? 'btn-success'  : 'btn-outline-success',
+                                                                        'reject'   => $active ? 'btn-danger'   : 'btn-outline-danger',
+                                                                        'escalate' => $active ? 'btn-primary'  : 'btn-outline-primary',
                                                                     };
                                                                 @endphp
                                                                 <button type="button"
@@ -498,22 +586,20 @@ new class extends Component {
                                                         </div>
                                                     </div>
 
+                                                    {{-- Notifications --}}
                                                     <div class="mb-2">
-                                                        <label
-                                                            class="form-label small text-uppercase text-muted fw-semibold d-flex align-items-center gap-1">
+                                                        <label class="form-label small text-uppercase text-muted fw-semibold d-flex align-items-center gap-1">
                                                             <iconify-icon icon="mdi:bell-outline"></iconify-icon>
                                                             Notify Via
                                                         </label>
 
                                                         {{-- Email --}}
-                                                        <div
-                                                            class="d-flex align-items-center justify-content-between mb-1">
-                                                            <span class="d-flex align-items-center gap-1 small">
-                                                                <iconify-icon icon="mdi:email-outline"></iconify-icon> Email
-                                                            </span>
+                                                        <div class="d-flex align-items-center justify-content-between mb-1">
+                                <span class="d-flex align-items-center gap-1 small">
+                                    <iconify-icon icon="mdi:email-outline"></iconify-icon> Email
+                                </span>
                                                             <div class="form-check form-switch m-0">
-                                                                <input class="form-check-input" type="checkbox"
-                                                                       role="switch"
+                                                                <input class="form-check-input" type="checkbox" role="switch"
                                                                        wire:model="approval.windows.{{ $i }}.notify_email"
                                                                     {{ $window['enabled'] ? '' : 'disabled' }}>
                                                             </div>
@@ -525,8 +611,7 @@ new class extends Component {
                                                                     <input type="email" class="form-control"
                                                                            placeholder="approver@example.com"
                                                                            wire:model="approval.windows.{{ $i }}.notify_email_addresses.{{ $ei }}">
-                                                                    <button class="btn btn-outline-secondary"
-                                                                            type="button"
+                                                                    <button class="btn btn-outline-secondary" type="button"
                                                                             wire:click="removeEmail({{ $i }}, {{ $ei }})">
                                                                         <iconify-icon icon="mdi:close"></iconify-icon>
                                                                     </button>
@@ -539,15 +624,12 @@ new class extends Component {
                                                         @endif
 
                                                         {{-- SMS --}}
-                                                        <div
-                                                            class="d-flex align-items-center justify-content-between mb-1">
-                                                            <span class="d-flex align-items-center gap-1 small">
-                                                                <iconify-icon
-                                                                    icon="mdi:message-text-outline"></iconify-icon> SMS
-                                                            </span>
+                                                        <div class="d-flex align-items-center justify-content-between mb-1">
+                                <span class="d-flex align-items-center gap-1 small">
+                                    <iconify-icon icon="mdi:message-text-outline"></iconify-icon> SMS
+                                </span>
                                                             <div class="form-check form-switch m-0">
-                                                                <input class="form-check-input" type="checkbox"
-                                                                       role="switch"
+                                                                <input class="form-check-input" type="checkbox" role="switch"
                                                                        wire:model="approval.windows.{{ $i }}.notify_sms"
                                                                     {{ $window['enabled'] ? '' : 'disabled' }}>
                                                             </div>
@@ -559,8 +641,7 @@ new class extends Component {
                                                                     <input type="text" class="form-control"
                                                                            placeholder="+254 7xx xxx xxx"
                                                                            wire:model="approval.windows.{{ $i }}.notify_sms_numbers.{{ $pi }}">
-                                                                    <button class="btn btn-outline-secondary"
-                                                                            type="button"
+                                                                    <button class="btn btn-outline-secondary" type="button"
                                                                             wire:click="removePhone({{ $i }}, {{ $pi }})">
                                                                         <iconify-icon icon="mdi:close"></iconify-icon>
                                                                     </button>
@@ -584,13 +665,13 @@ new class extends Component {
                                             Save Approval Settings
                                         </button>
                                     </div>
+
                                 </div>
                             </div>
 
                         </div>
                     </div>
                 </div>
-
             </div>
         </div>
     </div>
