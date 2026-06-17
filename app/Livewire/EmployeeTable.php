@@ -55,6 +55,59 @@ class EmployeeTable extends DataTableComponent
         $this->setEagerLoadAllRelationsStatus(true);
     }
 
+
+    // ADD this method to app/Livewire/EmployeeTable.php
+
+    #[On('override-attendance-status')]
+    public function overrideAttendanceStatus(int $employeeId, string $status): void
+    {
+        $employee = Employee::findOrFail($employeeId);
+        $org = auth()->user()->employee->organization;
+
+        $today = now()->toDateString();
+        $now = now();
+
+        if ($status === 'clocked_in') {
+            \App\Models\Attendance::updateOrCreate(
+                ['employee_id' => $employeeId, 'date' => $today],
+                [
+                    'status' => 'clocked_in',
+                    'check_in_time' => $now,
+                    'organization_id' => $org->id,
+                    'work_location_id' => $employee->assignments()->where('is_current', true)->first()?->work_location_id,
+                ]
+            );
+        } elseif ($status === 'clocked_out') {
+            $record = \App\Models\Attendance::where('employee_id', $employeeId)
+                ->where('date', $today)
+                ->latest()
+                ->first();
+
+            if ($record) {
+                $record->update([
+                    'status' => 'clocked_out',
+                    'check_out_time' => $now,
+                ]);
+            } else {
+                \App\Models\Attendance::create([
+                    'employee_id' => $employeeId,
+                    'date' => $today,
+                    'status' => 'clocked_out',
+                    'check_in_time' => $now,
+                    'check_out_time' => $now,
+                    'organization_id' => $org->id,
+                    'work_location_id' => $employee->assignments()->where('is_current', true)->first()?->work_location_id,
+                ]);
+            }
+        }
+
+        $this->dispatch('refreshDatatable');
+
+        LivewireAlert::title('Updated!')
+            ->text('Attendance status updated successfully.')
+            ->success()->toast()->position('top-end')->show();
+    }
+
     public function builder(): \Illuminate\Database\Eloquent\Builder
     {
         $orgId = auth()->user()->employee->organization_id ?? null;
@@ -212,19 +265,33 @@ class EmployeeTable extends DataTableComponent
         // Shows Present / Left School / Not Reported based on LAST attendance
         // record regardless of date — a pembroke who checked in 2 weeks ago
         // and never checked out is still considered Present.
+        // REPLACE WITH:
         if ($isStudentOrg) {
             $columns[] = Column::make("Status")
                 ->label(function ($row) {
-
                     $last = $row->lastAttendance;
+                    $id = $row->id;
 
-                    // REPLACE WITH:
+                    $overrideBtns = "
+                <div class='d-flex gap-1 mt-1'>
+                    <button onclick=\"Livewire.dispatch('override-attendance-status', {employeeId: {$id}, status: 'clocked_in'})\"
+                        class='btn btn-sm' style='font-size:0.65rem;padding:2px 7px;background:#dcfce7;color:#16a34a;border:1px solid #bbf7d0;border-radius:5px;'>
+                        <i class='ti ti-login'></i> On Campus
+                    </button>
+                    <button onclick=\"Livewire.dispatch('override-attendance-status', {employeeId: {$id}, status: 'clocked_out'})\"
+                        class='btn btn-sm' style='font-size:0.65rem;padding:2px 7px;background:#e0f2fe;color:#0284c7;border:1px solid #bae6fd;border-radius:5px;'>
+                        <i class='ti ti-logout'></i> Off Campus
+                    </button>
+                </div>
+            ";
+
                     if (!$last) {
                         return "
-        <span class='badge' style='background:#f1f5f9; color:#64748b; padding:5px 10px; border-radius:8px; font-size:0.75rem; font-weight:600;'>
-            <i class='ti ti-scan me-1'></i>Never Scanned
-        </span>
-    ";
+                    <span class='badge' style='background:#f1f5f9; color:#64748b; padding:5px 10px; border-radius:8px; font-size:0.75rem; font-weight:600;'>
+                        <i class='ti ti-scan me-1'></i>Never Scanned
+                    </span>
+                    {$overrideBtns}
+                ";
                     }
 
                     if ($last->status === 'clocked_in') {
@@ -232,11 +299,12 @@ class EmployeeTable extends DataTableComponent
                             ? \Carbon\Carbon::parse($last->check_in_time)->format('d M, g:i A')
                             : \Carbon\Carbon::parse($last->date)->format('d M Y');
                         return "
-                            <span class='badge' style='background:#dcfce7; color:#16a34a; padding:5px 10px; border-radius:8px; font-size:0.75rem; font-weight:600;'>
-                                <i class='ti ti-check me-1'></i>Present
-                            </span>
-                            <small class='text-muted d-block mt-1' style='font-size:0.7rem;'>Since {$since}</small>
-                        ";
+                    <span class='badge' style='background:#dcfce7; color:#16a34a; padding:5px 10px; border-radius:8px; font-size:0.75rem; font-weight:600;'>
+                        <i class='ti ti-check me-1'></i>On Campus
+                    </span>
+                    <small class='text-muted d-block mt-1' style='font-size:0.7rem;'>Since {$since}</small>
+                    {$overrideBtns}
+                ";
                     }
 
                     if ($last->status === 'clocked_out') {
@@ -244,20 +312,20 @@ class EmployeeTable extends DataTableComponent
                             ? \Carbon\Carbon::parse($last->check_out_time)->format('d M, g:i A')
                             : \Carbon\Carbon::parse($last->date)->format('d M Y');
                         return "
-                            <span class='badge' style='background:#e0f2fe; color:#0284c7; padding:5px 10px; border-radius:8px; font-size:0.75rem; font-weight:600;'>
-                                <i class='ti ti-logout me-1'></i>Left School
-                            </span>
-                            <small class='text-muted d-block mt-1' style='font-size:0.7rem;'>Left {$when}</small>
-                        ";
+                    <span class='badge' style='background:#e0f2fe; color:#0284c7; padding:5px 10px; border-radius:8px; font-size:0.75rem; font-weight:600;'>
+                        <i class='ti ti-logout me-1'></i>Off Campus
+                    </span>
+                    <small class='text-muted d-block mt-1' style='font-size:0.7rem;'>Left {$when}</small>
+                    {$overrideBtns}
+                ";
                     }
 
-                    // Any other status (absent, on_leave, etc.) — treat as not reported
-                    // REPLACE WITH:
                     return "
-    <span class='badge' style='background:#fff3cd; color:#856404; padding:5px 10px; border-radius:8px; font-size:0.75rem; font-weight:600;'>
-        <i class='ti ti-clock me-1'></i>Not On Campus
-    </span>
-";
+                <span class='badge' style='background:#fff3cd; color:#856404; padding:5px 10px; border-radius:8px; font-size:0.75rem; font-weight:600;'>
+                    <i class='ti ti-clock me-1'></i>Not On Campus
+                </span>
+                {$overrideBtns}
+            ";
                 })
                 ->html();
         }
