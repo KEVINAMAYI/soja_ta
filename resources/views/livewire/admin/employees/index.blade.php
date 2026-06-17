@@ -738,34 +738,29 @@ new class extends Component {
     }
 
 
+    // REPLACE WITH:
     public function loadStudentAttendanceStats(): void
     {
-        $today = now()->toDateString();
         $orgId = auth()->user()->employee->organization_id;
 
-        $students = Employee::where('organization_id', $orgId)
+        $this->totalStudents = Employee::where('organization_id', $orgId)
             ->where('active', 1)
             ->where('is_student', 1)
-            ->get();
+            ->count();
 
-        $studentIds = $students->pluck('id');
+        $this->presentCount = Employee::where('organization_id', $orgId)
+            ->where('active', 1)
+            ->where('is_student', 1)
+            ->whereHas('lastAttendance', fn($q) => $q->where('status', 'clocked_in'))
+            ->count();
 
-        $attendances = \App\Models\Attendance::whereIn('employee_id', $studentIds)
-            ->whereDate('date', $today)
-            ->get();
+        $this->leftSchoolCount = Employee::where('organization_id', $orgId)
+            ->where('active', 1)
+            ->where('is_student', 1)
+            ->whereHas('lastAttendance', fn($q) => $q->where('status', 'clocked_out'))
+            ->count();
 
-        $this->presentCount = $attendances->where('status', 'clocked_in')->pluck('employee_id')->unique()->count();
-        $this->leftSchoolCount = $attendances->where('status', 'clocked_out')->pluck('employee_id')->unique()->count();
-        $reportedIds = $attendances->whereIn('status', ['clocked_in', 'clocked_out'])->pluck('employee_id')->unique();
-
-        // Replace the notReportedCount calculation in both methods
-        $this->notReportedCount = max(0, $this->totalStudents -
-            Employee::where('organization_id', $orgId)
-                ->where('active', 1)
-                ->where('is_student', 1)
-                ->whereHas('attendances')
-                ->count()
-        );
+        $this->notReportedCount = max(0, $this->totalStudents - $this->presentCount - $this->leftSchoolCount);
     }
 
 
@@ -778,22 +773,22 @@ new class extends Component {
             $allPeople = Employee::where('organization_id', $orgId)->where('active', 1)->get();
 
             // ── Student Stats ──
+            // REPLACE WITH:
             $this->totalStudents = $allPeople->where('is_student', 1)->count();
-            $studentIds = $allPeople->where('is_student', 1)->pluck('id');
-            $studentAttendance = \App\Models\Attendance::whereIn('employee_id', $studentIds)
-                ->whereDate('date', $today)->get();
 
-            $this->presentCount = $studentAttendance->where('status', 'clocked_in')->pluck('employee_id')->unique()->count();
-            $this->leftSchoolCount = $studentAttendance->where('status', 'clocked_out')->pluck('employee_id')->unique()->count();
+            $this->presentCount = Employee::where('organization_id', $orgId)
+                ->where('active', 1)
+                ->where('is_student', 1)
+                ->whereHas('lastAttendance', fn($q) => $q->where('status', 'clocked_in'))
+                ->count();
 
-            // Replace the notReportedCount calculation in both methods
-            $this->notReportedCount = max(0, $this->totalStudents -
-                Employee::where('organization_id', $orgId)
-                    ->where('active', 1)
-                    ->where('is_student', 1)
-                    ->whereHas('attendances')
-                    ->count()
-            );
+            $this->leftSchoolCount = Employee::where('organization_id', $orgId)
+                ->where('active', 1)
+                ->where('is_student', 1)
+                ->whereHas('lastAttendance', fn($q) => $q->where('status', 'clocked_out'))
+                ->count();
+
+            $this->notReportedCount = max(0, $this->totalStudents - $this->presentCount - $this->leftSchoolCount);
 
             // ── Staff Stats ──
             $this->totalStaff = $allPeople->where('is_student', 0)->count();

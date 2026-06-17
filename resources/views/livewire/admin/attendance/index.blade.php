@@ -373,48 +373,28 @@ new class extends Component {
     }
 
 
+    // REPLACE WITH:
     private function loadSchoolSummary(int $orgId): void
     {
-        $students = Employee::where('organization_id', $orgId)
+        $this->totalEmployees = Employee::where('organization_id', $orgId)
             ->where('active', 1)
             ->where('is_student', 1)
-            ->get();
+            ->count();
 
-        $this->totalEmployees = $students->count();
-        $studentIds = $students->pluck('id');
-
-        $attendances = Attendance::whereIn('employee_id', $studentIds)
-            ->whereDate('date', $this->startDate)
-            ->get();
-
-        // On campus right now = last known status is clocked_in
         $this->presentCount = Employee::where('organization_id', $orgId)
             ->where('active', 1)
             ->where('is_student', 1)
             ->whereHas('lastAttendance', fn($q) => $q->where('status', 'clocked_in'))
             ->count();
 
-        // Off campus = had a clocked_out record today
         $this->leftSchoolCount = Employee::where('organization_id', $orgId)
             ->where('active', 1)
             ->where('is_student', 1)
             ->whereHas('lastAttendance', fn($q) => $q->where('status', 'clocked_out'))
             ->count();
 
-        // Unscanned = no clocked_in or clocked_out record today at all
-        $scannedIds = $attendances
-            ->whereIn('status', ['clocked_in', 'clocked_out'])
-            ->pluck('employee_id')->unique();
+        $this->absentCount = max(0, $this->totalEmployees - $this->presentCount - $this->leftSchoolCount);
 
-        $this->absentCount = max(0, $this->totalEmployees -
-            Employee::where('organization_id', $orgId)
-                ->where('active', 1)
-                ->where('is_student', 1)
-                ->whereHas('attendances')
-                ->count()
-        );
-
-        // Not used in school view but reset to avoid stale data
         $this->sickOffCount = 0;
         $this->onLeaveCount = 0;
         $this->offShiftCount = 0;
