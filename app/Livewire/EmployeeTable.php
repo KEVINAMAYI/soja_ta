@@ -156,7 +156,13 @@ class EmployeeTable extends DataTableComponent
                 'left' => $query->whereHas('lastAttendance',
                     fn($q) => $q->where('status', 'clocked_out')),
 
-                'not_reported' => $query->whereDoesntHave('attendances'),
+                // REPLACE WITH:
+                'not_reported' => $query->where(function ($q) {
+                    $q->whereDoesntHave('lastAttendance')
+                        ->orWhereHas('lastAttendance', fn($q2) =>
+                        $q2->whereNotIn('status', ['clocked_in', 'clocked_out'])
+                        );
+                }),
 
 
                 default => null,
@@ -322,7 +328,7 @@ class EmployeeTable extends DataTableComponent
 
                     return "
                 <span class='badge' style='background:#fff3cd; color:#856404; padding:5px 10px; border-radius:8px; font-size:0.75rem; font-weight:600;'>
-                    <i class='ti ti-clock me-1'></i>Not On Campus
+                    <i class='ti ti-clock me-1'></i>Never Scanned
                 </span>
                 {$overrideBtns}
             ";
@@ -435,8 +441,14 @@ class EmployeeTable extends DataTableComponent
                     } elseif ($effective === 'left') {
                         $builder->whereHas('lastAttendance', fn($q) => $q->where('status', 'clocked_out'));
                         // REPLACE WITH:
+                        // REPLACE WITH:
                     } elseif ($effective === 'not_reported') {
-                        $builder->whereDoesntHave('attendances');
+                        $builder->where(function ($q) {
+                            $q->whereDoesntHave('lastAttendance')
+                                ->orWhereHas('lastAttendance', fn($q2) =>
+                                $q2->whereNotIn('status', ['clocked_in', 'clocked_out'])
+                                );
+                        });
                     }
                 });
         }
