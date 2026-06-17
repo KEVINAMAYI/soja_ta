@@ -339,11 +339,11 @@ new class extends Component {
 
                 {{-- Pagination — single location --}}
                 @if($this->requests->hasPages())
-                    <div class="px-4 py-3 border-top d-flex align-items-center justify-content-between"
+                    <div class="px-4 py-3 border-top d-flex align-items-center justify-content-between flex-wrap gap-2"
                          style="background:#fafafa;">
-                        <span class="text-muted" style="font-size:.78rem;">
-                            Showing {{ $this->requests->firstItem() }}–{{ $this->requests->lastItem() }} of {{ $this->requests->total() }}
-                        </span>
+        <span class="text-muted" style="font-size:.78rem;">
+            Showing {{ $this->requests->firstItem() }}–{{ $this->requests->lastItem() }} of {{ $this->requests->total() }}
+        </span>
                         {{ $this->requests->links() }}
                     </div>
                 @endif
