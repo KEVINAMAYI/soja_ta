@@ -1092,7 +1092,7 @@ new class extends Component {
                                 {{-- Simplified School Filters --}}
                                 <option value="clocked_in">On Campus [Clocked In]</option>
                                 <option value="clocked_out">Off Campus [Clocked Out]</option>
-                                <option value="absent">Not Enrolled</option>
+                                <option value="absent">Never scanned</option>
                             @else
                                 {{-- Standard Employee Filters --}}
                                 <option value="present">Present [Clocked In + Clocked Out]</option>
