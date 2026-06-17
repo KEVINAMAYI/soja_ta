@@ -52,15 +52,12 @@ Route::middleware(['auth:sanctum'])->group(function () {
 
     Route::post('/devices/verify', [DeviceController::class, 'verify']);
 
-
+    // REPLACE WITH:
     Route::prefix('checkin-requests')->group(function () {
-        // Approver routes
+        Route::get('/my-requests', [CheckInApprovalController::class, 'myRequests']);
         Route::get('/', [CheckInApprovalController::class, 'index']);
         Route::get('/{id}', [CheckInApprovalController::class, 'show']);
         Route::post('/{id}/action', [CheckInApprovalController::class, 'action']);
-
-        // Employee's own requests
-        Route::get('/my-requests', [CheckInApprovalController::class, 'myRequests']);
     });
 
 });
