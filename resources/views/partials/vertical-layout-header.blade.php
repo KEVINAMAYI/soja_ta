@@ -1,6 +1,5 @@
-
 <nav {{ $sidebarBg ? "style=background-color:{$sidebarBg};" : '' }} class="navbar navbar-expand-lg p-0">
-<ul class="navbar-nav">
+    <ul class="navbar-nav">
         <li class="nav-item nav-icon-hover-bg rounded-circle d-flex">
             <a class="nav-link  sidebartoggler" id="headerCollapse" href="javascript:void(0)">
                 <iconify-icon icon="solar:hamburger-menu-line-duotone" class="fs-6"></iconify-icon>
@@ -9,8 +8,21 @@
     </ul>
 
     <div class="d-block d-lg-none py-9 py-xl-0">
-        <img src="assets/images/logos/logo.svg" alt="matdash-img"/>
+        @php
+            $navOrg = App\Models\Organization::find(auth()->user()->employee->organization_id);
+        @endphp
+        @if($navOrg?->logo_path)
+            <img src="{{ asset('storage/' . $navOrg->logo_path) }}"
+                 alt="{{ $navOrg->name }} logo"
+                 style="height:40px; max-width:120px; object-fit:contain;">
+        @else
+            <div class="rounded-circle d-flex align-items-center justify-content-center"
+                 style="width:40px;height:40px;background-color:{{ $navOrg?->primary_color ?? '#072639' }};color:#fff;font-weight:700;font-size:1rem;">
+                {{ strtoupper(substr($navOrg?->name ?? 'O', 0, 1)) }}
+            </div>
+        @endif
     </div>
+
     <a class="navbar-toggler p-0 border-0 nav-icon-hover-bg rounded-circle" href="javascript:void(0)"
        data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav"
        aria-expanded="false" aria-label="Toggle navigation">
@@ -55,8 +67,10 @@
                 <li class="nav-item dropdown">
                     <a class="nav-link" href="{{ route('user.settings') }}" id="drop1" aria-expanded="false">
                         <div class="d-flex align-items-center gap-2 lh-base">
-                            <img src="assets/images/profile/user-1.jpg" class="rounded-circle"
-                                 width="35" height="35" alt="matdash-img"/>
+                            <div class="rounded-circle d-flex align-items-center justify-content-center"
+                                 style="width:35px;height:35px;background-color:{{ $navOrg?->primary_color ?? '#072639' }};color:#fff;font-weight:700;font-size:1rem;">
+                                {{ strtoupper(substr($navOrg?->name ?? 'O', 0, 1)) }}
+                            </div>
                             <iconify-icon icon="solar:alt-arrow-down-bold" class="fs-2"></iconify-icon>
                         </div>
                     </a>
