@@ -31,17 +31,8 @@ new class extends Component {
 
     public function rules()
     {
-        $orgId = auth()->user()->employee->organization_id ?? null;
-
         return [
-            'name' => [
-                'required',
-                'string',
-                'max:255',
-                \Illuminate\Validation\Rule::unique('roles', 'name')
-                    ->where('organization_id', $orgId)
-                    ->ignore($this->editId),
-            ],
+            'name' => 'required|string|max:255',
             'selectedPermissions' => 'required|array|min:1',
         ];
     }
@@ -98,8 +89,23 @@ new class extends Component {
         try {
             DB::beginTransaction();
 
+            $orgId = auth()->user()->employee->organization_id ?? null;
+
+            // Manual uniqueness check scoped to organization
+            $exists = DB::table('roles')
+                ->where('name', strtolower($this->name))
+                ->where('organization_id', $orgId)
+                ->where('id', '!=', $this->editId)
+                ->exists();
+
+            if ($exists) {
+                $this->addError('name', 'The name has already been taken.');
+                DB::rollBack();
+                return;
+            }
+
             $role = Role::findOrFail($this->editId);
-            $role->update(['name' => $this->name]);
+            $role->update(['name' => strtolower($this->name)]);
             $role->syncPermissions($this->selectedPermissions);
 
             DB::commit();
@@ -124,7 +130,6 @@ new class extends Component {
                 ->toast()
                 ->position('top-end')
                 ->show();
-
         }
     }
 
@@ -134,12 +139,39 @@ new class extends Component {
         try {
             DB::beginTransaction();
 
-            $role = Role::findOrFail($id);
+            $orgId = auth()->user()->employee->organization_id ?? null;
+
+            // Only allow deleting roles within current org
+            $role = Role::where('id', $id)
+                ->where('organization_id', $orgId)
+                ->firstOrFail();
+
+            // Count users assigned to this role
+            $userCount = DB::table('model_has_roles')
+                ->where('role_id', $id)
+                ->count();
+
+            if ($userCount > 0) {
+                // Detach all users from this role first
+                DB::table('model_has_roles')
+                    ->where('role_id', $id)
+                    ->delete();
+            }
+
+            // Detach all permissions (Spatie handles this but being explicit)
+            DB::table('role_has_permissions')
+                ->where('role_id', $id)
+                ->delete();
+
             $role->delete();
 
             DB::commit();
 
-            LivewireAlert::text('Role deleted successfully.!')
+            $message = $userCount > 0
+                ? "Role deleted. {$userCount} employee(s) were detached."
+                : 'Role deleted successfully.';
+
+            LivewireAlert::text($message)
                 ->success()
                 ->toast()
                 ->position('top-end')
@@ -151,14 +183,14 @@ new class extends Component {
             DB::rollBack();
             Log::error('Error deleting role: ' . $th->getMessage());
 
-            LivewireAlert::text('Failed to delete role.!')
+            LivewireAlert::text('Failed to delete role.')
                 ->error()
                 ->toast()
                 ->position('top-end')
                 ->show();
-
         }
     }
+
 
     #[On('discard-role-modal')]
     public function discardRoleModal()
