@@ -196,7 +196,7 @@
                             </li>
                         @endcan
 
-{{--                        @can('approve-checkin-requests')--}}
+                        @can('approve-checkin-requests')
                             <li class="sidebar-item">
                                 <a class="sidebar-link d-flex align-items-center {{ request()->routeIs('checkin-requests.index') ? 'active' : '' }}"
                                    href="{{ route('checkin-requests.index') }}">
@@ -207,7 +207,7 @@
                                     @endif
                                 </a>
                             </li>
-{{--                        @endcan--}}
+                        @endcan
 
                         @can('view-all-attendance')
                             <li class="sidebar-item">
