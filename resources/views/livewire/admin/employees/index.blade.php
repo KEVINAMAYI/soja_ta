@@ -111,6 +111,8 @@ new class extends Component {
 
     public string $empTypeFilter = '';
     public string $activeFilter = '';
+    public int $adDeactivatedCount = 0;
+
 
     public function mount($roleId = null): void
     {
@@ -318,6 +320,41 @@ new class extends Component {
                     'section' => $ous['section'] ?? null,
                     'division' => $ous['division'] ?? null,
                     'isNew' => $isNew,
+                ];
+            }
+
+
+            // ── Find locally linked employees disabled or removed from AD ──
+            $activeAdIds = collect($this->adPreview)->pluck('ad_id')->toArray();
+
+            $disabledAdIds = collect($users)
+                ->filter(fn($u) => ($u['accountEnabled'] ?? true) === false)
+                ->pluck('id')
+                ->toArray();
+
+            $toDeactivate = Employee::where('organization_id', $org->id)
+                ->whereNotNull('ad_object_id')
+                ->whereNull('deleted_at')
+                ->get()
+                ->filter(fn($emp) => in_array($emp->ad_object_id, $disabledAdIds) ||
+                    !in_array($emp->ad_object_id, $activeAdIds)
+                );
+
+            foreach ($toDeactivate as $emp) {
+                $this->adPreview[] = [
+                    'ad_id' => $emp->ad_object_id,
+                    'name' => $emp->name,
+                    'email' => $emp->email,
+                    'phone' => $emp->phone ?? '—',
+                    'job_title' => $emp->employee_title ?? '—',
+                    'upn' => $emp->ad_upn ?? '—',
+                    'shift' => '—',
+                    'department' => $emp->department?->name ?? '—',
+                    'employee_id' => $emp->ad_employee_id ?? null,
+                    'section' => $emp->section ?? null,
+                    'division' => $emp->division ?? null,
+                    'isNew' => false,
+                    'action' => in_array($emp->ad_object_id, $disabledAdIds) ? 'disabled' : 'removed',
                 ];
             }
 
@@ -533,6 +570,64 @@ new class extends Component {
             }
         }
 
+
+        // ── AD CLEANUP: soft delete employees disabled or removed from AD ──────────
+        $softDeleted = 0;
+
+// Build set of active AD IDs from this sync
+        $activeAdIds = collect($this->adPreview)->pluck('ad_id')->toArray();
+
+// Also collect disabled users from the raw AD fetch
+        $allAdUsers = app(MicrosoftAdService::class)->getAllUsers();
+        $disabledAdIds = collect($allAdUsers)
+            ->filter(fn($u) => ($u['accountEnabled'] ?? true) === false)
+            ->pluck('id')
+            ->toArray();
+
+// Find locally linked employees who are either:
+// 1. Disabled in AD (accountEnabled = false)
+// 2. No longer exist in AD at all (not in activeAdIds)
+        $toDeactivate = Employee::where('organization_id', $org->id)
+            ->whereNotNull('ad_object_id')
+            ->whereNull('deleted_at')
+            ->get()
+            ->filter(fn($emp) => in_array($emp->ad_object_id, $disabledAdIds) ||
+                !in_array($emp->ad_object_id, $activeAdIds)
+            );
+
+        foreach ($toDeactivate as $emp) {
+            try {
+                // Remove from ZKBio
+                if ($emp->zkbio_pin && $org->zkbio_sync_enabled) {
+                    app(ZKBioPersonService::class, ['organization' => $org])
+                        ->deletePerson($emp->zkbio_pin);
+                }
+
+                // Detach ZKBio areas
+                $emp->zkbioAreas()->detach();
+
+                // Soft delete
+                $emp->delete();
+
+                $results[] = [
+                    'name' => $emp->name,
+                    'email' => $emp->email,
+                    'status' => 'deactivated',
+                    'zk' => $emp->zkbio_pin ? 'removed' : 'skipped',
+                    'message' => in_array($emp->ad_object_id, $disabledAdIds)
+                        ? 'Disabled in Active Directory'
+                        : 'No longer exists in Active Directory',
+                ];
+                $softDeleted++;
+
+            } catch (\Throwable $e) {
+                Log::warning("AD cleanup failed for employee {$emp->id}", ['error' => $e->getMessage()]);
+            }
+        }
+// ── END AD CLEANUP ──────────────────────────────────────────────────────────
+
+        $this->adDeactivatedCount = $softDeleted;  // ← here
+
         $this->adResults = $results;
         $this->adImportedCount = $imported;
         $this->adUpdatedCount = $updated;
@@ -543,8 +638,9 @@ new class extends Component {
         $this->dispatch('refreshDatatable');
         $this->loadSummaryStats();
 
+
         LivewireAlert::title('AD Sync Complete!')
-            ->text("{$imported} imported, {$updated} updated, {$errors} failed.")
+            ->text("{$imported} imported, {$updated} updated, {$errors} failed, {$softDeleted} deactivated.")
             ->success()->toast()->position('top-end')->show();
     }
 
@@ -2945,6 +3041,12 @@ new class extends Component {
                                     <span style="font-size:0.8rem;font-weight:700;color:#64748b;">
                 <iconify-icon icon="mdi:account-check"></iconify-icon> {{ $adExisting }} already exist
             </span>
+                                    @php $adDeactivating = collect($adPreview)->whereIn('action', ['disabled','removed'])->count(); @endphp
+                                    @if($adDeactivating > 0)
+                                        <span style="font-size:0.8rem;font-weight:700;color:#dc2626;">
+        <iconify-icon icon="mdi:account-remove"></iconify-icon> {{ $adDeactivating }} will be deactivated
+    </span>
+                                    @endif
                                     {{-- Live selection counter --}}
                                     <span x-show="selected.length > 0"
                                           style="font-size:0.8rem;font-weight:700;color:#0078d4;background:#dbeafe;padding:2px 10px;border-radius:99px;">
@@ -3070,13 +3172,23 @@ new class extends Component {
                                                     @if($row['isNew'])
                                                         <span
                                                             style="font-size:0.72rem;font-weight:700;padding:2px 9px;border-radius:99px;background:#dcfce7;color:#15803d;">
-                            <iconify-icon icon="mdi:plus-circle"></iconify-icon> New
-                        </span>
+        <iconify-icon icon="mdi:plus-circle"></iconify-icon> New
+    </span>
+                                                    @elseif(($row['action'] ?? '') === 'disabled')
+                                                        <span
+                                                            style="font-size:0.72rem;font-weight:700;padding:2px 9px;border-radius:99px;background:#fee2e2;color:#dc2626;">
+        <iconify-icon icon="mdi:account-cancel"></iconify-icon> Disabled in AD
+    </span>
+                                                    @elseif(($row['action'] ?? '') === 'removed')
+                                                        <span
+                                                            style="font-size:0.72rem;font-weight:700;padding:2px 9px;border-radius:99px;background:#fef3c7;color:#92400e;">
+        <iconify-icon icon="mdi:account-remove"></iconify-icon> Removed from AD
+    </span>
                                                     @else
                                                         <span
                                                             style="font-size:0.72rem;font-weight:700;padding:2px 9px;border-radius:99px;background:#f1f5f9;color:#64748b;">
-                            <iconify-icon icon="mdi:refresh"></iconify-icon> Update
-                        </span>
+        <iconify-icon icon="mdi:refresh"></iconify-icon> Update
+    </span>
                                                     @endif
                                                 </td>
                                             </tr>
@@ -3154,6 +3266,10 @@ new class extends Component {
                                 <span style="font-size:0.8rem;font-weight:700;color:#dc2626;">
                 <iconify-icon icon="mdi:alert"></iconify-icon> {{ $adErrorCount }} Failed
             </span>
+                                <span style="color:#e2e8f0;">|</span>
+                                <span style="font-size:0.8rem;font-weight:700;color:#dc2626;">
+    <iconify-icon icon="mdi:account-remove"></iconify-icon> {{ $adDeactivatedCount }} Deactivated
+</span>
                                 <button wire:click="resetAdSync" type="button"
                                         class="btn btn-sm ms-auto"
                                         style="font-size:0.78rem;background:#f1f5f9;border:none;color:#1e293b;border-radius:7px;font-weight:600;">
@@ -3194,6 +3310,11 @@ new class extends Component {
                                                         style="font-size:0.72rem;font-weight:700;padding:2px 9px;border-radius:99px;background:#dcfce7;color:#15803d;">
                                 <iconify-icon icon="mdi:check-circle"></iconify-icon> Imported
                             </span>
+                                                @elseif($r['status'] === 'deactivated')
+                                                    <span
+                                                        style="font-size:0.72rem;font-weight:700;padding:2px 9px;border-radius:99px;background:#fee2e2;color:#dc2626;">
+        <iconify-icon icon="mdi:account-remove"></iconify-icon> Deactivated
+    </span>
                                                 @elseif($r['status'] === 'updated')
                                                     <span
                                                         style="font-size:0.72rem;font-weight:700;padding:2px 9px;border-radius:99px;background:#e0f2fe;color:#0369a1;">
