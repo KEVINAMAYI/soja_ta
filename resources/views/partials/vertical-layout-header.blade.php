@@ -68,8 +68,8 @@
                     <a class="nav-link" href="{{ route('user.settings') }}" id="drop1" aria-expanded="false">
                         <div class="d-flex align-items-center gap-2 lh-base">
                             <div class="rounded-circle d-flex align-items-center justify-content-center"
-                                 style="width:35px;height:35px;background-color:{{ $navOrg?->primary_color ?? '#072639' }};color:#fff;font-weight:700;font-size:1rem;">
-                                {{ strtoupper(substr($navOrg?->name ?? 'O', 0, 1)) }}
+                                 style="width:35px;height:35px;background-color:{{ $navOrg?->primary_color ?? '#072639' }};color:#fff;font-weight:700;font-size:0.75rem;">
+                                {{ collect(explode(' ', trim($navOrg?->name ?? 'O')))->map(fn($w) => strtoupper(substr($w, 0, 1)))->implode('') }}
                             </div>
                             <iconify-icon icon="solar:alt-arrow-down-bold" class="fs-2"></iconify-icon>
                         </div>
@@ -80,18 +80,23 @@
                         <div class="position-relative px-4 pt-3 pb-2">
 
                             <div class="d-flex align-items-center mb-3 pb-3 border-bottom gap-6">
-                                <img
-                                    src="{{ Auth::user()->profile_photo_url ?? asset('assets/images/profile/user-1.jpg') }}"
-                                    class="rounded-circle"
-                                    width="56"
-                                    height="56"
-                                    alt="{{ Auth::user()->name ?? 'User' }}"/>
-
+                                @if(Auth::user()->profile_photo_url)
+                                    <img src="{{ Auth::user()->profile_photo_url }}"
+                                         class="rounded-circle"
+                                         width="56" height="56"
+                                         alt="{{ Auth::user()->name ?? 'User' }}"/>
+                                @else
+                                    <div class="rounded-circle d-flex align-items-center justify-content-center flex-shrink-0"
+                                         style="width:56px;height:56px;background-color:{{ $navOrg?->primary_color ?? '#072639' }};color:#fff;font-weight:700;font-size:1.1rem;">
+                                        {{ collect(explode(' ', trim(Auth::user()->name ?? 'U')))->map(fn($w) => strtoupper(substr($w, 0, 1)))->implode('') }}
+                                    </div>
+                                @endif
                                 <div>
                                     <h5 class="mb-0 fs-12">{{ Auth::user()->name }}</h5>
                                     <p class="mb-0 text-dark">{{ Auth::user()->email }}</p>
                                 </div>
                             </div>
+
                             <div class="message-body">
                                 <a href="{{ route('user.settings') }}"
                                    class="p-2 dropdown-item h6 rounded-1 d-flex justify-content-between align-items-center">
