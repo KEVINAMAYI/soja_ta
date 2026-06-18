@@ -31,8 +31,17 @@ new class extends Component {
 
     public function rules()
     {
+        $orgId = auth()->user()->employee->organization_id ?? null;
+
         return [
-            'name' => 'required|string|max:255|unique:roles,name' . ($this->editId ? ',' . $this->editId : ''),
+            'name' => [
+                'required',
+                'string',
+                'max:255',
+                \Illuminate\Validation\Rule::unique('roles', 'name')
+                    ->where('organization_id', $orgId)
+                    ->ignore($this->editId),
+            ],
             'selectedPermissions' => 'required|array|min:1',
         ];
     }
