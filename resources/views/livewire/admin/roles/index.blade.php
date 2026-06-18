@@ -105,7 +105,7 @@ new class extends Component {
             }
 
             $role = Role::findOrFail($this->editId);
-            $role->update(['name' => strtolower($this->name)]);
+            DB::table('roles')->where('id', $this->editId)->update(['name' => strtolower($this->name), 'updated_at' => now()]);
             $role->syncPermissions($this->selectedPermissions);
 
             DB::commit();
