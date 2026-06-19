@@ -300,7 +300,7 @@ class ZKPunchClassifier
         // ── STEP 5: Save results ──────────────────────────────────────────────────
         $result['worked_hours'] = round($workedMinutes / 60, 2);
         $result['break_lost_minutes'] = $breakLost;
-        $result['lost_minutes'] = $result['late_checkin_lost_minutes'] + $breakLost + ($result['minutes_early'] ?? 0);
+        $result['lost_minutes'] = $lostMinutes; // net shortfall: max(0, expected - worked) — never negative, never inflated by overtime
         $result['lost_hours_breakdown'] = $breakdown;
 
         $result['notes'][] = "Worked hours: {$result['worked_hours']}h.";
