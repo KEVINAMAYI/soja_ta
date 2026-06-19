@@ -4,7 +4,7 @@
             <i class="ti ti-dots fs-6 text-dark"></i>
         </a>
         <ul class="dropdown-menu" aria-labelledby="employee-actions">
-            @if(empty($workLocationId))
+            @can('view-employees')
                 <li>
                     <a class="dropdown-item d-flex align-items-center gap-2"
                        href="{{ route('employees.view',$employee->id) }}">
@@ -12,6 +12,9 @@
                         <span>View</span>
                     </a>
                 </li>
+            @endcan
+
+            @can('edit-employees')
                 <li>
                     <a class="dropdown-item d-flex align-items-center gap-2" href="javascript:void(0)"
                        wire:click="$dispatch('edit-employee',{ id : {{ $employee->id }} })">
@@ -19,6 +22,9 @@
                         <span>Edit</span>
                     </a>
                 </li>
+            @endcan
+
+            @can('assign-locations')
                 <li>
                     <a class="dropdown-item d-flex align-items-center gap-2"
                        href="javascript:void(0)"
@@ -27,6 +33,22 @@
                         <span>Assign Location</span>
                     </a>
                 </li>
+            @endcan
+
+            @can('unassign-locations')
+                @if($employee->assignments->isNotEmpty())
+                    <li>
+                        <a class="dropdown-item d-flex align-items-center gap-2"
+                           href="javascript:void(0)"
+                           wire:click="$dispatch('unassign-work-location',{ id : {{ $employee->id }} })">
+                            <iconify-icon icon="mdi:map-marker-radius-outline" class="text-danger w-4 h-4"></iconify-icon>
+                            <span>Unassign Location</span>
+                        </a>
+                    </li>
+                @endif
+            @endcan
+
+            @can('manage-zkbio-areas')
                 @if($employee->organization?->zkbio_enabled && $employee->zkbio_pin)
                     <li>
                         <a href="javascript:void(0)"
@@ -37,34 +59,45 @@
                         </a>
                     </li>
                 @endif
+            @endcan
+
+            @can('sync-to-zkbio')
                 @if($employee->organization?->zkbio_enabled && $employee->zkbio_pin)
                     <li>
                         <a href="javascript:void(0)"
                            class="dropdown-item d-flex align-items-center gap-2"
                            wire:click="$dispatch('sync-to-zkbio', { employeeId: {{ $employee->id }} })">
-                        <iconify-icon icon="mdi:fingerprint" style="font-size:15px; color:#e65100;"></iconify-icon>
+                            <iconify-icon icon="mdi:fingerprint" style="font-size:15px; color:#e65100;"></iconify-icon>
                             Sync to ZKBio
                         </a>
                     </li>
                 @endif
-                <li>
-                    @if($employee->active)
+            @endcan
+
+            @if($employee->active)
+                @can('deactivate-employees')
+                    <li>
                         <a class="dropdown-item d-flex align-items-center gap-2 text-warning" href="javascript:void(0)"
                            wire:click="$dispatch('deactivate-employee', { id: {{ $employee->id }} })">
                             <iconify-icon icon="mdi:account-off-outline" class="text-warning w-4 h-4"></iconify-icon>
                             <span>Deactivate</span>
                         </a>
-                    @else
+                    </li>
+                @endcan
+            @else
+                @can('activate-employees')
+                    <li>
                         <a class="dropdown-item d-flex align-items-center gap-2 text-success" href="javascript:void(0)"
                            wire:click="$dispatch('activate-employee', { id: {{ $employee->id }} })">
                             <iconify-icon icon="mdi:account-check-outline" class="text-success w-4 h-4"></iconify-icon>
                             <span>Activate</span>
                         </a>
-                    @endif
-                </li>
-                <li>
-                    <hr class="dropdown-divider">
-                </li>
+                    </li>
+                @endcan
+            @endif
+
+            @can('delete-employees')
+                <li><hr class="dropdown-divider"></li>
                 <li>
                     <a class="dropdown-item d-flex align-items-center gap-2 text-danger" href="javascript:void(0)"
                        wire:click="$dispatch('delete-employee', { id: {{ $employee->id }}, name: '{{ $employee->name }}' })"
@@ -73,16 +106,7 @@
                         <span>Delete</span>
                     </a>
                 </li>
-            @else
-                <li>
-                    <a class="dropdown-item d-flex align-items-center gap-2"
-                       href="javascript:void(0)"
-                       wire:click="$dispatch('unassign-work-location',{ id : {{ $employee->id }} })">
-                        <iconify-icon icon="mdi:map-marker-radius-outline" class="text-success w-4 h-4"></iconify-icon>
-                        <span>Unassign Location</span>
-                    </a>
-                </li>
-            @endif
+            @endcan
         </ul>
     </div>
 </div>

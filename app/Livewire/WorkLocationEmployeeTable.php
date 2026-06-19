@@ -67,8 +67,7 @@ class WorkLocationEmployeeTable extends DataTableComponent
 
             // 🕓 Shift
             Column::make("Shift", "shift_id")
-                ->format(fn($value, $row) =>
-                $row->shift?->name
+                ->format(fn($value, $row) => $row->shift?->name
                     ? "<span class='fw-semibold text-primary'>{$row->shift->name}</span>"
                     : "<span class='text-muted'>—</span>"
                 )
@@ -110,8 +109,7 @@ class WorkLocationEmployeeTable extends DataTableComponent
 
             // 🏢 Department
             Column::make("Department", "department_id")
-                ->format(fn($value, $row) =>
-                $row->department?->name
+                ->format(fn($value, $row) => $row->department?->name
                     ? "<span class='badge bg-light text-dark border px-3 py-2'>{$row->department->name}</span>"
                     : "<span class='text-muted'>—</span>"
                 )
@@ -130,7 +128,10 @@ class WorkLocationEmployeeTable extends DataTableComponent
 
             // ⚙️ Actions
             Column::make("Action")
-                ->label(fn($row) => view('livewire.admin.employees.actions', ['employee' => $row])),
+                ->label(fn($row) => view('livewire.admin.employees.actions', [
+                    'employee' => $row,
+                    'workLocationId' => $this->workLocationId,
+                ])),
         ];
     }
 
