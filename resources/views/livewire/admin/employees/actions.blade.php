@@ -23,7 +23,6 @@
                     </a>
                 </li>
             @endcan
-
             @can('assign-locations')
                 <li>
                     <a class="dropdown-item d-flex align-items-center gap-2"
