@@ -284,7 +284,6 @@ class SyncZKBioAttendance extends Command
         $shift = $this->classifier->resolveShift($employee, $firstPunch, $date);
 
         // Clock-in
-        // Clock-in (FIXED: Populate shift definitions even if check_in_time already exists from an open row state)
         if ($c['check_in']) {
             if (!$attendance->check_in_time) {
                 $attendance->check_in_time = $c['check_in'];
@@ -516,6 +515,15 @@ class SyncZKBioAttendance extends Command
         $start = $checkpoint
             ? Carbon::parse($checkpoint->synced_until)->subMinutes(2)->format('Y-m-d H:i:s')
             : "{$date} 00:00:00";
+
+        // ── GUARD: never let the start time sit in the future relative to now.
+        // A corrupted/future-dated checkpoint (e.g. from a --full sync that
+        // saved 23:59:59 as synced_until) would otherwise create an inverted
+        // window (start > end), which silently returns zero transactions from
+        // ZKBio and causes downstream records to look like missed punches.
+        if (Carbon::parse($start)->isAfter(now())) {
+            $start = "{$date} 00:00:00";
+        }
 
         return [$start, now()->format('Y-m-d H:i:s'), 'incremental'];
     }
