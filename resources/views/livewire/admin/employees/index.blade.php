@@ -1885,24 +1885,28 @@ new class extends Component {
                     @endif
 
                     {{-- ★ IMPORT TOGGLE BUTTON ★ --}}
-                    <button
-                        wire:click="toggleImportPanel"
-                        type="button"
-                        class="btn d-flex align-items-center gap-2"
-                        style="background:#fff; border:1.5px solid var(--primary-color) !important; color:var(--primary-color) !important; font-weight:600; border-radius:8px; font-size:0.875rem; padding:8px 14px;"
-                    >
-                        <iconify-icon icon="{{ $showImportPanel ? 'mdi:close' : 'mdi:upload' }}"
-                                      style="font-size:17px;"></iconify-icon>
-                        {{ $showImportPanel ? 'Close Import' : 'Import ' . ($isStudentOrg ? ($personType === 'student' ? 'Students' : 'Staff') : 'Employees') }}
-                    </button>
+                    @can('add-employees')
+                        <button
+                            wire:click="toggleImportPanel"
+                            type="button"
+                            class="btn d-flex align-items-center gap-2"
+                            style="background:#fff; border:1.5px solid var(--primary-color) !important; color:var(--primary-color) !important; font-weight:600; border-radius:8px; font-size:0.875rem; padding:8px 14px;"
+                        >
+                            <iconify-icon icon="{{ $showImportPanel ? 'mdi:close' : 'mdi:upload' }}"
+                                          style="font-size:17px;"></iconify-icon>
+                            {{ $showImportPanel ? 'Close Import' : 'Import ' . ($isStudentOrg ? ($personType === 'student' ? 'Students' : 'Staff') : 'Employees') }}
+                        </button>
+                    @endcan
 
                     {{-- Single create (existing) --}}
-                    <a href="javascript:void(0)"
-                       class="btn btn-primary d-flex align-items-center gap-2"
-                       data-bs-toggle="modal" data-bs-target="#employeeModal">
-                        <i class="ti ti-user-plus fs-5"></i>
-                        Add {{ $isStudent ? 'Student' : ($isStudentOrg ? 'Staff' : 'Employee') }}
-                    </a>
+                    @can('add-employees')
+                        <a href="javascript:void(0)"
+                           class="btn btn-primary d-flex align-items-center gap-2"
+                           data-bs-toggle="modal" data-bs-target="#employeeModal">
+                            <i class="ti ti-user-plus fs-5"></i>
+                            Add {{ $isStudent ? 'Student' : ($isStudentOrg ? 'Staff' : 'Employee') }}
+                        </a>
+                    @endcan
                 </div>
             </div>
 
