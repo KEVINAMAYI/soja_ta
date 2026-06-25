@@ -214,7 +214,10 @@ class SyncZKBioAttendance extends Command
             }
         }
 
-        $this->saveCheckpoint($date, $endDatetime);
+        // Only save checkpoint for incremental/full — not custom
+        if ($mode !== 'custom') {
+            $this->saveCheckpoint($date, $endDatetime);
+        }
 
         $this->line('');
         $this->info("=== Done : {$processed} processed  |  {$skipped} skipped  |  {$failed} failed ===");

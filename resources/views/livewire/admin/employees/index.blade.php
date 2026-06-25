@@ -1238,8 +1238,34 @@ new class extends Component {
             }
 
             DB::commit();
-            app(ZKBioPersonService::class, ['organization' => $org])->syncPerson($employee->fresh());
+
+            // ZKBio sync
+            if ($org->zkbio_sync_enabled && $org->zkbio_base_url && $org->zkbio_access_token) {
+                try {
+                    $fresh = $employee->fresh();
+                    app(ZKBioPersonService::class, ['organization' => $org])->syncPerson($fresh);
+
+                    // Assign to ALL areas
+                    $allAreas = \App\Models\ZkbioArea::where('organization_id', $org->id)
+                        ->where('area_code', '>', 5)
+                        ->get();
+
+                    if ($allAreas->isNotEmpty()) {
+                        $zkService = app(\App\Services\ZKBioPersonService::class, ['organization' => $org]);
+                        $areaCodes = $allAreas->pluck('area_code')->toArray();
+                        $zkService->syncEmployeeAreas($fresh, $areaCodes);
+                        $fresh->zkbioAreas()->sync($allAreas->pluck('id')->toArray());
+                    }
+
+                } catch (\Throwable $zkErr) {
+                    \Log::warning("ZKBio sync failed for new employee {$employee->name}", [
+                        'error' => $zkErr->getMessage()
+                    ]);
+                }
+            }
+
             $this->dispatch('hide-employee-modal');
+
             LivewireAlert::title('Awesome!')->text($isStudent ? 'Student created successfully.' : 'Staff member created successfully.')->success()->toast()->position('top-end')->show();
             $this->resetForm();
             $this->dispatch('refreshDatatable');
