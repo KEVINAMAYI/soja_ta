@@ -372,6 +372,39 @@ new class extends Component {
         }
     }
 
+    public function syncToday(): void
+    {
+        try {
+            $org = auth()->user()->employee->organization;
+            if (!$org->zkbio_enabled) return;
+
+            $startDate = now()->startOfDay()->format('Y-m-d H:i:s');
+            $endDate   = now()->format('Y-m-d H:i:s');
+
+            \Illuminate\Support\Facades\Artisan::call('zkbio:sync', [
+                '--from' => $startDate,
+                '--to'   => $endDate,
+            ]);
+
+            $this->loadSummaryStats();
+            $this->dispatch('date-range-updated',
+                startDate: $this->startDate,
+                endDate: $this->endDate,
+                status: $this->filterStatus,
+                grade: $this->filterGrade,
+            );
+
+            LivewireAlert::title('Synced!')
+                ->text('Attendance synced from midnight to now.')
+                ->success()->toast()->position('top-end')->show();
+
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::warning('Manual sync failed: ' . $e->getMessage());
+            LivewireAlert::title('Sync Failed!')
+                ->text($e->getMessage())
+                ->error()->toast()->position('top-end')->show();
+        }
+    }
 
     private function loadSchoolSummary(int $orgId): void
     {
@@ -449,7 +482,7 @@ new class extends Component {
 
         // Absent = not present AND no other status record
         $accountedForIds = $attendances
-            ->whereIn('status', ['clocked_in', 'clocked_out', 'on_leave', 'sick_off', 'off_shift', 'on_break','not_scheduled'])
+            ->whereIn('status', ['clocked_in', 'clocked_out', 'on_leave', 'sick_off', 'off_shift', 'on_break', 'not_scheduled'])
             ->pluck('employee_id')->unique();
 
         $this->absentCount = max(0, $this->totalEmployees - $accountedForIds->count());
@@ -1219,17 +1252,21 @@ new class extends Component {
                 <div class="row align-items-end mb-4 justify-content-end">
                     <div class="col-12 d-flex align-items-center justify-content-end gap-2 flex-wrap">
                         @if($zkbioEnabled)
-                            <button wire:click="syncNow" wire:loading.attr="disabled" wire:target="syncNow"
-                                    class="btn btn-warning btn-sm d-flex align-items-center gap-2"
-                                    style="height: 38px;">
-                            <span wire:loading.class="d-none" wire:target="syncNow"
-                                  class="d-flex align-items-center gap-2">
-                                <iconify-icon icon="mdi:refresh" style="font-size:16px;"></iconify-icon> Sync Now
-                            </span>
-                                <span wire:loading.class.remove="d-none" wire:target="syncNow"
+                            <button wire:click="syncToday"
+                                    wire:loading.attr="disabled"
+                                    wire:target="syncToday"
+                                    type="button"
+                                    class="btn d-flex align-items-center gap-2"
+                                    style="height:38px; background:#fff; border:1.5px solid #f59e0b; color:#b45309; font-weight:600; border-radius:8px; font-size:0.82rem; padding:6px 16px;">
+        <span wire:loading.class="d-none" wire:target="syncToday"
+              class="d-flex align-items-center gap-2">
+            <iconify-icon icon="mdi:database-sync-outline" style="font-size:17px;"></iconify-icon>
+            Sync Today
+        </span>
+                                <span wire:loading.class.remove="d-none" wire:target="syncToday"
                                       class="d-none d-flex align-items-center gap-2">
-                                <span class="spinner-border spinner-border-sm"></span> Syncing...
-                            </span>
+            <span class="spinner-border spinner-border-sm"></span> Syncing...
+        </span>
                             </button>
                         @endif
                         @if (str_contains($filterStatus ?? '', 'sick_off'))
