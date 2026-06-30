@@ -73,6 +73,52 @@ new class extends Component {
         return $query->orderByDesc('submitted_at')->paginate(10);
     }
 
+    public function export()
+    {
+        $orgId = auth()->user()->employee?->organization_id;
+
+        $query = CheckInApprovalRequest::with(['employee', 'resolvedBy'])
+            ->where('organization_id', $orgId);
+
+        if ($this->filter !== 'all') {
+            $query->where('status', $this->filter);
+        }
+
+        if ($this->search) {
+            $query->whereHas('employee', function ($q) {
+                $q->where('name', 'like', "%{$this->search}%")
+                    ->orWhere('id_number', 'like', "%{$this->search}%");
+            });
+        }
+
+        $rows = $query->orderByDesc('submitted_at')->get();
+
+        $filename = 'checkin-requests-' . now()->format('Y-m-d-His') . '.csv';
+
+        return response()->streamDownload(function () use ($rows) {
+            $out = fopen('php://output', 'w');
+            fputcsv($out, ['Employee', 'ID Number', 'Date', 'Check-in Time', 'Minutes Late', 'Submitted At', 'Status', 'Resolved By', 'Resolved At']);
+
+            foreach ($rows as $req) {
+                fputcsv($out, [
+                    $req->employee->name ?? '',
+                    $req->employee->id_number ?? '',
+                    $req->date?->format('Y-m-d'),
+                    $req->check_in_time?->format('H:i'),
+                    $req->minutes_late,
+                    $req->submitted_at?->format('Y-m-d H:i'),
+                    ucfirst($req->status),
+                    $req->resolvedBy->name ?? '',
+                    $req->status !== 'pending' ? $req->updated_at?->format('Y-m-d H:i') : '',
+                ]);
+            }
+
+            fclose($out);
+        }, $filename, [
+            'Content-Type' => 'text/csv',
+        ]);
+    }
+
     public function approve(int $requestId): void
     {
         $this->actOn($requestId, 'approved');
@@ -106,43 +152,6 @@ new class extends Component {
     }
 
 }; ?>
-
-@push('styles')
-    <style>
-        /* Make Bootstrap's default pagination match this page's palette */
-        .pagination {
-            margin-bottom: 0;
-            gap: .25rem;
-        }
-
-        .pagination .page-link {
-            border: 1px solid #e2e8f0;
-            border-radius: 8px !important;
-            color: #475569;
-            font-size: .82rem;
-            padding: .35rem .7rem;
-            margin: 0;
-        }
-
-        .pagination .page-item.active .page-link {
-            background: #072639;
-            border-color: #072639;
-            color: #fff;
-        }
-
-        .pagination .page-item.disabled .page-link {
-            color: #cbd5e1;
-            background: #fff;
-            border-color: #f1f5f9;
-        }
-
-        .pagination .page-link:hover {
-            background: #f8fafc;
-            border-color: #cbd5e1;
-        }
-    </style>
-@endpush
-
 
 <div class="row">
     <div class="col-12">
@@ -227,7 +236,7 @@ new class extends Component {
                         </div>
 
                         {{-- Export --}}
-                        <button class="btn btn-sm d-flex align-items-center gap-1"
+                        <button wire:click="export" class="btn btn-sm d-flex align-items-center gap-1"
                                 style="background:#072639;color:#fff;border-color:#072639;">
                             <iconify-icon icon="mdi:download-outline"></iconify-icon>
                             Export
@@ -390,12 +399,12 @@ new class extends Component {
 
                 {{-- Pagination — Bootstrap-styled, single location --}}
                 @if($this->requests->hasPages())
-                    <div class="px-4 py-3 border-top d-flex align-items-center justify-content-between flex-wrap gap-2"
+                    <div class="px-4 py-3 border-top d-flex align-items-center justify-content-between flex-wrap gap-3"
                          style="background:#fafafa;">
-                        <span class="text-muted" style="font-size:.78rem;">
+                        <span class="text-muted mb-0" style="font-size:.78rem;white-space:nowrap;">
                             Showing {{ $this->requests->firstItem() }}–{{ $this->requests->lastItem() }} of {{ $this->requests->total() }}
                         </span>
-                        <nav>
+                        <nav class="d-flex align-items-center">
                             {{ $this->requests->onEachSide(1)->links() }}
                         </nav>
                     </div>
@@ -407,3 +416,32 @@ new class extends Component {
     </div>
 </div>
 
+<style>
+    /* Make Bootstrap's default pagination match this page's palette */
+    .pagination {
+        margin-bottom: 0;
+        gap: .25rem;
+    }
+    .pagination .page-link {
+        border: 1px solid #e2e8f0;
+        border-radius: 8px !important;
+        color: #475569;
+        font-size: .82rem;
+        padding: .35rem .7rem;
+        margin: 0;
+    }
+    .pagination .page-item.active .page-link {
+        background: #072639;
+        border-color: #072639;
+        color: #fff;
+    }
+    .pagination .page-item.disabled .page-link {
+        color: #cbd5e1;
+        background: #fff;
+        border-color: #f1f5f9;
+    }
+    .pagination .page-link:hover {
+        background: #f8fafc;
+        border-color: #cbd5e1;
+    }
+</style>
