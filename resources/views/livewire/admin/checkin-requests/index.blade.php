@@ -1,5 +1,6 @@
 <?php
 
+use Illuminate\Pagination\Paginator;
 use App\Models\CheckInApprovalRequest;
 use App\Services\CheckInApprovalService;
 use Illuminate\Support\Facades\Route;
@@ -17,6 +18,12 @@ new class extends Component {
     public string $search = '';
 
     public array $breadcrumbItems = [];
+
+    public function boot(): void
+    {
+        // Use Bootstrap-themed pagination links so they match this page's styling
+        Paginator::useBootstrapFive();
+    }
 
     public function mount(): void
     {
@@ -49,7 +56,7 @@ new class extends Component {
     {
         $orgId = auth()->user()->employee?->organization_id;
 
-        $query = CheckInApprovalRequest::with(['employee', 'activeWindowLog'])
+        $query = CheckInApprovalRequest::with(['employee', 'activeWindowLog', 'resolvedBy'])
             ->where('organization_id', $orgId);
 
         if ($this->filter !== 'all') {
@@ -99,6 +106,43 @@ new class extends Component {
     }
 
 }; ?>
+
+@push('styles')
+    <style>
+        /* Make Bootstrap's default pagination match this page's palette */
+        .pagination {
+            margin-bottom: 0;
+            gap: .25rem;
+        }
+
+        .pagination .page-link {
+            border: 1px solid #e2e8f0;
+            border-radius: 8px !important;
+            color: #475569;
+            font-size: .82rem;
+            padding: .35rem .7rem;
+            margin: 0;
+        }
+
+        .pagination .page-item.active .page-link {
+            background: #072639;
+            border-color: #072639;
+            color: #fff;
+        }
+
+        .pagination .page-item.disabled .page-link {
+            color: #cbd5e1;
+            background: #fff;
+            border-color: #f1f5f9;
+        }
+
+        .pagination .page-link:hover {
+            background: #f8fafc;
+            border-color: #cbd5e1;
+        }
+    </style>
+@endpush
+
 
 <div class="row">
     <div class="col-12">
@@ -292,6 +336,13 @@ new class extends Component {
                                                           style="font-size:.85rem;"></iconify-icon> Rejected
                                         </span>
                                     @endif
+
+                                    {{-- Resolved timestamp --}}
+                                    @if($req->status !== 'pending' && $req->updated_at)
+                                        <div style="font-size:.7rem;color:#94a3b8;margin-top:.3rem;">
+                                            {{ $req->updated_at->format('d M Y · h:i A') }}
+                                        </div>
+                                    @endif
                                 </td>
 
                                 {{-- Action --}}
@@ -337,14 +388,16 @@ new class extends Component {
                     </table>
                 </div>
 
-                {{-- Pagination — single location --}}
+                {{-- Pagination — Bootstrap-styled, single location --}}
                 @if($this->requests->hasPages())
                     <div class="px-4 py-3 border-top d-flex align-items-center justify-content-between flex-wrap gap-2"
                          style="background:#fafafa;">
-        <span class="text-muted" style="font-size:.78rem;">
-            Showing {{ $this->requests->firstItem() }}–{{ $this->requests->lastItem() }} of {{ $this->requests->total() }}
-        </span>
-                        {{ $this->requests->links() }}
+                        <span class="text-muted" style="font-size:.78rem;">
+                            Showing {{ $this->requests->firstItem() }}–{{ $this->requests->lastItem() }} of {{ $this->requests->total() }}
+                        </span>
+                        <nav>
+                            {{ $this->requests->onEachSide(1)->links() }}
+                        </nav>
                     </div>
                 @endif
 
@@ -353,3 +406,4 @@ new class extends Component {
 
     </div>
 </div>
+
