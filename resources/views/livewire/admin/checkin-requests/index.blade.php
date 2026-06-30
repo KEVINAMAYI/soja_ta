@@ -153,6 +153,44 @@ new class extends Component {
 
 }; ?>
 
+
+@push('styles')
+    <style>
+        /* Make Bootstrap's default pagination match this page's palette */
+        .pagination {
+            margin-bottom: 0;
+            gap: .25rem;
+        }
+
+        .pagination .page-link {
+            border: 1px solid #e2e8f0;
+            border-radius: 8px !important;
+            color: #475569;
+            font-size: .82rem;
+            padding: .35rem .7rem;
+            margin: 0;
+        }
+
+        .pagination .page-item.active .page-link {
+            background: #072639;
+            border-color: #072639;
+            color: #fff;
+        }
+
+        .pagination .page-item.disabled .page-link {
+            color: #cbd5e1;
+            background: #fff;
+            border-color: #f1f5f9;
+        }
+
+        .pagination .page-link:hover {
+            background: #f8fafc;
+            border-color: #cbd5e1;
+        }
+    </style>
+@endpush
+
+
 <div class="row">
     <div class="col-12">
 
@@ -416,32 +454,3 @@ new class extends Component {
     </div>
 </div>
 
-<style>
-    /* Make Bootstrap's default pagination match this page's palette */
-    .pagination {
-        margin-bottom: 0;
-        gap: .25rem;
-    }
-    .pagination .page-link {
-        border: 1px solid #e2e8f0;
-        border-radius: 8px !important;
-        color: #475569;
-        font-size: .82rem;
-        padding: .35rem .7rem;
-        margin: 0;
-    }
-    .pagination .page-item.active .page-link {
-        background: #072639;
-        border-color: #072639;
-        color: #fff;
-    }
-    .pagination .page-item.disabled .page-link {
-        color: #cbd5e1;
-        background: #fff;
-        border-color: #f1f5f9;
-    }
-    .pagination .page-link:hover {
-        background: #f8fafc;
-        border-color: #cbd5e1;
-    }
-</style>
