@@ -156,7 +156,14 @@ new class extends Component {
 
 @push('styles')
     <style>
-        /* Make Bootstrap's default pagination match this page's palette */
+
+        .text-muted {
+            margin-top: 10px;
+            margin-right: 10px;
+            --bs-text-opacity: 1;
+            color: var(--bs-secondary-color) !important;
+        }
+
         .pagination {
             margin-bottom: 0;
             gap: .25rem;
