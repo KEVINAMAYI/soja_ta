@@ -211,8 +211,8 @@ class CheckInApprovalController extends Controller
             'check_in_time'   => $r->check_in_time?->format('H:i:s'),
             'minutes_late'    => $r->minutes_late,
             'current_window'  => $r->current_window,
-            'submitted_at'    => $r->submitted_at?->toIso8601String(),
-            'resolved_at'     => $r->resolved_at?->toIso8601String(),
+            'submitted_at'    => $r->submitted_at?->utc()->toIso8601String(),
+            'resolved_at'     => $r->resolved_at?->utc()->toIso8601String(),
             'notes'           => $r->notes,
             'employee'        => $r->employee ? [
                 'id'          => $r->employee->id,
@@ -221,9 +221,9 @@ class CheckInApprovalController extends Controller
                 'department'  => $r->employee->department?->name,
             ] : null,
             'active_window'   => $r->activeWindowLog ? [
-                'window_number'  => $r->activeWindowLog->window_number,
-                'approver_role'  => $r->activeWindowLog->approver_role,
-                'expires_at'     => $r->activeWindowLog->expires_at?->toIso8601String(),
+                'window_number'     => $r->activeWindowLog->window_number,
+                'approver_role'     => $r->activeWindowLog->approver_role,
+                'expires_at'        => $r->activeWindowLog->expires_at?->utc()->toIso8601String(),
                 'minutes_remaining' => max(0, now()->diffInMinutes($r->activeWindowLog->expires_at, false)),
             ] : null,
         ];
@@ -233,14 +233,13 @@ class CheckInApprovalController extends Controller
                 'window_number'  => $l->window_number,
                 'approver_role'  => $l->approver_role,
                 'status'         => $l->status,
-                'opened_at'      => $l->opened_at?->toIso8601String(),
-                'expires_at'     => $l->expires_at?->toIso8601String(),
-                'closed_at'      => $l->closed_at?->toIso8601String(),
+                'opened_at'      => $l->opened_at?->utc()->toIso8601String(),
+                'expires_at'     => $l->expires_at?->utc()->toIso8601String(),
+                'closed_at'      => $l->closed_at?->utc()->toIso8601String(),
                 'on_timeout'     => $l->on_timeout_action,
                 'actioned_by'    => $l->actionedBy?->name,
             ])->toArray();
-
-            $data['resolved_by'] = $r->resolvedBy?->name;
+            $data['resolved_by']  = $r->resolvedBy?->name;
             $data['attendance_id'] = $r->attendance_id;
         }
 
