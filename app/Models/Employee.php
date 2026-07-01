@@ -36,7 +36,10 @@ class Employee extends Model
         'is_student',
         'ad_employee_id',
         'division',
-        'section'
+        'section',
+        'ad_upn',
+        'ad_synced_at',
+        'ad_object_id'
     ];
 
 

@@ -590,17 +590,20 @@ new class extends Component {
 
 
         foreach ($toDeactivate as $emp) {
-            try {
-                // Remove from ZKBio
-                if ($emp->zkbio_pin && $org->zkbio_sync_enabled) {
+            // Attempt ZKBio removal independently — its failure must not block the local soft-delete
+            if ($emp->zkbio_pin && $org->zkbio_sync_enabled) {
+                try {
                     app(ZKBioPersonService::class, ['organization' => $org])
                         ->deletePerson($emp->zkbio_pin);
+                } catch (\Throwable $zkErr) {
+                    Log::warning("ZKBio removal failed for employee {$emp->id}, proceeding with local deactivation anyway", [
+                        'error' => $zkErr->getMessage()
+                    ]);
                 }
+            }
 
-                // Detach ZKBio areas
+            try {
                 $emp->zkbioAreas()->detach();
-
-                // Soft delete
                 $emp->delete();
 
                 $results[] = [
@@ -615,7 +618,7 @@ new class extends Component {
                 $softDeleted++;
 
             } catch (\Throwable $e) {
-                Log::warning("AD cleanup failed for employee {$emp->id}", ['error' => $e->getMessage()]);
+                Log::warning("Local soft-delete failed for employee {$emp->id}", ['error' => $e->getMessage()]);
             }
         }
 // ── END AD CLEANUP ──────────────────────────────────────────────────────────
