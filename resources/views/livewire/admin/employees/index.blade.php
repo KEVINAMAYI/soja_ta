@@ -371,36 +371,29 @@ new class extends Component {
     {
         if (empty($this->adPreview)) return;
 
-        // Increase execution time for large AD syncs
-        set_time_limit(0); // unlimited
+        set_time_limit(0);
         ini_set('max_execution_time', 0);
 
         $org = auth()->user()->employee->organization;
-
         $defaultShift = $org->shifts->firstWhere('name', 'Day Shift')
             ?? $org->shifts->firstWhere('name', 'Day')
             ?? $org->shifts->first();
-
         $defaultDept = $org->departments->first();
-
-        $defaultLocation = WorkLocation::where('organization_id', $org->id)
-            ->where('is_default', true)->first()
+        $defaultLocation = WorkLocation::where('organization_id', $org->id)->where('is_default', true)->first()
             ?? WorkLocation::where('organization_id', $org->id)->first();
+
+        $rows = empty($this->selectedAdUsers)
+            ? $this->adPreview
+            : array_filter($this->adPreview, fn($r) => in_array($r['ad_id'], $this->selectedAdUsers));
 
         $results = [];
         $imported = 0;
         $updated = 0;
         $errors = 0;
 
-        $rows = empty($this->selectedAdUsers)
-            ? $this->adPreview
-            : array_filter($this->adPreview,
-                fn($r) => in_array($r['ad_id'], $this->selectedAdUsers));
-
         foreach ($rows as $row) {
             try {
                 DB::beginTransaction();
-
                 $phone = $row['phone'] === '—' ? null : $row['phone'];
 
                 $existing = Employee::where('organization_id', $org->id)
@@ -408,7 +401,6 @@ new class extends Component {
                         $q->where('ad_object_id', $row['ad_id'])
                             ->orWhere('email', $row['email'])
                             ->orWhere('id_number', 'AD-' . substr($row['ad_id'], 0, 8));
-
                         if (!empty($row['employee_id'])) {
                             $q->orWhere('ad_employee_id', $row['employee_id']);
                         }
@@ -417,15 +409,14 @@ new class extends Component {
                 if ($existing) {
                     $existing->update([
                         'name' => $row['name'],
-                        'email' => $row['email'] ?: $existing->email, // ← update email from AD
+                        'email' => $row['email'] ?: $existing->email,
                         'phone' => $phone ?? $existing->phone,
                         'ad_object_id' => $row['ad_id'],
                         'ad_upn' => $row['upn'],
                         'ad_synced_at' => now(),
-                        'ad_employee_id' => $row['employee_id'],  // ← add
-                        'section' => $row['section'],       // ← add
-                        'division' => $row['division'],      // ← add
-                        // update department if AD has one and we can resolve it
+                        'ad_employee_id' => $row['employee_id'],
+                        'section' => $row['section'],
+                        'division' => $row['division'],
                         'department_id' => $this->resolveDepartment($org, $row['department']) ?? $existing->department_id,
                     ]);
 
@@ -435,12 +426,8 @@ new class extends Component {
 
                     DB::commit();
 
-
-                    // Assign a ZKBio PIN if the employee doesn't have one yet
                     if (!$existing->zkbio_pin && $org->zkbio_enabled) {
-                        $existing->update([
-                            'zkbio_pin' => Employee::generateZKBioPin($org->id)
-                        ]);
+                        $existing->update(['zkbio_pin' => Employee::generateZKBioPin($org->id)]);
                     }
 
                     $zkStatus = 'skipped';
@@ -448,8 +435,7 @@ new class extends Component {
                         $zkStatus = 'no_pin';
                     } elseif ($org->zkbio_sync_enabled && $org->zkbio_base_url && $org->zkbio_access_token) {
                         try {
-                            $synced = app(ZKBioPersonService::class, ['organization' => $org])
-                                ->syncPerson($existing->fresh());
+                            $synced = app(ZKBioPersonService::class, ['organization' => $org])->syncPerson($existing->fresh());
                             $zkStatus = $synced ? 'synced' : 'zk_failed: API returned false';
                         } catch (\Throwable $zkErr) {
                             $zkStatus = 'zk_failed: ' . $zkErr->getMessage();
@@ -457,31 +443,18 @@ new class extends Component {
                         }
                     }
 
-
                     if (!empty($this->defaultAdSyncAreas) && $existing->zkbio_pin) {
-                        $zkService = app(\App\Services\ZKBioPersonService::class, ['organization' => $org]);
-                        $zkService->syncEmployeeAreas($existing, $this->defaultAdSyncAreas);
+                        app(ZKBioPersonService::class, ['organization' => $org])
+                            ->syncEmployeeAreas($existing, $this->defaultAdSyncAreas);
                     }
 
-
-                    $results[] = [
-                        'name' => $row['name'],
-                        'email' => $row['email'],
-                        'status' => 'updated',
-                        'zk' => $zkStatus,
-                        'message' => 'Details updated from AD',
-                    ];
+                    $results[] = ['name' => $row['name'], 'email' => $row['email'], 'status' => 'updated', 'zk' => $zkStatus, 'message' => 'Details updated from AD'];
                     $updated++;
 
                 } else {
-                    // Create user account
                     $email = $row['email'] ?: "ad_{$row['ad_id']}@{$org->id}.local";
 
-                    $user = User::create([
-                        'name' => $row['name'],
-                        'email' => $email,
-                        'password' => Hash::make('password'),
-                    ]);
+                    $user = User::create(['name' => $row['name'], 'email' => $email, 'password' => Hash::make('password')]);
 
                     $employee = Employee::create([
                         'name' => $row['name'],
@@ -490,7 +463,6 @@ new class extends Component {
                         'shift_id' => $defaultShift?->id,
                         'shift_status' => 'on_shift',
                         'organization_id' => $org->id,
-                        'department_id' => $defaultDept?->id,
                         'id_number' => 'AD-' . substr($row['ad_id'], 0, 8),
                         'active' => true,
                         'user_id' => $user->id,
@@ -515,130 +487,126 @@ new class extends Component {
                         );
                     }
 
-
                     DB::commit();
 
-
-                    // ZKBio sync — only if enabled for this org
                     $zkStatus = 'skipped';
                     if ($org->zkbio_sync_enabled && $org->zkbio_base_url && $org->zkbio_access_token) {
                         try {
-                            app(ZKBioPersonService::class, ['organization' => $org])
-                                ->syncPerson($employee->fresh());
+                            app(ZKBioPersonService::class, ['organization' => $org])->syncPerson($employee->fresh());
                             $zkStatus = 'synced';
                         } catch (\Throwable $zkErr) {
                             $zkStatus = 'zk_failed: ' . $zkErr->getMessage();
-                            Log::warning("ZKBio sync failed for AD employee {$row['name']}", [
-                                'error' => $zkErr->getMessage()
-                            ]);
+                            Log::warning("ZKBio sync failed for AD employee {$row['name']}", ['error' => $zkErr->getMessage()]);
                         }
 
-                        // Assign default areas
                         if (!empty($this->defaultAdSyncAreas) && $employee->zkbio_pin) {
-                            $zkService = app(\App\Services\ZKBioPersonService::class, ['organization' => $org]);
-                            $zkService->assignPersonToAreas($employee, $this->defaultAdSyncAreas);
-                            $areaIds = \App\Models\ZkbioArea::where('organization_id', $org->id)
-                                ->whereIn('area_code', $this->defaultAdSyncAreas)
-                                ->pluck('id')->toArray();
+                            app(ZKBioPersonService::class, ['organization' => $org])
+                                ->assignPersonToAreas($employee, $this->defaultAdSyncAreas);
+                            $areaIds = ZkbioArea::where('organization_id', $org->id)
+                                ->whereIn('area_code', $this->defaultAdSyncAreas)->pluck('id')->toArray();
                             $employee->zkbioAreas()->sync($areaIds);
                         }
-
                     } else {
                         $zkStatus = 'skipped (ZKBio not enabled for this org)';
                     }
 
-                    $results[] = [
-                        'name' => $row['name'],
-                        'email' => $email,
-                        'status' => 'imported',
-                        'zk' => $zkStatus,
-                        'message' => 'Created from Active Directory',
-                    ];
+                    $results[] = ['name' => $row['name'], 'email' => $email, 'status' => 'imported', 'zk' => $zkStatus, 'message' => 'Created from Active Directory'];
                     $imported++;
                 }
 
             } catch (\Throwable $e) {
                 DB::rollBack();
-                $results[] = [
-                    'name' => $row['name'],
-                    'email' => $row['email'],
-                    'status' => 'error',
-                    'zk' => '—',
-                    'message' => $e->getMessage(),
-                ];
+                $results[] = ['name' => $row['name'], 'email' => $row['email'], 'status' => 'error', 'zk' => '—', 'message' => $e->getMessage()];
                 $errors++;
             }
         }
-
-
-        // ── AD CLEANUP: soft delete employees flagged in previewAdSync() ───────────
-        $softDeleted = 0;
-
-        $flaggedAdIds = collect($this->adPreview)
-            ->whereIn('action', ['disabled', 'removed'])
-            ->pluck('ad_id')
-            ->toArray();
-
-        $toDeactivate = Employee::where('organization_id', $org->id)
-            ->whereIn('ad_object_id', $flaggedAdIds)
-            ->whereNull('deleted_at')
-            ->get();
-
-        $actionByAdId = collect($this->adPreview)
-            ->whereIn('action', ['disabled', 'removed'])
-            ->pluck('action', 'ad_id');
-
-
-        foreach ($toDeactivate as $emp) {
-            // Attempt ZKBio removal independently — its failure must not block the local soft-delete
-            if ($emp->zkbio_pin && $org->zkbio_sync_enabled) {
-                try {
-                    app(ZKBioPersonService::class, ['organization' => $org])
-                        ->deletePerson($emp->zkbio_pin);
-                } catch (\Throwable $zkErr) {
-                    Log::warning("ZKBio removal failed for employee {$emp->id}, proceeding with local deactivation anyway", [
-                        'error' => $zkErr->getMessage()
-                    ]);
-                }
-            }
-
-            try {
-                $emp->zkbioAreas()->detach();
-                $emp->delete();
-
-                $results[] = [
-                    'name' => $emp->name,
-                    'email' => $emp->email,
-                    'status' => 'deactivated',
-                    'zk' => $emp->zkbio_pin ? 'removed' : 'skipped',
-                    'message' => ($actionByAdId[$emp->ad_object_id] ?? 'removed') === 'disabled'
-                        ? 'Disabled in Active Directory'
-                        : 'No longer exists in Active Directory',
-                ];
-                $softDeleted++;
-
-            } catch (\Throwable $e) {
-                Log::warning("Local soft-delete failed for employee {$emp->id}", ['error' => $e->getMessage()]);
-            }
-        }
-// ── END AD CLEANUP ──────────────────────────────────────────────────────────
-
-        $this->adDeactivatedCount = $softDeleted;  // ← here
 
         $this->adResults = $results;
         $this->adImportedCount = $imported;
         $this->adUpdatedCount = $updated;
         $this->adErrorCount = $errors;
+        $this->adDeactivatedCount = 0;
         $this->adSyncProcessed = true;
         $this->adLastSynced = now()->toDateTimeString();
 
         $this->dispatch('refreshDatatable');
         $this->loadSummaryStats();
 
-
         LivewireAlert::title('AD Sync Complete!')
-            ->text("{$imported} imported, {$updated} updated, {$errors} failed, {$softDeleted} deactivated.")
+            ->text("{$imported} imported, {$updated} updated, {$errors} failed.")
             ->success()->toast()->position('top-end')->show();
+    }
+
+
+    public function deactivateRemovedAdUsers(): void
+    {
+        $org = auth()->user()->employee->organization;
+        $excludedNames = ['Intern', 'windows', 'N. Tesla Meeting Room', 'Techsupport Identigate', 'Test Role', 'Test User'];
+
+        try {
+            $ad = app(MicrosoftAdService::class);
+            $liveUsers = $ad->filterValidUsers($ad->getAllUsers());
+
+            $liveAdIds = collect($liveUsers)->pluck('id')->toArray();
+            $disabledAdIds = collect($liveUsers)->filter(fn($u) => ($u['accountEnabled'] ?? true) === false)->pluck('id')->toArray();
+            $liveEmails = collect($liveUsers)->map(fn($u) => strtolower($u['mail'] ?? $u['userPrincipalName'] ?? ''))->filter()->values();
+            $liveNames = collect($liveUsers)->pluck('displayName')->map(fn($n) => strtolower(trim($n)));
+
+            $linked = Employee::where('organization_id', $org->id)
+                ->whereNotNull('ad_object_id')->whereNull('deleted_at')->get()
+                ->filter(fn($e) => in_array($e->ad_object_id, $disabledAdIds) || !in_array($e->ad_object_id, $liveAdIds))
+                ->mapWithKeys(fn($e) => [$e->id => in_array($e->ad_object_id, $disabledAdIds) ? 'disabled' : 'removed']);
+
+            $unlinked = Employee::where('organization_id', $org->id)
+                ->whereNull('ad_object_id')->whereNull('deleted_at')
+                ->where('employee_type', 'COSMOS')->get()
+                ->filter(function ($e) use ($liveEmails, $liveNames, $excludedNames) {
+                    if (in_array($e->name, $excludedNames)) return false;
+                    return !$liveEmails->contains(strtolower($e->email ?? ''))
+                        && !$liveNames->contains(strtolower(trim($e->name ?? '')));
+                })
+                ->mapWithKeys(fn($e) => [$e->id => 'removed']);
+
+            $toProcess = $linked->union($unlinked);
+
+            if ($toProcess->isEmpty()) {
+                LivewireAlert::title('Nothing to do')->text('No employees need deactivation right now.')->info()->toast()->position('top-end')->show();
+                return;
+            }
+
+            $deactivated = 0;
+            $failed = [];
+
+            foreach (Employee::whereIn('id', $toProcess->keys())->get() as $emp) {
+                if ($emp->zkbio_pin && $org->zkbio_sync_enabled) {
+                    try {
+                        app(ZKBioPersonService::class, ['organization' => $org])->deletePerson($emp->zkbio_pin);
+                    } catch (\Throwable $zkErr) {
+                        Log::warning("ZKBio removal failed for {$emp->id}", ['error' => $zkErr->getMessage()]);
+                    }
+                }
+                try {
+                    $emp->zkbioAreas()->detach();
+                    $emp->delete();
+                    $deactivated++;
+                } catch (\Throwable $e) {
+                    $failed[] = $emp->name;
+                    Log::warning("Soft-delete failed for {$emp->id}", ['error' => $e->getMessage()]);
+                }
+            }
+
+            $this->dispatch('refreshDatatable');
+            $this->loadSummaryStats();
+
+            $msg = "{$deactivated} employee(s) deactivated.";
+            if ($failed) $msg .= ' Failed: ' . implode(', ', $failed);
+
+            LivewireAlert::title('AD Cleanup Complete')->text($msg)->success()->toast()->position('top-end')->show();
+
+        } catch (\Throwable $e) {
+            LivewireAlert::title('Aborted')->text('AD fetch failed, no changes made: ' . $e->getMessage())->error()->toast()->position('top-end')->show();
+            Log::error('deactivateRemovedAdUsers failed', ['error' => $e->getMessage()]);
+        }
     }
 
 
@@ -2443,6 +2411,18 @@ new class extends Component {
                             {{ $showAdSyncPanel ? 'Close AD Sync' : 'Sync from AD' }}
                         </button>
                     @endif
+
+
+                    @if(!$isStudentOrg)
+                        <button wire:click="deactivateRemovedAdUsers" type="button"
+                                wire:confirm="This will soft-delete employees no longer in AD or disabled. Continue?"
+                                class="btn d-flex align-items-center gap-2"
+                                style="background:#fff; border:1.5px solid #dc2626 !important; color:#dc2626 !important; font-weight:600; border-radius:8px; font-size:0.875rem; padding:8px 14px;">
+                            <iconify-icon icon="mdi:account-remove" style="font-size:17px;"></iconify-icon>
+                            Deactivate Removed
+                        </button>
+                    @endif
+
 
                     {{-- ★ IMPORT TOGGLE BUTTON ★ --}}
                     <button
