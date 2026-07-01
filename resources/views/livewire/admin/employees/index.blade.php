@@ -2450,7 +2450,7 @@ new class extends Component {
     </span>
                             <iconify-icon icon="mdi:account-remove" wire:loading.remove
                                           wire:target="deactivateRemovedAdUsers" style="font-size:17px;"></iconify-icon>
-                            <span wire:loading.remove wire:target="deactivateRemovedAdUsers">Deactivate Removed</span>
+                            <span wire:loading.remove wire:target="deactivateRemovedAdUsers">Delete Removed</span>
                             <span wire:loading wire:target="deactivateRemovedAdUsers">Checking AD...</span>
                         </button>
                     @endif
