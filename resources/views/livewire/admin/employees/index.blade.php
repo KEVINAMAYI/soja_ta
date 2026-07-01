@@ -571,29 +571,23 @@ new class extends Component {
         }
 
 
-        // ── AD CLEANUP: soft delete employees disabled or removed from AD ──────────
+        // ── AD CLEANUP: soft delete employees flagged in previewAdSync() ───────────
         $softDeleted = 0;
 
-// Build set of active AD IDs from this sync
-        $activeAdIds = collect($this->adPreview)->pluck('ad_id')->toArray();
-
-// Also collect disabled users from the raw AD fetch
-        $allAdUsers = app(MicrosoftAdService::class)->getAllUsers();
-        $disabledAdIds = collect($allAdUsers)
-            ->filter(fn($u) => ($u['accountEnabled'] ?? true) === false)
-            ->pluck('id')
+        $flaggedAdIds = collect($this->adPreview)
+            ->whereIn('action', ['disabled', 'removed'])
+            ->pluck('ad_id')
             ->toArray();
 
-// Find locally linked employees who are either:
-// 1. Disabled in AD (accountEnabled = false)
-// 2. No longer exist in AD at all (not in activeAdIds)
         $toDeactivate = Employee::where('organization_id', $org->id)
-            ->whereNotNull('ad_object_id')
+            ->whereIn('ad_object_id', $flaggedAdIds)
             ->whereNull('deleted_at')
-            ->get()
-            ->filter(fn($emp) => in_array($emp->ad_object_id, $disabledAdIds) ||
-                !in_array($emp->ad_object_id, $activeAdIds)
-            );
+            ->get();
+
+        $actionByAdId = collect($this->adPreview)
+            ->whereIn('action', ['disabled', 'removed'])
+            ->pluck('action', 'ad_id');
+
 
         foreach ($toDeactivate as $emp) {
             try {
@@ -614,7 +608,7 @@ new class extends Component {
                     'email' => $emp->email,
                     'status' => 'deactivated',
                     'zk' => $emp->zkbio_pin ? 'removed' : 'skipped',
-                    'message' => in_array($emp->ad_object_id, $disabledAdIds)
+                    'message' => ($actionByAdId[$emp->ad_object_id] ?? 'removed') === 'disabled'
                         ? 'Disabled in Active Directory'
                         : 'No longer exists in Active Directory',
                 ];
