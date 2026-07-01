@@ -2186,6 +2186,19 @@ new class extends Component {
         </div>
     </div>
 
+    {{-- Deactivate Removed AD Users Loading Overlay --}}
+    <div style="padding-top:20px;" wire:loading wire:target="deactivateRemovedAdUsers" class="sync-loading-overlay">
+        <div class="sync-loading-card">
+            <div class="sync-loading-spinner" style="border-top-color:#dc2626;"></div>
+            <p class="sync-loading-title">Checking Active Directory</p>
+            <p class="sync-loading-sub">Comparing employees against AD & ZKBio...<br>Please do not close this page.</p>
+            <div class="sync-loading-progress">
+                <div class="sync-loading-progress-bar"
+                     style="background:linear-gradient(90deg, #dc2626, #f87171);"></div>
+            </div>
+        </div>
+    </div>
+
     {{-- Import Loading Overlay --}}
     <div style="padding-top:20px;" wire:loading wire:target="commitImport" class="sync-loading-overlay">
         <div class="sync-loading-card">
@@ -2413,17 +2426,6 @@ new class extends Component {
                     @endif
 
 
-                    @if(!$isStudentOrg)
-                        <button wire:click="deactivateRemovedAdUsers" type="button"
-                                wire:confirm="This will soft-delete employees no longer in AD or disabled. Continue?"
-                                class="btn d-flex align-items-center gap-2"
-                                style="background:#fff; border:1.5px solid #dc2626 !important; color:#dc2626 !important; font-weight:600; border-radius:8px; font-size:0.875rem; padding:8px 14px;">
-                            <iconify-icon icon="mdi:account-remove" style="font-size:17px;"></iconify-icon>
-                            Deactivate Removed
-                        </button>
-                    @endif
-
-
                     {{-- ★ IMPORT TOGGLE BUTTON ★ --}}
                     <button
                         wire:click="toggleImportPanel"
@@ -2435,6 +2437,23 @@ new class extends Component {
                                       style="font-size:17px;"></iconify-icon>
                         {{ $showImportPanel ? 'Close Import' : 'Import ' . ($isStudentOrg ? ($personType === 'student' ? 'Students' : 'Staff') : 'Employees') }}
                     </button>
+
+                    @if(!$isStudentOrg)
+                        <button wire:click="deactivateRemovedAdUsers" type="button"
+                                wire:confirm="This will soft-delete employees no longer in AD or disabled. Continue?"
+                                wire:loading.attr="disabled"
+                                wire:target="deactivateRemovedAdUsers"
+                                class="btn d-flex align-items-center gap-2"
+                                style="background:#fff; border:1.5px solid #dc2626 !important; color:#dc2626 !important; font-weight:600; border-radius:8px; font-size:0.875rem; padding:8px 14px;">
+    <span wire:loading wire:target="deactivateRemovedAdUsers">
+        <span class="spinner-border spinner-border-sm"></span>
+    </span>
+                            <iconify-icon icon="mdi:account-remove" wire:loading.remove
+                                          wire:target="deactivateRemovedAdUsers" style="font-size:17px;"></iconify-icon>
+                            <span wire:loading.remove wire:target="deactivateRemovedAdUsers">Deactivate Removed</span>
+                            <span wire:loading wire:target="deactivateRemovedAdUsers">Checking AD...</span>
+                        </button>
+                    @endif
 
                     {{-- Single create (existing) --}}
                     <a href="javascript:void(0)"
