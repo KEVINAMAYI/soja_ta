@@ -14,7 +14,10 @@ class Leave extends Model
         'department_id',
         'organization_id',
         'leave_type',
+        'leave_type_id',
         'status',
+        'current_level',
+        'total_levels',
         'start_date',
         'end_date',
         'reason',
@@ -28,6 +31,8 @@ class Leave extends Model
         'start_date' => 'date',
         'end_date' => 'date',
         'expected_resumption' => 'date',
+        'current_level' => 'integer',
+        'total_levels' => 'integer',
     ];
 
     public function employee()
@@ -38,5 +43,32 @@ class Leave extends Model
     public function department()
     {
         return $this->belongsTo(Department::class);
+    }
+
+    public function organization()
+    {
+        return $this->belongsTo(Organization::class);
+    }
+
+    public function leaveType()
+    {
+        return $this->belongsTo(LeaveType::class);
+    }
+
+    public function approvalLogs()
+    {
+        return $this->hasMany(LeaveApprovalLog::class);
+    }
+
+    public function activeApprovalLog()
+    {
+        return $this->hasOne(LeaveApprovalLog::class)
+            ->where('level_number', $this->current_level)
+            ->where('status', 'pending');
+    }
+
+    public function isPending(): bool
+    {
+        return $this->status === 'pending';
     }
 }

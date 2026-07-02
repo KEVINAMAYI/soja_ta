@@ -46,7 +46,10 @@ Route::middleware(['auth:sanctum'])->group(function () {
         Route::post('/apply', [LeaveController::class, 'apply']);
         Route::get('/my-leaves', [LeaveController::class, 'myLeaves']);
         Route::get('/types', [LeaveController::class, 'leaveTypes']);
+        Route::get('/balances', [LeaveController::class, 'balances']);
         Route::get('/{id}/cancel', [LeaveController::class, 'cancel']);
+        Route::post('/{id}/approve', [LeaveController::class, 'approve']);
+        Route::post('/{id}/reject', [LeaveController::class, 'reject']);
         Route::get('/{id}', [LeaveController::class, 'show']);
     });
 

@@ -3,7 +3,9 @@
 use App\Models\Leave;
 use App\Models\Employee;
 use App\Models\Department;
+use App\Models\LeaveType;
 use App\Services\AttendanceSeeder;
+use App\Services\LeaveApprovalService;
 use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
 use Livewire\Attributes\On;
@@ -25,17 +27,7 @@ new class extends Component {
     public $searchTerm = '';
     public $sendNotifications = true;
     public $notifyManagers = true;
-    public $leaveTypes = [
-        ['id' => 'sick', 'name' => 'Sick Off', 'icon' => '🤒'],
-        ['id' => 'offshift', 'name' => 'Off Shift', 'icon' => '🌙'],
-        ['id' => 'annual', 'name' => 'Annual Leave', 'icon' => '🏖️'],
-        ['id' => 'maternity', 'name' => 'Maternity Leave', 'icon' => '🤰'],
-        ['id' => 'paternity', 'name' => 'Paternity Leave', 'icon' => '👨‍🍼'],
-        ['id' => 'compassionate', 'name' => 'Compassionate Leave', 'icon' => '🕯️'],
-        ['id' => 'study', 'name' => 'Study Leave', 'icon' => '📚'],
-        ['id' => 'unpaid', 'name' => 'Unpaid Leave', 'icon' => '💸'],
-        ['id' => 'personal', 'name' => 'Personal Leave', 'icon' => '👤'],
-    ];
+    public $leaveTypes = []; // loaded per-organization in mount()
 
     // --- Properties for New Form Fields (Optional, but included for complete logic) ---
     public $reason = '';
@@ -58,6 +50,13 @@ new class extends Component {
         $data = $employeeCollection->toArray();
         $this->originalEmployees = $data;
         $this->employees = $data;
+
+        $this->leaveTypes = LeaveType::where('organization_id', $orgId)
+            ->where('is_active', true)
+            ->orderBy('name')
+            ->get(['code', 'name', 'icon'])
+            ->map(fn($t) => ['id' => $t->code, 'name' => $t->name, 'icon' => $t->icon ?? '📄'])
+            ->toArray();
     }
 
 
@@ -210,6 +209,7 @@ new class extends Component {
 
             $leaveTypeDetails = $this->getSelectedLeaveTypeProperty();
             $leaveTypeName = $leaveTypeDetails['name'] ?? $this->leaveType;
+            $leaveTypeModel = LeaveType::where('organization_id', $orgId)->where('code', $this->leaveType)->first();
 
             if ($this->leaveType === 'offshift') {
 
@@ -283,6 +283,7 @@ new class extends Component {
                         'employee_id' => $employee['id'],
                         'department_id' => $departmentId,
                         'leave_type' => $leaveTypeName,
+                        'leave_type_id' => $leaveTypeModel?->id,
                         'start_date' => $this->startDate,
                         'end_date' => $endDate,
                         'reason' => $this->reason,
@@ -293,7 +294,8 @@ new class extends Component {
                         'status' => 'pending',
                     ];
 
-                    Leave::create($data);
+                    $leave = Leave::create($data);
+                    app(LeaveApprovalService::class)->createApprovalChain($leave);
                     $count++;
                 }
 

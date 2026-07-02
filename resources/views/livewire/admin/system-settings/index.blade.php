@@ -1,9 +1,12 @@
 <?php
 
 use App\Models\Department;
+use App\Models\LeaveType;
 use App\Models\Organization;
 use App\Models\OrganizationSetting;
+use App\Models\User;
 use App\Services\CheckInApprovalSettings;
+use App\Services\LeaveApprovalSettings;
 use Illuminate\Support\Facades\DB;
 use Jantinnerezo\LivewireAlert\Facades\LivewireAlert;
 use Livewire\Attributes\On;
@@ -22,6 +25,18 @@ new class extends Component {
     // ── Check-in Approval tab state ──────────────────────────────────────
     public array $approval = [];
     public array $availableDepartments = [];
+
+    // ── Leave Approval tab state ─────────────────────────────────────────
+    public array $leaveApproval = [];
+    public array $availableUsers = [];
+
+    // ── Leave Types tab state ─────────────────────────────────────────────
+    public $ltName;
+    public $ltCode;
+    public $ltIcon;
+    public $ltAnnualEntitlementDays;
+    public $ltIsActive = true;
+    public $ltEditId;
 
     public function mount()
     {
@@ -42,6 +57,9 @@ new class extends Component {
         // ── Load check-in approval settings ──
         $this->approval = CheckInApprovalSettings::get($orgId);
 
+        // ── Load leave approval settings ──
+        $this->leaveApproval = LeaveApprovalSettings::get($orgId);
+
         $this->availableDepartments = Department::where('organization_id', $orgId)
             ->orderBy('name')
             ->get(['id', 'name'])
@@ -53,6 +71,12 @@ new class extends Component {
         $this->availableRoles = \Spatie\Permission\Models\Role::where('organization_id', $orgId)
             ->orderBy('name')
             ->pluck('name')
+            ->toArray();
+
+        $this->availableUsers = User::whereHas('employee', fn($q) => $q->where('organization_id', $orgId))
+            ->orderBy('name')
+            ->get(['id', 'name'])
+            ->map(fn($u) => ['id' => $u->id, 'name' => $u->name])
             ->toArray();
     }
 
@@ -165,6 +189,213 @@ new class extends Component {
             ->show();
     }
 
+    // ── Leave Approval tab actions ───────────────────────────────────────
+
+    public function addLeaveApprovalEmail(int $levelIndex): void
+    {
+        $this->leaveApproval['levels'][$levelIndex]['notify_email_addresses'][] = '';
+    }
+
+    public function removeLeaveApprovalEmail(int $levelIndex, int $emailIndex): void
+    {
+        unset($this->leaveApproval['levels'][$levelIndex]['notify_email_addresses'][$emailIndex]);
+        $this->leaveApproval['levels'][$levelIndex]['notify_email_addresses'] =
+            array_values($this->leaveApproval['levels'][$levelIndex]['notify_email_addresses']);
+    }
+
+    public function saveLeaveApprovalSettings(): void
+    {
+        $this->validate([
+            'leaveApproval.enabled'                              => 'boolean',
+            'leaveApproval.levels'                               => 'array|size:3',
+            'leaveApproval.levels.*.enabled'                     => 'boolean',
+            'leaveApproval.levels.*.approver_type'               => 'required|in:role,user',
+            'leaveApproval.levels.*.approver_role'               => 'nullable|string|max:100',
+            'leaveApproval.levels.*.approver_user_id'            => 'nullable|integer|exists:users,id',
+            'leaveApproval.levels.*.notify_email'                => 'boolean',
+            'leaveApproval.levels.*.notify_email_addresses.*'    => 'nullable|email',
+        ]);
+
+        $orgId = auth()->user()->employee?->organization_id;
+
+        LeaveApprovalSettings::save($orgId, $this->leaveApproval);
+
+        LivewireAlert::title('Saved!')
+            ->text('Leave approval settings updated successfully.')
+            ->success()
+            ->toast()
+            ->position('top-end')
+            ->show();
+    }
+
+    // ── Leave Types tab actions ──────────────────────────────────────────
+
+    public function getLeaveTypesListProperty()
+    {
+        $orgId = auth()->user()->employee?->organization_id;
+
+        return LeaveType::where('organization_id', $orgId)
+            ->orderBy('name')
+            ->get();
+    }
+
+    public function leaveTypeRules(): array
+    {
+        $orgId = auth()->user()->employee?->organization_id;
+
+        return [
+            'ltName' => 'required|string|max:255',
+            'ltCode' => 'required|string|max:100|alpha_dash|unique:leave_types,code,' . $this->ltEditId . ',id,organization_id,' . $orgId,
+            'ltIcon' => 'nullable|string|max:10',
+            'ltAnnualEntitlementDays' => 'nullable|numeric|min:0|max:999',
+            'ltIsActive' => 'boolean',
+        ];
+    }
+
+    public function createLeaveType(): void
+    {
+        $this->validate($this->leaveTypeRules());
+
+        try {
+            DB::beginTransaction();
+
+            $orgId = auth()->user()->employee?->organization_id;
+
+            LeaveType::create([
+                'organization_id' => $orgId,
+                'name' => $this->ltName,
+                'code' => $this->ltCode,
+                'icon' => $this->ltIcon,
+                'annual_entitlement_days' => $this->ltAnnualEntitlementDays,
+                'is_active' => $this->ltIsActive,
+            ]);
+
+            DB::commit();
+
+            $this->dispatch('hide-leave-type-modal');
+
+            LivewireAlert::title('Awesome!')
+                ->text('Leave type added successfully.')
+                ->success()
+                ->toast()
+                ->position('top-end')
+                ->show();
+
+            $this->resetLeaveTypeForm();
+
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            report($e);
+
+            LivewireAlert::title('Error!')
+                ->text('Failed to add leave type.')
+                ->error()
+                ->toast()
+                ->position('top-end')
+                ->show();
+        }
+    }
+
+    #[On('edit-leave-type')]
+    public function editLeaveTypeHandler($id): void
+    {
+        $type = LeaveType::findOrFail($id);
+        $this->ltEditId = $id;
+        $this->ltName = $type->name;
+        $this->ltCode = $type->code;
+        $this->ltIcon = $type->icon;
+        $this->ltAnnualEntitlementDays = $type->annual_entitlement_days;
+        $this->ltIsActive = $type->is_active;
+
+        $this->dispatch('show-leave-type-modal');
+    }
+
+    public function updateLeaveType(): void
+    {
+        $this->validate($this->leaveTypeRules());
+
+        try {
+            DB::beginTransaction();
+
+            LeaveType::findOrFail($this->ltEditId)->update([
+                'name' => $this->ltName,
+                'code' => $this->ltCode,
+                'icon' => $this->ltIcon,
+                'annual_entitlement_days' => $this->ltAnnualEntitlementDays,
+                'is_active' => $this->ltIsActive,
+            ]);
+
+            DB::commit();
+
+            $this->dispatch('hide-leave-type-modal');
+
+            LivewireAlert::title('Awesome!')
+                ->text('Leave type updated successfully.')
+                ->success()
+                ->toast()
+                ->position('top-end')
+                ->show();
+
+            $this->resetLeaveTypeForm();
+
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            report($e);
+
+            LivewireAlert::title('Error!')
+                ->text('Failed to update leave type.')
+                ->error()
+                ->toast()
+                ->position('top-end')
+                ->show();
+        }
+    }
+
+    #[On('delete-leave-type')]
+    public function deleteLeaveTypeHandler($id): void
+    {
+        try {
+            DB::beginTransaction();
+
+            LeaveType::findOrFail($id)->delete();
+
+            DB::commit();
+
+            LivewireAlert::title('Awesome!')
+                ->text('Leave type deleted successfully.')
+                ->success()
+                ->toast()
+                ->position('top-end')
+                ->show();
+
+            $this->resetLeaveTypeForm();
+
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            report($e);
+
+            LivewireAlert::title('Error!')
+                ->text('Failed to delete leave type.')
+                ->error()
+                ->toast()
+                ->position('top-end')
+                ->show();
+        }
+    }
+
+    #[On('discard-leave-type-modal')]
+    public function discardLeaveTypeModal(): void
+    {
+        $this->dispatch('hide-leave-type-modal');
+        $this->resetLeaveTypeForm();
+    }
+
+    public function resetLeaveTypeForm(): void
+    {
+        $this->reset(['ltName', 'ltCode', 'ltIcon', 'ltAnnualEntitlementDays', 'ltEditId']);
+        $this->ltIsActive = true;
+    }
+
     public function changeSystemSettingsBreadcrumb()
     {
         switch ($this->activeTab) {
@@ -181,6 +412,16 @@ new class extends Component {
             case 'checkin_approval':
                 $this->tabTitle = 'Check-in Approval';
                 $this->tabIcon = '<iconify-icon icon="mdi:shield-check-outline" class="fs-5"></iconify-icon>';
+                break;
+
+            case 'leave_approval':
+                $this->tabTitle = 'Leave Approval';
+                $this->tabIcon = '<iconify-icon icon="mdi:calendar-check-outline" class="fs-5"></iconify-icon>';
+                break;
+
+            case 'leave_types':
+                $this->tabTitle = 'Leave Types';
+                $this->tabIcon = '<iconify-icon icon="mdi:calendar-cog-outline" class="fs-5"></iconify-icon>';
                 break;
 
             default:
@@ -261,6 +502,36 @@ new class extends Component {
                     aria-selected="false">
                     <i class="ti ti-shield-check me-2 fs-6"></i>
                     <span class="d-none d-md-block">Check-in Approval</span>
+                </button>
+            </li>
+
+            <li class="nav-item" role="presentation">
+                <button
+                    class="nav-link position-relative rounded-0 {{ $activeTab === 'leave_approval' ? 'active' : '' }} d-flex align-items-center justify-content-center bg-transparent fs-3 py-3"
+                    id="tab-leave-approval-tab"
+                    data-bs-toggle="pill"
+                    data-bs-target="#tab-leave-approval"
+                    type="button"
+                    role="tab"
+                    aria-controls="tab-leave-approval"
+                    aria-selected="false">
+                    <i class="ti ti-calendar-check me-2 fs-6"></i>
+                    <span class="d-none d-md-block">Leave Approval</span>
+                </button>
+            </li>
+
+            <li class="nav-item" role="presentation">
+                <button
+                    class="nav-link position-relative rounded-0 {{ $activeTab === 'leave_types' ? 'active' : '' }} d-flex align-items-center justify-content-center bg-transparent fs-3 py-3"
+                    id="tab-leave-types-tab"
+                    data-bs-toggle="pill"
+                    data-bs-target="#tab-leave-types"
+                    type="button"
+                    role="tab"
+                    aria-controls="tab-leave-types"
+                    aria-selected="false">
+                    <i class="ti ti-calendar-cog me-2 fs-6"></i>
+                    <span class="d-none d-md-block">Leave Types</span>
                 </button>
             </li>
 
@@ -672,6 +943,327 @@ new class extends Component {
                         </div>
                     </div>
                 </div>
+
+                {{-- ════════════════════════════════════════════════════════
+                     Leave Approval Tab
+                ════════════════════════════════════════════════════════ --}}
+                <div class="tab-pane fade {{ $activeTab === 'leave_approval' ? 'show active' : '' }}"
+                     id="tab-leave-approval">
+
+                    <div class="row justify-content-center">
+                        <div class="col-lg-12">
+
+                            {{-- Approval system master toggle --}}
+                            <div class="card border shadow-none mb-4">
+                                <div class="card-body p-4">
+                                    <div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
+                                        <h5 class="mb-0 d-flex align-items-center gap-2">
+                                            <iconify-icon icon="mdi:calendar-check-outline"
+                                                          class="fs-4 text-primary"></iconify-icon>
+                                            Leave approval chain
+                                        </h5>
+                                        <div class="form-check form-switch m-0">
+                                            <input class="form-check-input" type="checkbox" role="switch"
+                                                   id="leaveApprovalEnabled"
+                                                   wire:model="leaveApproval.enabled"
+                                                   style="width:3em;height:1.5em;">
+                                            <label class="form-check-label fw-semibold ms-2" for="leaveApprovalEnabled">
+                                                Enabled for this tenant
+                                            </label>
+                                        </div>
+                                    </div>
+
+                                    <div class="alert alert-light border mb-0 py-2 px-3 d-flex gap-2 align-items-start small">
+                                        <iconify-icon icon="mdi:information-outline" class="fs-5 flex-shrink-0 text-primary mt-1"></iconify-icon>
+                                        <span>
+                When enabled, a submitted leave request must be approved sequentially through each
+                <strong>enabled</strong> level below (Level 1 → Level 2 → Level 3). A rejection at any
+                level immediately finalizes the request as rejected. You don't need to enable all 3 —
+                only the enabled levels are used.
+            </span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {{-- Approval levels --}}
+                            <div class="card border shadow-none mb-4">
+                                <div class="card-body p-4">
+                                    <div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
+                                        <h5 class="mb-0 d-flex align-items-center gap-2">
+                                            <iconify-icon icon="mdi:format-list-numbered" class="fs-4 text-primary"></iconify-icon>
+                                            Approval levels
+                                        </h5>
+                                    </div>
+
+                                    <div class="row g-3">
+                                        @foreach($leaveApproval['levels'] as $i => $level)
+                                            <div class="col-lg-4 col-12">
+                                                <div class="border rounded-3 p-3 h-100 {{ $level['enabled'] ? 'border-primary-subtle' : '' }}"
+                                                     style="{{ $level['enabled'] ? 'border-color:#0d6efd !important;' : '' }}">
+
+                                                    {{-- Level header --}}
+                                                    <div class="d-flex align-items-center justify-content-between mb-3">
+                            <span class="fw-bold small {{ $level['enabled'] ? 'text-primary' : 'text-muted' }}">
+                                LEVEL {{ $i + 1 }}
+                            </span>
+                                                        <div class="form-check form-switch m-0">
+                                                            <input class="form-check-input" type="checkbox" role="switch"
+                                                                   id="leaveLevel{{ $i }}Enabled"
+                                                                   wire:model="leaveApproval.levels.{{ $i }}.enabled">
+                                                        </div>
+                                                    </div>
+
+                                                    {{-- Approver type --}}
+                                                    <div class="mb-2">
+                                                        <label class="form-label small text-uppercase text-muted fw-semibold">Approver</label>
+                                                        <div class="btn-group btn-group-sm w-100" role="group">
+                                                            <button type="button"
+                                                                    class="btn {{ $level['approver_type'] === 'role' ? 'btn-primary' : 'btn-outline-primary' }}"
+                                                                    wire:click="$set('leaveApproval.levels.{{ $i }}.approver_type', 'role')"
+                                                                {{ $level['enabled'] ? '' : 'disabled' }}>
+                                                                Role
+                                                            </button>
+                                                            <button type="button"
+                                                                    class="btn {{ $level['approver_type'] === 'user' ? 'btn-primary' : 'btn-outline-primary' }}"
+                                                                    wire:click="$set('leaveApproval.levels.{{ $i }}.approver_type', 'user')"
+                                                                {{ $level['enabled'] ? '' : 'disabled' }}>
+                                                                Specific user
+                                                            </button>
+                                                        </div>
+                                                    </div>
+
+                                                    @if($level['approver_type'] === 'user')
+                                                        <div class="mb-2">
+                                                            <label class="form-label small text-uppercase text-muted fw-semibold">User</label>
+                                                            <select class="form-select form-select-sm"
+                                                                    wire:model="leaveApproval.levels.{{ $i }}.approver_user_id"
+                                                                {{ $level['enabled'] ? '' : 'disabled' }}>
+                                                                <option value="">— Select User —</option>
+                                                                @foreach($availableUsers as $availableUser)
+                                                                    <option value="{{ $availableUser['id'] }}">{{ $availableUser['name'] }}</option>
+                                                                @endforeach
+                                                            </select>
+                                                        </div>
+                                                    @else
+                                                        <div class="mb-2">
+                                                            <label class="form-label small text-uppercase text-muted fw-semibold">Role</label>
+                                                            <select class="form-select form-select-sm"
+                                                                    wire:model="leaveApproval.levels.{{ $i }}.approver_role"
+                                                                {{ $level['enabled'] ? '' : 'disabled' }}>
+                                                                <option value="">— Select Role —</option>
+                                                                @foreach($availableRoles as $role)
+                                                                    <option value="{{ $role }}">{{ $role }}</option>
+                                                                @endforeach
+                                                            </select>
+                                                        </div>
+                                                    @endif
+
+                                                    {{-- Notifications --}}
+                                                    <div class="mb-2">
+                                                        <label class="form-label small text-uppercase text-muted fw-semibold d-flex align-items-center gap-1">
+                                                            <iconify-icon icon="mdi:bell-outline"></iconify-icon>
+                                                            Also notify extra emails
+                                                        </label>
+
+                                                        <div class="d-flex align-items-center justify-content-between mb-1">
+                                <span class="d-flex align-items-center gap-1 small">
+                                    <iconify-icon icon="mdi:email-outline"></iconify-icon> Email
+                                </span>
+                                                            <div class="form-check form-switch m-0">
+                                                                <input class="form-check-input" type="checkbox" role="switch"
+                                                                       wire:model="leaveApproval.levels.{{ $i }}.notify_email"
+                                                                    {{ $level['enabled'] ? '' : 'disabled' }}>
+                                                            </div>
+                                                        </div>
+
+                                                        @if($level['notify_email'])
+                                                            @foreach($level['notify_email_addresses'] as $ei => $email)
+                                                                <div class="input-group input-group-sm mb-1">
+                                                                    <input type="email" class="form-control"
+                                                                           placeholder="approver@example.com"
+                                                                           wire:model="leaveApproval.levels.{{ $i }}.notify_email_addresses.{{ $ei }}">
+                                                                    <button class="btn btn-outline-secondary" type="button"
+                                                                            wire:click="removeLeaveApprovalEmail({{ $i }}, {{ $ei }})">
+                                                                        <iconify-icon icon="mdi:close"></iconify-icon>
+                                                                    </button>
+                                                                </div>
+                                                            @endforeach
+                                                            <button type="button" class="btn btn-sm btn-link p-0"
+                                                                    wire:click="addLeaveApprovalEmail({{ $i }})">
+                                                                + Add email
+                                                            </button>
+                                                        @endif
+                                                    </div>
+
+                                                </div>
+                                            </div>
+                                        @endforeach
+                                    </div>
+
+                                    <div class="d-flex align-items-center justify-content-end gap-2 mt-4">
+                                        <button wire:click="saveLeaveApprovalSettings" class="btn btn-primary">
+                                            <iconify-icon icon="mdi:content-save-outline" class="me-1"></iconify-icon>
+                                            Save Leave Approval Settings
+                                        </button>
+                                    </div>
+
+                                </div>
+                            </div>
+
+                        </div>
+                    </div>
+                </div>
+
+                {{-- ════════════════════════════════════════════════════════
+                     Leave Types Tab
+                ════════════════════════════════════════════════════════ --}}
+                <div class="tab-pane fade {{ $activeTab === 'leave_types' ? 'show active' : '' }}"
+                     id="tab-leave-types">
+
+                    <div class="row justify-content-center">
+                        <div class="col-lg-12">
+                            <div class="card border shadow-none">
+                                <div class="card-body p-4">
+                                    <div class="d-flex flex-wrap justify-content-between align-items-center mb-3">
+                                        <h5 class="mb-0 d-flex align-items-center gap-2">
+                                            <iconify-icon icon="mdi:calendar-cog-outline"
+                                                          class="fs-4 text-primary"></iconify-icon>
+                                            Leave Types
+                                        </h5>
+
+                                        <a href="javascript:void(0)" class="btn btn-primary" data-bs-toggle="modal"
+                                           data-bs-target="#leaveTypeModal">
+                                            <i class="ti ti-calendar-plus fs-5"></i> Add Leave Type
+                                        </a>
+                                    </div>
+
+                                    <div class="table-responsive">
+                                        <table class="table table-hover align-middle">
+                                            <thead>
+                                            <tr>
+                                                <th>Name</th>
+                                                <th>Code</th>
+                                                <th>Icon</th>
+                                                <th class="text-end">Annual Entitlement (days)</th>
+                                                <th>Active</th>
+                                                <th>Actions</th>
+                                            </tr>
+                                            </thead>
+                                            <tbody>
+                                            @forelse($this->leaveTypesList as $lt)
+                                                <tr wire:key="leave-type-row-{{ $lt->id }}">
+                                                    <td class="fw-semibold">{{ $lt->name }}</td>
+                                                    <td><span
+                                                            class="badge bg-secondary-subtle text-secondary">{{ $lt->code }}</span>
+                                                    </td>
+                                                    <td>{{ $lt->icon }}</td>
+                                                    <td class="text-end">{{ $lt->annual_entitlement_days ?? 'Unlimited' }}</td>
+                                                    <td>
+                                                        @if($lt->is_active)
+                                                            <span
+                                                                class="badge bg-success-subtle text-success">Active</span>
+                                                        @else
+                                                            <span
+                                                                class="badge bg-secondary-subtle text-secondary">Inactive</span>
+                                                        @endif
+                                                    </td>
+                                                    <td>
+                                                        <div class="btn-group" role="group">
+                                                            <button class="btn btn-sm btn-warning"
+                                                                    wire:click="editLeaveTypeHandler({{ $lt->id }})">
+                                                                <i class="ti ti-edit"></i>
+                                                            </button>
+                                                            <button class="btn btn-sm btn-danger"
+                                                                    onclick="confirm('Are you sure? Existing leave requests of this type will keep displaying, but no new requests can use it once removed.') || event.stopImmediatePropagation()"
+                                                                    wire:click="deleteLeaveTypeHandler({{ $lt->id }})">
+                                                                <i class="ti ti-trash"></i>
+                                                            </button>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            @empty
+                                                <tr>
+                                                    <td colspan="6" class="text-center text-muted py-4">No leave
+                                                        types yet.
+                                                    </td>
+                                                </tr>
+                                            @endforelse
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="modal fade" id="leaveTypeModal" tabindex="-1"
+                         aria-labelledby="leaveTypeModalTitle" aria-hidden="true" wire:ignore.self>
+                        <div class="modal-dialog modal-md modal-dialog-centered">
+                            <div class="modal-content">
+                                <div class="modal-header">
+                                    <h5 class="modal-title">{{ $ltEditId ? 'Edit Leave Type' : 'New Leave Type' }}</h5>
+                                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                </div>
+
+                                <form wire:submit.prevent="{{ $ltEditId ? 'updateLeaveType' : 'createLeaveType' }}">
+                                    <div class="modal-body">
+                                        <div class="mb-3">
+                                            <label for="ltName" class="form-label">Name</label>
+                                            <input type="text" wire:model="ltName" id="ltName" class="form-control"
+                                                   placeholder="e.g. Annual Leave"/>
+                                            @error('ltName') <small class="text-danger">{{ $message }}</small> @enderror
+                                        </div>
+
+                                        <div class="mb-3">
+                                            <label for="ltCode" class="form-label">Code</label>
+                                            <input type="text" wire:model="ltCode" id="ltCode" class="form-control"
+                                                   placeholder="e.g. annual"/>
+                                            <small class="text-muted">A stable identifier used internally (letters,
+                                                numbers, dashes/underscores only).</small>
+                                            @error('ltCode') <small class="text-danger">{{ $message }}</small> @enderror
+                                        </div>
+
+                                        <div class="mb-3">
+                                            <label for="ltIcon" class="form-label">Icon (optional emoji)</label>
+                                            <input type="text" wire:model="ltIcon" id="ltIcon" class="form-control"
+                                                   placeholder="🏖️"/>
+                                            @error('ltIcon') <small class="text-danger">{{ $message }}</small> @enderror
+                                        </div>
+
+                                        <div class="mb-3">
+                                            <label for="ltAnnualEntitlementDays" class="form-label">Annual
+                                                entitlement (days)</label>
+                                            <input type="number" step="0.5" min="0"
+                                                   wire:model="ltAnnualEntitlementDays"
+                                                   id="ltAnnualEntitlementDays" class="form-control"
+                                                   placeholder="Leave blank for unlimited / not balance-tracked"/>
+                                            <small class="text-muted">Leave blank for types that aren't
+                                                balance-tracked (e.g. unpaid leave, off-shift).</small>
+                                            @error('ltAnnualEntitlementDays') <small
+                                                class="text-danger">{{ $message }}</small> @enderror
+                                        </div>
+
+                                        <div class="form-check form-switch">
+                                            <input class="form-check-input" type="checkbox" role="switch"
+                                                   id="ltIsActive" wire:model="ltIsActive">
+                                            <label class="form-check-label" for="ltIsActive">Active</label>
+                                        </div>
+                                    </div>
+
+                                    <div class="modal-footer d-flex gap-1">
+                                        <button type="submit" class="btn btn-success">
+                                            {{ $ltEditId ? 'Save' : 'Add' }}
+                                        </button>
+                                        <button wire:click="$dispatch('discard-leave-type-modal')" type="button"
+                                                class="btn btn-outline-danger" data-bs-dismiss="modal">
+                                            Discard
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -698,6 +1290,12 @@ new class extends Component {
                         case 'tab-checkin-approval-tab':
                             mappedTab = 'checkin_approval';
                             break;
+                        case 'tab-leave-approval-tab':
+                            mappedTab = 'leave_approval';
+                            break;
+                        case 'tab-leave-types-tab':
+                            mappedTab = 'leave_types';
+                            break;
                         default:
                             mappedTab = 'qr_code';
                     }
@@ -705,6 +1303,14 @@ new class extends Component {
                     Livewire.dispatch('systemSettingsTabChanged', {tabId: mappedTab});
                 });
             });
+        });
+
+        window.addEventListener('show-leave-type-modal', () => {
+            new bootstrap.Modal(document.getElementById('leaveTypeModal')).show();
+        });
+
+        window.addEventListener('hide-leave-type-modal', () => {
+            bootstrap.Modal.getInstance(document.getElementById('leaveTypeModal'))?.hide();
         });
     </script>
 @endpush

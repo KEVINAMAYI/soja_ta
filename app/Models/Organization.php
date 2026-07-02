@@ -45,6 +45,11 @@ class Organization extends Model
         return $this->hasMany(Service::class);
     }
 
+    public function leaveTypes()
+    {
+        return $this->hasMany(LeaveType::class);
+    }
+
     public function settings()
     {
         return $this->hasMany(OrganizationSetting::class);

@@ -166,12 +166,22 @@
                             </li>
                         @endcan
 
-                        @can('view-employees')
+                        @if(auth()->user()->can('view-employees') || auth()->user()->can('approve-leave-requests'))
                             <li class="sidebar-item">
                                 <a class="sidebar-link {{ request()->routeIs('leaves.index') ? 'active' : '' }}"
                                    href="{{ route('leaves.index') }}">
                                     <iconify-icon icon="mdi:exit-run" class="fs-5"></iconify-icon>
                                     <span class="hide-menu">Leave Requests</span>
+                                </a>
+                            </li>
+                        @endif
+
+                        @can('approve-leave-requests')
+                            <li class="sidebar-item">
+                                <a class="sidebar-link {{ request()->routeIs('leave-balances.index') ? 'active' : '' }}"
+                                   href="{{ route('leave-balances.index') }}">
+                                    <iconify-icon icon="mdi:calendar-account-outline" class="fs-5"></iconify-icon>
+                                    <span class="hide-menu">Leave Balances</span>
                                 </a>
                             </li>
                         @endcan

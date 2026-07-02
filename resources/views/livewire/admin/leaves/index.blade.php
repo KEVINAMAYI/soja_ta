@@ -4,6 +4,7 @@ use App\Models\Leave;
 use App\Models\Employee;
 use App\Models\Department;
 use App\Models\Attendance;
+use App\Services\LeaveApprovalService;
 use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
 use Livewire\Attributes\On;
@@ -43,7 +44,7 @@ new class extends Component {
 
         // Get regular leaves
         $leaveQuery = Leave::where('organization_id', $org->id)
-            ->with(['employee.department'])
+            ->with(['employee.department', 'activeApprovalLog'])
             ->latest();
 
         if ($this->department_id) {
@@ -357,6 +358,46 @@ new class extends Component {
         }
     }
 
+    public function approveLeave($id)
+    {
+        $this->actionLeave($id, 'approve');
+    }
+
+    public function rejectLeave($id)
+    {
+        $this->actionLeave($id, 'reject');
+    }
+
+    private function actionLeave($id, string $action)
+    {
+        try {
+            $leave = Leave::findOrFail($id);
+
+            $leave = $action === 'approve'
+                ? app(LeaveApprovalService::class)->approve($leave, auth()->user())
+                : app(LeaveApprovalService::class)->reject($leave, auth()->user());
+
+            $org = auth()->user()->employee->organization;
+            $this->getData($org);
+
+            LivewireAlert::title($action === 'approve' ? 'Approved!' : 'Rejected!')
+                ->text($action === 'approve'
+                    ? ($leave->status === 'approved' ? 'Leave fully approved.' : 'Approved — advanced to level ' . $leave->current_level . '.')
+                    : 'Leave request rejected.')
+                ->success()
+                ->toast()
+                ->position('top-end')
+                ->show();
+        } catch (\Throwable $e) {
+            LivewireAlert::title('Error!')
+                ->text('Failed to action leave request: ' . $e->getMessage())
+                ->error()
+                ->toast()
+                ->position('top-end')
+                ->show();
+        }
+    }
+
     private function handleAttendanceOnDeletion($employeeId, $startDate, $endDate, $recordType)
     {
         // Delete all attendance records in the date range
@@ -546,6 +587,29 @@ new class extends Component {
                                     <i class="ti ti-dots-vertical fs-6"></i>
                                 </a>
                                 <ul class="dropdown-menu" aria-labelledby="dropdownMenuButton-{{ $record['id'] }}">
+                                    @can('approve-leave-requests')
+                                        @if($record['type'] === 'leave' && $record['status'] === 'pending' && $record['original']->activeApprovalLog)
+                                            <li>
+                                                <a class="dropdown-item d-flex align-items-center gap-3"
+                                                   href="javascript:void(0)"
+                                                   wire:click="approveLeave({{ $record['id'] }})">
+                                                    <iconify-icon icon="mdi:check-circle-outline"
+                                                                  class="fs-4 text-success"></iconify-icon>
+                                                    <span class="text-success">Approve (Level {{ $record['original']->current_level }})</span>
+                                                </a>
+                                            </li>
+                                            <li>
+                                                <a class="dropdown-item d-flex align-items-center gap-3"
+                                                   href="javascript:void(0)"
+                                                   onclick="confirm('Reject this leave request?') || event.stopImmediatePropagation()"
+                                                   wire:click="rejectLeave({{ $record['id'] }})">
+                                                    <iconify-icon icon="mdi:close-circle-outline"
+                                                                  class="fs-4 text-danger"></iconify-icon>
+                                                    <span class="text-danger">Reject</span>
+                                                </a>
+                                            </li>
+                                        @endif
+                                    @endcan
                                     <li>
                                         <a class="dropdown-item d-flex align-items-center gap-3"
                                            href="javascript:void(0)"

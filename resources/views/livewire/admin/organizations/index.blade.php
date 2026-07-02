@@ -6,6 +6,7 @@ use App\Models\Organization;
 use App\Models\Role;
 use App\Models\Shift;
 use App\Models\User;
+use Database\Seeders\LeaveTypesSeeder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Password;
@@ -106,6 +107,9 @@ new class extends Component {
                     'manager_id' => $user->id,
                 ]
             );
+
+            // Default leave types
+            LeaveTypesSeeder::seedForOrganization($organization->id);
 
             // Setup default roles + assign admin to user
             $this->setupDefaultRoles($organization, $user);

@@ -66,6 +66,10 @@ class RolesAndPermissionsSeeder extends Seeder
             //check in request
             ['name' => 'approve-checkin-requests', 'category' => 'Requests'],
 
+            //leave requests
+            ['name' => 'approve-leave-requests', 'category' => 'Requests'],
+            ['name' => 'manage-leave-types', 'category' => 'Requests'],
+
             // Locations
             ['name' => 'manage-work-locations', 'category' => 'Locations'],
             ['name' => 'assign-locations', 'category' => 'Locations'],
@@ -115,6 +119,7 @@ class RolesAndPermissionsSeeder extends Seeder
                 'view-all-reports',
                 'view-dashboard',
                 'assign-locations',
+                'approve-leave-requests',
             ],
 
             'employee' => [
@@ -127,6 +132,7 @@ class RolesAndPermissionsSeeder extends Seeder
                 'view-all-attendance',
                 'view-all-reports',
                 'view-dashboard',
+                'approve-leave-requests',
             ],
         ];
 
