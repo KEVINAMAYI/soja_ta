@@ -16,8 +16,12 @@ return new class extends Migration
 
             $table->boolean('enabled')->default(false);
 
-            // Same 3-element shape as LeaveApprovalSettings::defaults()['levels']
-            $table->json('levels');
+            // Same 3-element shape as LeaveApprovalSettings::defaults()['levels'],
+            // stored as text (json_encode/decode'd via the model's array cast)
+            // rather than a native JSON column — matches organization_settings.value
+            // and avoids native JSON column support differences across MySQL/MariaDB
+            // versions in production.
+            $table->text('levels');
 
             $table->timestamps();
         });
