@@ -206,9 +206,19 @@ class LeaveApprovalSettings
             $level['approver_type'] = in_array($level['approver_type'], ['role', 'user'], true)
                 ? $level['approver_type']
                 : 'role';
-            $level['approver_user_id'] = $level['approver_user_id'] !== null && $level['approver_user_id'] !== ''
+
+            // Only the field matching the current approver_type is meaningful —
+            // clear the other one so stale values (e.g. left over from switching
+            // "Role" -> "Specific user" in the form) never persist or leak into
+            // notifications/authorization checks.
+            $level['approver_user_id'] = ($level['approver_type'] === 'user'
+                    && $level['approver_user_id'] !== null && $level['approver_user_id'] !== '')
                 ? (int) $level['approver_user_id']
                 : null;
+            $level['approver_role'] = ($level['approver_type'] === 'role' && !empty($level['approver_role']))
+                ? $level['approver_role']
+                : null;
+
             $level['notify_email'] = (bool) $level['notify_email'];
             $level['notify_email_addresses'] = array_values($level['notify_email_addresses'] ?? []);
 

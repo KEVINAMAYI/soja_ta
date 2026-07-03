@@ -77,7 +77,7 @@ class User extends Authenticatable
             'email' => $this->email,
         ], false));
 
-        $this->notify(new CustomResetPassword($url, $organization->name));
+        $this->notify(new CustomResetPassword($url, $organization->name, $organization->primary_color));
     }
 
 

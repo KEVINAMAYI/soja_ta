@@ -1,9 +1,12 @@
-# Leave Approval & Per-Department Overrides — Deployment & API Testing Guide
+# Leave Approval & Per-Department Overrides — Deployment Guide
 
 Covers everything added on the `hf-leave-requests` branch: leave types, leave
 balances, the multi-level approval chain (configurable per department, from
 the same System Settings screen), approval-progress on the API, and the
 balance-exhausted guard on applying.
+
+For API endpoint documentation (request/response shapes, curl examples), see
+[`LEAVE_API.md`](LEAVE_API.md).
 
 ## 1. Migrations (run in this order)
 
@@ -36,7 +39,8 @@ default until an admin explicitly configures one.
   Only one scope's config is ever shown or saved at a time — there is no
   separate admin page for this.
 - **API:** `GET /api/leaves/{id}/approval-progress` (auth:sanctum,
-  owner-scoped — same authorization as `GET /api/leaves/{id}`).
+  owner-scoped — same authorization as `GET /api/leaves/{id}`). Full
+  endpoint list in [`LEAVE_API.md`](LEAVE_API.md).
 
 ## 4. Backward compatibility
 
@@ -68,124 +72,6 @@ default until an admin explicitly configures one.
       requested/remaining days message
 - [ ] Approval-required emails render correctly for both role-based and
       specific-user levels (no stray punctuation)
-
----
-
-## 6. API Testing Guide
-
-Base URL below assumes local dev (`http://localhost:8000`). All endpoints
-except login require the `Authorization: Bearer <token>` header.
-
-### 6.1 Get a token
-
-```bash
-curl -X POST http://localhost:8000/api/login \
-  -H "Accept: application/json" -H "Content-Type: application/json" \
-  -d '{"email":"employee@example.com","password":"secret"}'
-```
-
-Response includes `"token": "1|abcdef..."`. Export it for the rest of this
-guide:
-
-```bash
-export TOKEN="1|abcdef..."
-```
-
-### 6.2 List leave types
-
-```bash
-curl http://localhost:8000/api/leaves/types \
-  -H "Authorization: Bearer $TOKEN" -H "Accept: application/json"
-```
-
-### 6.3 Check leave balances (per type: entitled/used/pending/remaining)
-
-```bash
-curl "http://localhost:8000/api/leaves/balances?year=2026" \
-  -H "Authorization: Bearer $TOKEN" -H "Accept: application/json"
-```
-
-### 6.4 Apply for leave
-
-```bash
-curl -X POST http://localhost:8000/api/leaves/apply \
-  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -H "Accept: application/json" \
-  -d '{
-    "employee_id": 1,
-    "leave_type_id": 3,
-    "start_date": "2026-08-10",
-    "duration_type": "dateRange",
-    "end_date": "2026-08-12",
-    "reason": "Family trip"
-  }'
-```
-
-Returns `422` with `data.requested_days` / `data.remaining_days` if the
-leave type's balance is exhausted; otherwise `201` with the new leave.
-
-### 6.5 List my leaves
-
-```bash
-curl "http://localhost:8000/api/leaves/my-leaves?status=pending" \
-  -H "Authorization: Bearer $TOKEN" -H "Accept: application/json"
-```
-
-### 6.6 View a single leave (includes `approval_progress`)
-
-```bash
-curl http://localhost:8000/api/leaves/{id} \
-  -H "Authorization: Bearer $TOKEN" -H "Accept: application/json"
-```
-
-### 6.7 Approval progress only
-
-```bash
-curl http://localhost:8000/api/leaves/{id}/approval-progress \
-  -H "Authorization: Bearer $TOKEN" -H "Accept: application/json"
-```
-
-`data` is `null` if no approval chain was configured for that leave, else:
-```json
-{
-  "enabled": true,
-  "current_level": 2,
-  "total_levels": 2,
-  "levels": [
-    {"level_number": 1, "status": "approved", "approver_type": "role", "approver_role": "supervisor", "approver_user": null, "actioned_by": {"id": 5, "name": "Jane"}, "opened_at": "...", "closed_at": "...", "notes": null},
-    {"level_number": 2, "status": "pending", "approver_type": "user", "approver_role": null, "approver_user": {"id": 9, "name": "John"}, "actioned_by": null, "opened_at": "...", "closed_at": null, "notes": null}
-  ]
-}
-```
-
-### 6.8 Approve / reject (log in as the level's designated approver)
-
-```bash
-curl -X POST http://localhost:8000/api/leaves/{id}/approve \
-  -H "Authorization: Bearer $APPROVER_TOKEN" -H "Content-Type: application/json" -H "Accept: application/json" \
-  -d '{"notes":"Approved, enjoy your leave"}'
-
-curl -X POST http://localhost:8000/api/leaves/{id}/reject \
-  -H "Authorization: Bearer $APPROVER_TOKEN" -H "Content-Type: application/json" -H "Accept: application/json" \
-  -d '{"notes":"Coverage clash with another team member"}'
-```
-
-Returns `403` if the authenticated user isn't the designated approver for the
-leave's current level.
-
-### 6.9 Cancel a leave
-
-```bash
-curl http://localhost:8000/api/leaves/{id}/cancel \
-  -H "Authorization: Bearer $TOKEN" -H "Accept: application/json"
-```
-
-### Suggested test sequence for the department-override feature
-
-1. In System Settings → Leave Approval, set an org-wide chain (e.g. level 1 =
-   role `supervisor`).
-2. Switch scope to a specific department, save a different chain (e.g. level
-   1 = a named user).
-3. Apply for leave (6.4) as an employee in that department → check
-   `approval-progress` (6.7) shows the department's approver, not the role.
-4. Apply for leave as an employee in a *different* department (no override)
-   → confirm it uses the org-wide `supervisor` role chain instead.
+- [ ] Edit a leave balance from System Settings → Leave Balances; confirm the
+      change reflects in the report, the employee-facing API, and the
+      apply-time balance check

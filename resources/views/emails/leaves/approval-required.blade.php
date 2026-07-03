@@ -54,9 +54,6 @@
                                         <strong>{{ $totalDays }} day{{ $totalDays === 1 ? '' : 's' }}</strong> of
                                         <strong>{{ $leaveTypeName }}</strong>
                                     </p>
-                                    <p style="margin: 4px 0 0; color: #6b7280; font-size: 13px;">
-                                        Your approval is needed{!! $approverRoleLabel ? ' as <strong style="color:#374151;">' . e($approverRoleLabel) . '</strong>' : '' !!}.
-                                    </p>
                                 </td>
                             </tr>
                         </table>

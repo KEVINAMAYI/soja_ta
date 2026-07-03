@@ -18,6 +18,7 @@ class AttendancePivotDailyExcelExport implements WithEvents, WithTitle, ShouldAu
     protected $startDate;
     protected $endDate;
     protected $status;
+    protected ?int $departmentId;
 
     // Built during registerEvents
     protected array $pivotMap = [];
@@ -28,12 +29,14 @@ class AttendancePivotDailyExcelExport implements WithEvents, WithTitle, ShouldAu
         array   $selectedIds = [],
         ?string $startDate = null,
         ?string $endDate = null,
-        ?string $status = null
+        ?string $status = null,
+        ?int    $departmentId = null
     ) {
-        $this->selectedIds = $selectedIds;
-        $this->startDate   = $startDate;
-        $this->endDate     = $endDate;
-        $this->status      = $status;
+        $this->selectedIds  = $selectedIds;
+        $this->startDate    = $startDate;
+        $this->endDate      = $endDate;
+        $this->status       = $status;
+        $this->departmentId = $departmentId;
     }
 
     public function title(): string
@@ -203,7 +206,12 @@ class AttendancePivotDailyExcelExport implements WithEvents, WithTitle, ShouldAu
 
         $query = Attendance::query()
             ->with(['employee.user', 'employee.department', 'employee.shift', 'employee.organization'])
-            ->whereHas('employee', fn($q) => $q->where('organization_id', $orgId));
+            ->whereHas('employee', function ($q) use ($orgId) {
+                $q->where('organization_id', $orgId);
+                if ($this->departmentId) {
+                    $q->where('department_id', $this->departmentId);
+                }
+            });
 
         if (!empty($this->selectedIds)) {
             $query->whereIn('id', $this->selectedIds);

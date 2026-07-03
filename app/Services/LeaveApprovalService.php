@@ -436,8 +436,10 @@ class LeaveApprovalService
         $recipients = array_values(array_unique($recipients));
 
         if (!empty($recipients)) {
+            $approverRoleLabel = $config['approver_type'] === 'role' ? ($config['approver_role'] ?? null) : null;
+
             Notification::route('mail', $recipients)
-                ->notify(new LeaveApprovalRequiredNotification($leave, $level, $config['approver_role'] ?? null));
+                ->notify(new LeaveApprovalRequiredNotification($leave, $level, $approverRoleLabel));
         }
     }
 }
