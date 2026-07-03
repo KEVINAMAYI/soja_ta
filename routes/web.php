@@ -3,6 +3,7 @@
 use App\Http\Controllers\PDFExports\AttendanceExportController;
 use App\Http\Controllers\PDFExports\ClientsExportController;
 use App\Http\Controllers\PDFExports\EmployeeExportController;
+use App\Http\Controllers\PDFExports\LeaveBalanceExportController;
 use App\Jobs\SendReportJob;
 use App\Models\ReportSetting;
 use Illuminate\Support\Facades\Route;
@@ -27,6 +28,7 @@ Route::get('/attendance/daily/pdf', [AttendanceExportController::class, 'exportA
 Route::get('/attendance/monthly/pdf', [AttendanceExportController::class, 'exportAttendanceMonthlyPdf'])->name('attendance-monthly.export.pdf');
 Route::get('/attendance/department/pdf', [AttendanceExportController::class, 'exportAttendanceDepartmentPdf'])->name('department-attendance.export.pdf');
 Route::get('/clients/export/pdf', [ClientsExportController::class, 'exportClientsPdf'])->name('clients.export.pdf');
+Route::get('/leave-balances/export/pdf', [LeaveBalanceExportController::class, 'exportPdf'])->name('leave-balances.export.pdf');
 
 
 //TEST JOBS

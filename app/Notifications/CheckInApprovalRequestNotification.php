@@ -34,10 +34,14 @@ class CheckInApprovalRequestNotification extends Notification implements ShouldQ
 
         return (new MailMessage)
             ->subject('⏰ Check-in Approval Required: ' . ($employee->name ?? 'Employee') . ' — ' . $this->request->minutes_late . ' min late')
-            ->greeting('New Check-in Approval Request')
-            ->line(($employee->name ?? 'An employee') . ' checked in ' . $this->request->minutes_late . ' minutes late on ' . $this->request->date->format('d M Y') . '.')
-            ->line('This request requires action from: ' . $this->approverRole)
-            ->action('Review Request', $reviewUrl)
-            ->line('If no action is taken before the timeout, this request will be escalated or auto-resolved according to your organization\'s approval policy.');
+            ->view('emails.checkin.approval-required', [
+                'employeeName' => $employee->name ?? 'An employee',
+                'date' => $this->request->date->format('d M Y'),
+                'minutesLate' => $this->request->minutes_late,
+                'approverRole' => $this->approverRole,
+                'reviewUrl' => $reviewUrl,
+                'orgName' => $employee->organization->name ?? config('app.name'),
+                'brandColor' => $employee->organization->primary_color ?? '#072639',
+            ]);
     }
 }

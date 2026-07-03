@@ -50,6 +50,7 @@ Route::middleware(['auth'])->prefix('admin')->group(function () {
     //Leaves Locations
     Volt::route('leaves', 'admin.leaves.index')->name('leaves.index');
     Volt::route('leaves/create', 'admin.leaves.create')->name('leaves.create');
+    Volt::route('leave-balances', 'admin.leave-balances.index')->name('leave-balances.index');
 
     //shifts
     Volt::route('shifts/create', 'admin.shifts.create')->name('shifts.create');

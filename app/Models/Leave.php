@@ -62,13 +62,56 @@ class Leave extends Model
 
     public function activeApprovalLog()
     {
-        return $this->hasOne(LeaveApprovalLog::class)
-            ->where('level_number', $this->current_level)
-            ->where('status', 'pending');
+        // Deliberately NOT filtered by current_level here: only one approval
+        // log is ever 'pending' per leave at a time (the previous level's log
+        // is already closed out before the next one opens), so this alone is
+        // sufficient. Referencing $this->current_level in this closure would
+        // break under eager loading (->with('activeApprovalLog')), since the
+        // constraint gets built once against an unhydrated model instance.
+        return $this->hasOne(LeaveApprovalLog::class)->where('status', 'pending');
     }
 
     public function isPending(): bool
     {
         return $this->status === 'pending';
+    }
+
+    /**
+     * Approval-chain progress for API consumers: current/total level and
+     * every level opened so far with its approver and outcome. Only reflects
+     * levels actually opened (no placeholders for levels not yet reached).
+     * Null when no approval chain was ever configured for this leave.
+     *
+     * Relies on approvalLogs (and its approverUser/actionedBy) being
+     * eager-loaded by the caller to avoid N+1 queries.
+     */
+    public function getApprovalProgressAttribute(): ?array
+    {
+        if ($this->total_levels === null) {
+            return null;
+        }
+
+        return [
+            'enabled' => true,
+            'current_level' => $this->current_level,
+            'total_levels' => $this->total_levels,
+            'levels' => $this->approvalLogs
+                ->sortBy('level_number')
+                ->map(fn (LeaveApprovalLog $log) => [
+                    'level_number' => $log->level_number,
+                    'status' => $log->status,
+                    'approver_type' => $log->approver_type,
+                    'approver_role' => $log->approver_role,
+                    'approver_user' => $log->approverUser
+                        ? ['id' => $log->approverUser->id, 'name' => $log->approverUser->name]
+                        : null,
+                    'actioned_by' => $log->actionedBy
+                        ? ['id' => $log->actionedBy->id, 'name' => $log->actionedBy->name]
+                        : null,
+                    'opened_at' => $log->opened_at,
+                    'closed_at' => $log->closed_at,
+                    'notes' => $log->notes,
+                ])->values()->all(),
+        ];
     }
 }

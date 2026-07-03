@@ -20,6 +20,8 @@ new class extends Component {
     public $search = '';
     public $status = '';
     public $recordType = 'all'; // all, leave, sick_off, off_shift
+    public $editingHasActiveApprovalChain = false;
+    public $editingCurrentLevel = null;
 
     public $isReporting = null;
 
@@ -44,7 +46,7 @@ new class extends Component {
 
         // Get regular leaves
         $leaveQuery = Leave::where('organization_id', $org->id)
-            ->with(['employee.department', 'activeApprovalLog'])
+            ->with(['employee.department', 'activeApprovalLog.approverUser'])
             ->latest();
 
         if ($this->department_id) {
@@ -156,7 +158,8 @@ new class extends Component {
     {
         $this->reset([
             'employee_id', 'department_id', 'leave_type', 'start_date', 'end_date', 'reason',
-            'contact_during_leave', 'emergency_contact', 'handover_to', 'editId'
+            'contact_during_leave', 'emergency_contact', 'handover_to', 'editId',
+            'editingHasActiveApprovalChain', 'editingCurrentLevel',
         ]);
     }
 
@@ -182,6 +185,12 @@ new class extends Component {
             $this->emergency_contact = $leave->emergency_contact;
             $this->handover_to = $leave->handover_to;
             $this->status = $leave->status;
+
+            // A leave mid-flight through a multi-level approval chain must not
+            // have its status short-circuited via this manual edit form — it
+            // can only be advanced/finalized via the Approve/Reject actions.
+            $this->editingHasActiveApprovalChain = (bool) $leave->activeApprovalLog;
+            $this->editingCurrentLevel = $leave->current_level;
         } else {
             // Editing off-shift or sick-off
             $employee = Employee::findOrFail($id);
@@ -256,7 +265,12 @@ new class extends Component {
                     $leave = Leave::findOrFail($this->editId);
                     $leave->update($data);
 
-                    if (auth()->user()->can('view-employees')) {
+                    // Manual status editing is only allowed when there's no active
+                    // multi-level approval chain in progress — otherwise this would
+                    // let someone skip straight to "approved"/"rejected" without the
+                    // remaining levels ever actually approving. Leaves going through
+                    // the chain must be advanced via the Approve/Reject actions.
+                    if (auth()->user()->can('view-employees') && !$leave->activeApprovalLog) {
                         $leave->status = $this->status;
                         $leave->save();
                     }
@@ -519,6 +533,9 @@ new class extends Component {
                         <h6 class="fw-semibold mb-0">Status</h6>
                     </th>
                     <th>
+                        <h6 class="fw-semibold mb-0">Approval Progress</h6>
+                    </th>
+                    <th>
                         <h6 class="fw-semibold mb-0">Actions</h6>
                     </th>
                 </tr>
@@ -580,6 +597,32 @@ new class extends Component {
                             @endif
                         </td>
                         <td>
+                            @if($record['type'] === 'leave' && $record['original']->total_levels)
+                                @php $activeLog = $record['original']->activeApprovalLog; @endphp
+                                @if($activeLog)
+                                    <div class="d-flex flex-column">
+                                        <span class="badge bg-info-subtle text-info fw-semibold mb-1">
+                                            Level {{ $record['original']->current_level }} of {{ $record['original']->total_levels }}
+                                        </span>
+                                        <small class="text-muted">
+                                            Waiting on:
+                                            @if($activeLog->approver_type === 'user')
+                                                {{ $activeLog->approverUser->name ?? 'Unknown user' }}
+                                            @else
+                                                {{ ucfirst($activeLog->approver_role) }} role
+                                            @endif
+                                        </small>
+                                    </div>
+                                @elseif($record['status'] === 'approved')
+                                    <small class="text-muted">All {{ $record['original']->total_levels }} level(s) approved</small>
+                                @else
+                                    <span class="text-muted">-</span>
+                                @endif
+                            @else
+                                <span class="text-muted">-</span>
+                            @endif
+                        </td>
+                        <td>
                             <div class="dropdown dropstart">
                                 <a href="javascript:void(0)" class="text-muted"
                                    id="dropdownMenuButton-{{ $record['id'] }}"
@@ -587,8 +630,7 @@ new class extends Component {
                                     <i class="ti ti-dots-vertical fs-6"></i>
                                 </a>
                                 <ul class="dropdown-menu" aria-labelledby="dropdownMenuButton-{{ $record['id'] }}">
-                                    @can('approve-leave-requests')
-                                        @if($record['type'] === 'leave' && $record['status'] === 'pending' && $record['original']->activeApprovalLog)
+                                    @if($record['type'] === 'leave' && $record['status'] === 'pending' && $record['original']->activeApprovalLog && app(\App\Services\LeaveApprovalService::class)->canAct($record['original'], auth()->user()))
                                             <li>
                                                 <a class="dropdown-item d-flex align-items-center gap-3"
                                                    href="javascript:void(0)"
@@ -608,8 +650,7 @@ new class extends Component {
                                                     <span class="text-danger">Reject</span>
                                                 </a>
                                             </li>
-                                        @endif
-                                    @endcan
+                                    @endif
                                     <li>
                                         <a class="dropdown-item d-flex align-items-center gap-3"
                                            href="javascript:void(0)"
@@ -635,7 +676,7 @@ new class extends Component {
                     </tr>
                 @empty
                     <tr>
-                        <td colspan="5" class="text-center py-5">
+                        <td colspan="6" class="text-center py-5">
                             <div class="d-flex flex-column align-items-center">
                                 <iconify-icon icon="mdi:file-document-outline"
                                               class="fs-1 text-muted mb-2"></iconify-icon>
@@ -699,15 +740,27 @@ new class extends Component {
                                 </div>
 
                                 @if(auth()->user()->can('view-employees') && $editId && !str_starts_with($editId, 'emp_'))
-                                    <div class="col-md-6">
-                                        <label class="form-label">Status</label>
-                                        <select wire:model="status" class="form-control">
-                                            <option value="pending">Pending</option>
-                                            <option value="approved">Approved</option>
-                                            <option value="rejected">Rejected</option>
-                                            <option value="cancelled">Cancelled</option>
-                                        </select>
-                                    </div>
+                                    @if($editingHasActiveApprovalChain)
+                                        <div class="col-md-6">
+                                            <label class="form-label">Status</label>
+                                            <div class="alert alert-info mb-0 py-2 px-3 small">
+                                                <iconify-icon icon="mdi:information-outline" class="me-1"></iconify-icon>
+                                                This leave is currently pending approval at
+                                                level {{ $editingCurrentLevel }}. Use the Approve/Reject actions on
+                                                the list instead of editing status directly.
+                                            </div>
+                                        </div>
+                                    @else
+                                        <div class="col-md-6">
+                                            <label class="form-label">Status</label>
+                                            <select wire:model="status" class="form-control">
+                                                <option value="pending">Pending</option>
+                                                <option value="approved">Approved</option>
+                                                <option value="rejected">Rejected</option>
+                                                <option value="cancelled">Cancelled</option>
+                                            </select>
+                                        </div>
+                                    @endif
                                 @endif
 
                                 @if($leave_type === 'Off Shift' || $leave_type === 'Sick Off')

@@ -29,6 +29,10 @@ new class extends Component {
     // ── Leave Approval tab state ─────────────────────────────────────────
     public array $leaveApproval = [];
     public array $availableUsers = [];
+    public string $leaveApprovalScope = 'organization'; // 'organization' | 'department'
+    public $leaveApprovalDepartmentId = '';
+    public bool $leaveApprovalHasOverride = false;
+    public array $leaveApprovalOverriddenDepartmentIds = [];
 
     // ── Leave Types tab state ─────────────────────────────────────────────
     public $ltName;
@@ -59,6 +63,7 @@ new class extends Component {
 
         // ── Load leave approval settings ──
         $this->leaveApproval = LeaveApprovalSettings::get($orgId);
+        $this->leaveApprovalOverriddenDepartmentIds = LeaveApprovalSettings::departmentIdsWithOverride($orgId);
 
         $this->availableDepartments = Department::where('organization_id', $orgId)
             ->orderBy('name')
@@ -203,6 +208,36 @@ new class extends Component {
             array_values($this->leaveApproval['levels'][$levelIndex]['notify_email_addresses']);
     }
 
+    /**
+     * Switch between editing the organization-wide default and a single
+     * department's override — only one is ever shown/edited at a time.
+     */
+    public function setLeaveApprovalScope(string $scope): void
+    {
+        $this->leaveApprovalScope = $scope;
+        $this->refreshLeaveApprovalForm();
+    }
+
+    public function setLeaveApprovalDepartment($departmentId): void
+    {
+        $this->leaveApprovalDepartmentId = $departmentId;
+        $this->refreshLeaveApprovalForm();
+    }
+
+    private function refreshLeaveApprovalForm(): void
+    {
+        $orgId = auth()->user()->employee?->organization_id;
+
+        if ($this->leaveApprovalScope === 'department' && $this->leaveApprovalDepartmentId) {
+            $deptId = (int) $this->leaveApprovalDepartmentId;
+            $this->leaveApprovalHasOverride = LeaveApprovalSettings::hasDepartmentOverride($orgId, $deptId);
+            $this->leaveApproval = LeaveApprovalSettings::get($orgId, $deptId);
+        } else {
+            $this->leaveApprovalHasOverride = false;
+            $this->leaveApproval = LeaveApprovalSettings::get($orgId);
+        }
+    }
+
     public function saveLeaveApprovalSettings(): void
     {
         $this->validate([
@@ -218,10 +253,49 @@ new class extends Component {
 
         $orgId = auth()->user()->employee?->organization_id;
 
-        LeaveApprovalSettings::save($orgId, $this->leaveApproval);
+        if ($this->leaveApprovalScope === 'department') {
+            if (!$this->leaveApprovalDepartmentId) {
+                LivewireAlert::title('Select a department')
+                    ->text('Choose a department before saving a department-specific chain.')
+                    ->warning()
+                    ->toast()
+                    ->position('top-end')
+                    ->show();
+                return;
+            }
+
+            LeaveApprovalSettings::save($orgId, $this->leaveApproval, (int) $this->leaveApprovalDepartmentId);
+            $this->leaveApprovalHasOverride = true;
+            $this->leaveApprovalOverriddenDepartmentIds = LeaveApprovalSettings::departmentIdsWithOverride($orgId);
+        } else {
+            LeaveApprovalSettings::save($orgId, $this->leaveApproval);
+        }
 
         LivewireAlert::title('Saved!')
             ->text('Leave approval settings updated successfully.')
+            ->success()
+            ->toast()
+            ->position('top-end')
+            ->show();
+    }
+
+    /**
+     * Remove the selected department's override so it falls back to the
+     * organization-wide default again.
+     */
+    public function resetLeaveApprovalDepartmentOverride(): void
+    {
+        $orgId = auth()->user()->employee?->organization_id;
+        $deptId = (int) $this->leaveApprovalDepartmentId;
+
+        LeaveApprovalSettings::resetDepartmentOverride($orgId, $deptId);
+
+        $this->leaveApprovalHasOverride = false;
+        $this->leaveApprovalOverriddenDepartmentIds = LeaveApprovalSettings::departmentIdsWithOverride($orgId);
+        $this->leaveApproval = LeaveApprovalSettings::get($orgId, $deptId);
+
+        LivewireAlert::title('Reset!')
+            ->text('This department now uses the organization-wide default.')
             ->success()
             ->toast()
             ->position('top-end')
@@ -953,6 +1027,71 @@ new class extends Component {
                     <div class="row justify-content-center">
                         <div class="col-lg-12">
 
+                            {{-- Scope: exactly one of organization-wide or a single department is
+                                 ever being edited at a time, to avoid confusion about which config
+                                 is active. --}}
+                            <div class="card border shadow-none mb-4">
+                                <div class="card-body p-4">
+                                    <h5 class="mb-3 d-flex align-items-center gap-2">
+                                        <iconify-icon icon="mdi:sitemap-outline" class="fs-4 text-primary"></iconify-icon>
+                                        Scope
+                                    </h5>
+
+                                    <div class="btn-group w-100 mb-3" role="group">
+                                        <button type="button"
+                                                class="btn {{ $leaveApprovalScope === 'organization' ? 'btn-primary' : 'btn-outline-primary' }}"
+                                                wire:click="setLeaveApprovalScope('organization')">
+                                            Organization-wide
+                                        </button>
+                                        <button type="button"
+                                                class="btn {{ $leaveApprovalScope === 'department' ? 'btn-primary' : 'btn-outline-primary' }}"
+                                                wire:click="setLeaveApprovalScope('department')">
+                                            Specific Department
+                                        </button>
+                                    </div>
+
+                                    @if($leaveApprovalScope === 'department')
+                                        <label class="form-label small text-uppercase text-muted fw-semibold">Department</label>
+                                        <select class="form-select" wire:model="leaveApprovalDepartmentId"
+                                                wire:change="setLeaveApprovalDepartment($event.target.value)">
+                                            <option value="">— Select Department —</option>
+                                            @foreach($availableDepartments as $dept)
+                                                <option value="{{ $dept['id'] }}">
+                                                    {{ $dept['name'] }}
+                                                    @if(in_array($dept['id'], $leaveApprovalOverriddenDepartmentIds)) · Custom @endif
+                                                </option>
+                                            @endforeach
+                                        </select>
+
+                                        @if($leaveApprovalDepartmentId)
+                                            <div class="mt-3">
+                                                @if($leaveApprovalHasOverride)
+                                                    <div class="d-flex align-items-center justify-content-between gap-2 py-2 px-3 small rounded-3"
+                                                         style="background:#fff3cd;border:1px solid #ffe69c;color:#664d03;">
+                                                        <span class="d-flex align-items-center gap-2">
+                                                            <iconify-icon icon="mdi:pencil-outline" class="fs-5"></iconify-icon>
+                                                            This department has a custom approval chain.
+                                                        </span>
+                                                        <button wire:click="resetLeaveApprovalDepartmentOverride"
+                                                                class="btn btn-sm btn-outline-secondary flex-shrink-0">
+                                                            Reset to organization default
+                                                        </button>
+                                                    </div>
+                                                @else
+                                                    <div class="py-2 px-3 d-flex gap-2 align-items-center small rounded-3"
+                                                         style="background:#e7f1ff;border:1px solid #b6d4fe;color:#084298;">
+                                                        <iconify-icon icon="mdi:information-outline" class="fs-5"></iconify-icon>
+                                                        This department is currently using the organization-wide default shown below.
+                                                    </div>
+                                                @endif
+                                            </div>
+                                        @endif
+                                    @endif
+                                </div>
+                            </div>
+
+                            @if($leaveApprovalScope === 'organization' || $leaveApprovalDepartmentId)
+
                             {{-- Approval system master toggle --}}
                             <div class="card border shadow-none mb-4">
                                 <div class="card-body p-4">
@@ -968,14 +1107,17 @@ new class extends Component {
                                                    wire:model="leaveApproval.enabled"
                                                    style="width:3em;height:1.5em;">
                                             <label class="form-check-label fw-semibold ms-2" for="leaveApprovalEnabled">
-                                                Enabled for this tenant
+                                                {{ $leaveApprovalScope === 'department' ? 'Enabled for this department' : 'Enabled for this tenant' }}
                                             </label>
                                         </div>
                                     </div>
 
-                                    <div class="alert alert-light border mb-0 py-2 px-3 d-flex gap-2 align-items-start small">
-                                        <iconify-icon icon="mdi:information-outline" class="fs-5 flex-shrink-0 text-primary mt-1"></iconify-icon>
-                                        <span>
+                                    <div class="mb-0 py-2 px-3 d-flex gap-2 align-items-start small rounded-3"
+                                         style="background:#e7f1ff;border:1px solid #b6d4fe;">
+                                        <iconify-icon icon="mdi:information-outline"
+                                                      class="fs-5 flex-shrink-0"
+                                                      style="color:#0d6efd;margin-top:1px;"></iconify-icon>
+                                        <span style="color:#084298;line-height:1.6;">
                 When enabled, a submitted leave request must be approved sequentially through each
                 <strong>enabled</strong> level below (Level 1 → Level 2 → Level 3). A rejection at any
                 level immediately finalizes the request as rejected. You don't need to enable all 3 —
@@ -1103,12 +1245,14 @@ new class extends Component {
                                     <div class="d-flex align-items-center justify-content-end gap-2 mt-4">
                                         <button wire:click="saveLeaveApprovalSettings" class="btn btn-primary">
                                             <iconify-icon icon="mdi:content-save-outline" class="me-1"></iconify-icon>
-                                            Save Leave Approval Settings
+                                            {{ $leaveApprovalScope === 'department' ? 'Save for Selected Department' : 'Save Organization Default' }}
                                         </button>
                                     </div>
 
                                 </div>
                             </div>
+
+                            @endif
 
                         </div>
                     </div>

@@ -166,7 +166,13 @@
                             </li>
                         @endcan
 
-                        @if(auth()->user()->can('view-employees') || auth()->user()->can('approve-leave-requests'))
+                        @php
+                            $canSeeLeaveRequests = auth()->user()->can('view-employees')
+                                || auth()->user()->can('approve-leave-requests')
+                                || (auth()->user()->employee
+                                    && app(\App\Services\LeaveApprovalService::class)->hasAnyPendingApprovalFor(auth()->user(), auth()->user()->employee->organization_id));
+                        @endphp
+                        @if($canSeeLeaveRequests)
                             <li class="sidebar-item">
                                 <a class="sidebar-link {{ request()->routeIs('leaves.index') ? 'active' : '' }}"
                                    href="{{ route('leaves.index') }}">

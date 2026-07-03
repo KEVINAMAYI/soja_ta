@@ -149,7 +149,12 @@ class LeaveController extends Controller
                     return response()->json([
                         'code' => 1003,
                         'message' => 'Insufficient leave balance for ' . $leaveType->name
-                            . ($balanceCheck['remaining'] !== null ? '. Remaining days: ' . $balanceCheck['remaining'] : '.'),
+                            . '. Requested ' . $requestedDays . ' day(s), '
+                            . max(0, $balanceCheck['remaining']) . ' day(s) remaining.',
+                        'data' => [
+                            'requested_days' => $requestedDays,
+                            'remaining_days' => $balanceCheck['remaining'],
+                        ],
                     ], 422);
                 }
 
@@ -239,7 +244,7 @@ class LeaveController extends Controller
 
             // Build query
             $query = Leave::where('employee_id', $employeeId)
-                ->with(['employee', 'department']);
+                ->with(['employee', 'department', 'approvalLogs.approverUser', 'approvalLogs.actionedBy']);
 
             // Apply filters
             if ($request->has('status')) {
@@ -264,6 +269,7 @@ class LeaveController extends Controller
             // Paginate
             $perPage = $request->input('per_page', 15);
             $leaves = $query->paginate($perPage);
+            $leaves->getCollection()->each(fn (Leave $leave) => $leave->append('approval_progress'));
 
             // Get employee shift status for off-shift/sick leaves
             $employee = Employee::find($employeeId);
@@ -312,7 +318,7 @@ class LeaveController extends Controller
             $user = $request->user();
             $employeeId = $user->employee->id ?? null;
 
-            $leave = Leave::with(['employee', 'department'])
+            $leave = Leave::with(['employee', 'department', 'approvalLogs.approverUser', 'approvalLogs.actionedBy'])
                 ->findOrFail($id);
 
             // Check authorization - employee can only view their own leaves
@@ -322,6 +328,8 @@ class LeaveController extends Controller
                     'message' => 'Unauthorized. You do not have permission to view this leave request.'
                 ], 403);
             }
+
+            $leave->append('approval_progress');
 
             return response()->json([
                 'code' => 1000,
@@ -487,6 +495,45 @@ class LeaveController extends Controller
     }
 
     /**
+     * Get the approval-chain progress for a specific leave request
+     * GET /api/leaves/{id}/approval-progress
+     */
+    public function approvalProgress(Request $request, $id)
+    {
+        try {
+            $user = $request->user();
+            $employeeId = $user->employee->id ?? null;
+
+            $leave = Leave::with(['approvalLogs.approverUser', 'approvalLogs.actionedBy'])
+                ->findOrFail($id);
+
+            if ($leave->employee_id !== $employeeId) {
+                return response()->json([
+                    'code' => 1003,
+                    'message' => 'Unauthorized. You do not have permission to view this leave request.'
+                ], 403);
+            }
+
+            return response()->json([
+                'code' => 1000,
+                'message' => 'Approval progress retrieved successfully',
+                'data' => $leave->approval_progress
+            ], 200);
+
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            return response()->json([
+                'code' => 1003,
+                'message' => 'Leave request not found'
+            ], 404);
+        } catch (\Exception $e) {
+            return response()->json([
+                'code' => 1003,
+                'message' => 'Failed to retrieve approval progress: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
      * Approve the current pending level of a leave request
      * POST /api/leaves/{id}/approve
      */
@@ -507,13 +554,6 @@ class LeaveController extends Controller
     private function actionLeave(Request $request, $id, string $action)
     {
         $user = $request->user();
-
-        if (!$user->can('approve-leave-requests')) {
-            return response()->json([
-                'code' => 1003,
-                'message' => 'You do not have permission to action leave requests.'
-            ], 403);
-        }
 
         $validator = Validator::make($request->all(), [
             'notes' => 'nullable|string|max:500',
@@ -543,6 +583,16 @@ class LeaveController extends Controller
                 'code' => 1003,
                 'message' => 'This leave request has already been resolved.'
             ], 409);
+        }
+
+        // Authorization is driven entirely by the configured approval chain —
+        // whoever is designated as the current level's approver (by role or
+        // specific user) may act, regardless of any blanket permission.
+        if (!app(LeaveApprovalService::class)->canAct($leave, $user)) {
+            return response()->json([
+                'code' => 1003,
+                'message' => 'You are not authorized to action this approval level.'
+            ], 403);
         }
 
         try {
