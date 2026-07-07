@@ -171,6 +171,7 @@ class AttendanceReportService
         ?string $startDate = null,
         ?string $endDate = null,
         ?int    $departmentId = null,
+        ?string $employeeType = null,
     )
     {
         $startDate = Carbon::parse($startDate ?? now()->toDateString())->toDateString();
@@ -191,6 +192,11 @@ class AttendanceReportService
         if (!empty($ids)) $query->whereIn('attendances.employee_id', $ids);
         if ($departmentId) $query->where('employees.department_id', $departmentId);
 
+        if ($employeeType && $employeeType !== 'all') {
+            $query->where('employees.employee_type', $employeeType);
+        }
+
+
         $query->orderBy('attendances.date')->orderBy('employees.name');
 
         $records = $query->get();
@@ -208,6 +214,7 @@ class AttendanceReportService
         ?string $startDate = null,
         ?string $endDate = null,
         ?int    $departmentId = null,
+        ?string $employeeType = null,
     )
     {
         $startDate = Carbon::parse($startDate ?? now()->toDateString())->toDateString();
@@ -229,6 +236,10 @@ class AttendanceReportService
         if (!empty($ids)) $query->whereIn('attendances.employee_id', $ids);
         if ($departmentId) $query->where('employees.department_id', $departmentId);
 
+        if ($employeeType && $employeeType !== 'all') {
+            $query->where('employees.employee_type', $employeeType);
+        }
+
         $query->orderBy('attendances.date')->orderBy('attendances.check_in_time');
 
         $records = $query->get();
@@ -245,6 +256,7 @@ class AttendanceReportService
         ?string $startDate = null,
         ?string $endDate = null,
         ?int    $departmentId = null,
+        ?string $employeeType = null,
     )
     {
         $startDate = Carbon::parse($startDate ?? now()->toDateString())->toDateString();
@@ -266,6 +278,10 @@ class AttendanceReportService
         if (!empty($ids)) $query->whereIn('attendances.employee_id', $ids);
         if ($departmentId) $query->where('employees.department_id', $departmentId);
 
+        if ($employeeType && $employeeType !== 'all') {
+            $query->where('employees.employee_type', $employeeType);
+        }
+
         $query->orderBy('attendances.date')->orderBy('employees.name');
 
         $records = $query->get();
@@ -283,6 +299,7 @@ class AttendanceReportService
         ?string $startDate = null,
         ?string $endDate = null,
         ?int    $departmentId = null,
+        ?string $employeeType = null,
     )
     {
         $startDate = Carbon::parse($startDate ?? now()->toDateString())->toDateString();
@@ -304,6 +321,10 @@ class AttendanceReportService
 
         if (!empty($ids)) $query->whereIn('attendances.employee_id', $ids);
         if ($departmentId) $query->where('employees.department_id', $departmentId);
+
+        if ($employeeType && $employeeType !== 'all') {
+            $query->where('employees.employee_type', $employeeType);
+        }
 
         $query->orderBy('attendances.date')->orderBy('attendances.minutes_late', 'desc');
 

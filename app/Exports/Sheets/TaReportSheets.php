@@ -339,7 +339,8 @@ class MasterSheet implements FromArray, WithTitle, WithStyles, WithColumnWidths
             "Defined\nTime In",                  // I
             "Actual\nTime In",                   // J
             "Start of\nMeal",                   // K
-            "End of\nMeal",                     // L
+            "End of\nMeal",
+            "Total\nBreak",                     // M  ← new// L
             "Defined\nTime Out",                 // M
             "Actual\nTime Out",                  // N
             "Defined\nHours",                    // O
@@ -384,7 +385,8 @@ class MasterSheet implements FromArray, WithTitle, WithStyles, WithColumnWidths
                 $this->fmtTime($r->check_in_time),                 // J
                 $firstBreak ? $this->fmtTime($firstBreak->break_start_time) : '', // K
                 $firstBreak ? $this->fmtTime($firstBreak->break_end_time) : '', // L
-                $definedOut,                                        // M
+                $definedOut,
+                $this->totalBreakTime($r),                          // M  ← new// M
                 $this->fmtTime($r->check_out_time),                // N
                 (function () use ($r, $shift) {
                     $dow = \Carbon\Carbon::parse($r->date)->format('l');
@@ -414,7 +416,7 @@ class MasterSheet implements FromArray, WithTitle, WithStyles, WithColumnWidths
         $de = 3 + count($this->records);
         $out[] = [
             'TOTALS',
-            '', '', '', '', '', '', '', '', '', '', '', '',
+            '', '', '', '', '', '', '', '', '', '', '', '','',
             "=SUM(O{$ds}:O{$de})",
             "=SUM(P{$ds}:P{$de})",
             "=SUM(Q{$ds}:Q{$de})",
