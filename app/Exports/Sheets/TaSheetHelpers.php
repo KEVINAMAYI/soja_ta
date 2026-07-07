@@ -21,6 +21,33 @@ trait TaSheetHelpers
         ];
     }
 
+
+    /**
+     * Total break time for the record — sums breakLogs, falls back to DB column.
+     * Returns "H:MM" (e.g. "1:05") or "0:45", empty if no break.
+     */
+    private function totalBreakTime($r): string
+    {
+        $minutes = 0;
+
+        if (method_exists($r, 'relationLoaded') && $r->relationLoaded('breakLogs')) {
+            foreach ($r->breakLogs as $b) {
+                if (($b->break_start_time ?? null) && ($b->break_end_time ?? null)) {
+                    $minutes += Carbon::parse($b->break_start_time)
+                        ->diffInMinutes(Carbon::parse($b->break_end_time));
+                }
+            }
+        }
+
+        // Fallback to a stored column if logs weren't loaded / empty
+        if ($minutes === 0) {
+            $minutes = (int) ($r->total_break_minutes ?? $r->break_minutes ?? 0);
+        }
+
+        return $minutes > 0 ? $this->minutesToHHMM($minutes) : '';
+    }
+
+
     private function dataStyle(string $align = 'center', bool $bold = false): array
     {
         return [

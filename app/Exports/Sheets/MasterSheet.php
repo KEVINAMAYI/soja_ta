@@ -26,27 +26,27 @@ use PhpOffice\PhpSpreadsheet\Style\Color;
  * H  Shift (Day/Night)
  * I  Defined Time In
  * J  Actual Time In
- * K  Start of Lunch
- * L  End of Lunch
- * M  Defined Time Out
- * N  Actual Time Out
- * O  Defined Hours
- * P  Total Hours Worked
- * Q  OT 1
- * R  OT 2
- * S  Absent / Lost Hours
- * T  Exceptions
- * U  Interpretation
+ * K  Meal Time Out
+ * L  Meal Time In
+ * M  Total Break
+ * N  Defined Time Out
+ * O  Actual Time Out
+ * P  Defined Hours
+ * Q  Total Hours Worked
+ * R  OT 1
+ * S  OT 2
+ * T  Absent / Lost Hours
+ * U  Exceptions
+ * V  Interpretation
  */
 class MasterSheet implements FromArray, WithTitle, WithStyles, WithColumnWidths
 {
     use TaSheetHelpers;
 
-    private const LAST_COL = 'U';
-    private const TOTAL_COLS = 21;
+    private const LAST_COL = 'V';
+    private const TOTAL_COLS = 22;
 
     private array $shiftCache = [];
-
 
     public function __construct(
         private readonly array   $records,
@@ -68,13 +68,12 @@ class MasterSheet implements FromArray, WithTitle, WithStyles, WithColumnWidths
     public function columnWidths(): array
     {
         return [
-            'A' => 12, 'B' => 16, 'C' => 16,
-            'D' => 24, 'E' => 18, 'F' => 14,
-            'G' => 18, 'H' => 10, 'I' => 11,
-            'J' => 11, 'K' => 11, 'L' => 11,
-            'M' => 11, 'N' => 11, 'O' => 10,
-            'P' => 11, 'Q' => 9, 'R' => 9,
-            'S' => 11, 'T' => 26, 'U' => 26,
+            'A' => 12, 'B' => 16, 'C' => 16, 'D' => 24,
+            'E' => 18, 'F' => 14, 'G' => 18, 'H' => 10,
+            'I' => 11, 'J' => 11, 'K' => 11, 'L' => 11,
+            'M' => 11, 'N' => 11, 'O' => 11, 'P' => 10,
+            'Q' => 11, 'R' => 9,  'S' => 9,  'T' => 11,
+            'U' => 26, 'V' => 26,
         ];
     }
 
@@ -96,17 +95,18 @@ class MasterSheet implements FromArray, WithTitle, WithStyles, WithColumnWidths
             "Shift\n(Day/Night)",               // H
             "Defined\nTime In",                 // I
             "Actual\nTime In",                  // J
-            "Meal Time\nOut",                  // K
-            "Meal Time\nIn",                  // K
-            "Defined\nTime Out",                // M
-            "Actual\nTime Out",                 // N
-            "Defined\nHours",                   // O
-            "Total Hours\nWorked",              // P
-            "OT 1",                             // Q
-            "OT 2",                             // R
-            "Absent /\nLost Hours",             // S
-            "Exceptions\n(Gate Passes, Leave)", // T
-            "Interpretation",                   // U
+            "Meal Time\nOut",                   // K
+            "Meal Time\nIn",                    // L
+            "Total\nBreak",                     // M
+            "Defined\nTime Out",                // N
+            "Actual\nTime Out",                 // O
+            "Defined\nHours",                   // P
+            "Total Hours\nWorked",              // Q
+            "OT 1",                             // R
+            "OT 2",                             // S
+            "Absent /\nLost Hours",             // T
+            "Exceptions\n(Gate Passes, Leave)", // U
+            "Interpretation",                   // V
         ];
 
         foreach ($this->records as $r) {
@@ -138,9 +138,10 @@ class MasterSheet implements FromArray, WithTitle, WithStyles, WithColumnWidths
                 $shift ? Carbon::parse($shift->start_time)->format('H:i') : '', // I
                 $this->fmtTime($r->check_in_time),                 // J
                 $firstBreak ? $this->fmtTime($firstBreak->break_start_time) : '', // K
-                $firstBreak ? $this->fmtTime($firstBreak->break_end_time) : '', // L
-                $definedOut,                                        // M
-                $this->fmtTime($r->check_out_time),                // N
+                $firstBreak ? $this->fmtTime($firstBreak->break_end_time) : '',   // L
+                $this->totalBreakTime($r),                          // M
+                $definedOut,                                        // N
+                $this->fmtTime($r->check_out_time),                // O
                 (function() use ($r, $shift) {
                     $dow     = \Carbon\Carbon::parse($r->date)->format('l');
                     $isNight = ($shift?->shift_type ?? '') === 'night';
@@ -151,13 +152,13 @@ class MasterSheet implements FromArray, WithTitle, WithStyles, WithColumnWidths
                         $isNight                               => '11.0',
                         default                                => '9.0',
                     };
-                })(),  // O
-                $this->fmtHours((float)($r->worked_hours ?? 0)),   // P
-                $this->fmtHours((float)($r->ot1_hours ?? 0)),      // Q
-                $this->fmtHours((float)($r->ot2_hours ?? 0)),      // R
-                $this->lostHours($r),                              // S
-                '',                           // T
-                $r->interpretation ?? '',                           // U
+                })(),                                               // P
+                $this->fmtHours((float)($r->worked_hours ?? 0)),   // Q
+                $this->fmtHours((float)($r->ot1_hours ?? 0)),      // R
+                $this->fmtHours((float)($r->ot2_hours ?? 0)),      // S
+                $this->lostHours($r),                              // T
+                '',                                                 // U
+                $r->interpretation ?? '',                           // V
             ];
         }
 
@@ -165,13 +166,13 @@ class MasterSheet implements FromArray, WithTitle, WithStyles, WithColumnWidths
         $de = 3 + count($this->records);
         $out[] = [
             'TOTALS',
-            '', '', '', '', '', '', '', '', '', '', '', '',  // B–M
-            "=SUM(O{$ds}:O{$de})",  // O
+            '', '', '', '', '', '', '', '', '', '', '', '', '',  // B–O
             "=SUM(P{$ds}:P{$de})",  // P
             "=SUM(Q{$ds}:Q{$de})",  // Q
             "=SUM(R{$ds}:R{$de})",  // R
             "=SUM(S{$ds}:S{$de})",  // S
-            '', '',                  // T U
+            "=SUM(T{$ds}:T{$de})",  // T
+            '', '',                  // U V
         ];
 
         return $out;
@@ -205,13 +206,13 @@ class MasterSheet implements FromArray, WithTitle, WithStyles, WithColumnWidths
                      'B3:B3' => 'C0341B',
                      'C3:F3' => '2E75B6',
                      'G3:H3' => '375623',
-                     'I3:N3' => '1F6B3A',
-                     'O3:O3' => '7F3F98',
-                     'P3:P3' => '4472C4',
-                     'Q3:R3' => 'C55A11',
-                     'S3:S3' => 'C00000',
-                     'T3:T3' => '833C00',
-                     'U3:U3' => '404040',
+                     'I3:O3' => '1F6B3A',
+                     'P3:P3' => '7F3F98',
+                     'Q3:Q3' => '4472C4',
+                     'R3:S3' => 'C55A11',
+                     'T3:T3' => 'C00000',
+                     'U3:U3' => '833C00',
+                     'V3:V3' => '404040',
                  ] as $range => $color) {
             $sheet->getStyle($range)->applyFromArray($this->hdrStyle($color));
         }
@@ -226,7 +227,7 @@ class MasterSheet implements FromArray, WithTitle, WithStyles, WithColumnWidths
 
             $sheet->getStyle("A{$row}:{$lastCol}{$row}")->applyFromArray($this->dataStyle('center'));
             $sheet->getStyle("D{$row}:F{$row}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_LEFT);
-            $sheet->getStyle("T{$row}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_LEFT);
+            $sheet->getStyle("U{$row}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_LEFT);
 
             $empType = (string)$sheet->getCell("B{$row}")->getValue();
             if ($empType) {
@@ -234,25 +235,25 @@ class MasterSheet implements FromArray, WithTitle, WithStyles, WithColumnWidths
                 $sheet->getStyle("B{$row}")->applyFromArray($this->badgeStyle($bg, $fg));
             }
 
-            $interpVal = (string)$sheet->getCell("U{$row}")->getValue();
+            $interpVal = (string)$sheet->getCell("V{$row}")->getValue();
             if ($interpVal) {
                 [$bg, $fg] = $this->interpretationBadge($interpVal);
-                $sheet->getStyle("U{$row}")->applyFromArray($this->badgeStyle($bg, $fg));
+                $sheet->getStyle("V{$row}")->applyFromArray($this->badgeStyle($bg, $fg));
             }
 
-            $lostVal = $sheet->getCell("S{$row}")->getValue();
+            $lostVal = $sheet->getCell("T{$row}")->getValue();
             if (is_numeric($lostVal) && (float)$lostVal > 0) {
-                $sheet->getStyle("S{$row}")->getFont()->setBold(true)->getColor()->setRGB('C00000');
+                $sheet->getStyle("T{$row}")->getFont()->setBold(true)->getColor()->setRGB('C00000');
             }
         }
 
-        $sheet->mergeCells("A{$totalRow}:N{$totalRow}");
+        $sheet->mergeCells("A{$totalRow}:O{$totalRow}");
         $sheet->getStyle("A{$totalRow}:{$lastCol}{$totalRow}")->applyFromArray([
             'font' => ['bold' => true, 'size' => 9, 'name' => 'Arial', 'color' => ['rgb' => 'FFFFFF']],
             'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => '1F3864']],
             'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER],
         ]);
-        foreach (['O', 'P', 'Q', 'R', 'S'] as $col) {
+        foreach (['P', 'Q', 'R', 'S', 'T'] as $col) {
             $sheet->getStyle("{$col}{$totalRow}")->getFill()
                 ->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('D9E1F2');
             $sheet->getStyle("{$col}{$totalRow}")->getFont()
