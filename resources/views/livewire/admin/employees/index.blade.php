@@ -909,6 +909,52 @@ new class extends Component {
         $this->reset(['search', 'workLocations', 'selectedLocation']);
     }
 
+    #[On('unassign-work-location')]
+    public function unassignWorkLocation($id): void
+    {
+        DB::beginTransaction();
+
+        try {
+            $assignments = EmployeeAssignment::where('employee_id', $id)
+                ->where('is_current', true)
+                ->get();
+
+            if ($assignments->isNotEmpty()) {
+                foreach ($assignments as $assignment) {
+                    $assignment->update(['is_current' => false, 'end_date' => now()]);
+                }
+
+                DB::commit();
+
+                LivewireAlert::title('Success!')
+                    ->text('Employee has been unassigned from their work location.')
+                    ->success()
+                    ->toast()
+                    ->position('top-end')
+                    ->show();
+            } else {
+                DB::rollBack();
+
+                LivewireAlert::title('Notice')
+                    ->text('This employee is not currently assigned to any location.')
+                    ->info()
+                    ->toast()
+                    ->position('top-end')
+                    ->show();
+            }
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            report($e);
+
+            LivewireAlert::title('Error!')
+                ->text('Failed to unassign employee from location.')
+                ->error()
+                ->toast()
+                ->position('top-end')
+                ->show();
+        }
+    }
+
     public function rules(): array
     {
         if ($this->isCreatingStudent()) {

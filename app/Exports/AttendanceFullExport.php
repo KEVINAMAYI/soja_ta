@@ -31,6 +31,7 @@ class AttendanceFullExport implements WithMultipleSheets
         public readonly ?string $startDate = null,
         public readonly ?string $endDate = null,
         public readonly ?int    $departmentId = null,
+        public readonly ?string $employeeType = null,
     )
     {
     }
@@ -46,6 +47,7 @@ class AttendanceFullExport implements WithMultipleSheets
             'startDate' => $this->startDate,
             'endDate' => $this->endDate,
             'departmentId' => $this->departmentId,
+            'employeeType' => $this->employeeType,
         ];
 
         return [

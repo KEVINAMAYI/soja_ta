@@ -39,7 +39,8 @@ new class extends Component {
     public $exportDepartmentId = 'all';
     public $filterGrade = null;
 
-
+    public $filterEmployeeType = 'all';
+    public $employeeTypes = [];
 
     protected function rules()
     {
@@ -72,6 +73,14 @@ new class extends Component {
             $this->departments = Department::where('organization_id', $orgId)
                 ->orderBy('name')
                 ->get();
+
+
+            $this->employeeTypes = Employee::where('organization_id', $orgId)
+                ->whereNotNull('employee_type')
+                ->distinct()
+                ->orderBy('employee_type')
+                ->pluck('employee_type')
+                ->toArray();
         }
 
         $this->loadReportSettings();
@@ -120,7 +129,7 @@ new class extends Component {
     #[On('filter-updated')]
     public function dateChaged()
     {
-        $this->dispatch('date-range-updated', startDate: $this->startDate, endDate: $this->endDate, status: $this->filterStatus, grade: $this->filterGrade,department_id: $this->exportDepartmentId);
+        $this->dispatch('date-range-updated', startDate: $this->startDate, endDate: $this->endDate, status: $this->filterStatus, grade: $this->filterGrade, department_id: $this->exportDepartmentId, employee_type: $this->filterEmployeeType);
     }
 
     #[On('timesheets-filter-updated')]
@@ -684,7 +693,8 @@ new class extends Component {
                                                         <a href="#"
                                                            wire:click.prevent="dispatch('export-full-excel')"
                                                            class="dropdown-item">
-                                                            <iconify-icon icon="mdi:file-excel-box" width="16" height="16"
+                                                            <iconify-icon icon="mdi:file-excel-box" width="16"
+                                                                          height="16"
                                                                           style="margin-right:6px; vertical-align:middle;"></iconify-icon>
                                                             Full Excel (T&amp;A)
                                                         </a>
@@ -753,11 +763,24 @@ new class extends Component {
                                                     wire:change="$dispatch('filter-updated')">
                                                     <option value="all">All Departments</option>
                                                     @foreach($departments as $department)
-                                                        <option value="{{ $department->id }}">{{ $department->name }}</option>
+                                                        <option
+                                                            value="{{ $department->id }}">{{ $department->name }}</option>
                                                     @endforeach
                                                 </select>
                                             </div>
 
+                                            <div class="col-3 mb-3">
+                                                <label class="form-label">Employee Type</label>
+                                                <select
+                                                    class="form-control"
+                                                    wire:model="filterEmployeeType"
+                                                    wire:change="$dispatch('filter-updated')">
+                                                    <option value="all">All Types</option>
+                                                    @foreach($employeeTypes as $type)
+                                                        <option value="{{ $type }}">{{ ucfirst($type) }}</option>
+                                                    @endforeach
+                                                </select>
+                                            </div>
 
 
                                         </div>
@@ -855,6 +878,8 @@ new class extends Component {
                                                     @endforeach
                                                 </select>
                                             </div>
+
+
                                         </div>
 
 
