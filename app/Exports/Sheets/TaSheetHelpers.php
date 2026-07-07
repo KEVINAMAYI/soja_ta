@@ -48,6 +48,15 @@ trait TaSheetHelpers
     }
 
 
+    private function minutesToHHMM(int $minutes): string
+    {
+        $hours   = intdiv($minutes, 60);
+        $mins    = $minutes % 60;
+
+        return sprintf('%d:%02d', $hours, $mins);
+    }
+
+
     private function dataStyle(string $align = 'center', bool $bold = false): array
     {
         return [
