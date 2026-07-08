@@ -34,7 +34,12 @@ class PullZkbioAreaFromTransactions extends Command
             $query->where('zkbio_pin', $pin);
         }
 
+        if ($this->option('missing-only')) {
+            $query->whereDoesntHave('zkbioAreas');
+        }
+
         $employees = $query->get();
+
         $this->info("Checking transactions for {$employees->count()} employees ({$startDate} to {$endDate})...");
 
         $updated = 0; $noData = 0;
