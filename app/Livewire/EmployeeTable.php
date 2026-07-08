@@ -122,12 +122,15 @@ class EmployeeTable extends DataTableComponent
             $query->with([
                 'organization',
                 'user',
-                'assignments',
+                'assignments' => fn($q) => $q->where('is_current', true)->with('location'),
                 // Load last attendance record (most recent by date, regardless of date)
                 'lastAttendance',
             ]);
         } else {
-            $query->with(['organization', 'shift', 'user', 'assignments']);
+            $query->with([
+                'organization', 'shift', 'user',
+                'assignments' => fn($q) => $q->where('is_current', true)->with('location'),
+            ]);
         }
 
         if ($this->activePersonType === 'student') {
@@ -341,7 +344,6 @@ class EmployeeTable extends DataTableComponent
         $columns[] = Column::make($isStudentOrg ? "School Location" : "Work Location")
             ->label(function ($row) {
                 $locations = $row->assignments
-                    ->load('location')
                     ->pluck('location.name')
                     ->filter()
                     ->unique();

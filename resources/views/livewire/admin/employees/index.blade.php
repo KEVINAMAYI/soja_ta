@@ -926,6 +926,8 @@ new class extends Component {
 
                 DB::commit();
 
+                $this->dispatch('refreshDatatable');
+
                 LivewireAlert::title('Success!')
                     ->text('Employee has been unassigned from their work location.')
                     ->success()
