@@ -25,7 +25,7 @@ class EmployeeExportController extends Controller
         $org           = auth()->user()->employee->organization;
 
         $query = Employee::query()
-            ->with(['organization', 'shift', 'user', 'department'])
+            ->with(['organization', 'shift', 'user', 'department', 'zkbioAreas'])
             ->where('organization_id', $orgId);
 
         if (!empty($ids)) {

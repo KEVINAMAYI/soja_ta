@@ -113,6 +113,9 @@ new class extends Component {
     public string $activeFilter = '';
     public int $adDeactivatedCount = 0;
 
+    // ── NEW EMPLOYEE AREAS ────────────────────────────────────────────────
+    public array $newEmployeeAreas = [];      // selected area codes
+    public array $modalAreas = [];
 
     public function mount($roleId = null): void
     {
@@ -158,11 +161,36 @@ new class extends Component {
         }
 
 
+        $this->loadModalAreas();
+
         $this->shift_id = $this->shifts->firstWhere('name', 'Day Shift')?->id
             ?? $this->shifts->firstWhere('name', 'Day')?->id
             ?? $this->shifts->first()?->id
             ?? null;
 
+    }
+
+
+    public function loadModalAreas(): void
+    {
+        $org = auth()->user()->employee->organization;
+
+        $areas = ZkbioArea::where('organization_id', $org->id)
+            ->where('area_code', '>', 5)
+            ->get();
+
+        if ($areas->isEmpty()) {
+            app(ZKBioPersonService::class, ['organization' => $org])->syncAreas();
+
+            $areas = ZkbioArea::where('organization_id', $org->id)
+                ->where('area_code', '>', 5)
+                ->get();
+        }
+
+        $this->modalAreas = $areas->map(fn($a) => [
+            'area_code' => $a->area_code,
+            'area_name' => $a->area_name,
+        ])->toArray();
     }
 
 
@@ -433,7 +461,7 @@ new class extends Component {
                     $zkStatus = 'skipped';
                     if (!$existing->zkbio_pin) {
                         $zkStatus = 'no_pin';
-                    } elseif ($org->zkbio_sync_enabled && $org->zkbio_base_url && $org->zkbio_access_token) {
+                    } elseif ($org->zkbio_enabled && $org->zkbio_base_url && $org->zkbio_access_token) {
                         try {
                             $synced = app(ZKBioPersonService::class, ['organization' => $org])->syncPerson($existing->fresh());
                             $zkStatus = $synced ? 'synced' : 'zk_failed: API returned false';
@@ -490,7 +518,7 @@ new class extends Component {
                     DB::commit();
 
                     $zkStatus = 'skipped';
-                    if ($org->zkbio_sync_enabled && $org->zkbio_base_url && $org->zkbio_access_token) {
+                    if ($org->zkbio_enabled && $org->zkbio_base_url && $org->zkbio_access_token) {
                         try {
                             app(ZKBioPersonService::class, ['organization' => $org])->syncPerson($employee->fresh());
                             $zkStatus = 'synced';
@@ -578,7 +606,7 @@ new class extends Component {
             $failed = [];
 
             foreach (Employee::whereIn('id', $toProcess->keys())->get() as $emp) {
-                if ($emp->zkbio_pin && $org->zkbio_sync_enabled) {
+                if ($emp->zkbio_pin && $org->zkbio_enabled) {
                     try {
                         app(ZKBioPersonService::class, ['organization' => $org])->deletePerson($emp->zkbio_pin);
                     } catch (\Throwable $zkErr) {
@@ -915,7 +943,7 @@ new class extends Component {
 
                 // ── ZKBio Sync ──────────────────────────────────────────────
                 $zkStatus = 'skipped';
-                if ($org->zkbio_sync_enabled && $org->zkbio_base_url && $org->zkbio_access_token) {
+                if ($org->zkbio_enabled && $org->zkbio_base_url && $org->zkbio_access_token) {
                     try {
                         app(\App\Services\ZKBioPersonService::class, ['organization' => $org])
                             ->syncPerson($employee->fresh());
@@ -1204,22 +1232,21 @@ new class extends Component {
 
             DB::commit();
 
-            // ZKBio sync
-            if ($org->zkbio_sync_enabled && $org->zkbio_base_url && $org->zkbio_access_token) {
+            // ZKBio sync — person is only pushed to device once assigned to an area
+            if ($org->zkbio_enabled && $org->zkbio_base_url && $org->zkbio_access_token) {
                 try {
+                    if (!$employee->zkbio_pin) {
+                        $employee->update(['zkbio_pin' => Employee::generateZKBioPin($org->id)]);
+                    }
+
                     $fresh = $employee->fresh();
-                    app(ZKBioPersonService::class, ['organization' => $org])->syncPerson($fresh);
+                    $zkService = app(ZKBioPersonService::class, ['organization' => $org]);
 
-                    // Assign to ALL areas
-                    $allAreas = \App\Models\ZkbioArea::where('organization_id', $org->id)
-                        ->where('area_code', '>', 5)
-                        ->get();
+                    $zkService->syncPerson($fresh);
 
-                    if ($allAreas->isNotEmpty()) {
-                        $zkService = app(\App\Services\ZKBioPersonService::class, ['organization' => $org]);
-                        $areaCodes = $allAreas->pluck('area_code')->toArray();
-                        $zkService->syncEmployeeAreas($fresh, $areaCodes);
-                        $fresh->zkbioAreas()->sync($allAreas->pluck('id')->toArray());
+                    // Assign to selected areas — this is what pushes them to the device
+                    if (!empty($this->newEmployeeAreas)) {
+                        $zkService->syncEmployeeAreas($fresh, $this->newEmployeeAreas);
                     }
 
                 } catch (\Throwable $zkErr) {
@@ -1260,6 +1287,7 @@ new class extends Component {
         $this->employee_title = $employee->employee_title;
         $this->grade = $employee->grade;
         $this->personType = $employee->is_student ? 'student' : 'staff';
+        $this->newEmployeeAreas = $employee->zkbioAreas->pluck('area_code')->toArray();
         $this->dispatch('refresh-status', employee: $employee);
         $this->dispatch('show-employee-modal');
     }
@@ -1269,16 +1297,13 @@ new class extends Component {
         $this->validate();
         try {
             DB::beginTransaction();
-
             $employee = Employee::with('user.roles')->findOrFail($this->editId);
             $org = auth()->user()->employee->organization;
             $isStudent = $this->isCreatingStudent();
             $roleName = $this->resolveRoleName();
-
             $email = $isStudent ? $employee->email : $this->email;
             $phone = $isStudent ? $employee->phone : PhoneSanitizer::sanitize($this->phone);
             $deptId = $isStudent ? ($this->department_id ?? $employee->department_id) : $this->department_id;
-
             $employee->update([
                 'name' => $this->name,
                 'email' => $email,
@@ -1291,14 +1316,38 @@ new class extends Component {
                 'employee_title' => $this->employee_title,
                 'is_student' => $isStudent ? 1 : 0,
             ]);
-
             $employee->user->syncRoles([$roleName]);
             if ($employee->user) {
                 $employee->user->update(['name' => $this->name, 'email' => $email]);
             }
-
             DB::commit();
-            app(ZKBioPersonService::class, ['organization' => $org])->syncPerson($employee->fresh());
+
+            $freshEmployee = $employee->fresh();
+            $service = app(ZKBioPersonService::class, ['organization' => $org]);
+            $service->syncPerson($freshEmployee);
+
+            if ($freshEmployee->zkbio_pin) {
+                $currentCodes = $freshEmployee->zkbioAreas->pluck('area_code')->toArray();
+                $newCodes = $this->newEmployeeAreas ?? [];
+
+                $toAdd = array_diff($newCodes, $currentCodes);
+                $toRemove = array_diff($currentCodes, $newCodes);
+
+                if (!empty($toAdd)) {
+                    $service->assignPersonToAreas($freshEmployee, $toAdd);
+                }
+                if (!empty($toRemove)) {
+                    $service->removePersonFromAreas($freshEmployee, $toRemove);
+                }
+
+                $areaIds = ZkbioArea::where('organization_id', $org->id)
+                    ->whereIn('area_code', $newCodes)
+                    ->pluck('id')
+                    ->toArray();
+
+                $freshEmployee->zkbioAreas()->sync($areaIds);
+            }
+
             $this->dispatch('hide-employee-modal');
             LivewireAlert::title('Awesome!')->text($isStudent ? 'Student updated successfully.' : 'Staff member updated successfully.')->success()->toast()->position('top-end')->show();
             $this->resetForm();
@@ -1391,10 +1440,16 @@ new class extends Component {
     public function resetForm(): void
     {
         $this->reset(['name', 'email', 'phone', 'employee_type_id', 'department_id',
-            'id_number', 'editId', 'shift_id', 'employee_title', 'roleName', 'grade']);
+            'id_number', 'editId', 'shift_id', 'employee_title', 'roleName', 'grade',
+            'newEmployeeAreas']);
         $this->active = true;
         $this->roleName = 'employee';
+        $this->shift_id = $this->shifts->firstWhere('name', 'Day Shift')?->id
+            ?? $this->shifts->firstWhere('name', 'Day')?->id
+            ?? $this->shifts->first()?->id
+            ?? null;
     }
+
 
     #[On('set-off-shift')]
     public function openModal($id, $name): void
@@ -3404,9 +3459,6 @@ new class extends Component {
                 <form wire:submit.prevent="{{ $editId ? 'updateEmployee' : 'createEmployee' }}">
                     <div class="modal-body">
 
-                        {{-- Hidden shift resolver --}}
-                        <input type="hidden" wire:model="shift_id"/>
-
                         <div class="row">
 
                             @if($isStudentOrg)
@@ -3458,16 +3510,16 @@ new class extends Component {
                                 </div>
                             @endif
 
-                            {{--                            <div class="col-md-6 mb-3">--}}
-                            {{--                                <label class="form-label">{{ $isStudentOrg ? 'Session / Timetable' : 'Shift' }} <span class="text-danger">*</span></label>--}}
-                            {{--                                <select wire:model="shift_id" class="form-control">--}}
-                            {{--                                    <option value="">Select {{ $isStudentOrg ? 'Session' : 'Shift' }}</option>--}}
-                            {{--                                    @foreach ($shifts as $shift)--}}
-                            {{--                                        <option value="{{ $shift->id }}">{{ $shift->name }}</option>--}}
-                            {{--                                    @endforeach--}}
-                            {{--                                </select>--}}
-                            {{--                                @error('shift_id') <small class="text-danger">{{ $message }}</small> @enderror--}}
-                            {{--                            </div>--}}
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">{{ $isStudentOrg ? 'Session / Timetable' : 'Shift' }} <span class="text-danger">*</span></label>
+                                <select wire:model="shift_id" class="form-control">
+                                    <option value="">Select {{ $isStudentOrg ? 'Session' : 'Shift' }}</option>
+                                    @foreach ($shifts as $shift)
+                                        <option value="{{ $shift->id }}">{{ $shift->name }}</option>
+                                    @endforeach
+                                </select>
+                                @error('shift_id') <small class="text-danger">{{ $message }}</small> @enderror
+                            </div>
 
                             @if($isStudent)
                                 <div class="col-md-6 mb-3">
@@ -3521,6 +3573,44 @@ new class extends Component {
                                                id="activeToggle"/>
                                         <label for="activeToggle" class="form-check-label">Active</label>
                                     </div>
+                                </div>
+                            @endif
+
+
+                            @if(!empty($modalAreas))
+                                <div class="col-12 mb-3">
+                                    <label class="form-label fw-semibold mb-2">
+                                        <iconify-icon icon="mdi:map-marker-multiple"
+                                                      style="color:#0078d4;"></iconify-icon>
+                                        Device Areas
+                                        <small class="text-muted fw-normal">— assigns employee to ZKBio device</small>
+                                    </label>
+                                    <div class="row g-2">
+                                        @foreach($modalAreas as $area)
+                                            <div class="col-md-6">
+                                                <label class="d-flex align-items-center gap-2 p-2 rounded-2 w-100"
+                                                       style="border:1.5px solid {{ in_array($area['area_code'], $newEmployeeAreas) ? '#0078d4' : '#e2e8f0' }};
+                                  background:{{ in_array($area['area_code'], $newEmployeeAreas) ? '#f0f6ff' : '#fafafa' }};
+                                  cursor:pointer; font-size:0.8rem;">
+                                                    <input type="checkbox"
+                                                           value="{{ $area['area_code'] }}"
+                                                           wire:model.live="newEmployeeAreas"
+                                                           style="accent-color:#0078d4; cursor:pointer;">
+                                                    <iconify-icon icon="mdi:map-marker"
+                                                                  style="color:{{ in_array($area['area_code'], $newEmployeeAreas) ? '#0078d4' : '#94a3b8' }};"></iconify-icon>
+                                                    <span class="fw-semibold text-dark">{{ $area['area_name'] }}</span>
+                                                    <small
+                                                        class="text-muted ms-auto">Code: {{ $area['area_code'] }}</small>
+                                                </label>
+                                            </div>
+                                        @endforeach
+                                    </div>
+                                    @if(empty($newEmployeeAreas))
+                                        <small class="text-warning d-block mt-1">
+                                            <iconify-icon icon="mdi:alert"></iconify-icon>
+                                            No area selected — employee will be created but not pushed to any device.
+                                        </small>
+                                    @endif
                                 </div>
                             @endif
 

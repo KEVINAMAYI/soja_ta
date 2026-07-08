@@ -56,7 +56,7 @@ class EmployeesExcelExport implements FromView, ShouldAutoSize, WithTitle, WithS
         $org            = $user->employee->organization;
 
         $query = Employee::query()
-            ->with(['organization', 'shift', 'user', 'department'])
+            ->with(['organization', 'shift', 'user', 'department', 'zkbioAreas'])
             ->where('organization_id', $organizationId);
 
         if (!empty($this->selectedIds)) {
