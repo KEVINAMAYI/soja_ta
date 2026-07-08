@@ -13,7 +13,9 @@ class PullZkbioAreaFromTransactions extends Command
     protected $signature = 'zkbio:pull-areas-from-transactions
                             {--org=3}
                             {--days=90 : How many days back to look}
-                            {--pin= : Single employee by zkbio_pin}';
+                            {--pin= : Single employee by zkbio_pin}
+                            {--missing-only : Only check employees who currently have no zkbioAreas synced}';
+
 
     protected $description = 'Derive each employee\'s actual area(s) from ZKBio attendance transactions and sync locally';
 
