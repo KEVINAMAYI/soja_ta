@@ -163,6 +163,37 @@ class ZKBioPersonService
         return $query->get();
     }
 
+    /**
+     * Pull the areas a specific person is CURRENTLY assigned to on the ZKBio server.
+     */
+    public function getPersonAreas(string $pin): array
+    {
+        if (!$this->isEnabled()) return [];
+
+        $response = Http::timeout(10)
+            ->get("{$this->baseUrl}/api/attAreaPerson/list", [
+                'pageNo' => 1,
+                'pageSize' => 200,
+                'access_token' => $this->accessToken,
+                'pin' => $pin,
+            ]);
+
+        $body = $response->json();
+
+        if (($body['code'] ?? -1) !== 0) {
+            Log::error('ZKBio getPersonAreas failed', ['pin' => $pin, 'response' => $body]);
+            return [];
+        }
+
+        $rows = $body['data'] ?? [];
+
+        return collect($rows)
+            ->map(fn($r) => (string)($r['code'] ?? $r['areaCode'] ?? null))
+            ->filter()
+            ->values()
+            ->all();
+    }
+
     public function assignPersonToAreas(Employee $employee, array $areaCodes): bool
     {
         if (!$this->isEnabled() || !$employee->zkbio_pin) return false;
