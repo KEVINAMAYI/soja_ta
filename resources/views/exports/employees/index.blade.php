@@ -59,6 +59,7 @@
                 <th>Dept / Division / Section / Shift</th>
             @endif
             <th>Device PIN</th>
+            <th>Mapped Device(s)</th>
             <th>Active</th>
         </tr>
         </thead>
@@ -119,6 +120,15 @@
                     @endif
                 </td>
 
+                {{-- Mapped Device(s) --}}
+                <td>
+                    @if($emp->zkbioAreas->isNotEmpty())
+                        {{ $emp->zkbioAreas->pluck('area_name')->implode(', ') }}
+                    @else
+                        <span class="muted">—</span>
+                    @endif
+                </td>
+
                 {{-- Active --}}
                 <td>
                     @if($emp->active)
@@ -130,7 +140,7 @@
             </tr>
         @empty
             <tr>
-                <td colspan="13" style="text-align:center; color:#94a3b8; padding:20px;">No employees found.</td>
+                <td colspan="14" style="text-align:center; color:#94a3b8; padding:20px;">No employees found.</td>
             </tr>
         @endforelse
         </tbody>

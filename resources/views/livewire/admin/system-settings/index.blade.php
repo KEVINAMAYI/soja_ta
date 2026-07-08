@@ -22,8 +22,7 @@ new class extends Component {
         $org = Organization::find($orgId);
 
         $this->settings = $org->settings->mapWithKeys(function ($item) {
-            $value = $item->type === 'json' ? json_decode($item->value, true) : $item->value;
-            return [$item->key => $value];
+            return [$item->key => $item->value];
         })->toArray();
 
         // Make sure boolean value is cast properly for your new setting

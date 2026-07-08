@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Facades\DB;
 
 class Employee extends Model
 {
@@ -70,6 +71,41 @@ class Employee extends Model
                 }
             }
         });
+
+        static::saved(function ($employee) {
+            if ($employee->shift_id && ($employee->wasRecentlyCreated || $employee->wasChanged('shift_id'))) {
+                $employee->syncPrimaryShift();
+            }
+        });
+    }
+
+    /**
+     * Keep the employee_shifts pivot in step with the shift_id column.
+     * shift_id is the legacy single-shift field; shifts() is the pivot
+     * relation the UI/reports read from — without this they drift apart
+     * and employees show up with no shift assigned.
+     */
+    public function syncPrimaryShift(): void
+    {
+        if (!$this->shift_id) return;
+
+        DB::table('employee_shifts')->insertOrIgnore([
+            'employee_id' => $this->id,
+            'shift_id' => $this->shift_id,
+            'is_primary' => true,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        DB::table('employee_shifts')
+            ->where('employee_id', $this->id)
+            ->where('shift_id', $this->shift_id)
+            ->update(['is_primary' => true, 'updated_at' => now()]);
+
+        DB::table('employee_shifts')
+            ->where('employee_id', $this->id)
+            ->where('shift_id', '!=', $this->shift_id)
+            ->update(['is_primary' => false, 'updated_at' => now()]);
     }
 
 
