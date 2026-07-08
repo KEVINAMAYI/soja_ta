@@ -117,6 +117,10 @@ new class extends Component {
     public array $newEmployeeAreas = [];      // selected area codes
     public array $modalAreas = [];
 
+    // ── BULK DEVICE ASSIGNMENT ───────────────────────────────────────────
+    public array $bulkDeviceEmployeeIds = [];
+    public $bulkDeviceAreaCode = null;
+
     public function mount($roleId = null): void
     {
 
@@ -1481,6 +1485,80 @@ new class extends Component {
         }
         $this->dispatch('hide-off-shift-modal');
         LivewireAlert::title('Awesome!')->text($employee->personTypeLabel() . ' off-shift updated successfully.')->success()->toast()->position('top-end')->show();
+    }
+
+    #[On('open-bulk-device-modal')]
+    public function openBulkDeviceModal(array $ids): void
+    {
+        if (empty($ids)) {
+            return;
+        }
+        $this->bulkDeviceEmployeeIds = $ids;
+        $this->bulkDeviceAreaCode = null;
+        $this->dispatch('show-bulk-device-modal');
+    }
+
+    public function assignSelectedToDevice(): void
+    {
+        $this->validate(['bulkDeviceAreaCode' => 'required']);
+
+        $org = auth()->user()->employee->organization;
+
+        if (!$org->zkbio_enabled || !$org->zkbio_base_url || !$org->zkbio_access_token) {
+            LivewireAlert::title('ZKBio not configured')
+                ->text('Enable ZKBio for this organization before assigning devices.')
+                ->error()->toast()->position('top-end')->show();
+            return;
+        }
+
+        $area = ZkbioArea::where('organization_id', $org->id)
+            ->where('area_code', $this->bulkDeviceAreaCode)
+            ->first();
+
+        if (!$area) {
+            LivewireAlert::title('Error')->text('Selected device could not be found.')->error()->toast()->position('top-end')->show();
+            return;
+        }
+
+        $employees = Employee::whereIn('id', $this->bulkDeviceEmployeeIds)
+            ->where('organization_id', $org->id)
+            ->get();
+
+        $zkService = app(ZKBioPersonService::class, ['organization' => $org]);
+        $ok = 0;
+        $failed = 0;
+
+        foreach ($employees as $employee) {
+            try {
+                if (!$employee->zkbio_pin) {
+                    $employee->update(['zkbio_pin' => Employee::generateZKBioPin($org->id)]);
+                }
+
+                $fresh = $employee->fresh();
+                $zkService->syncPerson($fresh);
+                $zkService->assignPersonToAreas($fresh, [(string) $area->area_code]);
+
+                // Adds this device without disturbing any devices the employee already has
+                $employee->zkbioAreas()->syncWithoutDetaching([$area->id]);
+
+                $ok++;
+            } catch (\Throwable $e) {
+                Log::warning("Bulk device assignment failed for employee {$employee->id}", ['error' => $e->getMessage()]);
+                $failed++;
+            }
+        }
+
+        $this->dispatch('hide-bulk-device-modal');
+        $this->dispatch('bulk-device-assigned');
+        $this->dispatch('refreshDatatable');
+
+        LivewireAlert::title($failed ? 'Partially completed' : 'Awesome!')
+            ->text("{$ok} employee(s) assigned to {$area->area_name}." . ($failed ? " {$failed} failed — check logs." : ''))
+            ->{$failed ? 'warning' : 'success'}()
+            ->toast()->position('top-end')->show();
+
+        $this->bulkDeviceEmployeeIds = [];
+        $this->bulkDeviceAreaCode = null;
     }
 
     public function getBreadcrumbItemsProperty(): array
@@ -3714,6 +3792,36 @@ new class extends Component {
         </div>
     </div>
 
+    {{-- BULK DEVICE ASSIGNMENT MODAL --}}
+    <div class="modal fade" id="bulkDeviceModal" tabindex="-1" aria-hidden="true" wire:ignore.self>
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content shadow-lg">
+                <div class="modal-header bg-light rounded-top">
+                    <h5 class="modal-title">Assign to Device</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-muted mb-3">
+                        Assigning <strong>{{ count($bulkDeviceEmployeeIds) }}</strong> selected employee(s) to a device.
+                        This adds the device without removing any devices they're already mapped to.
+                    </p>
+                    <label class="form-label">Device <span class="text-danger">*</span></label>
+                    <select wire:model="bulkDeviceAreaCode" class="form-control">
+                        <option value="">Select Device</option>
+                        @foreach ($modalAreas as $area)
+                            <option value="{{ $area['area_code'] }}">{{ $area['area_name'] }}</option>
+                        @endforeach
+                    </select>
+                    @error('bulkDeviceAreaCode') <small class="text-danger">{{ $message }}</small> @enderror
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-danger" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-success" wire:click="assignSelectedToDevice">Assign</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     {{-- AREA MODEL--}}
     <div class="modal fade" id="areaModal" tabindex="-1" aria-hidden="true" wire:ignore.self>
         <div class="modal-dialog modal-lg modal-dialog-centered">
@@ -3876,6 +3984,13 @@ new class extends Component {
         });
         window.addEventListener('hide-off-shift-modal', () => {
             bootstrap.Modal.getInstance(document.getElementById('offShiftModal'))?.hide();
+        });
+
+        window.addEventListener('show-bulk-device-modal', () => {
+            new bootstrap.Modal(document.getElementById('bulkDeviceModal')).show();
+        });
+        window.addEventListener('hide-bulk-device-modal', () => {
+            bootstrap.Modal.getInstance(document.getElementById('bulkDeviceModal'))?.hide();
         });
 
         window.addEventListener('show-area-modal', () => {

@@ -333,9 +333,24 @@ class EmployeeTable extends DataTableComponent
         return [
             'activate' => 'Activate',
             'deactivate' => 'Deactivate',
+            'promptAssignDevice' => 'Assign to Device',
             'exportExcel' => 'Export Excel',
 //            'exportPdf' => 'Export PDF',
         ];
+    }
+
+    public function promptAssignDevice(): void
+    {
+        if (empty($this->getSelected())) {
+            return;
+        }
+        $this->dispatch('open-bulk-device-modal', ids: $this->getSelected());
+    }
+
+    #[On('bulk-device-assigned')]
+    public function onBulkDeviceAssigned(): void
+    {
+        $this->clearSelected();
     }
 
     public function exportExcel()
