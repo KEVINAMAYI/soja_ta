@@ -47,6 +47,10 @@ class EmployeeTable extends DataTableComponent
         $this->setPrimaryKey('id');
         $this->setSearchEnabled();
         $this->setEagerLoadAllRelationsStatus(true);
+
+        // Keep selections when the user searches or changes filters
+        $this->setClearSelectedOnSearchDisabled();
+        $this->setClearSelectedOnFilterDisabled();
     }
 
     public function builder(): \Illuminate\Database\Eloquent\Builder
