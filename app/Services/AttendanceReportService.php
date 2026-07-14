@@ -189,7 +189,7 @@ class AttendanceReportService
             ->whereBetween('attendances.date', [$startDate, $endDate])
             ->select('attendances.*');
 
-        if (!empty($ids)) $query->whereIn('attendances.employee_id', $ids);
+        if (!empty($ids)) $query->whereIn('attendances.id', $ids);
         if ($departmentId) $query->where('employees.department_id', $departmentId);
 
         if ($employeeType && $employeeType !== 'all') {
@@ -233,7 +233,7 @@ class AttendanceReportService
             ->whereIn('attendances.status', ['clocked_in', 'clocked_out'])
             ->select('attendances.*');
 
-        if (!empty($ids)) $query->whereIn('attendances.employee_id', $ids);
+        if (!empty($ids)) $query->whereIn('attendances.id', $ids);
         if ($departmentId) $query->where('employees.department_id', $departmentId);
 
         if ($employeeType && $employeeType !== 'all') {
@@ -275,7 +275,7 @@ class AttendanceReportService
             ->whereIn('attendances.status', ['absent', 'unchecked_in', 'on_leave', 'sick_leave', 'sick_off'])
             ->select('attendances.*');
 
-        if (!empty($ids)) $query->whereIn('attendances.employee_id', $ids);
+        if (!empty($ids)) $query->whereIn('attendances.id', $ids);
         if ($departmentId) $query->where('employees.department_id', $departmentId);
 
         if ($employeeType && $employeeType !== 'all') {
@@ -319,7 +319,7 @@ class AttendanceReportService
             ->where('attendances.within_grace_period', 0)
             ->select('attendances.*');
 
-        if (!empty($ids)) $query->whereIn('attendances.employee_id', $ids);
+        if (!empty($ids)) $query->whereIn('attendances.id', $ids);
         if ($departmentId) $query->where('employees.department_id', $departmentId);
 
         if ($employeeType && $employeeType !== 'all') {
