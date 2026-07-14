@@ -63,6 +63,20 @@ class AttendanceDailyTable extends DataTableComponent
     public function configure(): void
     {
         $this->setPrimaryKey('id');
+
+        // Keep selections when the user searches or changes filters
+        $this->setClearSelectedOnSearchDisabled();
+        $this->setClearSelectedOnFilterDisabled();
+    }
+
+    public function bulkActions(): array
+    {
+        return [
+            'exportExcel' => 'Export Selected (Excel)',
+            'exportPivotExcel' => 'Export Selected (Pivot Excel)',
+            'exportFullExcel' => 'Export Selected (Full Excel T&A)',
+            'exportPdf' => 'Export Selected (PDF)',
+        ];
     }
 
     public function builder(): \Illuminate\Database\Eloquent\Builder
