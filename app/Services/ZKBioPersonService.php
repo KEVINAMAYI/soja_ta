@@ -296,6 +296,26 @@ class ZKBioPersonService
         return true;
     }
 
+    /**
+     * Force-overwrite: remove the employee from every known area for this org,
+     * then reassign exactly the areas already recorded in our local pivot.
+     * Unlike syncEmployeeAreas(), this ignores whatever ZKBio currently has for
+     * the person — it's a full wipe + replace, for repairing drift between our
+     * DB and the device.
+     */
+    public function forceOverwriteEmployeeAreas(Employee $employee): bool
+    {
+        if (!$this->isEnabled() || !$employee->zkbio_pin) return false;
+
+        $allAreaCodes = $this->getCachedAreas()->pluck('area_code')->map(fn($c) => (string)$c)->all();
+        $targetCodes = $employee->zkbioAreas->pluck('area_code')->map(fn($c) => (string)$c)->all();
+
+        $removed = empty($allAreaCodes) || $this->removePersonFromAreas($employee, $allAreaCodes);
+        $assigned = empty($targetCodes) || $this->assignPersonToAreas($employee, $targetCodes);
+
+        return $removed && $assigned;
+    }
+
     // ─── Helpers ──────────────────────────────────────────────────────────────
 
     private function splitName(string $fullName): array

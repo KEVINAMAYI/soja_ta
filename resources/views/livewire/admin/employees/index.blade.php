@@ -49,6 +49,7 @@ new class extends Component {
     public $end_off_shift_date;
     public $shiftStatus;
     public bool $isStudentOrg = false;
+    public bool $zkbioEnabled = false;
 
     public $presentCount = 0;
     public $leftSchoolCount = 0;
@@ -134,6 +135,7 @@ new class extends Component {
 
         $org = auth()->user()->employee->organization;
         $this->isStudentOrg = (bool)($org->is_student_record ?? false);
+        $this->zkbioEnabled = (bool)($org->zkbio_enabled ?? false);
 
         if ($this->isStudentOrg && !in_array($this->personType, ['student', 'staff'])) {
             $this->personType = 'student';
@@ -1561,6 +1563,70 @@ new class extends Component {
         $this->bulkDeviceAreaCode = null;
     }
 
+    /**
+     * Force-overwrite every active employee's ZKBio area assignments to match
+     * what we have locally: remove them from every known area, then reassign
+     * exactly the areas recorded in our zkbioAreas pivot. Used to repair drift
+     * between our DB and the ZKBio device(s) rather than trusting incremental diffs.
+     */
+    public function syncAllEmployeeDevices(): void
+    {
+        try {
+            $org = auth()->user()->employee->organization;
+
+            if (!$org->zkbio_enabled || !$org->zkbio_base_url || !$org->zkbio_access_token) {
+                LivewireAlert::title('ZKBio not configured')
+                    ->text('Enable ZKBio for this organization before syncing devices.')
+                    ->error()->toast()->position('top-end')->show();
+                return;
+            }
+
+            $service = app(ZKBioPersonService::class, ['organization' => $org]);
+            $service->syncAreas();
+
+            $employees = Employee::where('organization_id', $org->id)
+                ->where('active', 1)
+                ->with('zkbioAreas')
+                ->get();
+
+            $ok = 0;
+            $failed = 0;
+
+            foreach ($employees as $employee) {
+                try {
+                    if (!$employee->zkbio_pin) {
+                        $employee->update(['zkbio_pin' => Employee::generateZKBioPin($org->id)]);
+                        $employee = $employee->fresh(['zkbioAreas']);
+                    }
+
+                    $service->syncPerson($employee);
+
+                    if ($service->forceOverwriteEmployeeAreas($employee)) {
+                        $ok++;
+                    } else {
+                        $failed++;
+                    }
+                } catch (\Throwable $e) {
+                    Log::warning("Force device resync failed for employee {$employee->id}", ['error' => $e->getMessage()]);
+                    $failed++;
+                }
+            }
+
+            $this->dispatch('refreshDatatable');
+
+            LivewireAlert::title($failed ? 'Partially completed' : 'Awesome!')
+                ->text("Resynced {$ok} employee(s) to ZKBio." . ($failed ? " {$failed} failed — check logs." : ''))
+                ->{$failed ? 'warning' : 'success'}()
+                ->toast()->position('top-end')->show();
+
+        } catch (\Exception $e) {
+            Log::error('syncAllEmployeeDevices failed', ['error' => $e->getMessage()]);
+            LivewireAlert::title('Sync Failed!')
+                ->text('Something went wrong while syncing devices. Check logs.')
+                ->error()->toast()->position('top-end')->show();
+        }
+    }
+
     public function getBreadcrumbItemsProperty(): array
     {
         $label = $this->isStudentOrg
@@ -2544,6 +2610,24 @@ new class extends Component {
 
                 {{-- Action buttons --}}
                 <div class="d-flex gap-2">
+                    {{-- ★ ZKBIO FULL DEVICE RESYNC BUTTON ★ --}}
+                    @if($zkbioEnabled)
+                        <button wire:click="syncAllEmployeeDevices" type="button"
+                                wire:confirm="This will remove every employee from all ZKBio devices and reassign them exactly as recorded here. This may take a while for large teams. Continue?"
+                                wire:loading.attr="disabled"
+                                wire:target="syncAllEmployeeDevices"
+                                class="btn d-flex align-items-center gap-2"
+                                style="background:#fff; border:1.5px solid #f59e0b !important; color:#b45309 !important; font-weight:600; border-radius:8px; font-size:0.875rem; padding:8px 14px;">
+                            <span wire:loading wire:target="syncAllEmployeeDevices">
+                                <span class="spinner-border spinner-border-sm"></span>
+                            </span>
+                            <iconify-icon icon="mdi:sync-circle" wire:loading.remove
+                                          wire:target="syncAllEmployeeDevices" style="font-size:17px;"></iconify-icon>
+                            <span wire:loading.remove wire:target="syncAllEmployeeDevices">Sync All Devices</span>
+                            <span wire:loading wire:target="syncAllEmployeeDevices">Syncing...</span>
+                        </button>
+                    @endif
+
                     {{-- ★ AD SYNC BUTTON ★ --}}
                     @if(!$isStudentOrg)
                         <button
