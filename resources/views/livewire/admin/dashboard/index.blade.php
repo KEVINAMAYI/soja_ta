@@ -18,7 +18,6 @@ new class extends Component {
     public $OffShiftToday = 0;
     public $lateArrivals = 0;
     public $overtimeHours = 0;
-    public $departmentStats = [];
     public $recentActivities = [];
     public $currentEmployeeStatus = [];
     public $employeeLocations = [];
@@ -37,6 +36,10 @@ new class extends Component {
     public int $checkedOutTodayCount = 0;
     public int $totalStudents = 0;
     public array $gradeStats = [];
+
+    public $departmentStats = [];
+    public int $deptPage = 1;
+    public int $deptPerPage = 5;
 
     public function mount(): void
     {
@@ -248,12 +251,19 @@ new class extends Component {
                 ->distinct('employee_id')
                 ->count('employee_id');
 
+            $total = $group->count();
+
             return [
                 'name' => $group->first()->department->name ?? 'Unknown',
                 'clocked_in' => $clockedIn,
-                'total' => $group->count(),
+                'total' => $total,
+                'percentage' => $total ? round(($clockedIn / $total) * 100) : 0,
             ];
-        })->values()->toArray();
+        })
+            ->sortByDesc('percentage')
+            ->values()
+            ->toArray();
+
 
         // Recent activity — only staff
         $this->currentEmployeeStatus = Attendance::with('employee.department', 'location')
@@ -372,6 +382,40 @@ new class extends Component {
         ];
     }
 
+
+    /* ─────────────────────────────────────────────
+   DEPARTMENT PAGINATION
+───────────────────────────────────────────── */
+    public function paginatedDepartments(): array
+    {
+        $offset = ($this->deptPage - 1) * $this->deptPerPage;
+        return array_slice($this->departmentStats, $offset, $this->deptPerPage);
+    }
+
+    public function deptTotalPages(): int
+    {
+        return (int) max(1, ceil(count($this->departmentStats) / $this->deptPerPage));
+    }
+
+    public function nextDeptPage(): void
+    {
+        if ($this->deptPage < $this->deptTotalPages()) {
+            $this->deptPage++;
+        }
+    }
+
+    public function prevDeptPage(): void
+    {
+        if ($this->deptPage > 1) {
+            $this->deptPage--;
+        }
+    }
+
+    public function goToDeptPage(int $page): void
+    {
+        $this->deptPage = max(1, min($page, $this->deptTotalPages()));
+    }
+
     /* ─────────────────────────────────────────────
        DAILY ATTENDANCE PERCENTAGE
     ───────────────────────────────────────────── */
@@ -407,6 +451,60 @@ new class extends Component {
 
 @push('styles')
     <style>
+        /* ── Department pagination ── */
+        .dept-page-indicator {
+            font-size: .75rem;
+            font-weight: 600;
+            color: #94a3b8;
+            text-transform: none;
+            letter-spacing: 0;
+        }
+
+        .dept-page-btn {
+            border: none;
+            background: #f1f5f9;
+            color: #64748b;
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+            transition: all .15s;
+            cursor: pointer;
+        }
+
+        .dept-page-btn:hover:not(:disabled) {
+            background: #e2e8f0;
+            color: #1e293b;
+        }
+
+        .dept-page-btn:disabled {
+            opacity: .35;
+            cursor: not-allowed;
+        }
+
+        .dept-page-dot {
+            border: none;
+            background: #e2e8f0;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            padding: 0;
+            cursor: pointer;
+            transition: all .2s;
+        }
+
+        .dept-page-dot.active {
+            background: var(--primary-color, #4f46e5);
+            width: 20px;
+            border-radius: 99px;
+        }
+
+        .dept-page-dot:hover:not(.active) {
+            background: #cbd5e1;
+        }
         /* ── Toggle pill ── */
         .view-toggle {
             display: inline-flex;
@@ -1077,20 +1175,42 @@ new class extends Component {
         {{-- Department Overview --}}
         <div style="margin-top:5px;" class="col-lg-8">
             <div class="card shadow-sm h-100">
-                <div class="card-header department-overview-title fw-semibold">Department Overview</div>
+                <div class="card-header department-overview-title fw-semibold d-flex justify-content-between align-items-center">
+                    <span>Department Overview</span>
+                    @if($this->deptTotalPages() > 1)
+                        <span class="dept-page-indicator">{{ $deptPage }} / {{ $this->deptTotalPages() }}</span>
+                    @endif
+                </div>
                 <div class="card-body">
-                    @foreach ($departmentStats as $dept)
-                        @php $perc = $dept['total'] ? round(($dept['clocked_in'] / $dept['total']) * 100) : 0; @endphp
+                    @forelse ($this->paginatedDepartments() as $dept)
                         <div class="mb-3">
                             <div class="d-flex justify-content-between small fw-semibold">
                                 <span>{{ $dept['name'] }}</span>
-                                <span>{{ $dept['clocked_in'] }}/{{ $dept['total'] }} ({{ $perc }}%)</span>
+                                <span>{{ $dept['clocked_in'] }}/{{ $dept['total'] }} ({{ $dept['percentage'] }}%)</span>
                             </div>
                             <div class="progress" style="height:6px;">
-                                <div class="progress-bar bg-primary" style="width:{{ $perc }}%"></div>
+                                <div class="progress-bar bg-primary" style="width:{{ $dept['percentage'] }}%"></div>
                             </div>
                         </div>
-                    @endforeach
+                    @empty
+                        <p class="text-muted small mb-0">No department data available.</p>
+                    @endforelse
+
+                    @if($this->deptTotalPages() > 1)
+                        <div class="dept-pagination d-flex justify-content-center align-items-center gap-2 mt-3 pt-3 border-top">
+                            <button wire:click="prevDeptPage" @disabled($deptPage <= 1) class="dept-page-btn">
+                                <iconify-icon icon="mdi:chevron-left"></iconify-icon>
+                            </button>
+                            @for($i = 1; $i <= $this->deptTotalPages(); $i++)
+                                <button wire:click="goToDeptPage({{ $i }})"
+                                        class="dept-page-dot {{ $deptPage === $i ? 'active' : '' }}"
+                                        aria-label="Page {{ $i }}"></button>
+                            @endfor
+                            <button wire:click="nextDeptPage" @disabled($deptPage >= $this->deptTotalPages()) class="dept-page-btn">
+                                <iconify-icon icon="mdi:chevron-right"></iconify-icon>
+                            </button>
+                        </div>
+                    @endif
                 </div>
             </div>
         </div>
