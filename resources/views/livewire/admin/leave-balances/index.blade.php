@@ -56,6 +56,45 @@ new class extends Component {
             ->toArray();
     }
 
+    public function getGroupedRowsProperty(): array
+    {
+        return collect($this->rows)
+            ->groupBy('employee_id')
+            ->map(function ($rows, $employeeId) {
+                $first = $rows->first();
+
+                return [
+                    'employee_id' => (int)$employeeId,
+                    'employee_name' => $first['employee_name'],
+                    'department' => $first['department'] ?? '—',
+                    'summary' => [
+                        'annual' => $this->summaryFor($rows, 'annual'),
+                        'sick' => $this->summaryFor($rows, 'sick'),
+                        'personal' => $this->summaryFor($rows, 'personal'),
+                    ],
+                    'leave_types' => $rows->values()->all(),
+                ];
+            })
+            ->values()
+            ->all();
+    }
+
+    private function summaryFor($rows, string $keyword): ?array
+    {
+        $row = $rows->first(
+            fn($r) => str_contains(strtolower($r['leave_type_name']), $keyword)
+        );
+
+        if (!$row) {
+            return null;
+        }
+
+        return [
+            'entitled' => $row['entitled_days'], // null = Unlimited
+            'leave_type_id' => $row['leave_type_id'],
+        ];
+    }
+
     public function updated($property)
     {
         if (in_array($property, ['leaveTypeId', 'departmentId', 'search', 'year'])) {
@@ -87,12 +126,12 @@ new class extends Component {
 
         if ($this->leaveTypeId) {
             $type = LeaveType::find($this->leaveTypeId);
-            return $type ? $service->balancesForType($type, $employees, (int) $this->year) : [];
+            return $type ? $service->balancesForType($type, $employees, (int)$this->year) : [];
         }
 
         $types = collect($this->leaveTypes)->map(fn($t) => LeaveType::find($t['id']))->filter();
 
-        return $service->balancesForTypes($types, $employees, (int) $this->year);
+        return $service->balancesForTypes($types, $employees, (int)$this->year);
     }
 
     public function editBalanceHandler(int $employeeId, int $leaveTypeId): void
@@ -127,11 +166,11 @@ new class extends Component {
 
         app(LeaveApprovalService::class)->setBalanceOverride(
             $orgId,
-            (int) $this->lbEmployeeId,
-            (int) $this->lbLeaveTypeId,
-            (int) $this->year,
-            (float) $this->lbEntitledDays,
-            (float) $this->lbUsedDays
+            (int)$this->lbEmployeeId,
+            (int)$this->lbLeaveTypeId,
+            (int)$this->year,
+            (float)$this->lbEntitledDays,
+            (float)$this->lbUsedDays
         );
 
         $this->dispatch('hide-leave-balance-modal');
@@ -171,15 +210,15 @@ new class extends Component {
 
         if ($this->leaveTypeId) {
             $type = LeaveType::find($this->leaveTypeId);
-            $rows = $type ? $service->balancesForType($type, $employees, (int) $this->year) : [];
+            $rows = $type ? $service->balancesForType($type, $employees, (int)$this->year) : [];
         } else {
             $types = LeaveType::where('organization_id', $orgId)->where('is_active', true)->orderBy('name')->get();
-            $rows = $service->balancesForTypes($types, $employees, (int) $this->year);
+            $rows = $service->balancesForTypes($types, $employees, (int)$this->year);
         }
 
         $orgName = auth()->user()->employee?->organization?->name ?? 'Organization';
 
-        return Excel::download(new LeaveBalancesExcelExport($rows, $orgName, (int) $this->year), 'leave-balances.xlsx');
+        return Excel::download(new LeaveBalancesExcelExport($rows, $orgName, (int)$this->year), 'leave-balances.xlsx');
     }
 
     public function initials(string $name): string
@@ -261,85 +300,125 @@ new class extends Component {
             </div>
         </div>
 
-        <div class="table-responsive">
-            <table class="table table-hover align-middle mb-0">
-                <thead>
-                <tr class="text-uppercase small text-muted">
-                    <th class="border-0">Employee</th>
-                    <th class="border-0">Leave Type</th>
-                    <th class="border-0 text-end">Entitled</th>
-                    <th class="border-0 text-end">Used</th>
-                    <th class="border-0 text-end">Pending</th>
-                    <th class="border-0 text-end">Remaining</th>
-                    <th class="border-0 text-end">Actions</th>
-                </tr>
-                </thead>
-                <tbody>
-                @forelse($this->rows as $row)
-                    <tr>
-                        <td>
-                            <div class="d-flex align-items-center gap-2">
-                                <div class="d-flex align-items-center justify-content-center rounded-circle fw-bold text-white flex-shrink-0"
-                                     style="width:36px;height:36px;font-size:.75rem;background-color:{{ $this->avatarColor($row['employee_name']) }};">
-                                    {{ $this->initials($row['employee_name']) }}
+        <div class="accordion" id="leaveBalancesAccordion">
+            @forelse($this->groupedRows as $emp)
+                @php $collapseId = 'emp-' . $emp['employee_id']; @endphp
+                <div class="accordion-item mb-2 border rounded">
+                    <h2 class="accordion-header">
+                        <button class="accordion-button collapsed d-flex align-items-center gap-3"
+                                type="button" data-bs-toggle="collapse"
+                                data-bs-target="#{{ $collapseId }}">
+
+                            <div
+                                class="d-flex align-items-center justify-content-center rounded-circle fw-bold text-white flex-shrink-0"
+                                style="width:36px;height:36px;font-size:.75rem;background-color:{{ $this->avatarColor($emp['employee_name']) }};">
+                                {{ $this->initials($emp['employee_name']) }}
+                            </div>
+
+                            <div class="flex-grow-1 d-flex flex-wrap align-items-center gap-4">
+                                <div style="min-width:180px;">
+                                    <div class="fw-semibold">{{ $emp['employee_name'] }}</div>
+                                    <div class="text-muted small">{{ $emp['department'] }}</div>
                                 </div>
-                                <div>
-                                    <div class="fw-semibold">{{ $row['employee_name'] }}</div>
-                                    <div class="text-muted small">{{ $row['department'] ?? '—' }}</div>
+
+                                <div class="text-center" style="min-width:80px;">
+                                    <div class="text-muted small text-uppercase">Annual</div>
+                                    <div class="fw-semibold">
+                                        {{ $emp['summary']['annual']['entitled'] ?? '—' }}
+                                    </div>
+                                </div>
+
+                                <div class="text-center" style="min-width:80px;">
+                                    <div class="text-muted small text-uppercase">Sick</div>
+                                    <div class="fw-semibold">
+                                        @if(is_null($emp['summary']['sick']['entitled'] ?? null))
+                                            <span class="fs-5">&infin;</span>
+                                        @else
+                                            {{ $emp['summary']['sick']['entitled'] }}
+                                        @endif
+                                    </div>
+                                </div>
+
+                                <div class="text-center" style="min-width:80px;">
+                                    <div class="text-muted small text-uppercase">Personal</div>
+                                    <div class="fw-semibold">
+                                        {{ $emp['summary']['personal']['entitled'] ?? '—' }}
+                                    </div>
                                 </div>
                             </div>
-                        </td>
-                        <td>
-                            <span class="badge bg-primary-subtle text-primary fw-semibold">
-                                {{ $row['leave_type_icon'] ?? '' }} {{ $row['leave_type_name'] }}
-                            </span>
-                        </td>
-                        <td class="text-end">
-                            @if($row['entitled_days'] === null)
-                                <span class="badge bg-secondary-subtle text-secondary">Unlimited</span>
-                            @else
-                                <span class="fw-semibold">{{ $row['entitled_days'] }}</span>
-                            @endif
-                        </td>
-                        <td class="text-end">{{ $row['used_days'] }}</td>
-                        <td class="text-end">
-                            @if($row['pending_days'] > 0)
-                                <span class="badge bg-warning-subtle text-warning">{{ $row['pending_days'] }}</span>
-                            @else
-                                <span class="text-muted">0</span>
-                            @endif
-                        </td>
-                        <td class="text-end">
-                            @if($row['remaining_days'] === null)
-                                <span class="badge bg-secondary-subtle text-secondary">Unlimited</span>
-                            @else
-                                <span class="badge {{ $row['remaining_days'] < 0 ? 'bg-danger-subtle text-danger' : 'bg-success-subtle text-success' }} fw-semibold">
-                                    {{ $row['remaining_days'] }}
-                                </span>
-                            @endif
-                        </td>
-                        <td class="text-end">
-                            <div class="d-flex justify-content-end gap-1">
-                                <button class="btn btn-sm btn-outline-primary"
-                                        wire:click="editBalanceHandler({{ $row['employee_id'] }}, {{ $row['leave_type_id'] }})"
-                                        title="Edit balance">
-                                    <i class="ti ti-edit"></i>
-                                </button>
-                            </div>
-                        </td>
-                    </tr>
-                @empty
-                    <tr>
-                        <td colspan="7" class="text-center py-5">
-                            <div class="d-flex flex-column align-items-center">
-                                <iconify-icon icon="mdi:calendar-search-outline" class="fs-1 text-muted mb-2"></iconify-icon>
-                                <h6 class="text-muted">No records found</h6>
-                            </div>
-                        </td>
-                    </tr>
-                @endforelse
-                </tbody>
-            </table>
+                        </button>
+                    </h2>
+
+                    <div id="{{ $collapseId }}" class="accordion-collapse collapse"
+                         data-bs-parent="#leaveBalancesAccordion">
+                        <div class="accordion-body">
+                            <table class="table table-sm align-middle mb-0">
+                                <thead>
+                                <tr class="text-uppercase small text-muted">
+                                    <th class="border-0">Leave Type</th>
+                                    <th class="border-0 text-end">Entitled</th>
+                                    <th class="border-0 text-end">Used</th>
+                                    <th class="border-0 text-end">Pending</th>
+                                    <th class="border-0 text-end">Remaining</th>
+                                    <th class="border-0 text-end">Actions</th>
+                                </tr>
+                                </thead>
+                                <tbody>
+                                @foreach($emp['leave_types'] as $row)
+                                    <tr>
+                                        <td>
+                                    <span class="badge bg-primary-subtle text-primary fw-semibold">
+                                        {{ $row['leave_type_icon'] ?? '' }} {{ $row['leave_type_name'] }}
+                                    </span>
+                                        </td>
+                                        <td class="text-end">
+                                            @if($row['entitled_days'] === null)
+                                                <span class="badge bg-secondary-subtle text-secondary">Unlimited</span>
+                                            @else
+                                                <span class="fw-semibold">{{ $row['entitled_days'] }}</span>
+                                            @endif
+                                        </td>
+                                        <td class="text-end">{{ $row['used_days'] }}</td>
+                                        <td class="text-end">
+                                            @if($row['pending_days'] > 0)
+                                                <span
+                                                    class="badge bg-warning-subtle text-warning">{{ $row['pending_days'] }}</span>
+                                            @else
+                                                <span class="text-muted">0</span>
+                                            @endif
+                                        </td>
+                                        <td class="text-end">
+                                            @if($row['remaining_days'] === null)
+                                                <span class="badge bg-secondary-subtle text-secondary">Unlimited</span>
+                                            @else
+                                                <span
+                                                    class="badge {{ $row['remaining_days'] < 0 ? 'bg-danger-subtle text-danger' : 'bg-success-subtle text-success' }} fw-semibold">
+                                            {{ $row['remaining_days'] }}
+                                        </span>
+                                            @endif
+                                        </td>
+                                        <td class="text-end">
+                                            <button class="btn btn-sm btn-outline-primary"
+                                                    wire:click="editBalanceHandler({{ $row['employee_id'] }}, {{ $row['leave_type_id'] }})"
+                                                    title="Edit balance">
+                                                <i class="ti ti-edit"></i>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                @endforeach
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            @empty
+                <div class="text-center py-5">
+                    <div class="d-flex flex-column align-items-center">
+                        <iconify-icon icon="mdi:calendar-search-outline" class="fs-1 text-muted mb-2"></iconify-icon>
+                        <h6 class="text-muted">No records found</h6>
+                    </div>
+                </div>
+            @endforelse
         </div>
 
         <div class="mt-3">
