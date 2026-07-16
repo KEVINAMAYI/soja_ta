@@ -75,7 +75,7 @@ class InterpretationService
         }
 
         // ── Break overrun ─────────────────────────────────────────────────
-        if ($excessBreak >= $this->extendedLunchThreshold) {
+        if ($excessBreak > $this->extendedLunchThreshold) {
             return 'Extended Lunch';
         }
 
