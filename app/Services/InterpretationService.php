@@ -98,7 +98,7 @@ class InterpretationService
         if ($isEarlyOut) return 'Early Out';
 
         // ── 7. Break overrun ─────────────────────────────────────────────
-        if ($excessBreak >= $this->extendedLunchThreshold) return 'Extended Lunch';
+        if ($excessBreak > $this->extendedLunchThreshold) return 'Extended Lunch';
 
         return 'Attendance OK';
     }
@@ -119,6 +119,7 @@ class InterpretationService
      * Night = 16:00–05:59, Day = 06:00–15:59
      */
     private function shiftLabel($punchTime): string
+
     {
         if (!$punchTime) return 'Day Shift';
         try {
