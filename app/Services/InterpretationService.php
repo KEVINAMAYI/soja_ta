@@ -23,7 +23,7 @@ class InterpretationService
 
     public function __construct()
     {
-        $this->extendedLunchThreshold = config('attendance.extended_lunch_threshold', 15);
+        $this->extendedLunchThreshold = config('attendance.extended_lunch_threshold', 30);
     }
 
     public function interpret($attendance): string
