@@ -78,6 +78,78 @@
         padding: 16px 16px 6px;
         margin: 0;
     }
+
+    .sidebar-footer-help {
+        margin-top: auto;
+    }
+
+    .sidebar-footer-help .sidebar-link {
+        padding: 10px 16px;
+        color: grey;
+        text-decoration: none;
+    }
+
+    .sidebar-footer-help .sidebar-link:hover {
+        color: var(--primary-color);
+    }
+
+    aside.left-sidebar {
+        display: flex;
+        flex-direction: column;
+        height: 100vh; /* or whatever your theme uses */
+    }
+
+    aside.left-sidebar > div {
+        display: flex;
+        flex-direction: column;
+        flex: 1;
+        min-height: 0; /* critical: lets child overflow instead of pushing siblings out */
+    }
+
+    .scroll-sidebar {
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow-y: auto;
+    }
+
+    .sidebar-footer-help {
+        flex-shrink: 0;
+    }
+
+    aside.left-sidebar {
+        display: flex;
+        flex-direction: column;
+        height: 100vh;
+    }
+
+    aside.left-sidebar > div {
+        display: flex;
+        flex-direction: column;
+        flex: 1;
+        min-height: 0;
+    }
+
+    /* THIS is the div that actually wraps brand-logo, nav, and footer-help */
+    aside.left-sidebar > div > div {
+        display: flex;
+        flex-direction: column;
+        flex: 1;
+        min-height: 0;
+    }
+
+    .brand-logo {
+        flex-shrink: 0;
+    }
+
+    .scroll-sidebar {
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow-y: auto;
+    }
+
+    .sidebar-footer-help {
+        flex-shrink: 0;
+    }
 </style>
 
 <aside {{ $sidebarBg ? "style=background-color:{$sidebarBg};" : '' }} class="left-sidebar with-vertical">
@@ -93,6 +165,17 @@
 
                 @php
                     $isSchool = auth()->user()->employee?->organization?->is_student_record;
+
+                    // Help & Support settings
+                    $orgId = auth()->user()->employee?->organization_id;
+                    $orgSettings = \App\Models\Organization::find($orgId)?->settings
+                        ->mapWithKeys(fn($item) => [$item->key => $item->value])
+                        ->toArray() ?? [];
+
+                    $showHelpIcon = (bool)($orgSettings['show_help_icon'] ?? false);
+                    $helpPageUrl = $orgSettings['help_page_url'] ?? '';
+                    $helpTooltipLabel = $orgSettings['help_icon_tooltip_label'] ?? 'Help';
+
                 @endphp
 
                 {{-- ══════════════════════════════════════════════════════ --}}
@@ -280,6 +363,20 @@
                 @endif
 
             </nav>
+
+            @if($showHelpIcon && $helpPageUrl)
+                <div class="sidebar-footer-help border-top mt-2 pt-2 pb-3">
+                    <a href="{{ $helpPageUrl }}"
+                       target="_blank"
+                       rel="noopener noreferrer"
+                       class="sidebar-link d-flex align-items-center gap-2"
+                       title="{{ $helpTooltipLabel }}">
+                        <iconify-icon icon="mdi:help-circle-outline" class="fs-5"></iconify-icon>
+                        <span class="hide-menu">{{ $helpTooltipLabel }}</span>
+                    </a>
+                </div>
+            @endif
+
         </div>
     </div>
 </aside>
