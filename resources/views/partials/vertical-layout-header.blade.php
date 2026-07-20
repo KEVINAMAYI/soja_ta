@@ -31,6 +31,22 @@
 
 
     <div class="collapse navbar-collapse justify-content-end" id="navbarNav">
+
+        @php
+
+            // Help & Support settings
+$orgId = auth()->user()->employee?->organization_id;
+$orgSettings = \App\Models\Organization::find($orgId)?->settings
+->mapWithKeys(fn($item) => [$item->key => $item->value])
+->toArray() ?? [];
+
+$showHelpIcon = (bool)($orgSettings['show_help_icon'] ?? false);
+$helpPageUrl = $orgSettings['help_page_url'] ?? '';
+$helpTooltipLabel = $orgSettings['help_icon_tooltip_label'] ?? 'Help';
+
+
+        @endphp
+
         <div class="d-flex align-items-center justify-content-between">
             <ul class="navbar-nav flex-row mx-auto ms-lg-auto align-items-center justify-content-center">
                 <li class="nav-item dropdown">
@@ -42,6 +58,17 @@
                     </a>
                 </li>
 
+                @if($showHelpIcon && $helpPageUrl)
+                    <li class="nav-item">
+                        <a class="nav-link nav-icon-hover-bg rounded-circle"
+                           href="{{ $helpPageUrl }}"
+                           target="_blank"
+                           rel="noopener noreferrer"
+                           title="{{ $helpTooltipLabel }}">
+                            <iconify-icon icon="solar:question-circle-line-duotone" class="fs-6"></iconify-icon>
+                        </a>
+                    </li>
+                @endif
 
                 <li class="nav-item">
                     <a class="nav-link moon dark-layout nav-icon-hover-bg rounded-circle"
@@ -51,12 +78,6 @@
                     <a class="nav-link sun light-layout nav-icon-hover-bg rounded-circle"
                        href="javascript:void(0)" style="display: none">
                         <iconify-icon icon="solar:sun-2-line-duotone" class="sun fs-6"></iconify-icon>
-                    </a>
-                </li>
-                <li class="nav-item d-block d-xl-none">
-                    <a class="nav-link nav-icon-hover-bg rounded-circle" href="javascript:void(0)"
-                       data-bs-toggle="modal" data-bs-target="#exampleModal">
-                        <iconify-icon icon="solar:magnifer-line-duotone" class="fs-6"></iconify-icon>
                     </a>
                 </li>
 
@@ -86,8 +107,9 @@
                                          width="56" height="56"
                                          alt="{{ Auth::user()->name ?? 'User' }}"/>
                                 @else
-                                    <div class="rounded-circle d-flex align-items-center justify-content-center flex-shrink-0"
-                                         style="width:56px;height:56px;background-color:{{ $navOrg?->primary_color ?? '#072639' }};color:#fff;font-weight:700;font-size:1.1rem;">
+                                    <div
+                                        class="rounded-circle d-flex align-items-center justify-content-center flex-shrink-0"
+                                        style="width:56px;height:56px;background-color:{{ $navOrg?->primary_color ?? '#072639' }};color:#fff;font-weight:700;font-size:1.1rem;">
                                         {{ collect(explode(' ', trim(Auth::user()->name ?? 'U')))->map(fn($w) => strtoupper(substr($w, 0, 1)))->implode('') }}
                                     </div>
                                 @endif
