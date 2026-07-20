@@ -58,6 +58,13 @@ new class extends Component {
             ? (bool)$this->settings['generate_employee_qr_on_create']
             : false;
 
+        // Help & Support settings
+        $this->settings['show_help_icon'] = isset($this->settings['show_help_icon'])
+            ? (bool)$this->settings['show_help_icon']
+            : false;
+        $this->settings['help_page_url'] = $this->settings['help_page_url'] ?? '';
+        $this->settings['help_icon_tooltip_label'] = $this->settings['help_icon_tooltip_label'] ?? 'Help';
+
         // ── Load check-in approval settings ──
         $this->approval = CheckInApprovalSettings::get($orgId);
 
@@ -105,7 +112,9 @@ new class extends Component {
                     'key' => $key
                 ]);
 
-                $setting->type = ($key === 'generate_employee_qr_on_create') ? 'boolean' : $setting->type ?? 'string';
+                $setting->type = in_array($key, ['generate_employee_qr_on_create', 'show_help_icon'])
+                    ? 'boolean'
+                    : $setting->type ?? 'string';
 
                 $setting->value = $value;
                 $setting->save();
@@ -498,6 +507,11 @@ new class extends Component {
                 $this->tabIcon = '<iconify-icon icon="mdi:calendar-cog-outline" class="fs-5"></iconify-icon>';
                 break;
 
+            case 'help_support':
+                $this->tabTitle = 'Help & Support';
+                $this->tabIcon = '<iconify-icon icon="mdi:help-circle-outline" class="fs-5"></iconify-icon>';
+                break;
+
             default:
                 $this->tabTitle = 'Settings';
                 $this->tabIcon = '<iconify-icon icon="mdi:cog-outline" class="fs-5"></iconify-icon>';
@@ -606,6 +620,21 @@ new class extends Component {
                     aria-selected="false">
                     <i class="ti ti-calendar-cog me-2 fs-6"></i>
                     <span class="d-none d-md-block">Leave Types</span>
+                </button>
+            </li>
+
+            <li class="nav-item" role="presentation">
+                <button
+                    class="nav-link position-relative rounded-0 {{ $activeTab === 'help_support' ? 'active' : '' }} d-flex align-items-center justify-content-center bg-transparent fs-3 py-3"
+                    id="tab-help-support-tab"
+                    data-bs-toggle="pill"
+                    data-bs-target="#tab-help-support"
+                    type="button"
+                    role="tab"
+                    aria-controls="tab-help-support"
+                    aria-selected="false">
+                    <i class="ti ti-help-circle me-2 fs-6"></i>
+                    <span class="d-none d-md-block">Help & Support</span>
                 </button>
             </li>
 
@@ -1408,6 +1437,51 @@ new class extends Component {
                         </div>
                     </div>
                 </div>
+
+                <!-- Help & Support Settings Tab -->
+                <div class="tab-pane fade {{ $activeTab === 'help_support' ? 'show active' : '' }}" id="tab-help-support">
+                    <div class="row justify-content-center">
+                        <div class="col-lg-12">
+                            <div class="card border shadow-none">
+                                <div class="card-body p-4">
+                                    <h4 class="card-title mb-4">Help & Support Settings</h4>
+
+                                    <div class="form-check form-switch mb-4">
+                                        <input class="form-check-input" type="checkbox" role="switch"
+                                               id="showHelpIcon"
+                                               wire:model.defer="settings.show_help_icon">
+                                        <label class="form-check-label" for="showHelpIcon">
+                                            Show help icon in the top navigation bar
+                                        </label>
+                                    </div>
+
+                                    <div class="mb-4">
+                                        <label for="helpPageUrl" class="form-label fw-semibold">Help page URL</label>
+                                        <div class="input-group">
+                                            <span class="input-group-text"><i class="ti ti-link"></i></span>
+                                            <input type="url" class="form-control" id="helpPageUrl"
+                                                   placeholder="https://help.example.com/..."
+                                                   wire:model.defer="settings.help_page_url">
+                                        </div>
+                                        <small class="text-muted">Links to an externally hosted help site. Opens in a new tab.</small>
+                                    </div>
+
+                                    <div class="mb-4">
+                                        <label for="helpTooltipLabel" class="form-label fw-semibold">Icon tooltip label</label>
+                                        <input type="text" class="form-control" id="helpTooltipLabel"
+                                               placeholder="Help"
+                                               wire:model.defer="settings.help_icon_tooltip_label">
+                                    </div>
+
+                                    <div class="d-flex align-items-center justify-content-end gap-6 mt-4">
+                                        <button wire:click="storeSettings" class="btn btn-primary">Save</button>
+                                    </div>
+
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -1439,6 +1513,9 @@ new class extends Component {
                             break;
                         case 'tab-leave-types-tab':
                             mappedTab = 'leave_types';
+                            break;
+                        case 'tab-help-support-tab':
+                            mappedTab = 'help_support';
                             break;
                         default:
                             mappedTab = 'qr_code';

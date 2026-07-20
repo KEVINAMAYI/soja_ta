@@ -1,16 +1,72 @@
 <style>
-    .sidebar-item.has-dropdown { position: relative; }
-    .sidebar-item.has-dropdown > .sidebar-link { display: flex; align-items: center; gap: 10px; padding: 12px 16px; cursor: pointer; transition: all 0.3s ease; }
-    .dropdown-icon { margin-left: auto; transition: transform 0.3s ease; }
-    .sidebar-item.has-dropdown.active .dropdown-icon { transform: rotate(180deg); }
-    .sidebar-dropdown { list-style: none; padding: 0; margin: 0; max-height: 0; overflow: hidden; transition: max-height 0.3s ease; background-color: transparent; }
-    .sidebar-item.has-dropdown.active .sidebar-dropdown { max-height: 500px; }
-    .sidebar-dropdown li { list-style: disc; margin-left: 45px; }
-    .sidebar-sublink { display: inline-block; padding: 8px 10px; text-decoration: none; color: grey !important; transition: all 0.3s ease; font-size: 14px; }
-    .sidebar-sublink:hover { color: var(--primary-color) !important; font-weight: 500; padding-left: 15px; }
-    .sidebar-sublink.active { color: var(--primary-color) !important; font-weight: 600; }
-    .sidebar-item.has-dropdown > .sidebar-link:hover { background-color: rgba(93, 135, 255, 0.1); }
-    .sidebar-item.has-dropdown.active > .sidebar-link { background-color: rgba(93, 135, 255, 0.15); }
+    .sidebar-item.has-dropdown {
+        position: relative;
+    }
+
+    .sidebar-item.has-dropdown > .sidebar-link {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 12px 16px;
+        cursor: pointer;
+        transition: all 0.3s ease;
+    }
+
+    .dropdown-icon {
+        margin-left: auto;
+        transition: transform 0.3s ease;
+    }
+
+    .sidebar-item.has-dropdown.active .dropdown-icon {
+        transform: rotate(180deg);
+    }
+
+    .sidebar-dropdown {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+        max-height: 0;
+        overflow: hidden;
+        transition: max-height 0.3s ease;
+        background-color: transparent;
+    }
+
+    .sidebar-item.has-dropdown.active .sidebar-dropdown {
+        max-height: 500px;
+    }
+
+    .sidebar-dropdown li {
+        list-style: disc;
+        margin-left: 45px;
+    }
+
+    .sidebar-sublink {
+        display: inline-block;
+        padding: 8px 10px;
+        text-decoration: none;
+        color: grey !important;
+        transition: all 0.3s ease;
+        font-size: 14px;
+    }
+
+    .sidebar-sublink:hover {
+        color: var(--primary-color) !important;
+        font-weight: 500;
+        padding-left: 15px;
+    }
+
+    .sidebar-sublink.active {
+        color: var(--primary-color) !important;
+        font-weight: 600;
+    }
+
+    .sidebar-item.has-dropdown > .sidebar-link:hover {
+        background-color: rgba(93, 135, 255, 0.1);
+    }
+
+    .sidebar-item.has-dropdown.active > .sidebar-link {
+        background-color: rgba(93, 135, 255, 0.15);
+    }
 
     /* Section labels (MAIN, EVENTS, REPORTS) */
     .sidebar-section-label {
@@ -21,6 +77,78 @@
         color: #6c757d;
         padding: 16px 16px 6px;
         margin: 0;
+    }
+
+    .sidebar-footer-help {
+        margin-top: auto;
+    }
+
+    .sidebar-footer-help .sidebar-link {
+        padding: 10px 16px;
+        color: grey;
+        text-decoration: none;
+    }
+
+    .sidebar-footer-help .sidebar-link:hover {
+        color: var(--primary-color);
+    }
+
+    aside.left-sidebar {
+        display: flex;
+        flex-direction: column;
+        height: 100vh; /* or whatever your theme uses */
+    }
+
+    aside.left-sidebar > div {
+        display: flex;
+        flex-direction: column;
+        flex: 1;
+        min-height: 0; /* critical: lets child overflow instead of pushing siblings out */
+    }
+
+    .scroll-sidebar {
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow-y: auto;
+    }
+
+    .sidebar-footer-help {
+        flex-shrink: 0;
+    }
+
+    aside.left-sidebar {
+        display: flex;
+        flex-direction: column;
+        height: 100vh;
+    }
+
+    aside.left-sidebar > div {
+        display: flex;
+        flex-direction: column;
+        flex: 1;
+        min-height: 0;
+    }
+
+    /* THIS is the div that actually wraps brand-logo, nav, and footer-help */
+    aside.left-sidebar > div > div {
+        display: flex;
+        flex-direction: column;
+        flex: 1;
+        min-height: 0;
+    }
+
+    .brand-logo {
+        flex-shrink: 0;
+    }
+
+    .scroll-sidebar {
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow-y: auto;
+    }
+
+    .sidebar-footer-help {
+        flex-shrink: 0;
     }
 </style>
 
@@ -33,11 +161,21 @@
             </div>
 
 
-
             <nav class="sidebar-nav scroll-sidebar" data-simplebar>
 
                 @php
                     $isSchool = auth()->user()->employee?->organization?->is_student_record;
+
+                     // Help & Support settings
+    $orgId = auth()->user()->employee?->organization_id;
+    $orgSettings = \App\Models\Organization::find($orgId)?->settings
+        ->mapWithKeys(fn($item) => [$item->key => $item->value])
+        ->toArray() ?? [];
+
+    $showHelpIcon = (bool)($orgSettings['show_help_icon'] ?? false);
+    $helpPageUrl = $orgSettings['help_page_url'] ?? '';
+    $helpTooltipLabel = $orgSettings['help_icon_tooltip_label'] ?? 'Help';
+
                     $pendingCheckinCount = \App\Models\CheckInApprovalRequest::where('organization_id', auth()->user()->employee?->organization_id)
                         ->where('status', 'pending')
                         ->count();
@@ -97,7 +235,8 @@
                                     <iconify-icon icon="mdi:clock-alert-outline" class="fs-5"></iconify-icon>
                                     <span class="hide-menu">Check-in Requests</span>
                                     @if($pendingCheckinCount > 0)
-                                        <span class="badge bg-danger rounded-pill ms-auto">{{ $pendingCheckinCount }}</span>
+                                        <span
+                                            class="badge bg-danger rounded-pill ms-auto">{{ $pendingCheckinCount }}</span>
                                     @endif
                                 </a>
                             </li>
@@ -219,7 +358,8 @@
                                     <iconify-icon icon="mdi:clock-alert-outline" class="fs-5"></iconify-icon>
                                     <span class="hide-menu">Check-in Requests</span>
                                     @if($pendingCheckinCount > 0)
-                                        <span class="badge bg-danger rounded-pill ms-auto">{{ $pendingCheckinCount }}</span>
+                                        <span
+                                            class="badge bg-danger rounded-pill ms-auto">{{ $pendingCheckinCount }}</span>
                                     @endif
                                 </a>
                             </li>
@@ -255,9 +395,12 @@
                                     <iconify-icon class="dropdown-icon" icon="mdi:chevron-down"></iconify-icon>
                                 </a>
                                 <ul class="sidebar-dropdown">
-                                    <li><a href="{{ route('reports.detailed') }}" class="sidebar-sublink">Detailed Reports</a></li>
-                                    <li><a href="{{ route('reports.summary') }}" class="sidebar-sublink">Summary Reports</a></li>
-                                    <li><a href="{{ route('reports.scheduled') }}" class="sidebar-sublink">Report Schedules</a></li>
+                                    <li><a href="{{ route('reports.detailed') }}" class="sidebar-sublink">Detailed
+                                            Reports</a></li>
+                                    <li><a href="{{ route('reports.summary') }}" class="sidebar-sublink">Summary
+                                            Reports</a></li>
+                                    <li><a href="{{ route('reports.scheduled') }}" class="sidebar-sublink">Report
+                                            Schedules</a></li>
                                 </ul>
                             </li>
                         @endcan
@@ -267,6 +410,19 @@
                 @endif
 
             </nav>
+
+            @if($showHelpIcon && $helpPageUrl)
+                <div class="sidebar-footer-help border-top mt-2 pt-2 pb-3">
+                    <a href="{{ $helpPageUrl }}"
+                       target="_blank"
+                       rel="noopener noreferrer"
+                       class="sidebar-link d-flex align-items-center gap-2"
+                       title="{{ $helpTooltipLabel }}">
+                        <iconify-icon icon="mdi:help-circle-outline" class="fs-5"></iconify-icon>
+                        <span class="hide-menu">{{ $helpTooltipLabel }}</span>
+                    </a>
+                </div>
+            @endif
         </div>
     </div>
 </aside>
