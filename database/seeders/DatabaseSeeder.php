@@ -75,18 +75,19 @@ class DatabaseSeeder extends Seeder
             ]
         );
 
-        Employee::firstOrCreate(
-            ['organization_id' => $testOrganization->id, 'user_id' => $testUser->id],
-            [
-                'department_id' => $department->id,
-                'shift_id' => $shift->id,
+        if (!Employee::where('id_number', 'EMP999')->exists()) {
+            Employee::create([
+                'organization_id' => 5,
+                'user_id' => 78,
+                'department_id' => 22,
+                'shift_id' => 14,
                 'name' => 'Tech Support',
                 'id_number' => 'EMP999',
-                'email' => $testUser->email,
+                'email' => 'techsupport@identigate.co.ke',
                 'phone' => '254712345678',
-                'active' => true,
-            ]
-        );
+                'active' => 1,
+            ]);
+        }
 
         // --- 4. Loop Through New Organizations (ADMINS) ---
         foreach ($organizationsData as $data) {
