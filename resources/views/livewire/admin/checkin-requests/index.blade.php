@@ -374,21 +374,32 @@ new class extends Component {
                                     @if($req->status === 'pending')
                                         <span class="badge rounded-pill d-inline-flex align-items-center gap-1"
                                               style="background:#fffbeb;color:#92400e;font-weight:500;padding:.35em .75em;">
-                                            <iconify-icon icon="mdi:timer-sand"
-                                                          style="font-size:.85rem;"></iconify-icon> Pending
-                                        </span>
+            <iconify-icon icon="mdi:timer-sand" style="font-size:.85rem;"></iconify-icon> Pending
+        </span>
                                     @elseif($req->status === 'approved')
-                                        <span class="badge rounded-pill d-inline-flex align-items-center gap-1"
-                                              style="background:#f0fdf4;color:#15803d;font-weight:500;padding:.35em .75em;">
-                                            <iconify-icon icon="mdi:check-circle-outline"
-                                                          style="font-size:.85rem;"></iconify-icon> Approved
-                                        </span>
+                                        @if($req->resolvedBy)
+                                            <span class="badge rounded-pill d-inline-flex align-items-center gap-1"
+                                                  style="background:#f0fdf4;color:#15803d;font-weight:500;padding:.35em .75em;">
+                <iconify-icon icon="mdi:check-circle-outline" style="font-size:.85rem;"></iconify-icon> Approved
+            </span>
+                                        @else
+                                            <span class="badge rounded-pill d-inline-flex align-items-center gap-1"
+                                                  style="background:#eef2ff;color:#4338ca;font-weight:500;padding:.35em .75em;">
+                <iconify-icon icon="mdi:robot-outline" style="font-size:.85rem;"></iconify-icon> System Approved
+            </span>
+                                        @endif
                                     @else
-                                        <span class="badge rounded-pill d-inline-flex align-items-center gap-1"
-                                              style="background:#fef2f2;color:#b91c1c;font-weight:500;padding:.35em .75em;">
-                                            <iconify-icon icon="mdi:close-circle-outline"
-                                                          style="font-size:.85rem;"></iconify-icon> Rejected
-                                        </span>
+                                        @if($req->resolvedBy)
+                                            <span class="badge rounded-pill d-inline-flex align-items-center gap-1"
+                                                  style="background:#fef2f2;color:#b91c1c;font-weight:500;padding:.35em .75em;">
+                <iconify-icon icon="mdi:close-circle-outline" style="font-size:.85rem;"></iconify-icon> Rejected
+            </span>
+                                        @else
+                                            <span class="badge rounded-pill d-inline-flex align-items-center gap-1"
+                                                  style="background:#f3f4f6;color:#4b5563;font-weight:500;padding:.35em .75em;">
+                <iconify-icon icon="mdi:robot-outline" style="font-size:.85rem;"></iconify-icon> System Rejected
+            </span>
+                                        @endif
                                     @endif
 
                                     {{-- Resolved timestamp --}}
@@ -420,11 +431,18 @@ new class extends Component {
                                         </div>
                                     @else
                                         <span style="font-size:.78rem;color:#94a3b8;">
-                                            {{ ucfirst($req->status) }}
+            {{ ucfirst($req->status) }}
                                             @if($req->resolvedBy)
                                                 by {{ $req->resolvedBy->name }}
+                                            @else
+                                                <span class="d-inline-flex align-items-center gap-1" title="{{ $req->notes }}">
+                    by System
+                    @if($req->notes)
+                                                        <iconify-icon icon="mdi:information-outline" style="font-size:.85rem;cursor:help;"></iconify-icon>
+                                                    @endif
+                </span>
                                             @endif
-                                        </span>
+        </span>
                                     @endif
                                 </td>
 
