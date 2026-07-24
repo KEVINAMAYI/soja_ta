@@ -49,6 +49,13 @@ class RolesAndPermissionsSeeder extends Seeder
             ['name' => 'edit-roles', 'category' => 'Roles'],
             ['name' => 'delete-roles', 'category' => 'Roles'],
 
+            // System Users (non-employee manager/system accounts)
+            ['name' => 'view-users', 'category' => 'System Users'],
+            ['name' => 'add-users', 'category' => 'System Users'],
+            ['name' => 'edit-users', 'category' => 'System Users'],
+            ['name' => 'deactivate-users', 'category' => 'System Users'],
+            ['name' => 'convert-to-system-user', 'category' => 'System Users'],
+
             // Timesheets
             ['name' => 'checkin-other-employees', 'category' => 'Timesheets'],
             ['name' => 'approve-manual-timesheets', 'category' => 'Timesheets'],

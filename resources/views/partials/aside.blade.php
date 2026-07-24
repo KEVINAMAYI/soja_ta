@@ -1,111 +1,7 @@
 <style>
-    .sidebar-item .sidebar-link {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        padding: 9px 16px;
-        margin: 2px 8px;
-        border-radius: 8px;
-        cursor: pointer;
-        color: #1f2937;
-        font-weight: 500;
-        text-decoration: none !important;
-        font-size: 14.5px;
-        transition: all 0.15s ease;
-    }
-
-    .sidebar-item .sidebar-link:hover {
-        background-color: rgba(93, 135, 255, 0.08);
-        color: #111827;
-    }
-
-    .sidebar-item .sidebar-link.active {
-        background-color: #e8443c;
-        color: #fff !important;
-        font-weight: 600;
-    }
-
-    .sidebar-item .sidebar-link.active iconify-icon {
-        color: #fff !important;
-    }
-
-    .sidebar-item .sidebar-link iconify-icon {
-        font-size: 19px;
-        color: #4b5563;
-        flex-shrink: 0;
-    }
-
-    .dropdown-icon {
-        margin-left: auto;
-        transition: transform 0.3s ease;
-    }
-
-    .sidebar-item.has-dropdown.active .dropdown-icon {
-        transform: rotate(180deg);
-    }
-
-    .sidebar-dropdown {
-        list-style: none;
-        padding: 0;
-        margin: 0;
-        max-height: 0;
-        overflow: hidden;
-        transition: max-height 0.3s ease;
-        background-color: transparent;
-    }
-
-    .sidebar-item.has-dropdown.active .sidebar-dropdown {
-        max-height: 500px;
-    }
-
-    .sidebar-dropdown li {
-        list-style: disc;
-        margin-left: 45px;
-    }
-
-    .sidebar-sublink {
-        display: inline-block;
-        padding: 8px 10px;
-        text-decoration: none;
-        color: #6b7280 !important;
-        transition: all 0.3s ease;
-        font-size: 14px;
-    }
-
-    .sidebar-sublink:hover {
-        color: var(--primary-color) !important;
-        font-weight: 500;
-        padding-left: 15px;
-    }
-
-    .sidebar-sublink.active {
-        color: var(--primary-color) !important;
-        font-weight: 600;
-    }
-
-    .sidebar-item.has-dropdown > .sidebar-link:hover {
-        background-color: rgba(93, 135, 255, 0.08);
-    }
-
-    .sidebar-item.has-dropdown.active > .sidebar-link {
-        background-color: rgba(93, 135, 255, 0.12);
-    }
-
-    /* Section labels */
-    .sidebar-section-label {
-        font-size: 11.5px;
-        font-weight: 700;
-        letter-spacing: 0.02em;
-        text-transform: none;
-        color: #6b7280;
-        padding: 16px 16px 4px;
-        margin: 0;
-    }
-
-    .sidebar-section-label:first-child {
-        padding-top: 8px;
-    }
-
+    /* ============================================================
+     LAYOUT / SCROLL SCAFFOLDING — required for sidebar scrolling
+     ============================================================ */
     aside.left-sidebar {
         display: flex;
         flex-direction: column;
@@ -141,6 +37,159 @@
         margin-top: auto;
     }
 
+    /* ============================================================
+       LIST RESETS
+       ============================================================ */
+    .sidebar-menu,
+    .sidebar-dropdown {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+    }
+
+    .sidebar-item {
+        margin: 0;
+        padding: 0;
+    }
+
+    /* ============================================================
+       LINK STYLING — single source of truth
+       ============================================================ */
+    .sidebar-item .sidebar-link {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 7px 12px;
+        margin: 1px 8px;
+        border-radius: 8px;
+        cursor: pointer;
+        color: #374151;
+        font-weight: 500;
+        font-size: 13.5px;
+        line-height: 1.3;
+        text-decoration: none !important;
+        white-space: nowrap;
+        position: relative;
+        transition: background-color 0.15s ease, color 0.15s ease;
+    }
+
+    .sidebar-item .sidebar-link iconify-icon {
+        font-size: 17px;
+        color: #6b7280;
+        flex-shrink: 0;
+        width: 20px;
+        display: flex;
+        justify-content: center;
+        transition: color 0.15s ease;
+    }
+
+    .sidebar-item .sidebar-link:hover {
+        background-color: rgba(93, 135, 255, 0.08);
+        color: #111827;
+    }
+
+    .sidebar-item .sidebar-link:hover iconify-icon {
+        color: #374151;
+    }
+
+    /* Active state uses the theme's dynamic primary color */
+    .sidebar-item .sidebar-link.active {
+        background-color: color-mix(in srgb, var(--primary-color) 12%, transparent);
+        color: var(--primary-color);
+        font-weight: 600;
+    }
+
+    .sidebar-item .sidebar-link.active::before {
+        content: '';
+        position: absolute;
+        left: -8px;
+        top: 4px;
+        bottom: 4px;
+        width: 3px;
+        border-radius: 0 3px 3px 0;
+        background-color: var(--primary-color);
+    }
+
+    .sidebar-item .sidebar-link.active iconify-icon {
+        color: var(--primary-color);
+    }
+
+    /* ============================================================
+       DROPDOWN SUB-MENU (kept for any future dropdown items)
+       ============================================================ */
+    .dropdown-icon {
+        margin-left: auto;
+        transition: transform 0.3s ease;
+    }
+
+    .sidebar-item.has-dropdown.active .dropdown-icon {
+        transform: rotate(180deg);
+    }
+
+    .sidebar-dropdown {
+        max-height: 0;
+        overflow: hidden;
+        transition: max-height 0.3s ease;
+        background-color: transparent;
+    }
+
+    .sidebar-item.has-dropdown.active .sidebar-dropdown {
+        max-height: 500px;
+    }
+
+    .sidebar-dropdown li {
+        list-style: disc;
+        margin-left: 45px;
+    }
+
+    .sidebar-sublink {
+        display: inline-block;
+        padding: 8px 10px;
+        text-decoration: none;
+        color: #6b7280 !important;
+        transition: all 0.3s ease;
+        font-size: 13px;
+    }
+
+    .sidebar-sublink:hover {
+        color: var(--primary-color) !important;
+        font-weight: 500;
+        padding-left: 15px;
+    }
+
+    .sidebar-sublink.active {
+        color: var(--primary-color) !important;
+        font-weight: 600;
+    }
+
+    .sidebar-item.has-dropdown > .sidebar-link:hover {
+        background-color: rgba(93, 135, 255, 0.08);
+    }
+
+    .sidebar-item.has-dropdown.active > .sidebar-link {
+        background-color: color-mix(in srgb, var(--primary-color) 10%, transparent);
+    }
+
+    /* ============================================================
+       SECTION LABELS
+       ============================================================ */
+    .sidebar-section-label {
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: #9ca3af;
+        padding: 14px 20px 6px;
+        margin: 0;
+    }
+
+    .sidebar-section-label:first-child {
+        padding-top: 8px;
+    }
+
+    /* ============================================================
+       FOOTER HELP LINK
+       ============================================================ */
     .sidebar-footer-help .sidebar-link {
         padding: 10px 16px;
         color: #4b5563;
@@ -372,6 +421,17 @@
                                    href="{{ route('organizations.index') }}">
                                     <iconify-icon icon="mdi:office-building-outline"></iconify-icon>
                                     <span class="hide-menu">Clients</span>
+                                </a>
+                            </li>
+                        @endcan
+
+                        @can('view-users')
+                            <p class="sidebar-section-label">Administration</p>
+                            <li class="sidebar-item">
+                                <a class="sidebar-link {{ request()->routeIs('users.index') ? 'active' : '' }}"
+                                   href="{{ route('users.index') }}">
+                                    <iconify-icon icon="mdi:account-cog-outline"></iconify-icon>
+                                    <span class="hide-menu">System Users</span>
                                 </a>
                             </li>
                         @endcan

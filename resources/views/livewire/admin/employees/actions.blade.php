@@ -95,6 +95,17 @@
                 @endcan
             @endif
 
+            @can('convert-to-system-user')
+                <li>
+                    <a class="dropdown-item d-flex align-items-center gap-2" href="javascript:void(0)"
+                       wire:click="$dispatch('convert-to-system-user', { id: {{ $employee->id }} })"
+                       wire:confirm="Convert {{ $employee->name }} to a system user? They will stop appearing in attendance, timesheets, shift coverage, and reports.">
+                        <iconify-icon icon="mdi:account-cog-outline" class="text-info w-4 h-4"></iconify-icon>
+                        <span>Convert to System User</span>
+                    </a>
+                </li>
+            @endcan
+
             @can('delete-employees')
                 <li><hr class="dropdown-divider"></li>
                 <li>
