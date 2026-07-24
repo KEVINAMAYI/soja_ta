@@ -25,7 +25,7 @@ new class extends Component {
 
     public function loadStats()
     {
-        $employeeRecord = Employee::where('user_id', auth()->id())->first();
+        $employeeRecord = Employee::withSystemUsers()->where('user_id', auth()->id())->first();
         $orgId = $employeeRecord->organization_id ?? null;
 
         if (!$orgId) return;

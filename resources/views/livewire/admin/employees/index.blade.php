@@ -1402,6 +1402,27 @@ new class extends Component {
         }
     }
 
+    #[On('convert-to-system-user')]
+    public function convertToSystemUser($id): void
+    {
+        if (!auth()->user()?->can('convert-to-system-user')) {
+            abort(403, 'Unauthorized.');
+        }
+
+        try {
+            DB::beginTransaction();
+            $employee = Employee::findOrFail($id);
+            Employee::where('id', $employee->id)->update(['is_system_user' => true]);
+            DB::commit();
+            LivewireAlert::title('Success!')->text($employee->name . ' is now a system user and will no longer appear in attendance, timesheets, shift coverage, or reports.')->success()->toast()->position('top-end')->show();
+            $this->dispatch('refreshDatatable');
+            $this->loadSummaryStats();
+        } catch (\Exception $e) {
+            DB::rollBack();
+            LivewireAlert::title('Error!')->text('Something went wrong.')->error()->toast()->position('top-end')->show();
+        }
+    }
+
     #[On('delete-employee')]
     public function deleteEmployee($id): void
     {

@@ -66,7 +66,9 @@ class User extends Authenticatable
 
     public function employee()
     {
-        return $this->hasOne(Employee::class)->withTrashed();
+        return $this->hasOne(Employee::class)
+            ->withoutGlobalScope(\App\Models\Scopes\ExcludeSystemUsersScope::class)
+            ->withTrashed();
     }
 
 

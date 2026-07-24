@@ -3,7 +3,9 @@
 namespace App\Models;
 
 use App\Helpers\QRCodeGenerator;
+use App\Models\Scopes\ExcludeSystemUsersScope;
 use Carbon\Carbon;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -35,6 +37,7 @@ class Employee extends Model
         'zkbio_pin',
         'grade',
         'is_student',
+        'is_system_user',
         'ad_employee_id',
         'division',
         'section',
@@ -46,6 +49,8 @@ class Employee extends Model
 
     protected static function booted()
     {
+        static::addGlobalScope(new ExcludeSystemUsersScope);
+
         static::creating(function ($employee) {
             $orgId = $employee->organization_id;
 
@@ -77,6 +82,15 @@ class Employee extends Model
                 $employee->syncPrimaryShift();
             }
         });
+    }
+
+    /**
+     * Include system-user (non-trackable) employee rows, which are hidden
+     * by default via ExcludeSystemUsersScope.
+     */
+    public function scopeWithSystemUsers(Builder $query): Builder
+    {
+        return $query->withoutGlobalScope(ExcludeSystemUsersScope::class);
     }
 
     /**
@@ -253,8 +267,9 @@ class Employee extends Model
         $org = \App\Models\Organization::find($organizationId);
         $pinStart = (int)($org?->zkbio_pin_start ?? 4000);
 
-        // Get highest existing PIN for this org only
-        $max = self::withTrashed()
+        // Get highest existing PIN for this org only — must see system-user rows too,
+        // since the zkbio_pin column is unique across the whole table regardless of that flag.
+        $max = self::withSystemUsers()->withTrashed()
             ->where('organization_id', $organizationId)
             ->whereNotNull('zkbio_pin')
             ->selectRaw('MAX(CAST(zkbio_pin AS UNSIGNED)) as max_pin')
@@ -264,7 +279,7 @@ class Employee extends Model
         $next = max(($max ?? 0) + 1, $pinStart + 1);
 
         // Race condition safety
-        while (self::withTrashed()->where('zkbio_pin', (string)$next)->exists()) {
+        while (self::withSystemUsers()->withTrashed()->where('zkbio_pin', (string)$next)->exists()) {
             $next++;
         }
 

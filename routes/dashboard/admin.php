@@ -22,6 +22,9 @@ Route::middleware(['auth'])->prefix('admin')->group(function () {
     // Route to manage Organizations
     Volt::route('organizations', 'admin.organizations.index')->name('organizations.index');
 
+    // Route to manage non-employee manager/system Users
+    Volt::route('users', 'admin.users.index')->name('users.index');
+
     // Route to manage Shifts
     Volt::route('shifts', 'admin.shifts.index')->name('shifts.index');
     Volt::route('shifts/view/{shift}', 'admin.shifts.view')->name('shifts.view');

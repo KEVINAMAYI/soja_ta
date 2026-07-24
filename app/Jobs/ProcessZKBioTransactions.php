@@ -169,18 +169,34 @@ class ProcessZKBioTransactions implements ShouldQueue
 
     private function resolveEmployee(string $pin, string $name, array $tx): ?Employee
     {
-        $employee = Employee::where('zkbio_pin', $pin)->first();
-        if ($employee) return $employee;
+        // Must see system-user rows here — zkbio_pin/id_number/email are unique
+        // DB-wide regardless of that flag, so a scoped lookup would falsely
+        // conclude "no match" and try to auto-create a duplicate.
+        $employee = Employee::withSystemUsers()->where('zkbio_pin', $pin)->first();
 
-        $employee = Employee::where('id_number', "ZK-{$pin}")->first();
-        if ($employee) {
-            $employee->update(['zkbio_pin' => $pin]);
-            return $employee;
+        if (!$employee) {
+            $employee = Employee::withSystemUsers()->where('id_number', "ZK-{$pin}")->first();
+            if ($employee) {
+                $employee->update(['zkbio_pin' => $pin]);
+            }
         }
 
-        $employee = Employee::where('email', "zkbio_{$pin}@auto.local")->first();
+        if (!$employee) {
+            $employee = Employee::withSystemUsers()->where('email', "zkbio_{$pin}@auto.local")->first();
+            if ($employee) {
+                $employee->update(['zkbio_pin' => $pin]);
+            }
+        }
+
         if ($employee) {
-            $employee->update(['zkbio_pin' => $pin]);
+            if ($employee->is_system_user) {
+                Log::info('ZKBio scan ignored: PIN belongs to a system user, not tracked for attendance', [
+                    'pin' => $pin,
+                    'employee' => $employee->name,
+                ]);
+                return null;
+            }
+
             return $employee;
         }
 
@@ -210,7 +226,7 @@ class ProcessZKBioTransactions implements ShouldQueue
             $user->assignRole('employee');
         }
 
-        $employee = Employee::firstOrCreate(
+        $employee = Employee::withSystemUsers()->firstOrCreate(
             ['zkbio_pin' => $pin],
             [
                 'name'            => $displayName,

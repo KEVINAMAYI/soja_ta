@@ -53,7 +53,7 @@ new class extends Component {
         $this->googleMapsApiKey = env('GOOGLE_MAPS_API_KEY');
 
         $today = Carbon::today();
-        $orgId = Employee::where('user_id', auth()->id())->value('organization_id');
+        $orgId = Employee::withSystemUsers()->where('user_id', auth()->id())->value('organization_id');
 
         // Only load the active view's data — no need to load both
         if ($this->showStudentView) {
