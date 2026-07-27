@@ -363,6 +363,24 @@ new class extends Component {
                                     <span class="d-none d-md-block">User Roles & Permissions</span>
                                 </button>
                             </li>
+
+                            @can('view-users')
+                                <li class="nav-item" role="presentation">
+                                    <button
+                                        class="nav-link position-relative rounded-0 d-flex align-items-center justify-content-center bg-transparent fs-3 py-3"
+                                        id="system-users-tab"
+                                        data-bs-toggle="tab"
+                                        data-bs-target="#system-users"
+                                        type="button"
+                                        role="tab"
+                                        aria-controls="system-users"
+                                        aria-selected="false">
+                                        <i class="ti ti-user-cog mx-1 fs-6"></i>
+                                        <span class="d-none d-md-block"> Users</span>
+                                    </button>
+                                </li>
+                            @endcan
+
                             <li class="nav-item" role="presentation">
                                 <button
                                     class="nav-link position-relative rounded-0 d-flex align-items-center justify-content-center bg-transparent fs-3 py-3"
@@ -387,6 +405,15 @@ new class extends Component {
                                  aria-labelledby="user-roles-tab">
                                 <livewire:admin.roles.index/>
                             </div>
+
+                            {{-- System Users Content — moved here from the sidebar's
+                                 Administration section per CTO's request --}}
+                            @can('view-users')
+                                <div class="tab-pane fade" id="system-users" role="tabpanel"
+                                     aria-labelledby="system-users-tab">
+                                    <livewire:admin.users.index/>
+                                </div>
+                            @endcan
 
                             <!-- QR Token Management Placeholder -->
                             <div class="tab-pane fade" id="qr-token" role="tabpanel" aria-labelledby="qr-token-tab">
@@ -487,7 +514,3 @@ new class extends Component {
         });
     </script>
 @endpush
-
-
-
-
