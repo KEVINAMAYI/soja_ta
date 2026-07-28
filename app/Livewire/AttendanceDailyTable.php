@@ -23,6 +23,7 @@ class AttendanceDailyTable extends DataTableComponent
     public $endDate;
     public $departmentId;
     public $filterGrade;
+    public $employeeIds = [];
 
     public function mount($status = null): void
     {
@@ -35,13 +36,14 @@ class AttendanceDailyTable extends DataTableComponent
     }
 
     #[On('date-range-updated')]
-    public function filterByDateRange($startDate, $endDate, $status, $grade = null,  $department_id = null): void
+    public function filterByDateRange($startDate, $endDate, $status, $grade = null, $department_id = null, $employee_ids = null): void
     {
         $this->startDate   = $startDate;
         $this->endDate     = $endDate;
         $this->status      = $status;
         $this->filterGrade = $grade;
         $this->departmentId = $department_id ?? 'all'; // ← add this
+        $this->employeeIds = array_map('intval', $employee_ids ?? []);
 
         $this->maybeSeed();
         $this->dispatch('refreshDatatable');
@@ -66,6 +68,8 @@ class AttendanceDailyTable extends DataTableComponent
     public function configure(): void
     {
         $this->setPrimaryKey('id');
+        // Free-text search duplicated the new Employee(s) filter above the table — disabled to avoid two competing "find an employee" controls.
+        $this->setSearchDisabled();
     }
 
     public function builder(): \Illuminate\Database\Eloquent\Builder
@@ -101,6 +105,9 @@ class AttendanceDailyTable extends DataTableComponent
                     if ($grade) $q->where('grade', $grade);
                     if ($this->departmentId && $this->departmentId !== 'all') {
                         $q->where('department_id', $this->departmentId);
+                    }
+                    if (!empty($this->employeeIds)) {
+                        $q->whereIn('id', $this->employeeIds);
                     }
                 });
 
@@ -138,6 +145,9 @@ class AttendanceDailyTable extends DataTableComponent
                 if ($grade) $q->where('grade', $grade);
                 if ($this->departmentId && $this->departmentId !== 'all') {
                     $q->where('department_id', $this->departmentId); // ← add
+                }
+                if (!empty($this->employeeIds)) {
+                    $q->whereIn('id', $this->employeeIds);
                 }
             });
 
@@ -205,6 +215,7 @@ class AttendanceDailyTable extends DataTableComponent
 
         if ($grade) $unscannedQuery->where('grade', $grade);
         if ($search) $unscannedQuery->where('name', 'like', "%$search%");
+        if (!empty($this->employeeIds)) $unscannedQuery->whereIn('id', $this->employeeIds);
 
         $unscannedIds = $unscannedQuery->pluck('id')->toArray();
 
@@ -400,7 +411,9 @@ class AttendanceDailyTable extends DataTableComponent
                 selectedIds: $this->getSelected(),
                 startDate: $this->startDate,
                 endDate: $this->endDate,
-                status: $this->status
+                status: $this->status,
+                departmentId: $this->departmentId,
+                employeeIds: $this->employeeIds,
             ),
             'attendance.xlsx'
         );
@@ -416,6 +429,7 @@ class AttendanceDailyTable extends DataTableComponent
                 endDate: $this->endDate,
                 status: $this->status,
                 departmentId: $this->departmentId !== 'all' ? (int) $this->departmentId : null, // ← add
+                employeeIds: $this->employeeIds,
             ),
             'attendance.xlsx'
         );
@@ -433,7 +447,7 @@ class AttendanceDailyTable extends DataTableComponent
         return Excel::download(
             new AttendanceFullExport(
                 orgId: $orgId,
-                ids: $this->getSelected(),
+                ids: $this->employeeIds,
                 startDate: $this->startDate,
                 endDate: $this->endDate,
                 departmentId: $this->departmentId !== 'all' ? (int) $this->departmentId : null
@@ -450,6 +464,7 @@ class AttendanceDailyTable extends DataTableComponent
             'start_date' => $this->startDate,
             'end_date' => $this->endDate,
             'status' => $this->status,
+            'employee_ids' => $this->employeeIds,
         ]);
 
         return redirect()->to($url);

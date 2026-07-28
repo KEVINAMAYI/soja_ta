@@ -30,6 +30,7 @@ class AttendanceReportService
         ?string $startDate = null,
         ?string $endDate = null,
         ?string $status = null,
+        array   $employeeIds = [],
     ) {
         $startDate = $startDate ?? now()->toDateString();
         $endDate   = $endDate   ?? $startDate;
@@ -43,6 +44,10 @@ class AttendanceReportService
 
         if (!empty($ids)) {
             $query->whereIn('id', $ids);
+        }
+
+        if (!empty($employeeIds)) {
+            $query->whereIn('employee_id', $employeeIds);
         }
 
         if ($status) {

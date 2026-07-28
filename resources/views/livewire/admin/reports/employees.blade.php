@@ -38,6 +38,8 @@ new class extends Component {
     public $reportSettings;
     public $exportDepartmentId = 'all';
     public $filterGrade = null;
+    public $employees = [];
+    public $exportEmployeeIds = [];
 
     protected function rules()
     {
@@ -70,6 +72,11 @@ new class extends Component {
             $this->departments = Department::where('organization_id', $orgId)
                 ->orderBy('name')
                 ->get();
+
+            $this->employees = Employee::where('organization_id', $orgId)
+                ->where('active', 1)
+                ->orderBy('name')
+                ->get(['id', 'name']);
         }
 
         $this->loadReportSettings();
@@ -118,7 +125,12 @@ new class extends Component {
     #[On('filter-updated')]
     public function dateChaged()
     {
-        $this->dispatch('date-range-updated', startDate: $this->startDate, endDate: $this->endDate, status: $this->filterStatus, grade: $this->filterGrade, department_id: $this->exportDepartmentId);
+        $this->dispatch('date-range-updated', startDate: $this->startDate, endDate: $this->endDate, status: $this->filterStatus, grade: $this->filterGrade, department_id: $this->exportDepartmentId, employee_ids: $this->exportEmployeeIds);
+    }
+
+    public function updatedExportEmployeeIds()
+    {
+        $this->dateChaged();
     }
 
     #[On('timesheets-filter-updated')]
@@ -488,6 +500,46 @@ new class extends Component {
             transition: all 0.2s ease-in-out !important;
         }
 
+        /* Employee(s) checkbox dropdown */
+        .employee-filter-toggle {
+            position: relative;
+            padding-right: 2.25rem !important;
+        }
+
+        .employee-filter-toggle-arrow {
+            position: absolute;
+            top: 50%;
+            right: 0.9rem;
+            transform: translateY(-50%);
+            color: #6c757d;
+            pointer-events: none;
+        }
+
+        .employee-checklist-menu {
+            max-height: 320px;
+            overflow-y: auto;
+        }
+
+        .employee-checklist-items {
+            max-height: 220px;
+            overflow-y: auto;
+        }
+
+        .employee-checklist-items .employee-checkbox-item {
+            padding-top: 4px;
+            padding-bottom: 4px;
+            padding-right: 6px;
+            border-radius: 6px;
+        }
+
+        .employee-checklist-items .employee-checkbox-item:hover {
+            background-color: #f1f5f9;
+        }
+
+        .employee-checklist-items .form-check-label {
+            cursor: pointer;
+        }
+
 
         .email-badge {
             background: linear-gradient(45deg, #6dbf8c, #3a9e64, #2a8a47, #118c1b); /* Green gradient */
@@ -703,61 +755,106 @@ new class extends Component {
 
                                         </div>
 
-                                        <div class="row">
-                                            {{-- DATE FILTER --}}
-                                            <div class="col-3 mb-3">
-                                                <label class="form-label">Start Date</label>
-                                                <input
-                                                    type="date"
-                                                    id="attendance-start-date"
-                                                    class="form-control"
-                                                    wire:model="startDate"
-                                                    wire:change="$dispatch('filter-updated')"
-                                                />
+                                        <div class="mb-4">
+                                            <div class="d-flex align-items-center mb-3">
+                                                <iconify-icon icon="mdi:filter-variant" width="16" height="16"
+                                                              class="text-muted me-2"></iconify-icon>
+                                                <span class="fw-semibold text-muted text-uppercase" style="font-size:.72rem; letter-spacing:.05em;">Filters</span>
                                             </div>
 
-                                            <div class="col-3 mb-3">
-                                                <label class="form-label">End Date</label>
-                                                <input
-                                                    type="date"
-                                                    id="attendance-end-date"
-                                                    class="form-control"
-                                                    wire:model="endDate"
-                                                    wire:change="$dispatch('filter-updated')"
-                                                />
-                                            </div>
+                                            <div class="row g-3 align-items-end">
+                                                {{-- DATE FILTER --}}
+                                                <div class="col-6 col-md-3">
+                                                    <label class="form-label small mb-1">Start Date</label>
+                                                    <input
+                                                        type="date"
+                                                        id="attendance-start-date"
+                                                        class="form-control"
+                                                        wire:model="startDate"
+                                                        wire:change="$dispatch('filter-updated')"
+                                                    />
+                                                </div>
 
-                                            <div class="col-3 md-3">
-                                                <label class="form-label">Attendance Status</label>
-                                                <select
-                                                    class="form-control"
-                                                    wire:model="filterStatus"
-                                                    wire:change="$dispatch('filter-updated')">
-                                                    <option value="">All</option>
-                                                    <option value="present">Present [Clocked In + Clocked Out]</option>
-                                                    <option value="clocked_in">Clocked In</option>
-                                                    <option value="clocked_out">Clocked Out</option>
-                                                    <option value="absent">Absent</option>
-                                                    <option value="on_leave">On Leave</option>
-                                                    <option value="off_shift">Off Shift</option>
-                                                    <option value="sick_off">Sick Off</option>
-                                                </select>
-                                            </div>
+                                                <div class="col-6 col-md-3">
+                                                    <label class="form-label small mb-1">End Date</label>
+                                                    <input
+                                                        type="date"
+                                                        id="attendance-end-date"
+                                                        class="form-control"
+                                                        wire:model="endDate"
+                                                        wire:change="$dispatch('filter-updated')"
+                                                    />
+                                                </div>
 
-                                            <div class="col-3 md-3">
-                                                <label class="form-label">Department</label>
-                                                <select
-                                                    class="form-control"
-                                                    wire:model="exportDepartmentId"
-                                                    wire:change="$dispatch('filter-updated')">
-                                                    <option value="all">All Departments</option>
-                                                    @foreach($departments as $department)
-                                                        <option
-                                                            value="{{ $department->id }}">{{ $department->name }}</option>
-                                                    @endforeach
-                                                </select>
-                                            </div>
+                                                <div class="col-6 col-md-3">
+                                                    <label class="form-label small mb-1">Attendance Status</label>
+                                                    <select
+                                                        class="form-control"
+                                                        wire:model="filterStatus"
+                                                        wire:change="$dispatch('filter-updated')">
+                                                        <option value="">All</option>
+                                                        <option value="present">Present [Clocked In + Clocked Out]</option>
+                                                        <option value="clocked_in">Clocked In</option>
+                                                        <option value="clocked_out">Clocked Out</option>
+                                                        <option value="absent">Absent</option>
+                                                        <option value="on_leave">On Leave</option>
+                                                        <option value="off_shift">Off Shift</option>
+                                                        <option value="sick_off">Sick Off</option>
+                                                    </select>
+                                                </div>
 
+                                                <div class="col-6 col-md-3">
+                                                    <label class="form-label small mb-1">Department</label>
+                                                    <select
+                                                        class="form-control"
+                                                        wire:model="exportDepartmentId"
+                                                        wire:change="$dispatch('filter-updated')">
+                                                        <option value="all">All Departments</option>
+                                                        @foreach($departments as $department)
+                                                            <option
+                                                                value="{{ $department->id }}">{{ $department->name }}</option>
+                                                        @endforeach
+                                                    </select>
+                                                </div>
+
+                                                <div class="col-6 col-md-3">
+                                                    <label class="form-label small mb-1">Employees</label>
+                                                    <div class="dropdown" id="employee-filter-container">
+                                                        <button type="button"
+                                                                class="form-control text-start employee-filter-toggle">
+                                                            <span>{{ count($exportEmployeeIds) ? count($exportEmployeeIds) . ' selected' : 'All Employees' }}</span>
+                                                            <i class="ti ti-chevron-down employee-filter-toggle-arrow"></i>
+                                                        </button>
+                                                        <div id="employee-filter-menu" class="dropdown-menu p-2 employee-checklist-menu" style="width: 260px; display: none;">
+                                                            <input type="text" class="form-control form-control-sm mb-2"
+                                                                   placeholder="Search employees…"
+                                                                   oninput="filterEmployeeCheckboxes(this)">
+
+                                                            <div class="d-flex justify-content-between align-items-center mb-2 px-1">
+                                                                <small class="text-muted">{{ $employees->count() }} employees</small>
+                                                                @if(count($exportEmployeeIds))
+                                                                    <button type="button" class="btn btn-link btn-sm p-0"
+                                                                            wire:click="$set('exportEmployeeIds', [])">Clear</button>
+                                                                @endif
+                                                            </div>
+
+                                                            <div class="employee-checklist-items">
+                                                                @foreach($employees as $employee)
+                                                                    <div class="form-check employee-checkbox-item"
+                                                                         data-name="{{ strtolower($employee->name) }}">
+                                                                        <input class="form-check-input" type="checkbox"
+                                                                               value="{{ $employee->id }}"
+                                                                               wire:model.live="exportEmployeeIds"
+                                                                               id="emp-filter-{{ $employee->id }}">
+                                                                        <label class="form-check-label small w-100"
+                                                                               for="emp-filter-{{ $employee->id }}">{{ $employee->name }}</label>
+                                                                    </div>
+                                                                @endforeach
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
                                         </div>
 
                                         <!-- Livewire Component -->
@@ -1212,6 +1309,53 @@ new class extends Component {
 
 @push('scripts')
     <script>
+        function filterEmployeeCheckboxes(input) {
+            const term = input.value.trim().toLowerCase();
+            input.closest('.employee-checklist-menu')
+                .querySelectorAll('.employee-checkbox-item')
+                .forEach(item => {
+                    item.style.display = item.dataset.name.includes(term) ? '' : 'none';
+                });
+        }
+
+        // Employees filter dropdown — plain JS (no Bootstrap/Alpine dropdown JS),
+        // because every checkbox click triggers a Livewire re-render that morphs
+        // this DOM subtree, and any open/closed state tracked by a JS library's
+        // own internals doesn't survive that morph. A MutationObserver re-applies
+        // our own `employeeFilterOpen` flag after every such patch instead.
+        (function () {
+            let employeeFilterOpen = false;
+
+            function applyEmployeeFilterState() {
+                const menu = document.getElementById('employee-filter-menu');
+                if (menu) menu.style.display = employeeFilterOpen ? 'block' : 'none';
+            }
+
+            document.addEventListener('click', function (e) {
+                const toggle = e.target.closest('.employee-filter-toggle');
+                const insideMenu = e.target.closest('#employee-filter-menu');
+
+                if (toggle) {
+                    employeeFilterOpen = !employeeFilterOpen;
+                    applyEmployeeFilterState();
+                    return;
+                }
+
+                if (!insideMenu && employeeFilterOpen) {
+                    employeeFilterOpen = false;
+                    applyEmployeeFilterState();
+                }
+            });
+
+            document.addEventListener('DOMContentLoaded', function () {
+                const container = document.getElementById('employee-filter-container');
+                if (!container) return;
+
+                new MutationObserver(applyEmployeeFilterState)
+                    .observe(container, {childList: true, subtree: true, attributes: true, attributeFilter: ['style']});
+            });
+        })();
+
         document.addEventListener('DOMContentLoaded', () => {
             const modalEl = document.getElementById('reportModal');
 

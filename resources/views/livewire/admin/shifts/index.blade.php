@@ -149,6 +149,22 @@ new class extends Component {
 
         try {
             $shift = Shift::findOrFail($id);
+
+            // Employees FK cascades on delete — block instead of silently wiping
+            // their records (and their attendance/leave/overtime history with them).
+            if ($shift->employees()->count() > 0) {
+                DB::rollBack();
+
+                LivewireAlert::title('Cannot delete shift')
+                    ->text('This shift still has employees assigned. Reassign them to another shift first.')
+                    ->error()
+                    ->toast()
+                    ->position('top-end')
+                    ->show();
+
+                return;
+            }
+
             $shift->delete();
 
             DB::commit();

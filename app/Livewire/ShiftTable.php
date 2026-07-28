@@ -64,7 +64,7 @@ class ShiftTable extends DataTableComponent
 
             // 👥 Employees count
             Column::make("Employees","start_time")
-                ->format(fn($value, $row) => '<span class="badge bg-danger fw-bold">' . $row->employees->count() . '</span>')
+                ->format(fn($value, $row) => '<a href="' . route('employees.index', ['shift_id' => $row->id]) . '" title="View employees on this shift"><span class="badge bg-danger fw-bold">' . $row->employees->count() . '</span></a>')
                 ->html(),
 
             // ⏱ Break minutes

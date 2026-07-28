@@ -5,6 +5,7 @@ namespace App\Livewire;
 use App\Exports\EmployeesExcelExport;
 use App\Models\Attendance;
 use App\Models\Role;
+use App\Models\Shift;
 use Illuminate\Support\Facades\Auth;
 use Jantinnerezo\LivewireAlert\Facades\LivewireAlert;
 use Livewire\Attributes\On;
@@ -36,6 +37,10 @@ class EmployeeTable extends DataTableComponent
 
         if (request()->has('active')) {
             $this->setFilter('active', request()->query('active'));
+        }
+
+        if (request()->has('shift_id')) {
+            $this->setFilter('shift_id', request()->query('shift_id'));
         }
     }
 
@@ -426,6 +431,22 @@ class EmployeeTable extends DataTableComponent
                     });
                 }),
         ];
+
+        // Shifts don't apply to school orgs (students aren't shift-assigned)
+        if (!$isStudentOrg) {
+            $shiftOptions = ['' => 'All Shifts'] +
+                Shift::where('organization_id', $orgId)
+                    ->orderBy('name')
+                    ->pluck('name', 'id')
+                    ->toArray();
+
+            $filters['shift_id'] = SelectFilter::make('Shift')
+                ->options($shiftOptions)
+                ->filter(function ($builder, $value) {
+                    if ($value === '' || $value === null) return;
+                    $builder->where('shift_id', $value);
+                });
+        }
 
         // For school orgs, add a status filter that uses the last attendance record
         if ($isStudentOrg) {

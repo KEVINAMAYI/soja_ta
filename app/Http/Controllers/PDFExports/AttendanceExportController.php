@@ -24,6 +24,7 @@ class AttendanceExportController extends Controller
         $startDate = $request->input('start_date');
         $endDate = $request->input('end_date');
         $status = $request->input('status');
+        $employeeIds = $request->input('employee_ids', []);
         $orgId = auth()->user()->employee->organization_id ?? null;
 
         $attendances = $this->reportService->getDaily(
@@ -32,6 +33,7 @@ class AttendanceExportController extends Controller
             startDate: $startDate,
             endDate: $endDate,
             status: $status,
+            employeeIds: $employeeIds,
         );
 
         if ($attendances->isEmpty()) {

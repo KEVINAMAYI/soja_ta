@@ -22,6 +22,7 @@ class AttendanceDailyExcelExport implements FromView, ShouldAutoSize, WithTitle,
     protected $endDate;
     protected $status;
     protected $departmentId;
+    protected array $employeeIds;
 
 
     public function __construct(
@@ -29,7 +30,8 @@ class AttendanceDailyExcelExport implements FromView, ShouldAutoSize, WithTitle,
         ?string $startDate = null,
         ?string $endDate = null,
         ?string $status = null,
-        mixed   $departmentId = null
+        mixed   $departmentId = null,
+        array   $employeeIds = []
 
     )
     {
@@ -38,6 +40,7 @@ class AttendanceDailyExcelExport implements FromView, ShouldAutoSize, WithTitle,
         $this->endDate = $endDate;
         $this->status = $status;
         $this->departmentId = ($departmentId && $departmentId !== 'all') ? (int) $departmentId : null;
+        $this->employeeIds = $employeeIds;
 
     }
 
@@ -52,6 +55,9 @@ class AttendanceDailyExcelExport implements FromView, ShouldAutoSize, WithTitle,
                 // ← department filter inside the whereHas so it's scoped correctly
                 if ($this->departmentId) {
                     $q->where('department_id', $this->departmentId);
+                }
+                if (!empty($this->employeeIds)) {
+                    $q->whereIn('id', $this->employeeIds);
                 }
             });
 

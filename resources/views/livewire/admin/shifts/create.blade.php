@@ -2310,13 +2310,16 @@ new class extends Component {
 
                         <div class="d-flex align-items-center">
 
-                            <div class="d-flex align-items-center text-muted me-2">
+                            <a href="{{ route('employees.index', ['shift_id' => $shift['id']]) }}"
+                               class="d-flex align-items-center text-muted me-2 text-decoration-none"
+                               title="View employees on this shift"
+                               onclick="event.stopPropagation()">
                                 <svg width="12" height="12" class="me-1" fill="currentColor" viewBox="0 0 24 24">
                                     <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/>
                                     <circle cx="9" cy="7" r="4"/>
                                 </svg>
                                 <small>{{ $shift['employees'] }}</small>
-                            </div>
+                            </a>
 
                             <button type="button"
                                     class="delete-btn mw-3 mb-1 btn btn-outline-danger p-1 d-flex align-items-center justify-content-center"

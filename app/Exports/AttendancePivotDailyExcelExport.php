@@ -19,6 +19,7 @@ class AttendancePivotDailyExcelExport implements WithEvents, WithTitle, ShouldAu
     protected $endDate;
     protected $status;
     protected ?int $departmentId;
+    protected array $employeeIds;
 
     // Built during registerEvents
     protected array $pivotMap = [];
@@ -30,13 +31,15 @@ class AttendancePivotDailyExcelExport implements WithEvents, WithTitle, ShouldAu
         ?string $startDate = null,
         ?string $endDate = null,
         ?string $status = null,
-        ?int    $departmentId = null
+        ?int    $departmentId = null,
+        array   $employeeIds = []
     ) {
         $this->selectedIds  = $selectedIds;
         $this->startDate    = $startDate;
         $this->endDate      = $endDate;
         $this->status       = $status;
         $this->departmentId = $departmentId;
+        $this->employeeIds  = $employeeIds;
     }
 
     public function title(): string
@@ -210,6 +213,9 @@ class AttendancePivotDailyExcelExport implements WithEvents, WithTitle, ShouldAu
                 $q->where('organization_id', $orgId);
                 if ($this->departmentId) {
                     $q->where('department_id', $this->departmentId);
+                }
+                if (!empty($this->employeeIds)) {
+                    $q->whereIn('id', $this->employeeIds);
                 }
             });
 
