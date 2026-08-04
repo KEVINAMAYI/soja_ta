@@ -204,19 +204,15 @@
 <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
 
 <style>
-    /* Select2's own bundled CSS sets .select2-selection__rendered { line-height: 28px },
-       which fights the app theme's 40px rule and leaves the label sitting near the top
-       of the (taller) box. Scoped + !important so this wins regardless of load order,
-       without touching any other Select2 instance in the app. */
-    .dept-group-select + .select2-container--default .select2-selection--single {
-        height: 40px !important;
-    }
-    .dept-group-select + .select2-container--default .select2-selection--single .select2-selection__rendered {
-        height: 40px !important;
-        line-height: 40px !important;
-    }
-    .dept-group-select + .select2-container--default .select2-selection--single .select2-selection__arrow {
-        height: 38px !important;
+    /* Select2's multi-select box defaults to height:auto (~27px empty), noticeably
+       shorter than the sibling .form-control date/status inputs on the same filter
+       row (~43px, per the theme's own min-height formula). Match it so the row lines
+       up, while still letting the box grow taller once several tags are selected. */
+    .dept-group-select + .select2-container--default .select2-selection--multiple {
+        min-height: calc(1.5em + 20px + calc(var(--bs-border-width, 1px) * 2));
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
     }
 </style>
 
@@ -234,18 +230,21 @@
             $el.select2({
                 width: '100%',
                 placeholder: 'All Departments',
-                allowClear: false,
+                allowClear: true,
                 minimumResultsForSearch: 0,
             });
 
             $el.on('change', function () {
-                const val = $(this).val();
+                const selected = $(this).val() || [];
                 const eventName = $el.data('dispatch-event');
                 if (!eventName) {
                     return;
                 }
+                // Each selected option's value is a comma-joined id list (one derived
+                // group); flatten and dedupe across every group the user picked.
+                const ids = [...new Set(selected.flatMap((value) => value.split(',')))];
                 Livewire.dispatch(eventName, {
-                    department_ids: val && val !== 'all' ? val.split(',') : [],
+                    department_ids: ids,
                 });
             });
         });
