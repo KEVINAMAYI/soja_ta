@@ -49,8 +49,12 @@ class DeriveDepartmentGroups extends Command
             'Human Resources and Administration - HR',
         ],
         'Information Technology' => [
+            'IT',
             'IT Department',
             'Information Technology',
+        ],
+        'Quality Control' => [
+            'QualityControl',
         ],
         'Formulation & Development' => [
             'Formulation & Development',
@@ -69,6 +73,7 @@ class DeriveDepartmentGroups extends Command
             'Engineering and Projects - Mechanical',
             'Engineering and Projects - Projects',
             'Engineering and Projects - Utility',
+            'OperationsEngineering and Projects0',
         ],
     ];
 
