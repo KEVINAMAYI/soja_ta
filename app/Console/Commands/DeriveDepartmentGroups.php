@@ -11,62 +11,64 @@ class DeriveDepartmentGroups extends Command
     protected $description = 'Backfill departments.department_derived: apply the confirmed canonical-name mapping for known AD-sync duplicate clusters, then group everything else by its name prefix (text before the first " - ")';
 
     /**
-     * organization_id => [canonical department_derived name => [department names to merge into it]]
+     * canonical department_derived name => [department names to merge into it]
      *
-     * Confirmed against the live departments table for organization 2 (Cosmos Pharmaceuticals) —
-     * see docs/department-name-inconsistency.md and docs/pmo-summary-ad-department-findings.md.
-     * Matched by exact current `name`, not by id, so this stays valid if AD sync re-creates
-     * one of these rows under the same name after this command has already run once.
+     * Confirmed against the live departments table for Cosmos Pharmaceuticals — see
+     * docs/department-name-inconsistency.md and docs/pmo-summary-ad-department-findings.md.
+     * Matched by exact current `name` (not id, not organization_id) so this is portable
+     * across environments where the same organization can have a different numeric id,
+     * and stays valid if AD sync re-creates one of these rows under the same name after
+     * this command has already run once. Matching by name alone is safe: two unrelated
+     * organizations sharing an exact typo like "FFinance" is not a realistic collision,
+     * and grouping is still read per-organization via Department::groupedByDerived().
      */
     private const CLUSTERS = [
-        2 => [
-            'Finance' => [
-                'Finance',
-                'Finance - Controlling - Billing',
-                'Finance - Controlling - Costing',
-                'Finance - Controlling - Credit Control',
-                'Finance - Financial Accounting',
-                'Finance - Financial Accounting - General Ledger',
-                'Finance - Financial Accounting - Payables',
-                'Finance - Treasury, Tax & Investments - Treasury',
-                'FFinance - Financial Accounting',
-            ],
-            'Sales and Marketing' => [
-                'SALES',
-                'Sales & Marketing',
-                'Sales & Marketing -Vet',
-                'Sales & Marketing Operations',
-            ],
-            'Human Resources and Administration' => [
-                'HR',
-                'HR & Admin',
-                'Human Resource',
-                'Human Resources and Administration',
-                'Human Resources and Administration - Admin',
-                'Human Resources and Administration - HR',
-            ],
-            'Information Technology' => [
-                'IT Department',
-                'Information Technology',
-            ],
-            'Formulation & Development' => [
-                'Formulation & Development',
-                'Formulation and Development',
-            ],
-            'Regulatory Affairs' => [
-                'Regulatory',
-                'Regulatory Affairs',
-                'Regulatory Affairs - Registration',
-                'Regulatory Affairs - Regulatory',
-            ],
-            'Engineering and Projects' => [
-                'Engineering',
-                'Engineering and Projects',
-                'Engineering and Projects - Electrical',
-                'Engineering and Projects - Mechanical',
-                'Engineering and Projects - Projects',
-                'Engineering and Projects - Utility',
-            ],
+        'Finance' => [
+            'Finance',
+            'Finance - Controlling - Billing',
+            'Finance - Controlling - Costing',
+            'Finance - Controlling - Credit Control',
+            'Finance - Financial Accounting',
+            'Finance - Financial Accounting - General Ledger',
+            'Finance - Financial Accounting - Payables',
+            'Finance - Treasury, Tax & Investments - Treasury',
+            'FFinance - Financial Accounting',
+        ],
+        'Sales and Marketing' => [
+            'SALES',
+            'Sales & Marketing',
+            'Sales & Marketing -Vet',
+            'Sales & Marketing Operations',
+        ],
+        'Human Resources and Administration' => [
+            'HR',
+            'HR & Admin',
+            'Human Resource',
+            'Human Resources and Administration',
+            'Human Resources and Administration - Admin',
+            'Human Resources and Administration - HR',
+        ],
+        'Information Technology' => [
+            'IT Department',
+            'Information Technology',
+        ],
+        'Formulation & Development' => [
+            'Formulation & Development',
+            'Formulation and Development',
+        ],
+        'Regulatory Affairs' => [
+            'Regulatory',
+            'Regulatory Affairs',
+            'Regulatory Affairs - Registration',
+            'Regulatory Affairs - Regulatory',
+        ],
+        'Engineering and Projects' => [
+            'Engineering',
+            'Engineering and Projects',
+            'Engineering and Projects - Electrical',
+            'Engineering and Projects - Mechanical',
+            'Engineering and Projects - Projects',
+            'Engineering and Projects - Utility',
         ],
     ];
 
@@ -74,15 +76,12 @@ class DeriveDepartmentGroups extends Command
     {
         $mapped = 0;
 
-        foreach (self::CLUSTERS as $organizationId => $groups) {
-            foreach ($groups as $canonical => $names) {
-                $updated = Department::where('organization_id', $organizationId)
-                    ->whereIn('name', $names)
-                    ->update(['department_derived' => $canonical]);
+        foreach (self::CLUSTERS as $canonical => $names) {
+            $updated = Department::whereIn('name', $names)
+                ->update(['department_derived' => $canonical]);
 
-                $mapped += $updated;
-                $this->info("[{$canonical}] matched {$updated} department row(s)");
-            }
+            $mapped += $updated;
+            $this->info("[{$canonical}] matched {$updated} department row(s)");
         }
 
         // Everything not covered by a cluster above: group by the text before the first
