@@ -1,5 +1,7 @@
 {{--
-    Flat, searchable department filter — one option per derived (canonical) department group.
+    Flat, searchable, multi-select department filter — one option per derived
+    (canonical) department group. Pick none for "All Departments", or pick
+    several groups to filter/export just those departments together.
 
     Props:
       $groupedDepartments  Collection keyed by department_derived, each value a Collection of
@@ -9,34 +11,25 @@
       $selectedDepartmentIds Array of currently-selected department ids (empty array = "All Departments").
 
     Value encoding (parsed by initDeptGroupSelects() in the app layout):
-      "all"    -> no department filter
-      "1,2,3"  -> every department id under one derived group
+      each selected <option> value is "1,2,3" — every department id under one derived
+      group; the ids from all selected options are flattened into one department_ids array.
 --}}
 @php
-    // Order-independent (sorted-set) comparison against each group's natural id order,
-    // so the rendered option's value="" (also natural order) is what actually gets selected.
-    $selectedSet = collect($selectedDepartmentIds ?? [])->map(fn ($id) => (string) $id)->sort()->values();
-
-    $selectedValue = 'all';
-    if ($selectedSet->isNotEmpty()) {
-        foreach ($groupedDepartments as $members) {
-            $naturalIds = $members->pluck('id')->map(fn ($id) => (string) $id)->values();
-            if ($naturalIds->sort()->values()->all() === $selectedSet->all()) {
-                $selectedValue = $naturalIds->implode(',');
-                break;
-            }
-        }
-    }
+    $selectedSet = collect($selectedDepartmentIds ?? [])->map(fn ($id) => (string) $id)->values();
 @endphp
 
 <div wire:ignore>
     <select id="{{ $selectId }}"
             class="form-control dept-group-select"
-            data-dispatch-event="{{ $dispatchEvent }}">
-        <option value="all" @selected($selectedValue === 'all')>All Departments</option>
+            data-dispatch-event="{{ $dispatchEvent }}"
+            multiple>
         @foreach($groupedDepartments as $groupName => $members)
-            @php $groupIds = $members->pluck('id')->implode(','); @endphp
-            <option value="{{ $groupIds }}" @selected($selectedValue === $groupIds)>{{ $groupName }}</option>
+            @php
+                $naturalIds = $members->pluck('id')->map(fn ($id) => (string) $id)->values();
+                $groupIds = $naturalIds->implode(',');
+                $isSelected = $naturalIds->isNotEmpty() && $naturalIds->diff($selectedSet)->isEmpty();
+            @endphp
+            <option value="{{ $groupIds }}" @selected($isSelected)>{{ $groupName }}</option>
         @endforeach
     </select>
 </div>
