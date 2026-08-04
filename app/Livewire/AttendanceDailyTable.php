@@ -21,7 +21,7 @@ class AttendanceDailyTable extends DataTableComponent
     public $status;
     public $startDate;
     public $endDate;
-    public $departmentId;
+    public $departmentIds = [];
     public $filterGrade;
 
     public $employeeType = 'all';
@@ -33,18 +33,17 @@ class AttendanceDailyTable extends DataTableComponent
         $this->status = $status;
         $this->startDate = now()->toDateString();
         $this->endDate = now()->toDateString();
-        $this->departmentId = 'all';
         $this->maybeSeed();
     }
 
     #[On('date-range-updated')]
-    public function filterByDateRange($startDate, $endDate, $status, $grade = null, $department_id = null, $employee_type = null): void
+    public function filterByDateRange($startDate, $endDate, $status, $grade = null, $department_ids = [], $employee_type = null): void
     {
         $this->startDate = $startDate;
         $this->endDate = $endDate;
         $this->status = $status;
         $this->filterGrade = $grade;
-        $this->departmentId = $department_id ?? 'all';
+        $this->departmentIds = $department_ids ?? [];
         $this->employeeType = $employee_type ?? 'all';
         $this->maybeSeed();
         $this->dispatch('refreshDatatable');
@@ -98,7 +97,7 @@ class AttendanceDailyTable extends DataTableComponent
                 ->whereHas('employee', function ($q) use ($orgId, $grade, $isSchool) {
                     $q->where('organization_id', $orgId)->where('active', 0)->where('is_student', $isSchool ? 1 : 0);
                     if ($grade) $q->where('grade', $grade);
-                    if ($this->departmentId && $this->departmentId !== 'all') $q->where('department_id', $this->departmentId);
+                    if (!empty($this->departmentIds)) $q->whereIn('department_id', $this->departmentIds);
                 });
             if ($search) $query->where(fn($q) => $q->where('status', 'like', "%$search%")->orWhereHas('employee', fn($q) => $q->where('name', 'like', "%$search%")));
             return $query->orderByDesc('date')->orderByRaw('check_in_time IS NULL')->orderByDesc(DB::raw('COALESCE(check_in_time, updated_at)'));
@@ -110,7 +109,7 @@ class AttendanceDailyTable extends DataTableComponent
             ->whereHas('employee', function ($q) use ($orgId, $grade, $isSchool) {
                 $q->where('organization_id', $orgId)->where('active', 1)->where('is_student', $isSchool ? 1 : 0);
                 if ($grade) $q->where('grade', $grade);
-                if ($this->departmentId && $this->departmentId !== 'all') $q->where('department_id', $this->departmentId);
+                if (!empty($this->departmentIds)) $q->whereIn('department_id', $this->departmentIds);
             });
 
         if ($isSchool) {
@@ -336,7 +335,7 @@ class AttendanceDailyTable extends DataTableComponent
     #[On('export-pivot-daily-excel')]
     public function exportPivotExcel()
     {
-        return Excel::download(new AttendancePivotDailyExcelExport(selectedIds: $this->getSelected(), startDate: $this->startDate, endDate: $this->endDate, status: $this->status, departmentId: $this->departmentId !== 'all' ? (int)$this->departmentId : null), 'attendance.xlsx');
+        return Excel::download(new AttendancePivotDailyExcelExport(selectedIds: $this->getSelected(), startDate: $this->startDate, endDate: $this->endDate, status: $this->status), 'attendance.xlsx');
     }
 
     #[On('export-full-excel')]
@@ -353,7 +352,7 @@ class AttendanceDailyTable extends DataTableComponent
                 ids: $this->getSelected(),
                 startDate: $this->startDate,
                 endDate: $this->endDate,
-                departmentId: $this->departmentId !== 'all' ? (int)$this->departmentId : null,
+                departmentIds: $this->departmentIds,
                 employeeType: $this->employeeType ?? null,
             ),
             $filename

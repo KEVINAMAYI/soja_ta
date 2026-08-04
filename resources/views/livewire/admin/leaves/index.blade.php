@@ -487,7 +487,7 @@ new class extends Component {
                     <tr>
                         <td>
                             <div class="d-flex flex-column">
-                                <h6 class="fw-semibold mb-1">{{ $record['employee']->name }}</h6>
+                                <h6 class="fw-semibold mb-1">{{ $record['employee']->name ?? 'N/A' }}</h6>
                                 <span class="fw-normal text-muted d-flex align-items-center gap-1">
                                         <iconify-icon icon="tabler:user" class="text-primary" width="20"></iconify-icon>
                                         {{ $record['employee']->email ?? 'N/A' }}

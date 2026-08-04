@@ -66,14 +66,14 @@ class AttendanceReportService
         return $records;
     }
 
-    public function baseQuery($orgId, $ids, $start_date, $end_date, $department_id)
+    public function baseQuery($orgId, $ids, $start_date, $end_date, $department_ids = [])
     {
         $query = Attendance::query()
             ->join('employees', 'attendances.employee_id', '=', 'employees.id')
             ->where('employees.organization_id', $orgId);
 
-        if ($department_id && $department_id !== 'all') {
-            $query->where('employees.department_id', $department_id);
+        if (!empty($department_ids)) {
+            $query->whereIn('employees.department_id', (array) $department_ids);
         }
 
         if ($start_date) $query->where('attendances.date', '>=', $start_date);
@@ -83,9 +83,9 @@ class AttendanceReportService
         return $query;
     }
 
-    public function getMonthly(int $orgId, array $ids, string $start_date, string $end_date, $department_id = null)
+    public function getMonthly(int $orgId, array $ids, string $start_date, string $end_date, $department_ids = [])
     {
-        $query = $this->baseQuery($orgId, $ids, $start_date, $end_date, $department_id)
+        $query = $this->baseQuery($orgId, $ids, $start_date, $end_date, $department_ids)
             ->with(['employee', 'employee.department', 'employee.shift']);
 
         $query->select(
@@ -170,7 +170,7 @@ class AttendanceReportService
         array   $ids = [],
         ?string $startDate = null,
         ?string $endDate = null,
-        ?int    $departmentId = null,
+        array   $departmentIds = [],
         ?string $employeeType = null,
     )
     {
@@ -190,7 +190,7 @@ class AttendanceReportService
             ->select('attendances.*');
 
         if (!empty($ids)) $query->whereIn('attendances.id', $ids);
-        if ($departmentId) $query->where('employees.department_id', $departmentId);
+        if (!empty($departmentIds)) $query->whereIn('employees.department_id', $departmentIds);
 
         if ($employeeType && $employeeType !== 'all') {
             $query->where('employees.employee_type', $employeeType);

@@ -8,7 +8,7 @@ use App\Models\Department;
 
 new class extends Component {
 
-    public $department_id;
+    public $department_ids = [];
     public $startDate;
     public $endDate;
     public $departments = [];
@@ -18,25 +18,26 @@ new class extends Component {
         $today = now()->toDateString();
         $this->startDate = $today;
         $this->endDate = $today;
-        $this->department_id = 'all';
 
-        // Load departments for the current organization
+        // Load departments for the current organization, grouped by department_derived
         $orgId = auth()->user()->employee->organization_id ?? null;
         if ($orgId) {
-            $this->departments = Department::where('organization_id', $orgId)
-                ->orderBy('name')
-                ->get();
+            $this->departments = Department::groupedByDerived($orgId);
         }
     }
 
     #[On('filter-updated')]
-    public function filterChanged()
+    public function filterChanged($department_ids = null)
     {
+        if ($department_ids !== null) {
+            $this->department_ids = $department_ids;
+        }
+
         // Emit event to the table component
         $this->dispatch('timesheet-range-updated',
             startDate: $this->startDate,
             endDate: $this->endDate,
-            department_id: $this->department_id
+            department_ids: $this->department_ids
         );
     }
 
@@ -186,15 +187,12 @@ new class extends Component {
                 {{-- DEPARTMENT FILTER --}}
                 <div class="col-md-4">
                     <label class="form-label fw-semibold">Department</label>
-                    <select
-                        class="form-control"
-                        wire:model="department_id"
-                        wire:change="$dispatch('filter-updated')">
-                        <option value="all">All Departments</option>
-                        @foreach($departments as $department)
-                            <option value="{{ $department->id }}">{{ $department->name }}</option>
-                        @endforeach
-                    </select>
+                    @include('livewire.admin.partials.department-group-filter', [
+                        'groupedDepartments' => $departments,
+                        'selectId' => 'timesheetsDeptFilter',
+                        'dispatchEvent' => 'filter-updated',
+                        'selectedDepartmentIds' => $department_ids,
+                    ])
                 </div>
             </div>
 

@@ -203,6 +203,57 @@
 <script src="../assets/js/apex-chart/apex.line.init.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
 
+<style>
+    /* Select2's own bundled CSS sets .select2-selection__rendered { line-height: 28px },
+       which fights the app theme's 40px rule and leaves the label sitting near the top
+       of the (taller) box. Scoped + !important so this wins regardless of load order,
+       without touching any other Select2 instance in the app. */
+    .dept-group-select + .select2-container--default .select2-selection--single {
+        height: 40px !important;
+    }
+    .dept-group-select + .select2-container--default .select2-selection--single .select2-selection__rendered {
+        height: 40px !important;
+        line-height: 40px !important;
+    }
+    .dept-group-select + .select2-container--default .select2-selection--single .select2-selection__arrow {
+        height: 38px !important;
+    }
+</style>
+
+<script>
+    // Grouped department filter (see resources/views/livewire/admin/partials/department-group-filter.blade.php).
+    // The <select> lives inside a wire:ignore wrapper, so Livewire never touches it after the
+    // initial render — we own its Select2 lifecycle and forward changes to Livewire ourselves.
+    function initDeptGroupSelects(context = document) {
+        $(context).find('select.dept-group-select').each(function () {
+            const $el = $(this);
+            if ($el.hasClass('select2-hidden-accessible')) {
+                return;
+            }
+
+            $el.select2({
+                width: '100%',
+                placeholder: 'All Departments',
+                allowClear: false,
+                minimumResultsForSearch: 0,
+            });
+
+            $el.on('change', function () {
+                const val = $(this).val();
+                const eventName = $el.data('dispatch-event');
+                if (!eventName) {
+                    return;
+                }
+                Livewire.dispatch(eventName, {
+                    department_ids: val && val !== 'all' ? val.split(',') : [],
+                });
+            });
+        });
+    }
+
+    document.addEventListener('DOMContentLoaded', () => initDeptGroupSelects());
+</script>
+
 @rappasoftTableScripts
 @rappasoftTableThirdPartyScripts
 
