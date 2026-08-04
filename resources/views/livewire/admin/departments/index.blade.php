@@ -13,6 +13,27 @@ new class extends Component {
     public $editId;
     public $description;
     public $manager_id;
+    public $department_derived;
+    public $availableGroups = [];
+
+    public function mount()
+    {
+        $this->loadAvailableGroups();
+    }
+
+    public function loadAvailableGroups()
+    {
+        $orgId = auth()->user()->employee->organization_id ?? null;
+
+        $this->availableGroups = $orgId
+            ? Department::where('organization_id', $orgId)
+                ->whereNotNull('department_derived')
+                ->distinct()
+                ->orderBy('department_derived')
+                ->pluck('department_derived')
+                ->toArray()
+            : [];
+    }
 
     public function rules()
     {
@@ -20,6 +41,7 @@ new class extends Component {
             'name' => 'required|string|max:255|unique:departments,name,' . $this->editId,
             'description' => 'nullable|string|max:1000',
             'manager_id' => 'nullable|exists:users,id',
+            'department_derived' => 'nullable|string|max:255',
         ];
     }
 
@@ -37,7 +59,8 @@ new class extends Component {
                 'name' => $this->name,
                 'description' => $this->description,
                 'manager_id' => $this->manager_id,
-                'organization_id' => $org->id
+                'organization_id' => $org->id,
+                'department_derived' => $this->department_derived ?: $this->name,
             ]);
 
 
@@ -61,6 +84,7 @@ new class extends Component {
                 ->show();
 
             $this->resetForm();
+            $this->loadAvailableGroups();
             $this->dispatch('refreshDatatable');
 
         } catch (\Exception $e) {
@@ -84,6 +108,7 @@ new class extends Component {
         $this->name = $dept->name;
         $this->description = $dept->description;
         $this->manager_id = $dept->manager_id;
+        $this->department_derived = $dept->department_derived;
 
         $this->dispatch('show-department-modal');
     }
@@ -100,6 +125,7 @@ new class extends Component {
                     'name' => $this->name,
                     'description' => $this->description,
                     'manager_id' => $this->manager_id,
+                    'department_derived' => $this->department_derived ?: $this->name,
 
                 ]);
 
@@ -122,6 +148,7 @@ new class extends Component {
                 ->show();
 
             $this->resetForm();
+            $this->loadAvailableGroups();
             $this->dispatch('refreshDatatable');
 
         } catch (\Exception $e) {
@@ -183,7 +210,7 @@ new class extends Component {
 
     public function resetForm()
     {
-        $this->reset(['name', 'editId']);
+        $this->reset(['name', 'editId', 'department_derived']);
     }
 };
 
@@ -250,6 +277,25 @@ new class extends Component {
                             @error('name') <small class="text-danger">{{ $message }}</small> @enderror
                         </div>
 
+                        <div class="mb-3" wire:ignore>
+                            <label for="department_derived" class="form-label">Group under</label>
+                            <select id="department_derived" class="form-control select2-tags"
+                                    data-placeholder="Same as department name">
+                                @if($department_derived)
+                                    <option value="{{ $department_derived }}" selected>{{ $department_derived }}</option>
+                                @endif
+                                @foreach($availableGroups as $group)
+                                    @if($group !== $department_derived)
+                                        <option value="{{ $group }}">{{ $group }}</option>
+                                    @endif
+                                @endforeach
+                            </select>
+                            <small class="text-muted">
+                                Departments in the same group appear together when filtering reports. Leave blank to use the department name.
+                            </small>
+                            @error('department_derived') <small class="text-danger d-block">{{ $message }}</small> @enderror
+                        </div>
+
                         <div class="mb-3">
                             <label for="description" class="form-label">Description</label>
                             <textarea wire:model="description" id="description" class="form-control" rows="3"
@@ -292,6 +338,43 @@ new class extends Component {
 
         window.addEventListener('hide-department-modal', () => {
             bootstrap.Modal.getInstance(document.getElementById('departmentModal'))?.hide();
+        });
+
+        // "Group under" is a wire:ignore select — Livewire never touches its DOM, so we
+        // (re)initialize Select2 and sync its value from the component every time the
+        // modal opens, and tear it down when it closes.
+        $(document).on('shown.bs.modal', '#departmentModal', function () {
+            const $modal = $(this);
+            const $el = $modal.find('select.select2-tags');
+
+            if ($el.hasClass('select2-hidden-accessible')) {
+                $el.select2('destroy');
+            }
+
+            $el.select2({
+                width: '100%',
+                tags: true,
+                allowClear: true,
+                placeholder: $el.data('placeholder') || '',
+                dropdownParent: $modal,
+            });
+
+            const current = @this.get('department_derived');
+            if (current && $el.find('option[value="' + current + '"]').length === 0) {
+                $el.append(new Option(current, current, false, false));
+            }
+            $el.val(current || null).trigger('change.select2');
+
+            $el.off('change.deptGroup').on('change.deptGroup', function () {
+                @this.set('department_derived', $(this).val() || null);
+            });
+        });
+
+        $(document).on('hidden.bs.modal', '#departmentModal', function () {
+            const $el = $(this).find('select.select2-tags');
+            if ($el.hasClass('select2-hidden-accessible')) {
+                $el.select2('destroy');
+            }
         });
     </script>
 @endpush

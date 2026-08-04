@@ -18,13 +18,12 @@ use Illuminate\Support\Facades\DB;
 class AttendanceMonthlyTable extends DataTableComponent
 {
 
-    public $department_id;
+    public $department_ids = [];
     public $startDate;
     public $endDate;
 
     public function mount()
     {
-        $this->department_id = 'all';
         $this->startDate = now()->toDateString();
         $this->endDate = now()->toDateString();
     }
@@ -37,11 +36,11 @@ class AttendanceMonthlyTable extends DataTableComponent
 
 
     #[On('timesheet-range-updated')]
-    public function filterByDateRange($startDate, $endDate, $department_id)
+    public function filterByDateRange($startDate, $endDate, $department_ids = [])
     {
         $this->startDate = $startDate;
         $this->endDate = $endDate;
-        $this->department_id = $department_id;
+        $this->department_ids = $department_ids;
 
         $this->dispatch('refreshDatatable');
 
@@ -56,9 +55,9 @@ class AttendanceMonthlyTable extends DataTableComponent
             ->join('employees', 'attendances.employee_id', '=', 'employees.id')
             ->where('employees.organization_id', $orgId);
 
-        // Filter by department
-        if ($this->department_id && $this->department_id !== 'all') {
-            $query->where('employees.department_id', $this->department_id);
+        // Filter by department (a single department, or every department in a derived group)
+        if (!empty($this->department_ids)) {
+            $query->whereIn('employees.department_id', $this->department_ids);
         }
 
         // Date filtering
@@ -195,7 +194,7 @@ class AttendanceMonthlyTable extends DataTableComponent
         return Excel::download(
             new AttendanceMonthlyExcelExport(
                 selected: $this->getSelected(),
-                department_id: $this->department_id,
+                department_ids: $this->department_ids,
                 startDate: $this->startDate,
                 endDate: $this->endDate
             ),
@@ -213,7 +212,7 @@ class AttendanceMonthlyTable extends DataTableComponent
             'ids' => $this->getSelected(),
             'start_date' => $this->startDate,
             'end_date' => $this->endDate,
-            'department_id' => $this->department_id,
+            'department_ids' => $this->department_ids,
         ]);
 
         return redirect()->to($url);

@@ -18,14 +18,14 @@ use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 class AttendanceMonthlyExcelExport implements FromView, ShouldAutoSize, WithTitle, WithStyles
 {
     protected array $selected;
-    protected $department_id;
+    protected array $department_ids;
     protected $startDate;
     protected $endDate;
 
-    public function __construct($selected = [], $department_id = null, $startDate = null, $endDate = null)
+    public function __construct($selected = [], $department_ids = [], $startDate = null, $endDate = null)
     {
         $this->selected = $selected;
-        $this->department_id = $department_id;
+        $this->department_ids = (array) $department_ids;
         $this->startDate = $startDate;
         $this->endDate = $endDate;
     }
@@ -38,9 +38,9 @@ class AttendanceMonthlyExcelExport implements FromView, ShouldAutoSize, WithTitl
             ->join('employees', 'attendances.employee_id', '=', 'employees.id')
             ->where('employees.organization_id', $orgId);
 
-        // Filter by department
-        if ($this->department_id && $this->department_id !== 'all') {
-            $query->where('employees.department_id', $this->department_id);
+        // Filter by department (a single department, or every department in a derived group)
+        if (!empty($this->department_ids)) {
+            $query->whereIn('employees.department_id', $this->department_ids);
         }
 
         // Date filtering

@@ -58,10 +58,10 @@ class AttendanceExportController extends Controller
         $ids = $request->input('ids', []);
         $start_date = $request->input('start_date');
         $end_date = $request->input('end_date');
-        $department_id = $request->input('department_id');
+        $department_ids = $request->input('department_ids', []);
         $orgId = auth()->user()->employee->organization_id ?? null;
 
-        $attendances = $this->reportService->getMonthly($orgId, $ids, $start_date, $end_date, $department_id);
+        $attendances = $this->reportService->getMonthly($orgId, $ids, $start_date, $end_date, $department_ids);
 
         if ($attendances->isEmpty()) {
             return back()->with('error', 'No attendance records found to export.');

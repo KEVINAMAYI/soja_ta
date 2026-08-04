@@ -34,9 +34,9 @@ new class extends Component {
     public $timeSheetsStartDate;
     public $timeSheetsEndDate;
     public $departments = [];
-    public $department_id;
+    public $department_ids = [];
     public $reportSettings;
-    public $exportDepartmentId = 'all';
+    public $exportDepartmentIds = [];
     public $filterGrade = null;
 
     public $filterEmployeeType = 'all';
@@ -65,14 +65,11 @@ new class extends Component {
         $today = now()->toDateString();
         $this->timeSheetsStartDate = $today;
         $this->timeSheetsEndDate = $today;
-        $this->department_id = 'all';
 
-        // Load departments for the current organization
+        // Load departments for the current organization, grouped by department_derived
         $orgId = auth()->user()->employee->organization_id ?? null;
         if ($orgId) {
-            $this->departments = Department::where('organization_id', $orgId)
-                ->orderBy('name')
-                ->get();
+            $this->departments = Department::groupedByDerived($orgId);
             $this->employeeTypes = Employee::where('organization_id', $orgId)
                 ->whereNotNull('employee_type')
                 ->distinct()
@@ -125,15 +122,23 @@ new class extends Component {
 
 
     #[On('filter-updated')]
-    public function dateChaged()
+    public function dateChaged($department_ids = null)
     {
-        $this->dispatch('date-range-updated', startDate: $this->startDate, endDate: $this->endDate, status: $this->filterStatus, grade: $this->filterGrade, department_id: $this->exportDepartmentId, employee_type: $this->filterEmployeeType);
+        if ($department_ids !== null) {
+            $this->exportDepartmentIds = $department_ids;
+        }
+
+        $this->dispatch('date-range-updated', startDate: $this->startDate, endDate: $this->endDate, status: $this->filterStatus, grade: $this->filterGrade, department_ids: $this->exportDepartmentIds, employee_type: $this->filterEmployeeType);
     }
 
     #[On('timesheets-filter-updated')]
-    public function filterChnaged()
+    public function filterChnaged($department_ids = null)
     {
-        $this->dispatch('timesheet-range-updated', startDate: $this->timeSheetsStartDate, endDate: $this->timeSheetsEndDate, department_id: $this->department_id);
+        if ($department_ids !== null) {
+            $this->department_ids = $department_ids;
+        }
+
+        $this->dispatch('timesheet-range-updated', startDate: $this->timeSheetsStartDate, endDate: $this->timeSheetsEndDate, department_ids: $this->department_ids);
     }
 
 
@@ -755,16 +760,12 @@ new class extends Component {
 
                                             <div class="col-3 md-3">
                                                 <label class="form-label">Department</label>
-                                                <select
-                                                    class="form-control"
-                                                    wire:model="exportDepartmentId"
-                                                    wire:change="$dispatch('filter-updated')">
-                                                    <option value="all">All Departments</option>
-                                                    @foreach($departments as $department)
-                                                        <option
-                                                            value="{{ $department->id }}">{{ $department->name }}</option>
-                                                    @endforeach
-                                                </select>
+                                                @include('livewire.admin.partials.department-group-filter', [
+                                                    'groupedDepartments' => $departments,
+                                                    'selectId' => 'dailyExportDeptFilter',
+                                                    'dispatchEvent' => 'filter-updated',
+                                                    'selectedDepartmentIds' => $exportDepartmentIds,
+                                                ])
                                             </div>
 
                                             <div class="col-3 mb-3">
@@ -864,16 +865,12 @@ new class extends Component {
                                             {{-- DEPARTMENT FILTER --}}
                                             <div class="col-md-4">
                                                 <label class="form-label fw-semibold">Department</label>
-                                                <select
-                                                    class="form-control"
-                                                    wire:model="department_id"
-                                                    wire:change="$dispatch('timesheets-filter-updated')">
-                                                    <option value="all">All Departments</option>
-                                                    @foreach($departments as $department)
-                                                        <option
-                                                            value="{{ $department->id }}">{{ $department->name }}</option>
-                                                    @endforeach
-                                                </select>
+                                                @include('livewire.admin.partials.department-group-filter', [
+                                                    'groupedDepartments' => $departments,
+                                                    'selectId' => 'monthlyTimesheetsDeptFilter',
+                                                    'dispatchEvent' => 'timesheets-filter-updated',
+                                                    'selectedDepartmentIds' => $department_ids,
+                                                ])
                                             </div>
                                         </div>
 
