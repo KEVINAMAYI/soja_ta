@@ -15,6 +15,7 @@ class LeaveApprovalLog extends Model
         'approver_type',
         'approver_role',
         'approver_user_id',
+        'approver_user_ids',
         'status',
         'opened_at',
         'closed_at',
@@ -24,6 +25,7 @@ class LeaveApprovalLog extends Model
 
     protected $casts = [
         'level_number' => 'integer',
+        'approver_user_ids' => 'array',
         'opened_at' => 'datetime',
         'closed_at' => 'datetime',
     ];
