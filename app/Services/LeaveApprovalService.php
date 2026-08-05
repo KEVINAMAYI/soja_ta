@@ -58,7 +58,15 @@ class LeaveApprovalService
             'level_number' => $level,
             'approver_type' => $config['approver_type'],
             'approver_role' => $config['approver_type'] === 'role' ? $config['approver_role'] : null,
-            'approver_user_id' => $config['approver_type'] === 'user' ? $config['approver_user_id'] : null,
+            'approver_user_ids' => $config['approver_type'] === 'user'
+                ? array_values(array_unique(array_filter(array_map(
+                    fn ($id) => is_numeric($id) ? (int) $id : null,
+                    $config['approver_user_ids'] ?? []
+                ))))
+                : [],
+            'approver_user_id' => $config['approver_type'] === 'user'
+                ? ($config['approver_user_ids'][0] ?? $config['approver_user_id'] ?? null)
+                : null,
             'status' => 'pending',
             'opened_at' => now(),
         ]);
@@ -147,9 +155,16 @@ class LeaveApprovalService
 
     private function matchesApprover(User $actor, LeaveApprovalLog $log): bool
     {
-        return $log->approver_type === 'user'
-            ? $actor->id === $log->approver_user_id
-            : ($log->approver_role && $actor->hasRole($log->approver_role));
+        if ($log->approver_type !== 'user') {
+            return $log->approver_role && $actor->hasRole($log->approver_role);
+        }
+
+        $approverIds = array_filter(array_unique(array_merge(
+            $log->approver_user_ids ?? [],
+            $log->approver_user_id ? [$log->approver_user_id] : []
+        )));
+
+        return in_array($actor->id, $approverIds, true);
     }
 
     /**
@@ -184,8 +199,17 @@ class LeaveApprovalService
         return LeaveApprovalLog::where('status', 'pending')
             ->whereHas('leave', fn ($q) => $q->where('organization_id', $organizationId))
             ->where(function ($q) use ($actor, $roleNames) {
-                $q->where(fn ($q2) => $q2->where('approver_type', 'user')->where('approver_user_id', $actor->id))
-                    ->orWhere(fn ($q2) => $q2->where('approver_type', 'role')->whereIn('approver_role', $roleNames));
+                $q->where(function ($q2) use ($actor) {
+                        $q2->where('approver_type', 'user')
+                            ->where(function ($q3) use ($actor) {
+                                $q3->whereJsonContains('approver_user_ids', $actor->id)
+                                    ->orWhere('approver_user_id', $actor->id);
+                            });
+                    })
+                    ->orWhere(function ($q2) use ($roleNames) {
+                        $q2->where('approver_type', 'role')
+                            ->whereIn('approver_role', $roleNames);
+                    });
             })
             ->exists();
     }
@@ -416,10 +440,21 @@ class LeaveApprovalService
     {
         $recipients = [];
 
-        if ($config['approver_type'] === 'user' && $config['approver_user_id']) {
-            $user = User::find($config['approver_user_id']);
-            if ($user?->email) {
-                $recipients[] = $user->email;
+        if ($config['approver_type'] === 'user') {
+            $approverIds = array_values(array_unique(array_filter(array_map(
+                fn ($id) => is_numeric($id) ? (int) $id : null,
+                array_merge(
+                    $config['approver_user_ids'] ?? [],
+                    isset($config['approver_user_id']) ? [$config['approver_user_id']] : []
+                )
+            ))));
+
+            if (!empty($approverIds)) {
+                $recipients = User::whereIn('id', $approverIds)
+                    ->whereNotNull('email')
+                    ->pluck('email')
+                    ->filter()
+                    ->all();
             }
         } elseif ($config['approver_type'] === 'role' && $config['approver_role']) {
             $recipients = User::role($config['approver_role'])
