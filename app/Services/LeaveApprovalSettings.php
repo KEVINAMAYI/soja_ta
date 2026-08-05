@@ -18,7 +18,8 @@ class LeaveApprovalSettings
      *       'enabled' => bool,
      *       'approver_type' => 'role' | 'user',
      *       'approver_role' => string|null,        // spatie role name, used when approver_type = 'role'
-     *       'approver_user_id' => int|null,        // specific user id, used when approver_type = 'user'
+     *       'approver_user_id' => int|null,        // first selected user id for compatibility
+     *       'approver_user_ids' => int[],          // selected user ids when approver_type = 'user'
      *       'notify_email' => bool,                // send to extra manually configured addresses too
      *       'notify_email_addresses' => string[],
      *     ]
@@ -33,6 +34,8 @@ class LeaveApprovalSettings
                     'approver_type' => 'role',
                     'approver_role' => 'supervisor',
                     'approver_user_id' => null,
+                    'approver_user_ids' => [],
+                    'approver_rule' => 'anyone_approve',
                     'notify_email' => false,
                     'notify_email_addresses' => [],
                 ],
@@ -41,6 +44,8 @@ class LeaveApprovalSettings
                     'approver_type' => 'role',
                     'approver_role' => 'department-manager',
                     'approver_user_id' => null,
+                    'approver_user_ids' => [],
+                    'approver_rule' => 'anyone_approve',
                     'notify_email' => false,
                     'notify_email_addresses' => [],
                 ],
@@ -49,6 +54,8 @@ class LeaveApprovalSettings
                     'approver_type' => 'role',
                     'approver_role' => 'admin',
                     'approver_user_id' => null,
+                    'approver_user_ids' => [],
+                    'approver_rule' => 'anyone_approve',
                     'notify_email' => false,
                     'notify_email_addresses' => [],
                 ],
@@ -211,13 +218,36 @@ class LeaveApprovalSettings
             // clear the other one so stale values (e.g. left over from switching
             // "Role" -> "Specific user" in the form) never persist or leak into
             // notifications/authorization checks.
-            $level['approver_user_id'] = ($level['approver_type'] === 'user'
-                    && $level['approver_user_id'] !== null && $level['approver_user_id'] !== '')
-                ? (int) $level['approver_user_id']
-                : null;
+            $ids = [];
+
+            if (!empty($level['approver_user_ids']) && is_array($level['approver_user_ids'])) {
+                $ids = array_values(array_filter(array_map(
+                    fn ($id) => is_numeric($id) ? (int) $id : null,
+                    $level['approver_user_ids']
+                )));
+            }
+
+            if (!empty($level['approver_user_id']) && is_numeric($level['approver_user_id'])) {
+                $ids[] = (int) $level['approver_user_id'];
+            }
+
+            $ids = array_values(array_unique($ids));
+
+            if ($level['approver_type'] === 'user') {
+                $level['approver_user_ids'] = $ids;
+                $level['approver_user_id'] = $ids[0] ?? null;
+            } else {
+                $level['approver_user_ids'] = [];
+                $level['approver_user_id'] = null;
+            }
+
             $level['approver_role'] = ($level['approver_type'] === 'role' && !empty($level['approver_role']))
                 ? $level['approver_role']
                 : null;
+
+            $level['approver_rule'] = in_array($level['approver_rule'] ?? null, ['anyone_approve', 'all_approve'], true)
+                ? $level['approver_rule']
+                : 'anyone_approve';
 
             $level['notify_email'] = (bool) $level['notify_email'];
             $level['notify_email_addresses'] = array_values($level['notify_email_addresses'] ?? []);
