@@ -46,7 +46,13 @@ class LeaveApprovalRequiredNotification extends Notification implements ShouldQu
                 'level' => $this->level,
                 'totalLevels' => $this->leave->total_levels,
                 'approverRoleLabel' => $this->approverRoleLabel,
-                'reviewUrl' => route('leaves.index'),
+                'reviewUrl' => \App\Services\GuestRoute::makeGuestLoginRedirect(
+                    'leaves.index',
+                    $this->leave->start_date,
+                    [],
+                    ['review_modal' => 'details', 'leave_id' => $this->leave->id],
+                    $notifiable->email ?? null
+                ),
                 'orgName' => $employee->organization->name ?? config('app.name'),
                 'brandColor' => $employee->organization->primary_color ?? '#072639',
             ]);
