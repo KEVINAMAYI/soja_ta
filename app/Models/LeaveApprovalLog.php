@@ -44,4 +44,9 @@ class LeaveApprovalLog extends Model
     {
         return $this->belongsTo(User::class, 'actioned_by');
     }
+
+    public function levelApprovers()
+    {
+        return $this->hasMany(LevelApprover::class, 'leave_approval_log_id');
+    }
 }
