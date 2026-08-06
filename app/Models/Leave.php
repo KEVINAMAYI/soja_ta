@@ -2,8 +2,6 @@
 
 namespace App\Models;
 
-use Carbon\Carbon;
-use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
@@ -76,47 +74,6 @@ class Leave extends Model
     public function isPending(): bool
     {
         return $this->status === 'pending';
-    }
-
-    /**
-     * Count business days (Mon–Fri) between two dates, inclusive of both
-     * endpoints regardless of which day of the week either one falls on.
-     * This is the single source of truth for leave-day counts — balance
-     * deduction, balance checks, and every UI that displays a day count
-     * must all go through this so they can never disagree with each other.
-     */
-    public static function businessDaysBetween($startDate, $endDate): int
-    {
-        $start = Carbon::parse($startDate)->startOfDay();
-        $end = Carbon::parse($endDate)->startOfDay();
-
-        return $start->diffInDaysFiltered(
-            fn (CarbonInterface $date) => $date->isWeekday(),
-            $end->copy()->addDay()
-        );
-    }
-
-    /**
-     * Given a start date and a number of business days, find the end date
-     * that covers exactly that many weekdays — skipping over any Saturday/
-     * Sunday in between rather than counting them. E.g. 4 days starting on
-     * a Thursday lands on the following Tuesday (Thu, Fri, Mon, Tue), not
-     * Sunday. Mirrors businessDaysBetween() so a request for N days always
-     * ends up with businessDaysBetween(start, end) === N.
-     */
-    public static function addBusinessDays($startDate, int $days): Carbon
-    {
-        $date = Carbon::parse($startDate)->startOfDay();
-        $counted = $date->isWeekday() ? 1 : 0;
-
-        while ($counted < $days) {
-            $date->addDay();
-            if ($date->isWeekday()) {
-                $counted++;
-            }
-        }
-
-        return $date;
     }
 
     /**

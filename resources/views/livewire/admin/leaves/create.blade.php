@@ -131,8 +131,11 @@ new class extends Component {
 
     public function calculateWorkingDays()
     {
+        // ... (existing calculate logic) ...
         if (!$this->startDate || !$this->endDate) return 0;
-        return Leave::businessDaysBetween($this->startDate, $this->endDate);
+        $start = Carbon::parse($this->startDate);
+        $end = Carbon::parse($this->endDate);
+        return $start->diffInDays($end) + 1;
     }
 
     public function getSelectedLeaveTypeProperty()
@@ -183,7 +186,9 @@ new class extends Component {
             $message = '';
 
             if ($this->durationType === 'numberOfDays') {
-                $endDate = Leave::addBusinessDays($this->startDate, (int) $this->numberOfDays)->format('Y-m-d');
+                $start = Carbon::parse($this->startDate);
+                $end = $start->copy()->addDays($this->numberOfDays - 1);
+                $endDate = $end->format('Y-m-d');
             } else {
                 $endDate = $this->endDate;
             }

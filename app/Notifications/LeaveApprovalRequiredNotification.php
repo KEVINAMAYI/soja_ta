@@ -29,7 +29,7 @@ class LeaveApprovalRequiredNotification extends Notification implements ShouldQu
         $employee = $this->leave->employee;
         $leaveType = $this->leave->leaveType;
         $employeeName = $employee->name ?? 'An employee';
-        $totalDays = Leave::businessDaysBetween($this->leave->start_date, $this->leave->end_date);
+        $totalDays = $this->leave->start_date->diffInDays($this->leave->end_date) + 1;
 
         return (new MailMessage)
             ->subject('Leave Approval Required (Level ' . $this->level . '): ' . ($employee->name ?? 'Employee'))

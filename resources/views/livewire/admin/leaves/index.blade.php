@@ -1355,7 +1355,7 @@ new class extends Component {
                                     <span class="ld-detail-label">Duration</span>
                                     <div class="ld-detail-value">{{ $leave->start_date->format('d – d M Y') }}</div>
                                     <div
-                                        class="ld-detail-sub">{{ Leave::businessDaysBetween($leave->start_date, $leave->end_date) }}
+                                        class="ld-detail-sub">{{ $leave->start_date->diffInWeekdays($leave->end_date) + 1 }}
                                         working days
                                     </div>
                                 </div>

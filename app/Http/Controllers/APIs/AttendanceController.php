@@ -163,12 +163,13 @@ class AttendanceController extends Controller
                     'scheduled_days' => $shift->pattern_days ?? [],
                 ], 403);
             }
-            $today = Carbon::today()->toDateString();
-            $withinOffWindow = $employee->start_off_shift_date && $employee->end_off_shift_date
-                && $employee->start_off_shift_date <= $today && $employee->end_off_shift_date >= $today;
-
-            if (in_array($employee->shift_status, ['off_shift', 'sick_off']) && $withinOffWindow) {
-                $label = $employee->shift_status === 'sick_off' ? 'on sick leave' : 'temporarily off shift';
+            if (in_array($employee->shift_status, ['off_shift', 'sick_off', 'on_leave'])) {
+                $label = match ($employee->shift_status) {
+                    'off_shift' => 'temporarily off shift',
+                    'sick_off' => 'on sick leave',
+                    'on_leave' => 'on leave',
+                    default => $employee->shift_status,
+                };
                 return response()->json(['code' => 1003, 'message' => "You cannot check in. You are currently {$label}."], 403);
             }
 
