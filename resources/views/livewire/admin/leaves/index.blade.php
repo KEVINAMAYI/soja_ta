@@ -36,6 +36,25 @@ new class extends Component {
         $this->isReporting = $isReporting;
         $org = auth()->user()->employee->organization;
         $this->getData($org);
+
+        // If the URL includes modal/query params (for example from an emailed link),
+        // open the details modal for the requested leave after mount.
+        $reviewModal = request()->query('review_modal');
+        $leaveId = request()->query('leave_id');
+
+        if ($reviewModal === 'details' && $leaveId) {
+            // Defensive checks: ensure the leave exists, belongs to the same org
+            // as the current user, and that the user has permission to view
+            // or approve leave requests.
+            $leave = Leave::find($leaveId);
+            $user = auth()->user();
+
+            if ($leave && $user && $user->employee && $leave->organization_id === $user->employee->organization_id) {
+                if ($user->can('view-employees') || $user->can('approve-leave-requests')) {
+                    $this->viewLeaveDetails((int) $leaveId, 'leave');
+                }
+            }
+        }
     }
 
     public function viewLeaveDetails($id, $type)
