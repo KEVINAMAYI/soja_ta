@@ -7,8 +7,10 @@ use App\Models\Leave;
 use App\Models\LeaveApprovalLog;
 use App\Models\LeaveBalance;
 use App\Models\LeaveType;
+use App\Models\LevelApprover;
 use App\Models\User;
 use App\Notifications\LeaveApprovalRequiredNotification;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Notification;
 
 class LeaveApprovalService
@@ -37,6 +39,7 @@ class LeaveApprovalService
         $leave->current_level = $start;
         $leave->save();
 
+        
         return $this->openLevel($leave, $start, $settings);
     }
 
@@ -106,6 +109,22 @@ class LeaveApprovalService
 
         $this->authorizeActor($actor, $activeLog);
 
+
+        $settings = LeaveApprovalSettings::get($leave->organization_id, $leave->department_id);
+
+
+        // now save these details to list of approvers if rule applies
+        if ($activeLog->approver_type === 'user' && $settings['levels'][$activeLog->level_number - 1]['approver_rule'] == 'all_approve') {
+            LevelApprover::firstOrCreate([
+                'leave_approval_log_id' => $activeLog->id,
+                'level_approver_id' => $actor->id,
+            ]);
+
+            if(LevelApprover::getActionedApproversCountForLog($activeLog->id) < count($activeLog->approver_user_ids)) {
+                return $leave->fresh();
+            }
+        }
+
         $activeLog->update([
             'status' => 'approved',
             'closed_at' => now(),
@@ -113,7 +132,6 @@ class LeaveApprovalService
             'notes' => $notes,
         ]);
 
-        $settings = LeaveApprovalSettings::get($leave->organization_id, $leave->department_id);
         $this->advanceOrFinalize($leave, $activeLog->level_number, $settings, $notes);
 
         return $leave->fresh();
@@ -445,7 +463,9 @@ class LeaveApprovalService
                 fn ($id) => is_numeric($id) ? (int) $id : null,
                 array_merge(
                     $config['approver_user_ids'] ?? [],
-                    isset($config['approver_user_id']) ? [$config['approver_user_id']] : []
+                    // this check is added to allow legacy single approver ID to be used in the config,
+                    //but it will be ignored if approver_user_ids is present and non-empty
+                    (isset($config['approver_user_id']) && count($config['approver_user_ids']) > 0) ? [$config['approver_user_id']] : []
                 )
             ))));
 
@@ -464,9 +484,9 @@ class LeaveApprovalService
                 ->all();
         }
 
-        if (!empty($config['notify_email'])) {
-            $recipients = array_merge($recipients, array_filter($config['notify_email_addresses'] ?? []));
-        }
+        // if (!empty($config['notify_email'])) {
+        //     $recipients = array_merge($recipients, array_filter($config['notify_email_addresses'] ?? []));
+        // }
 
         $recipients = array_values(array_unique($recipients));
 
@@ -477,4 +497,5 @@ class LeaveApprovalService
                 ->notify(new LeaveApprovalRequiredNotification($leave, $level, $approverRoleLabel));
         }
     }
+    
 }
