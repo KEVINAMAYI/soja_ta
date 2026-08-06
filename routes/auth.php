@@ -17,6 +17,9 @@ Route::middleware('guest')->group(function () {
     Volt::route('reset-password/{token}', 'auth.reset-password')
         ->name('password.reset');
 
+    Route::get('leave-approver/guest-login', \App\Http\Controllers\Auth\GuestApproverLoginRedirectController::class)
+        ->name('leave.approver.guest.login');
+
 });
 
 Route::middleware('auth')->group(function () {
