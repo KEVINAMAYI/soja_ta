@@ -209,7 +209,7 @@ class LeaveApprovalService
             return;
         }
 
-        $days = $leave->start_date->diffInDays($leave->end_date) + 1;
+        $days = Leave::businessDaysBetween($leave->start_date, $leave->end_date);
         $year = $leave->start_date->year;
 
         $balance = LeaveBalance::firstOrCreate(
@@ -253,7 +253,7 @@ class LeaveApprovalService
             ->where('status', 'pending')
             ->whereYear('start_date', $year)
             ->get()
-            ->sum(fn ($l) => $l->start_date->diffInDays($l->end_date) + 1);
+            ->sum(fn ($l) => Leave::businessDaysBetween($l->start_date, $l->end_date));
 
         $remaining = $entitled - (float) $used - $pending;
 
@@ -331,7 +331,7 @@ class LeaveApprovalService
                 ->where('status', 'pending')
                 ->whereYear('start_date', $year)
                 ->get()
-                ->sum(fn ($l) => $l->start_date->diffInDays($l->end_date) + 1);
+                ->sum(fn ($l) => Leave::businessDaysBetween($l->start_date, $l->end_date));
 
             return [
                 'leave_type_id' => $type->id,
@@ -367,7 +367,7 @@ class LeaveApprovalService
             ->whereYear('start_date', $year)
             ->get()
             ->groupBy('employee_id')
-            ->map(fn ($group) => $group->sum(fn ($l) => $l->start_date->diffInDays($l->end_date) + 1));
+            ->map(fn ($group) => $group->sum(fn ($l) => Leave::businessDaysBetween($l->start_date, $l->end_date)));
 
         return $employees->map(function (Employee $employee) use ($type, $balancesByEmployee, $pendingByEmployee, $year) {
             $balance = $balancesByEmployee->get($employee->id);

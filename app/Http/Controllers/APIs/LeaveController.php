@@ -54,9 +54,7 @@ class LeaveController extends Controller
 
             // Calculate end date
             if ($durationType === 'numberOfDays') {
-                $start = Carbon::parse($startDate);
-                $end = $start->copy()->addDays($request->number_of_days - 1);
-                $endDate = $end->format('Y-m-d');
+                $endDate = Leave::addBusinessDays($startDate, (int) $request->number_of_days)->format('Y-m-d');
             } else {
                 $endDate = $request->end_date;
             }
@@ -136,7 +134,7 @@ class LeaveController extends Controller
 
             } else {
                 // Check leave balance before creating the request
-                $requestedDays = Carbon::parse($startDate)->diffInDays(Carbon::parse($endDate)) + 1;
+                $requestedDays = Leave::businessDaysBetween($startDate, $endDate);
                 $balanceCheck = app(LeaveApprovalService::class)->checkBalance(
                     $employee,
                     $leaveType,
