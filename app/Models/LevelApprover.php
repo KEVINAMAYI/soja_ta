@@ -11,7 +11,8 @@ class LevelApprover extends Model
 
     protected $fillable = [
         'leave_approval_log_id',
-        'level_approver_id'
+        'level_approver_id',
+        'action',
     ];
 
     public function levelApprover()
