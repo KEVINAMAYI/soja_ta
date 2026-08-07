@@ -42,7 +42,7 @@ new class extends Component {
         $reviewModal = request()->query('review_modal');
         $leaveId = request()->query('leave_id');
 
-        if ($reviewModal === 'details' && $leaveId) {
+        if (in_array($reviewModal, ['details', 'leaveDetailsModal'], true) && $leaveId) {
             // Defensive checks: ensure the leave exists, belongs to the same org
             // as the current user, and that the user has permission to view
             // or approve leave requests.
@@ -63,6 +63,7 @@ new class extends Component {
             $this->viewingRecord = Leave::with([
                 'employee.department',
                 'approvalLogs.approverUser',
+                'approvalLogs.levelApprovers',
                 'approvalLogs.actionedBy',
                 'activeApprovalLog',
             ])->findOrFail($id);
@@ -1434,10 +1435,60 @@ new class extends Component {
                                                 @elseif($log->status === 'rejected')
                                                     <span class="ld-step-badge danger">Rejected</span>
                                                 @elseif($log->level_number == $leave->current_level)
-                                                    @if($canAct)
-                                                        <span class="ld-step-badge primary">Awaiting your review</span>
+                                                    @php
+                                                        if ($log->approver_type === 'user') {
+                                                            $approverIds = [];
+                                                            if (!empty($log->approver_user_ids) && is_array($log->approver_user_ids)) {
+                                                                $approverIds = $log->approver_user_ids;
+                                                            }
+                                                            if ($log->approver_user_id) {
+                                                                $approverIds[] = $log->approver_user_id;
+                                                            }
+                                                            $approverIds = array_values(array_unique(array_filter($approverIds)));
+
+                                                            $approverUsers = \App\Models\User::whereIn('id', $approverIds)
+                                                                ->get()
+                                                                ->map(fn($user) => ['id' => $user->id, 'name' => $user->name])
+                                                                ->toArray();
+
+                                                            if (empty($approverUsers) && $log->approverUser) {
+                                                                $approverUsers = [['id' => $log->approverUser->id, 'name' => $log->approverUser->name]];
+                                                            }
+
+                                                            $actedApproverIds = $log->levelApprovers->pluck('level_approver_id')->toArray();
+                                                            $approverLabel = count($approverUsers) > 1
+                                                                ? implode(', ', array_column($approverUsers, 'name'))
+                                                                : ($approverUsers[0]['name'] ?? ucfirst($log->approver_role ?? 'Approver'));
+                                                        } else {
+                                                            $approverLabel = ucfirst($log->approver_role ?? 'Approver');
+                                                        }
+                                                    @endphp
+
+                                                    @if($log->approver_type === 'user')
+                                                        @foreach($approverUsers as $approver)
+                                                            @php
+                                                                $acted = in_array($approver['id'], $actedApproverIds, true);
+                                                                $rejectedByThisApprover = $log->status === 'rejected'
+                                                                    && $log->actionedBy
+                                                                    && $log->actionedBy->id === $approver['id'];
+                                                            @endphp
+
+                                                            @if($acted)
+                                                                <span class="ld-step-badge success">Approved by {{ $approver['name'] }}</span>
+                                                            @elseif($rejectedByThisApprover)
+                                                                <span class="ld-step-badge danger">Rejected by {{ $approver['name'] }}</span>
+                                                            @elseif($canAct && auth()->user()->id === $approver['id'])
+                                                                <span class="ld-step-badge primary">Awaiting your review</span>
+                                                            @else
+                                                                <span class="ld-step-badge primary">Awaiting {{ $approver['name'] }}'s review</span>
+                                                            @endif
+                                                        @endforeach
                                                     @else
-                                                        <span class="ld-step-badge primary">Awaiting {{ $approverLabel }}'s review</span>
+                                                        @if($canAct)
+                                                            <span class="ld-step-badge primary">Awaiting your review</span>
+                                                        @else
+                                                            <span class="ld-step-badge primary">Awaiting {{ $approverLabel }}'s review</span>
+                                                        @endif
                                                     @endif
                                                 @else
                                                     <span class="ld-step-badge secondary">Not yet reached</span>
