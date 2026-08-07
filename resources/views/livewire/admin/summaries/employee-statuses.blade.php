@@ -22,16 +22,24 @@ new class extends Component {
 
         $this->isStudentRecord = Auth::user()->employee?->organization?->is_student_record ?? false;
         $this->entityLabel = $this->isStudentRecord ? 'Student' : 'Employee';
+        $isStudent = $this->isStudentRecord ? 1 : 0;
 
         $orgId = Auth::user()->employee->organization_id ?? null;
-
-        // Total employees in the organization
-        $this->totalEmployees = Employee::where('organization_id', $orgId)->where('active',1)->count();
-
         $today = Carbon::today();
 
-        // Fetch all today's attendances for this org
-        $attendances = Attendance::whereHas('employee', fn($q) => $q->where('organization_id', $orgId))
+        // Same scope as the Dashboard's staff stats (loadStaffStats() in
+        // dashboard/index.blade.php), so the two pages can't disagree over who's
+        // even in the denominator.
+        $employees = Employee::where('organization_id', $orgId)
+            ->where('active', 1)
+            ->where('is_student', $isStudent)
+            ->get();
+
+        $this->totalEmployees = $employees->count();
+        $employeeIds = $employees->pluck('id');
+
+        // Fetch today's attendances, scoped to that same employee set
+        $attendances = Attendance::whereIn('employee_id', $employeeIds)
             ->whereDate('date', $today)->get();
 
         // Get employees who actually showed up (clocked in or out)
@@ -40,15 +48,7 @@ new class extends Component {
             ->pluck('employee_id')
             ->unique();
 
-        // Get employees marked absent BUT exclude those who showed up
-        $absentEmployeeIds = $attendances
-            ->whereIn('status', ['absent', 'unchecked_in'])
-            ->pluck('employee_id')
-            ->unique()
-            ->reject(fn($id) => $presentEmployeeIds->contains($id)); // Exclude present employees
-
         $this->present = $presentEmployeeIds->count();
-        $this->absent = $absentEmployeeIds->count();
 
         // On Leave — unique employees
         $this->onLeave = $attendances
@@ -65,8 +65,24 @@ new class extends Component {
         // Fetch Sick Off count
         $this->sickOff = $attendances->where('status', 'sick_off')->count();
 
+        // Absent = active employees with no accounted-for status at all today — matches
+        // the Dashboard's derivation exactly, instead of counting explicit status='absent'
+        // rows. The literal-count approach silently under-counted whenever the
+        // attendance-seeding cron (attendance:seed, runs every minute) hadn't yet
+        // written an 'absent'/'unchecked_in' row for someone — Present wasn't affected
+        // since it only ever depends on real clock-in punches, but Absent needs a
+        // "no record at all" case to be treated as absent, not invisible.
+        $accountedForIds = $attendances
+            ->whereIn('status', ['clocked_in', 'clocked_out', 'on_leave', 'sick_off', 'off_shift', 'on_break', 'not_scheduled'])
+            ->pluck('employee_id')
+            ->unique();
+        $this->absent = max(0, $this->totalEmployees - $accountedForIds->count());
+
         // Fetch Inactive Employees count
-        $this->inactiveEmployees = Employee::where('organization_id', $orgId)->where('active', 0)->count();
+        $this->inactiveEmployees = Employee::where('organization_id', $orgId)
+            ->where('active', 0)
+            ->where('is_student', $isStudent)
+            ->count();
     }
 
 }; ?>
