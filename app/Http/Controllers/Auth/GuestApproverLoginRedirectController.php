@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Session;
 use Illuminate\Validation\ValidationException;
+use Carbon\Carbon;
 
 class GuestApproverLoginRedirectController extends Controller
 {
@@ -25,6 +26,8 @@ class GuestApproverLoginRedirectController extends Controller
         }
 
         $targetUrl = GuestRoute::decryptRedirectToken($token);
+
+        Log::info('Decrypted target URL from redirect token', ['target_url' => $targetUrl]);
 
         if ($targetUrl === null) {
             return redirect()->route('login')
@@ -46,15 +49,30 @@ class GuestApproverLoginRedirectController extends Controller
                 ->withErrors(['redirect_token' => 'Invalid details provided.']);
         }
 
-        // if date today is greater than leave start date, then the link has expired
-        if ($leaveStartDate && now()->isAfter($leaveStartDate)) {
-            return redirect()->route('login')
-                ->withErrors(['redirect_token' => 'The login link has expired.']);
+        Log::info('Guest approver login redirect request received12345', ['request' => $parsedTargetUrl]);
+
+        // Consider link expired only when the leave start date is strictly
+        // before today. If the start date is today the link remains valid
+        // for the whole day.
+        if ($leaveStartDate) {
+            try {
+                $leaveStart = Carbon::parse($leaveStartDate)->startOfDay();
+            } catch (\Throwable $e) {
+                return redirect()->route('login')
+                    ->withErrors(['redirect_token' => 'Invalid details provided.']);
+            }
+
+            if (Carbon::now()->startOfDay()->gt($leaveStart)) {
+                Log::info('Guest approver login redirect request received - link expired', ['leave_start_date' => $leaveStartDate, 'today' => now()->toDateString()]);
+                return redirect()->route('login')
+                    ->withErrors(['redirect_token' => 'The login link has expired.']);
+            }
         }
 
         $user = User::where('email', $receiverEmail)->first();
 
         if (!$user || !$user->employee) {
+            Log::info('Guest approver login redirect request received - user not found or has no employee record', ['receiver_email' => $receiverEmail]);
             return redirect()->route('login')
                 ->withErrors(['redirect_token' => 'The account for the provided email could not be found.']);
         }
@@ -64,9 +82,11 @@ class GuestApproverLoginRedirectController extends Controller
                 ->withErrors(['redirect_token' => 'The account for the provided email is inactive.']);
         }
 
+        session()->put('url.intended', $targetUrl);
+
         Auth::guard('web')->login($user, true);
         Session::regenerate();
 
-        return redirect()->away($targetUrl);
+        return redirect()->intended(route('dashboard', [], false));
     }
 }
