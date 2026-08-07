@@ -493,8 +493,11 @@ class LeaveApprovalService
         if (!empty($recipients)) {
             $approverRoleLabel = $config['approver_type'] === 'role' ? ($config['approver_role'] ?? null) : null;
 
-            Notification::route('mail', $recipients)
-                ->notify(new LeaveApprovalRequiredNotification($leave, $level, $approverRoleLabel));
+            // use for each since I want to send customized email to each approver with their email in the review link --> SIR-DOMMY
+            foreach ($recipients as $recipientEmail) {
+                Notification::route('mail', $recipientEmail)
+                    ->notify(new LeaveApprovalRequiredNotification($leave, $level, $approverRoleLabel));
+            }
         }
     }
     
