@@ -1,7 +1,7 @@
 <?php
 
 use App\Models\Attendance;
-use App\Models\Department;
+use App\Models\Unit;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Livewire\Volt\Component;
@@ -52,60 +52,82 @@ new class extends Component {
         }
 
 
-        // --- 2. Department Weekly Data (Chart Data) ---
+        // --- 2. Unit Weekly Data (Chart Data) ---
+        // Grouped by Unit, not raw Department rows. AD-sync data quality means the
+        // departments table can carry dozens of near-duplicate rows for the same real
+        // department (e.g. "Finance", "Finance - Financial Accounting", "FFinance -
+        // Financial Accounting" — see docs/department-name-inconsistency.md), which is
+        // exactly what made this chart unreadable once an org had "many departments."
+        // Unit is the clean, deduplicated grouping level from the org hierarchy
+        // (Company > Unit > Department > Section > Subsection).
         $startOfWeek = Carbon::now()->startOfWeek(); // Monday
         $endOfWeek = Carbon::now()->endOfWeek();     // Sunday
 
-        $departments = Department::where('organization_id', $orgId)->get();
+        $units = Unit::where('organization_id', $orgId)->get();
 
-        $categories = [];
-        $presentData = [];
-        $absentData = [];
-        $leaveData = [];
-        $offShiftData = []; // <-- NEW SERIES
+        $unitRows = [];
 
-        foreach ($departments as $dept) {
-            $categories[] = $dept->name;
-
+        foreach ($units as $unit) {
             $attendances = Attendance::whereBetween('date', [$startOfWeek, $endOfWeek])
                 ->whereHas('employee', fn($q) => $q->where('organization_id', $orgId)
-                    ->where('department_id', $dept->id)
+                    ->where('unit_id', $unit->id)
                 )->get();
 
-            // Get employees who actually showed up (clocked in or out)
             $presentEmployeeIds = $attendances
                 ->whereIn('status', ['clocked_in', 'clocked_out'])
                 ->pluck('employee_id')
                 ->unique();
 
-            // Get employees marked absent BUT exclude those who showed up
             $absentEmployeeIds = $attendances
                 ->whereIn('status', ['absent', 'unchecked_in'])
                 ->pluck('employee_id')
                 ->unique()
-                ->reject(fn($id) => $presentEmployeeIds->contains($id)); // Exclude present employees
+                ->reject(fn($id) => $presentEmployeeIds->contains($id));
 
-            $presentData[] = $presentEmployeeIds->count();
-            $absentData[] = $absentEmployeeIds->count();
-
-            $leaveData[] = $attendances->where('status', 'on_leave')
-                ->pluck('employee_id')
-                ->unique()
-                ->count();
-
-            $offShiftData[] = $attendances->where('status', 'off_shift')
-                ->pluck('employee_id')
-                ->unique()
-                ->count();
+            $unitRows[] = [
+                'name' => $unit->name,
+                'present' => $presentEmployeeIds->count(),
+                'absent' => $absentEmployeeIds->count(),
+                'leave' => $attendances->where('status', 'on_leave')->pluck('employee_id')->unique()->count(),
+                'off_shift' => $attendances->where('status', 'off_shift')->pluck('employee_id')->unique()->count(),
+                'overtime' => (float) $attendances->sum('overtime_hours'),
+            ];
         }
 
+        // Employees not yet mapped to a Unit (pending their next AD sync/backfill) are
+        // surfaced as their own "Unassigned" bar rather than silently dropped from the
+        // chart — same principle as the "no subsection" handling on the Employees page.
+        $unassigned = Attendance::whereBetween('date', [$startOfWeek, $endOfWeek])
+            ->whereHas('employee', fn($q) => $q->where('organization_id', $orgId)->whereNull('unit_id'))
+            ->get();
+
+        if ($unassigned->isNotEmpty()) {
+            $presentEmployeeIds = $unassigned->whereIn('status', ['clocked_in', 'clocked_out'])->pluck('employee_id')->unique();
+            $absentEmployeeIds = $unassigned->whereIn('status', ['absent', 'unchecked_in'])->pluck('employee_id')->unique()
+                ->reject(fn($id) => $presentEmployeeIds->contains($id));
+
+            $unitRows[] = [
+                'name' => 'Unassigned',
+                'present' => $presentEmployeeIds->count(),
+                'absent' => $absentEmployeeIds->count(),
+                'leave' => $unassigned->where('status', 'on_leave')->pluck('employee_id')->unique()->count(),
+                'off_shift' => $unassigned->where('status', 'off_shift')->pluck('employee_id')->unique()->count(),
+                'overtime' => (float) $unassigned->sum('overtime_hours'),
+            ];
+        }
+
+        // Busiest units first, so the chart leads with what actually matters.
+        $attendanceRows = $unitRows;
+        usort($attendanceRows, fn($a, $b) => ($b['present'] + $b['absent'] + $b['leave'] + $b['off_shift'])
+            <=> ($a['present'] + $a['absent'] + $a['leave'] + $a['off_shift']));
+
         $this->chartData = [
-            'categories' => $categories,
+            'categories' => array_column($attendanceRows, 'name'),
             'series' => [
-                ['name' => 'Present', 'data' => $presentData],
-                ['name' => 'Absent', 'data' => $absentData],
-                ['name' => 'Leave', 'data' => $leaveData],
-                ['name' => 'Off Shift', 'data' => $offShiftData], // <-- ADDED SERIES
+                ['name' => 'Present', 'data' => array_column($attendanceRows, 'present')],
+                ['name' => 'Absent', 'data' => array_column($attendanceRows, 'absent')],
+                ['name' => 'Leave', 'data' => array_column($attendanceRows, 'leave')],
+                ['name' => 'Off Shift', 'data' => array_column($attendanceRows, 'off_shift')],
             ]
         ];
 
@@ -127,32 +149,16 @@ new class extends Component {
         ];
 
 
-        // --- 4. Overtime Data (No change needed) ---
-        $startOfWeek = Carbon::now()->startOfWeek();
-        $endOfWeek = Carbon::now()->endOfWeek();
-
-        $departments = Department::where('organization_id', $orgId)->get();
-
-        $overtimeCategories = [];
-        $overtimeSeriesData = [];
-
-        foreach ($departments as $dept) {
-            $overtimeCategories[] = $dept->name;
-
-            $attendances = Attendance::whereBetween('date', [$startOfWeek, $endOfWeek])
-                ->whereHas('employee', fn($q) => $q->where('organization_id', $orgId)
-                    ->where('department_id', $dept->id)
-                )->get();
-
-            $totalOvertime = $attendances->sum('overtime_hours');
-
-            $overtimeSeriesData[] = $totalOvertime;
-        }
+        // --- 4. Overtime Data — same per-unit rows computed above, just re-sorted by
+        // overtime hours (busiest units for attendance and for overtime aren't always
+        // the same units, so each chart gets its own descending order).
+        $overtimeRows = $unitRows;
+        usort($overtimeRows, fn($a, $b) => $b['overtime'] <=> $a['overtime']);
 
         $this->overtimeChartData = [
-            'categories' => $overtimeCategories,
+            'categories' => array_column($overtimeRows, 'name'),
             'series' => [
-                ['name' => 'Overtime Hours', 'data' => $overtimeSeriesData],
+                ['name' => 'Overtime Hours', 'data' => array_column($overtimeRows, 'overtime')],
             ]
         ];
 
@@ -208,7 +214,7 @@ new class extends Component {
         <div class="col-lg-8">
             <div class="card h-100">
                 <div class="card-body">
-                    <h5 class="card-title mb-4">Weekly Departmental Attendance</h5>
+                    <h5 class="card-title mb-4">Weekly Attendance by Unit</h5>
                     <div id="department-weekly-data"></div>
                 </div>
             </div>
@@ -227,7 +233,7 @@ new class extends Component {
         <div class="col-lg-8">
             <div class="card h-100">
                 <div class="card-body">
-                    <h5 class="card-title mb-4">Weekly Departmental Overtime Hours</h5>
+                    <h5 class="card-title mb-4">Weekly Overtime Hours by Unit</h5>
                     <div id="department-weekly-overtime"></div>
                 </div>
             </div>
@@ -448,21 +454,27 @@ new class extends Component {
             chart.render();
 
 
-            // Department Weekly Data (Stacked Bar Chart)
+            // Unit Weekly Data (Stacked Bar Chart)
             const chartData = @json($chartData);
+
+            // Fixed heights are exactly what made this chart unreadable once it had many
+            // bars — each category needs a minimum amount of vertical room regardless of
+            // how many there are, so height scales with the category count instead.
+            const unitChartHeight = Math.min(900, Math.max(320, chartData.categories.length * 46));
 
             const options_stacked = {
                 series: chartData.series, // Now contains 4 series
                 chart: {
                     fontFamily: "inherit",
                     type: "bar",
-                    height: 400,
+                    height: unitChartHeight,
                     stacked: true,
                     toolbar: {show: false},
                 },
                 plotOptions: {
                     bar: {
                         horizontal: true,
+                        barHeight: "65%",
                     },
                 },
                 grid: {
@@ -507,18 +519,20 @@ new class extends Component {
 
             // Overtime Chart and Top Employees data remain the same
             const overtimeChartData = @json($overtimeChartData);
+            const overtimeChartHeight = Math.min(900, Math.max(320, overtimeChartData.categories.length * 46));
 
             const overtimeOptions = {
                 series: overtimeChartData.series,
                 chart: {
                     fontFamily: "inherit",
                     type: "bar",
-                    height: 400,
+                    height: overtimeChartHeight,
                     toolbar: {show: false},
                 },
                 plotOptions: {
                     bar: {
                         horizontal: true,
+                        barHeight: "65%",
                     },
                 },
                 grid: {
