@@ -21,8 +21,12 @@ class AttendanceDailyTable extends DataTableComponent
     public $status;
     public $startDate;
     public $endDate;
-    public $departmentIds = [];
     public $filterGrade;
+    public $unitId = null;
+    public $departmentId = null;
+    public $sectionId = null;
+    public $subsectionId = null;
+    public $includeOutsourced = false;
 
     public $employeeType = 'all';
 
@@ -37,16 +41,45 @@ class AttendanceDailyTable extends DataTableComponent
     }
 
     #[On('date-range-updated')]
-    public function filterByDateRange($startDate, $endDate, $status, $grade = null, $department_ids = [], $employee_type = null): void
-    {
+    public function filterByDateRange(
+        $startDate, $endDate, $status, $grade = null, $employee_type = null,
+        $unit_id = null, $department_id = null, $section_id = null, $subsection_id = null, $include_outsourced = null
+    ): void {
         $this->startDate = $startDate;
         $this->endDate = $endDate;
         $this->status = $status;
         $this->filterGrade = $grade;
-        $this->departmentIds = $department_ids ?? [];
         $this->employeeType = $employee_type ?? 'all';
+        $this->unitId = $unit_id;
+        $this->departmentId = $department_id;
+        $this->sectionId = $section_id;
+        $this->subsectionId = $subsection_id;
+        $this->includeOutsourced = (bool) $include_outsourced;
         $this->maybeSeed();
         $this->dispatch('refreshDatatable');
+    }
+
+    /**
+     * Applies the Unit>Department>Section>Subsection filter to an employee-scoped query.
+     * Outsourced employees have null unit/department/section/subsection by definition,
+     * so they're excluded by an active filter unless includeOutsourced ORs them back in.
+     */
+    private function applyHierarchyFilter($q): void
+    {
+        $active = $this->unitId || $this->departmentId || $this->sectionId || $this->subsectionId;
+        if (!$active) return;
+
+        $q->where(function ($h) {
+            $h->where(function ($levels) {
+                if ($this->unitId) $levels->where('unit_id', $this->unitId);
+                if ($this->departmentId) $levels->where('department_id', $this->departmentId);
+                if ($this->sectionId) $levels->where('section_id', $this->sectionId);
+                if ($this->subsectionId) $levels->where('subsection_id', $this->subsectionId);
+            });
+            if ($this->includeOutsourced) {
+                $h->orWhere('employee_type', 'Outsourced');
+            }
+        });
     }
 
     private function maybeSeed(): void
@@ -97,7 +130,7 @@ class AttendanceDailyTable extends DataTableComponent
                 ->whereHas('employee', function ($q) use ($orgId, $grade, $isSchool) {
                     $q->where('organization_id', $orgId)->where('active', 0)->where('is_student', $isSchool ? 1 : 0);
                     if ($grade) $q->where('grade', $grade);
-                    if (!empty($this->departmentIds)) $q->whereIn('department_id', $this->departmentIds);
+                    $this->applyHierarchyFilter($q);
                 });
             if ($search) $query->where(fn($q) => $q->where('status', 'like', "%$search%")->orWhereHas('employee', fn($q) => $q->where('name', 'like', "%$search%")));
             return $query->orderByDesc('date')->orderByRaw('check_in_time IS NULL')->orderByDesc(DB::raw('COALESCE(check_in_time, updated_at)'));
@@ -109,7 +142,7 @@ class AttendanceDailyTable extends DataTableComponent
             ->whereHas('employee', function ($q) use ($orgId, $grade, $isSchool) {
                 $q->where('organization_id', $orgId)->where('active', 1)->where('is_student', $isSchool ? 1 : 0);
                 if ($grade) $q->where('grade', $grade);
-                if (!empty($this->departmentIds)) $q->whereIn('department_id', $this->departmentIds);
+                $this->applyHierarchyFilter($q);
             });
 
         if ($isSchool) {
@@ -352,8 +385,14 @@ class AttendanceDailyTable extends DataTableComponent
                 ids: $this->getSelected(),
                 startDate: $this->startDate,
                 endDate: $this->endDate,
-                departmentIds: $this->departmentIds,
+                // AttendanceReportService::getMaster() still takes departmentIds as an
+                // array (kept for backward compatibility) — adapt the singular filter.
+                departmentIds: $this->departmentId ? [$this->departmentId] : [],
                 employeeType: $this->employeeType ?? null,
+                unitId: $this->unitId,
+                sectionId: $this->sectionId,
+                subsectionId: $this->subsectionId,
+                includeOutsourced: $this->includeOutsourced,
             ),
             $filename
         );

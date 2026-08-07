@@ -214,6 +214,34 @@
         align-items: center;
         flex-wrap: wrap;
     }
+
+    /* Rappasoft datatable search box (bootstrap-4 theme). The package's default is a
+       narrow, plain input that looks out of place next to the custom filter panels —
+       widen it, add a search icon, and give it the same focus ring as the rest of the UI.
+       Global on purpose: every table on the site uses this same package/theme. */
+    .input-group:has(> input[wire\:model\.live="search"]) {
+        width: 100%;
+        max-width: 360px;
+    }
+
+    input[wire\:model\.live="search"].form-control {
+        border-radius: 8px !important;
+        border: 1px solid #d1d5db !important;
+        padding: 10px 14px 10px 38px !important;
+        background-color: #fff !important;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23767c88' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cpath d='m21 21-4.3-4.3'/%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: 12px center;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, .04);
+        transition: border-color .15s ease, box-shadow .15s ease;
+    }
+
+    input[wire\:model\.live="search"].form-control:focus {
+        border-color: var(--primary-color, #635bff) !important;
+        box-shadow: 0 0 0 3px rgba(99, 91, 255, .12) !important;
+        box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary-color, #635bff) 15%, transparent) !important;
+        outline: none;
+    }
 </style>
 
 <script>

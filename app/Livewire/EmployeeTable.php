@@ -21,6 +21,11 @@ class EmployeeTable extends DataTableComponent
     public ?string $activePersonType = '';
     public string $empTypeFilter = '';
     public string $activeFilter = '';
+    public string $unitFilter = '';
+    public string $departmentFilter = '';
+    public string $sectionFilter = '';
+    public string $subsectionFilter = '';
+    public bool $includeOutsourced = false;
 
     public function mount($type = 'student'): void
     {
@@ -40,6 +45,19 @@ class EmployeeTable extends DataTableComponent
         $this->empTypeFilter = $empType;
         $this->activeFilter  = $active;
         $this->dispatch('refreshDatatable'); // ← this was missing
+    }
+
+    #[On('employee-hierarchy-filter-updated')]
+    public function filterByHierarchy(
+        string $unitId = '', string $departmentId = '', string $sectionId = '',
+        string $subsectionId = '', bool $includeOutsourced = false
+    ): void {
+        $this->unitFilter = $unitId;
+        $this->departmentFilter = $departmentId;
+        $this->sectionFilter = $sectionId;
+        $this->subsectionFilter = $subsectionId;
+        $this->includeOutsourced = $includeOutsourced;
+        $this->dispatch('refreshDatatable');
     }
 
     public function configure(): void
@@ -65,7 +83,7 @@ class EmployeeTable extends DataTableComponent
         if ($isStudentOrg) {
             $query->with(['organization', 'user', 'assignments', 'lastAttendance']);
         } else {
-            $query->with(['organization', 'shifts', 'user', 'assignments', 'department']);
+            $query->with(['organization', 'shifts', 'user', 'assignments', 'department', 'unit', 'sectionRecord', 'subsectionRecord']);
         }
 
         if ($this->activePersonType === 'student') {
@@ -82,6 +100,23 @@ class EmployeeTable extends DataTableComponent
             $query->where('active', (int)$this->activeFilter);
         }
 
+        $hierarchyActive = $this->unitFilter !== '' || $this->departmentFilter !== ''
+            || $this->sectionFilter !== '' || $this->subsectionFilter !== '';
+
+        if ($hierarchyActive) {
+            $query->where(function ($q) {
+                $q->where(function ($h) {
+                    if ($this->unitFilter !== '') $h->where('unit_id', $this->unitFilter);
+                    if ($this->departmentFilter !== '') $h->where('department_id', $this->departmentFilter);
+                    if ($this->sectionFilter !== '') $h->where('section_id', $this->sectionFilter);
+                    if ($this->subsectionFilter !== '') $h->where('subsection_id', $this->subsectionFilter);
+                });
+                if ($this->includeOutsourced) {
+                    $q->orWhere('employee_type', 'Outsourced');
+                }
+            });
+        }
+
         if ($this->search !== null && $this->search !== '') {
             $query->where(function ($q) {
                 $q->where('name', 'like', '%' . $this->search . '%')
@@ -90,7 +125,9 @@ class EmployeeTable extends DataTableComponent
                     ->orWhere('ad_employee_id', 'like', '%' . $this->search . '%')
                     ->orWhere('section', 'like', '%' . $this->search . '%')
                     ->orWhere('division', 'like', '%' . $this->search . '%')
-                    ->orWhere('employee_type', 'like', '%' . $this->search . '%');
+                    ->orWhere('employee_type', 'like', '%' . $this->search . '%')
+                    ->orWhereHas('unit', fn ($u) => $u->where('name', 'like', '%' . $this->search . '%'))
+                    ->orWhereHas('sectionRecord', fn ($s) => $s->where('name', 'like', '%' . $this->search . '%'));
             });
         }
 
@@ -184,9 +221,9 @@ class EmployeeTable extends DataTableComponent
             ->html()
             ->sortable();
 
-        // Dept / Grade column
+        // Org Path column (Unit > Department > Section > Subsection)
         $columns[] = Column::make(
-            $isStudent ? "Year Group" : "Dept / Division / Section",
+            $isStudent ? "Year Group" : "Org Path",
             "id"
         )
             ->format(function ($value, $row) {
@@ -196,38 +233,23 @@ class EmployeeTable extends DataTableComponent
                         : "<span class='text-muted'>—</span>";
                 }
 
-                $lines = [];
-
-                if ($row->division) {
-                    $lines[] = "<small class='d-block'>
-                        <span class='text-muted' style='font-size:0.68rem;text-transform:uppercase;letter-spacing:0.4px;'>
-                            <i class='ti ti-layout-distribute-horizontal me-1'></i>Division
-                        </span><br>
-                        <span class='fw-semibold text-dark' style='font-size:0.82rem;'>{$row->division}</span>
-                    </small>";
+                if ($row->employee_type === 'Outsourced') {
+                    return "<span class='text-muted fst-italic' style='font-size:0.78rem;'>Not applicable — installed manually</span>";
                 }
 
-                if ($row->department) {
-                    $lines[] = "<small class='d-block mt-1'>
-                        <span class='text-muted' style='font-size:0.68rem;text-transform:uppercase;letter-spacing:0.4px;'>
-                            <i class='ti ti-building me-1'></i>Department
-                        </span><br>
-                        <span class='fw-semibold text-dark' style='font-size:0.82rem;'>{$row->department->name}</span>
-                    </small>";
-                }
+                $levels = [
+                    ['label' => $row->unit?->name, 'bg' => '#1d4f4d'],
+                    ['label' => $row->department?->name, 'bg' => '#2b6e6b'],
+                    ['label' => $row->sectionRecord?->name, 'bg' => '#5a9c99'],
+                    ['label' => $row->subsectionRecord?->name, 'bg' => '#9cc4c2'],
+                ];
 
-                if ($row->section) {
-                    $lines[] = "<small class='d-block mt-1'>
-                        <span class='text-muted' style='font-size:0.68rem;text-transform:uppercase;letter-spacing:0.4px;'>
-                            <i class='ti ti-sitemap me-1'></i>Section
-                        </span><br>
-                        <span class='fw-semibold text-dark' style='font-size:0.82rem;'>{$row->section}</span>
-                    </small>";
-                }
+                $chips = collect($levels)->map(fn ($l) => $l['label']
+                    ? "<span style='background:{$l['bg']};color:#fff;font-size:0.68rem;font-weight:600;padding:2px 7px;border-radius:5px;margin:0 3px 3px 0;display:inline-block;'>{$l['label']}</span>"
+                    : "<span style='font-size:0.68rem;color:#94a3b8;font-style:italic;border:1px dashed #cbd5e1;border-radius:5px;padding:1px 5px;margin:0 3px 3px 0;display:inline-block;'>—</span>"
+                )->implode('');
 
-                return $lines
-                    ? "<div class='d-flex flex-column'>" . implode('', $lines) . "</div>"
-                    : "<span class='text-muted'>—</span>";
+                return "<div style='max-width:280px;'>{$chips}</div>";
             })
             ->html()
             ->collapseOnMobile();

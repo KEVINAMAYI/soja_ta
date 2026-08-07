@@ -41,6 +41,9 @@ class Employee extends Model
         'ad_employee_id',
         'division',
         'section',
+        'unit_id',
+        'section_id',
+        'subsection_id',
         'ad_upn',
         'ad_synced_at',
         'ad_object_id'
@@ -156,6 +159,26 @@ class Employee extends Model
     public function department()
     {
         return $this->belongsTo(Department::class);
+    }
+
+    public function unit()
+    {
+        return $this->belongsTo(Unit::class);
+    }
+
+    /**
+     * Named sectionRecord(), not section() — `section` is already a real string
+     * column on this model, so a same-named relation method would be shadowed by
+     * that attribute and never resolve.
+     */
+    public function sectionRecord()
+    {
+        return $this->belongsTo(Section::class, 'section_id');
+    }
+
+    public function subsectionRecord()
+    {
+        return $this->belongsTo(Subsection::class, 'subsection_id');
     }
 
     public function shift()

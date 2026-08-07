@@ -14,17 +14,21 @@ class Department extends Model
         'name',
         'department_derived',
         'organization_id',
+        'unit_id',
         'description',
         'manager_id',
     ];
 
     protected static function booted()
     {
-        static::creating(function (Department $department) {
-            if (blank($department->department_derived)) {
-                $department->department_derived = $department->name;
-            }
-        });
+        // Superseded by the Unit>Department>Section>Subsection hierarchy filter — Department
+        // filtering no longer needs name-based grouping. Commented out, not deleted, pending
+        // end-to-end testing of the new hierarchy.
+        // static::creating(function (Department $department) {
+        //     if (blank($department->department_derived)) {
+        //         $department->department_derived = $department->name;
+        //     }
+        // });
     }
 
     public function manager()
@@ -32,7 +36,15 @@ class Department extends Model
         return $this->belongsTo(User::class, 'manager_id');
     }
 
+    public function unit()
+    {
+        return $this->belongsTo(Unit::class);
+    }
+
     /**
+     * Superseded by the Unit>Department>Section>Subsection hierarchy filter.
+     * Commented out, not deleted — remove for good once the new hierarchy is confirmed working.
+     *
      * Departments for an organization, grouped by their derived (canonical) name.
      *
      * Returns plain ['id' => ..., 'name' => ...] arrays rather than Department models —
@@ -41,16 +53,16 @@ class Department extends Model
      * component property (throws "Collection::getMorphClass does not exist"). Plain
      * arrays sidestep that entirely.
      */
-    public static function groupedByDerived(int $organizationId): Collection
-    {
-        return static::where('organization_id', $organizationId)
-            ->orderBy('department_derived')
-            ->orderBy('name')
-            ->get(['id', 'name', 'department_derived'])
-            ->groupBy(fn (Department $department) => $department->department_derived ?: $department->name)
-            ->map(fn (Collection $members) => $members
-                ->map(fn (Department $department) => ['id' => $department->id, 'name' => $department->name])
-                ->values());
-    }
+    // public static function groupedByDerived(int $organizationId): Collection
+    // {
+    //     return static::where('organization_id', $organizationId)
+    //         ->orderBy('department_derived')
+    //         ->orderBy('name')
+    //         ->get(['id', 'name', 'department_derived'])
+    //         ->groupBy(fn (Department $department) => $department->department_derived ?: $department->name)
+    //         ->map(fn (Collection $members) => $members
+    //             ->map(fn (Department $department) => ['id' => $department->id, 'name' => $department->name])
+    //             ->values());
+    // }
 
 }

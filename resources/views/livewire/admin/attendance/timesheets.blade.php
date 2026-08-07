@@ -8,36 +8,63 @@ use App\Models\Department;
 
 new class extends Component {
 
-    public $department_ids = [];
     public $startDate;
     public $endDate;
-    public $departments = [];
+    public $unit_id = null;
+    public $department_id = null;
+    public $section_id = null;
+    public $subsection_id = null;
+    public $includeOutsourced = false;
 
     public function mount()
     {
         $today = now()->toDateString();
         $this->startDate = $today;
         $this->endDate = $today;
+    }
 
-        // Load departments for the current organization, grouped by department_derived
-        $orgId = auth()->user()->employee->organization_id ?? null;
-        if ($orgId) {
-            $this->departments = Department::groupedByDerived($orgId);
-        }
+    public function units()
+    {
+        return \App\Models\Unit::where('organization_id', auth()->user()->employee->organization_id)
+            ->orderBy('name')->get();
+    }
+
+    public function departmentsForUnit()
+    {
+        if (!$this->unit_id) return collect();
+        return Department::where('unit_id', $this->unit_id)->orderBy('name')->get();
+    }
+
+    public function sectionsForDepartment()
+    {
+        if (!$this->department_id) return collect();
+        return \App\Models\Section::where('department_id', $this->department_id)->orderBy('name')->get();
+    }
+
+    public function subsectionsForSection()
+    {
+        if (!$this->section_id) return collect();
+        return \App\Models\Subsection::where('section_id', $this->section_id)->orderBy('name')->get();
     }
 
     #[On('filter-updated')]
-    public function filterChanged($department_ids = null)
+    public function filterChanged($unit_id = null, $department_id = null, $section_id = null, $subsection_id = null, $includeOutsourced = null)
     {
-        if ($department_ids !== null) {
-            $this->department_ids = $department_ids;
-        }
+        if ($unit_id !== null) $this->unit_id = $unit_id;
+        if ($department_id !== null) $this->department_id = $department_id;
+        if ($section_id !== null) $this->section_id = $section_id;
+        if ($subsection_id !== null) $this->subsection_id = $subsection_id;
+        if ($includeOutsourced !== null) $this->includeOutsourced = $includeOutsourced;
 
         // Emit event to the table component
         $this->dispatch('timesheet-range-updated',
             startDate: $this->startDate,
             endDate: $this->endDate,
-            department_ids: $this->department_ids
+            unit_id: $this->unit_id,
+            department_id: $this->department_id,
+            section_id: $this->section_id,
+            subsection_id: $this->subsection_id,
+            include_outsourced: $this->includeOutsourced,
         );
     }
 
@@ -160,10 +187,8 @@ new class extends Component {
 
         <div class="card card-body">
 
-            <div class="row align-items-end mb-4">
-
-                {{-- START DATE --}}
-                <div class="col-md-4">
+            <div class="row g-3 mb-3">
+                <div class="col-6 col-md-6">
                     <label class="form-label fw-semibold">Start Date</label>
                     <input
                         type="date"
@@ -173,8 +198,7 @@ new class extends Component {
                     />
                 </div>
 
-                {{-- END DATE --}}
-                <div class="col-md-4">
+                <div class="col-6 col-md-6">
                     <label class="form-label fw-semibold">End Date</label>
                     <input
                         type="date"
@@ -183,16 +207,58 @@ new class extends Component {
                         wire:change="$dispatch('filter-updated')"
                     />
                 </div>
+            </div>
 
-                {{-- DEPARTMENT FILTER --}}
-                <div class="col-md-4">
-                    <label class="form-label fw-semibold">Department</label>
-                    @include('livewire.admin.partials.department-group-filter', [
-                        'groupedDepartments' => $departments,
-                        'selectId' => 'timesheetsDeptFilter',
-                        'dispatchEvent' => 'filter-updated',
-                        'selectedDepartmentIds' => $department_ids,
-                    ])
+            <div class="border rounded-3 bg-light-subtle p-3 mb-4">
+                <div class="fw-bold text-uppercase small text-muted mb-3" style="letter-spacing:.04em;">
+                    <i class="ti ti-sitemap me-1"></i>Filter by Organization
+                </div>
+
+                <div class="row g-3">
+                    <div class="col-6 col-md-3">
+                        <label class="form-label small fw-semibold text-uppercase text-muted mb-1">Unit</label>
+                        <select class="form-control" wire:model="unit_id" wire:change="$dispatch('filter-updated')">
+                            <option value="">All Units</option>
+                            @foreach ($this->units() as $u)
+                                <option value="{{ $u->id }}">{{ $u->name }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <label class="form-label small fw-semibold text-uppercase text-muted mb-1">Department</label>
+                        <select class="form-control" wire:model="department_id" wire:change="$dispatch('filter-updated')" @disabled(!$unit_id)>
+                            <option value="">{{ $unit_id ? 'All Departments' : 'Select a Unit first' }}</option>
+                            @foreach ($this->departmentsForUnit() as $d)
+                                <option value="{{ $d->id }}">{{ $d->name }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <label class="form-label small fw-semibold text-uppercase text-muted mb-1">Section</label>
+                        <select class="form-control" wire:model="section_id" wire:change="$dispatch('filter-updated')" @disabled(!$department_id)>
+                            <option value="">{{ $department_id ? 'All Sections' : '—' }}</option>
+                            @foreach ($this->sectionsForDepartment() as $s)
+                                <option value="{{ $s->id }}">{{ $s->name }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <label class="form-label small fw-semibold text-uppercase text-muted mb-1">Subsection</label>
+                        <select class="form-control" wire:model="subsection_id" wire:change="$dispatch('filter-updated')" @disabled(!$section_id)>
+                            <option value="">{{ $section_id ? 'All Subsections' : '—' }}</option>
+                            @foreach ($this->subsectionsForSection() as $sub)
+                                <option value="{{ $sub->id }}">{{ $sub->name }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+                </div>
+
+                <div class="d-flex align-items-center gap-2 border border-dashed rounded-2 px-3 py-2 mt-3" style="background:rgba(0,0,0,.015);">
+                    <input type="checkbox" class="form-check-input mt-0 flex-shrink-0" id="timesheetsInclOut" wire:model="includeOutsourced" wire:change="$dispatch('filter-updated')">
+                    <label class="form-check-label small mb-0" for="timesheetsInclOut">
+                        <span class="fw-semibold">Include Outsourced staff</span>
+                        <span class="text-muted d-block d-md-inline"> — excluded by default since they don't sit under Unit/Department/Section.</span>
+                    </label>
                 </div>
             </div>
 

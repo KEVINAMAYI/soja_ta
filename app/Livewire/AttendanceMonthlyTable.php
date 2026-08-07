@@ -18,9 +18,13 @@ use Illuminate\Support\Facades\DB;
 class AttendanceMonthlyTable extends DataTableComponent
 {
 
-    public $department_ids = [];
     public $startDate;
     public $endDate;
+    public $unitId = null;
+    public $departmentId = null;
+    public $sectionId = null;
+    public $subsectionId = null;
+    public $includeOutsourced = false;
 
     public function mount()
     {
@@ -36,11 +40,17 @@ class AttendanceMonthlyTable extends DataTableComponent
 
 
     #[On('timesheet-range-updated')]
-    public function filterByDateRange($startDate, $endDate, $department_ids = [])
-    {
+    public function filterByDateRange(
+        $startDate, $endDate, $unit_id = null, $department_id = null,
+        $section_id = null, $subsection_id = null, $include_outsourced = null
+    ) {
         $this->startDate = $startDate;
         $this->endDate = $endDate;
-        $this->department_ids = $department_ids;
+        $this->unitId = $unit_id;
+        $this->departmentId = $department_id;
+        $this->sectionId = $section_id;
+        $this->subsectionId = $subsection_id;
+        $this->includeOutsourced = (bool) $include_outsourced;
 
         $this->dispatch('refreshDatatable');
 
@@ -55,9 +65,22 @@ class AttendanceMonthlyTable extends DataTableComponent
             ->join('employees', 'attendances.employee_id', '=', 'employees.id')
             ->where('employees.organization_id', $orgId);
 
-        // Filter by department (a single department, or every department in a derived group)
-        if (!empty($this->department_ids)) {
-            $query->whereIn('employees.department_id', $this->department_ids);
+        // Unit > Department > Section > Subsection filter. Outsourced employees have
+        // null unit/department/section/subsection by definition, so they're excluded
+        // unless includeOutsourced ORs them back in.
+        $hierarchyActive = $this->unitId || $this->departmentId || $this->sectionId || $this->subsectionId;
+        if ($hierarchyActive) {
+            $query->where(function ($q) {
+                $q->where(function ($h) {
+                    if ($this->unitId) $h->where('employees.unit_id', $this->unitId);
+                    if ($this->departmentId) $h->where('employees.department_id', $this->departmentId);
+                    if ($this->sectionId) $h->where('employees.section_id', $this->sectionId);
+                    if ($this->subsectionId) $h->where('employees.subsection_id', $this->subsectionId);
+                });
+                if ($this->includeOutsourced) {
+                    $q->orWhere('employees.employee_type', 'Outsourced');
+                }
+            });
         }
 
         // Date filtering
@@ -194,7 +217,11 @@ class AttendanceMonthlyTable extends DataTableComponent
         return Excel::download(
             new AttendanceMonthlyExcelExport(
                 selected: $this->getSelected(),
-                department_ids: $this->department_ids,
+                unitId: $this->unitId,
+                departmentId: $this->departmentId,
+                sectionId: $this->sectionId,
+                subsectionId: $this->subsectionId,
+                includeOutsourced: $this->includeOutsourced,
                 startDate: $this->startDate,
                 endDate: $this->endDate
             ),
@@ -212,7 +239,10 @@ class AttendanceMonthlyTable extends DataTableComponent
             'ids' => $this->getSelected(),
             'start_date' => $this->startDate,
             'end_date' => $this->endDate,
-            'department_ids' => $this->department_ids,
+            // AttendanceReportService::getMonthly() still takes a department_ids array
+            // (out of scope for this change) — adapt the new singular filter to that
+            // shape rather than reworking that deeper service here.
+            'department_ids' => $this->departmentId ? [$this->departmentId] : [],
         ]);
 
         return redirect()->to($url);
