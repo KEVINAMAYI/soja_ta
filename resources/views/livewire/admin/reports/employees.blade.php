@@ -33,14 +33,67 @@ new class extends Component {
 
     public $timeSheetsStartDate;
     public $timeSheetsEndDate;
-    public $departments = [];
-    public $department_ids = [];
     public $reportSettings;
-    public $exportDepartmentIds = [];
     public $filterGrade = null;
 
     public $filterEmployeeType = 'all';
     public $employeeTypes = [];
+
+    // ── ORG HIERARCHY: daily export filter ──────────────────────────────────
+    public $unit_id = null;
+    public $department_id = null;
+    public $section_id = null;
+    public $subsection_id = null;
+    public $includeOutsourced = false;
+
+    // ── ORG HIERARCHY: monthly timesheets filter ────────────────────────────
+    public $ts_unit_id = null;
+    public $ts_department_id = null;
+    public $ts_section_id = null;
+    public $ts_subsection_id = null;
+    public $ts_includeOutsourced = false;
+
+    public function units()
+    {
+        return \App\Models\Unit::where('organization_id', auth()->user()->employee->organization_id)
+            ->orderBy('name')->get();
+    }
+
+    public function departmentsForUnit()
+    {
+        if (!$this->unit_id) return collect();
+        return \App\Models\Department::where('unit_id', $this->unit_id)->orderBy('name')->get();
+    }
+
+    public function sectionsForDepartment()
+    {
+        if (!$this->department_id) return collect();
+        return \App\Models\Section::where('department_id', $this->department_id)->orderBy('name')->get();
+    }
+
+    public function subsectionsForSection()
+    {
+        if (!$this->section_id) return collect();
+        return \App\Models\Subsection::where('section_id', $this->section_id)->orderBy('name')->get();
+    }
+
+    public function departmentsForTsUnit()
+    {
+        if (!$this->ts_unit_id) return collect();
+        return \App\Models\Department::where('unit_id', $this->ts_unit_id)->orderBy('name')->get();
+    }
+
+    public function sectionsForTsDepartment()
+    {
+        if (!$this->ts_department_id) return collect();
+        return \App\Models\Section::where('department_id', $this->ts_department_id)->orderBy('name')->get();
+    }
+
+    public function subsectionsForTsSection()
+    {
+        if (!$this->ts_section_id) return collect();
+        return \App\Models\Subsection::where('section_id', $this->ts_section_id)->orderBy('name')->get();
+    }
 
     protected function rules()
     {
@@ -66,10 +119,11 @@ new class extends Component {
         $this->timeSheetsStartDate = $today;
         $this->timeSheetsEndDate = $today;
 
-        // Load departments for the current organization, grouped by department_derived
+        // Superseded by the Unit>Department>Section>Subsection hierarchy filter —
+        // commented out, not deleted, pending end-to-end testing of the new hierarchy.
+        // $this->departments = Department::groupedByDerived($orgId);
         $orgId = auth()->user()->employee->organization_id ?? null;
         if ($orgId) {
-            $this->departments = Department::groupedByDerived($orgId);
             $this->employeeTypes = Employee::where('organization_id', $orgId)
                 ->whereNotNull('employee_type')
                 ->distinct()
@@ -122,23 +176,38 @@ new class extends Component {
 
 
     #[On('filter-updated')]
-    public function dateChaged($department_ids = null)
+    public function dateChaged($unit_id = null, $department_id = null, $section_id = null, $subsection_id = null, $includeOutsourced = null)
     {
-        if ($department_ids !== null) {
-            $this->exportDepartmentIds = $department_ids;
-        }
+        if ($unit_id !== null) $this->unit_id = $unit_id;
+        if ($department_id !== null) $this->department_id = $department_id;
+        if ($section_id !== null) $this->section_id = $section_id;
+        if ($subsection_id !== null) $this->subsection_id = $subsection_id;
+        if ($includeOutsourced !== null) $this->includeOutsourced = $includeOutsourced;
 
-        $this->dispatch('date-range-updated', startDate: $this->startDate, endDate: $this->endDate, status: $this->filterStatus, grade: $this->filterGrade, department_ids: $this->exportDepartmentIds, employee_type: $this->filterEmployeeType);
+        $this->dispatch('date-range-updated',
+            startDate: $this->startDate, endDate: $this->endDate, status: $this->filterStatus,
+            grade: $this->filterGrade, employee_type: $this->filterEmployeeType,
+            unit_id: $this->unit_id, department_id: $this->department_id,
+            section_id: $this->section_id, subsection_id: $this->subsection_id,
+            include_outsourced: $this->includeOutsourced,
+        );
     }
 
     #[On('timesheets-filter-updated')]
-    public function filterChnaged($department_ids = null)
+    public function filterChnaged($unit_id = null, $department_id = null, $section_id = null, $subsection_id = null, $includeOutsourced = null)
     {
-        if ($department_ids !== null) {
-            $this->department_ids = $department_ids;
-        }
+        if ($unit_id !== null) $this->ts_unit_id = $unit_id;
+        if ($department_id !== null) $this->ts_department_id = $department_id;
+        if ($section_id !== null) $this->ts_section_id = $section_id;
+        if ($subsection_id !== null) $this->ts_subsection_id = $subsection_id;
+        if ($includeOutsourced !== null) $this->ts_includeOutsourced = $includeOutsourced;
 
-        $this->dispatch('timesheet-range-updated', startDate: $this->timeSheetsStartDate, endDate: $this->timeSheetsEndDate, department_ids: $this->department_ids);
+        $this->dispatch('timesheet-range-updated',
+            startDate: $this->timeSheetsStartDate, endDate: $this->timeSheetsEndDate,
+            unit_id: $this->ts_unit_id, department_id: $this->ts_department_id,
+            section_id: $this->ts_section_id, subsection_id: $this->ts_subsection_id,
+            include_outsourced: $this->ts_includeOutsourced,
+        );
     }
 
 
@@ -717,9 +786,8 @@ new class extends Component {
 
                                         </div>
 
-                                        <div class="row">
-                                            {{-- DATE FILTER --}}
-                                            <div class="col-3 mb-3">
+                                        <div class="row g-3 mb-3">
+                                            <div class="col-6 col-md-3">
                                                 <label class="form-label">Start Date</label>
                                                 <input
                                                     type="date"
@@ -730,7 +798,7 @@ new class extends Component {
                                                 />
                                             </div>
 
-                                            <div class="col-3 mb-3">
+                                            <div class="col-6 col-md-3">
                                                 <label class="form-label">End Date</label>
                                                 <input
                                                     type="date"
@@ -741,7 +809,7 @@ new class extends Component {
                                                 />
                                             </div>
 
-                                            <div class="col-3 md-3">
+                                            <div class="col-6 col-md-3">
                                                 <label class="form-label">Attendance Status</label>
                                                 <select
                                                     class="form-control"
@@ -758,17 +826,7 @@ new class extends Component {
                                                 </select>
                                             </div>
 
-                                            <div class="col-3 md-3">
-                                                <label class="form-label">Department</label>
-                                                @include('livewire.admin.partials.department-group-filter', [
-                                                    'groupedDepartments' => $departments,
-                                                    'selectId' => 'dailyExportDeptFilter',
-                                                    'dispatchEvent' => 'filter-updated',
-                                                    'selectedDepartmentIds' => $exportDepartmentIds,
-                                                ])
-                                            </div>
-
-                                            <div class="col-3 mb-3">
+                                            <div class="col-6 col-md-3">
                                                 <label class="form-label">Employee Type</label>
                                                 <select
                                                     class="form-control"
@@ -780,7 +838,59 @@ new class extends Component {
                                                     @endforeach
                                                 </select>
                                             </div>
+                                        </div>
 
+                                        <div class="border rounded-3 bg-light-subtle p-3 mb-3">
+                                            <div class="fw-bold text-uppercase small text-muted mb-3" style="letter-spacing:.04em;">
+                                                <i class="ti ti-sitemap me-1"></i>Filter by Organization
+                                            </div>
+
+                                            <div class="row g-3">
+                                                <div class="col-6 col-md-3">
+                                                    <label class="form-label small fw-semibold text-uppercase text-muted mb-1">Unit</label>
+                                                    <select class="form-control" wire:model="unit_id" wire:change="$dispatch('filter-updated')">
+                                                        <option value="">All Units</option>
+                                                        @foreach ($this->units() as $u)
+                                                            <option value="{{ $u->id }}">{{ $u->name }}</option>
+                                                        @endforeach
+                                                    </select>
+                                                </div>
+                                                <div class="col-6 col-md-3">
+                                                    <label class="form-label small fw-semibold text-uppercase text-muted mb-1">Department</label>
+                                                    <select class="form-control" wire:model="department_id" wire:change="$dispatch('filter-updated')" @disabled(!$unit_id)>
+                                                        <option value="">{{ $unit_id ? 'All Departments' : 'Select a Unit first' }}</option>
+                                                        @foreach ($this->departmentsForUnit() as $d)
+                                                            <option value="{{ $d->id }}">{{ $d->name }}</option>
+                                                        @endforeach
+                                                    </select>
+                                                </div>
+                                                <div class="col-6 col-md-3">
+                                                    <label class="form-label small fw-semibold text-uppercase text-muted mb-1">Section</label>
+                                                    <select class="form-control" wire:model="section_id" wire:change="$dispatch('filter-updated')" @disabled(!$department_id)>
+                                                        <option value="">{{ $department_id ? 'All Sections' : '—' }}</option>
+                                                        @foreach ($this->sectionsForDepartment() as $s)
+                                                            <option value="{{ $s->id }}">{{ $s->name }}</option>
+                                                        @endforeach
+                                                    </select>
+                                                </div>
+                                                <div class="col-6 col-md-3">
+                                                    <label class="form-label small fw-semibold text-uppercase text-muted mb-1">Subsection</label>
+                                                    <select class="form-control" wire:model="subsection_id" wire:change="$dispatch('filter-updated')" @disabled(!$section_id)>
+                                                        <option value="">{{ $section_id ? 'All Subsections' : '—' }}</option>
+                                                        @foreach ($this->subsectionsForSection() as $sub)
+                                                            <option value="{{ $sub->id }}">{{ $sub->name }}</option>
+                                                        @endforeach
+                                                    </select>
+                                                </div>
+                                            </div>
+
+                                            <div class="d-flex align-items-center gap-2 border border-dashed rounded-2 px-3 py-2 mt-3" style="background:rgba(0,0,0,.015);">
+                                                <input type="checkbox" class="form-check-input mt-0 flex-shrink-0" id="dailyExportInclOut" wire:model="includeOutsourced" wire:change="$dispatch('filter-updated')">
+                                                <label class="form-check-label small mb-0" for="dailyExportInclOut">
+                                                    <span class="fw-semibold">Include Outsourced staff</span>
+                                                    <span class="text-muted d-block d-md-inline"> — excluded by default since they don't sit under Unit/Department/Section.</span>
+                                                </label>
+                                            </div>
                                         </div>
 
                                         <!-- Livewire Component -->
@@ -838,10 +948,8 @@ new class extends Component {
 
                                         </div>
 
-                                        <div class="row align-items-end mb-4">
-
-                                            {{-- START DATE --}}
-                                            <div class="col-md-4">
+                                        <div class="row g-3 mb-3">
+                                            <div class="col-6 col-md-6">
                                                 <label class="form-label fw-semibold">Start Date</label>
                                                 <input
                                                     type="date"
@@ -851,8 +959,7 @@ new class extends Component {
                                                 />
                                             </div>
 
-                                            {{-- END DATE --}}
-                                            <div class="col-md-4">
+                                            <div class="col-6 col-md-6">
                                                 <label class="form-label fw-semibold">End Date</label>
                                                 <input
                                                     type="date"
@@ -861,16 +968,58 @@ new class extends Component {
                                                     wire:change="$dispatch('timesheets-filter-updated')"
                                                 />
                                             </div>
+                                        </div>
 
-                                            {{-- DEPARTMENT FILTER --}}
-                                            <div class="col-md-4">
-                                                <label class="form-label fw-semibold">Department</label>
-                                                @include('livewire.admin.partials.department-group-filter', [
-                                                    'groupedDepartments' => $departments,
-                                                    'selectId' => 'monthlyTimesheetsDeptFilter',
-                                                    'dispatchEvent' => 'timesheets-filter-updated',
-                                                    'selectedDepartmentIds' => $department_ids,
-                                                ])
+                                        <div class="border rounded-3 bg-light-subtle p-3 mb-4">
+                                            <div class="fw-bold text-uppercase small text-muted mb-3" style="letter-spacing:.04em;">
+                                                <i class="ti ti-sitemap me-1"></i>Filter by Organization
+                                            </div>
+
+                                            <div class="row g-3">
+                                                <div class="col-6 col-md-3">
+                                                    <label class="form-label small fw-semibold text-uppercase text-muted mb-1">Unit</label>
+                                                    <select class="form-control" wire:model="ts_unit_id" wire:change="$dispatch('timesheets-filter-updated')">
+                                                        <option value="">All Units</option>
+                                                        @foreach ($this->units() as $u)
+                                                            <option value="{{ $u->id }}">{{ $u->name }}</option>
+                                                        @endforeach
+                                                    </select>
+                                                </div>
+                                                <div class="col-6 col-md-3">
+                                                    <label class="form-label small fw-semibold text-uppercase text-muted mb-1">Department</label>
+                                                    <select class="form-control" wire:model="ts_department_id" wire:change="$dispatch('timesheets-filter-updated')" @disabled(!$ts_unit_id)>
+                                                        <option value="">{{ $ts_unit_id ? 'All Departments' : 'Select a Unit first' }}</option>
+                                                        @foreach ($this->departmentsForTsUnit() as $d)
+                                                            <option value="{{ $d->id }}">{{ $d->name }}</option>
+                                                        @endforeach
+                                                    </select>
+                                                </div>
+                                                <div class="col-6 col-md-3">
+                                                    <label class="form-label small fw-semibold text-uppercase text-muted mb-1">Section</label>
+                                                    <select class="form-control" wire:model="ts_section_id" wire:change="$dispatch('timesheets-filter-updated')" @disabled(!$ts_department_id)>
+                                                        <option value="">{{ $ts_department_id ? 'All Sections' : '—' }}</option>
+                                                        @foreach ($this->sectionsForTsDepartment() as $s)
+                                                            <option value="{{ $s->id }}">{{ $s->name }}</option>
+                                                        @endforeach
+                                                    </select>
+                                                </div>
+                                                <div class="col-6 col-md-3">
+                                                    <label class="form-label small fw-semibold text-uppercase text-muted mb-1">Subsection</label>
+                                                    <select class="form-control" wire:model="ts_subsection_id" wire:change="$dispatch('timesheets-filter-updated')" @disabled(!$ts_section_id)>
+                                                        <option value="">{{ $ts_section_id ? 'All Subsections' : '—' }}</option>
+                                                        @foreach ($this->subsectionsForTsSection() as $sub)
+                                                            <option value="{{ $sub->id }}">{{ $sub->name }}</option>
+                                                        @endforeach
+                                                    </select>
+                                                </div>
+                                            </div>
+
+                                            <div class="d-flex align-items-center gap-2 border border-dashed rounded-2 px-3 py-2 mt-3" style="background:rgba(0,0,0,.015);">
+                                                <input type="checkbox" class="form-check-input mt-0 flex-shrink-0" id="tsInclOut" wire:model="ts_includeOutsourced" wire:change="$dispatch('timesheets-filter-updated')">
+                                                <label class="form-check-label small mb-0" for="tsInclOut">
+                                                    <span class="fw-semibold">Include Outsourced staff</span>
+                                                    <span class="text-muted d-block d-md-inline"> — excluded by default since they don't sit under Unit/Department/Section.</span>
+                                                </label>
                                             </div>
                                         </div>
 

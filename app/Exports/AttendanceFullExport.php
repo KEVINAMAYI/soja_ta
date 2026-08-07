@@ -30,6 +30,10 @@ class AttendanceFullExport implements WithMultipleSheets
         public readonly ?string $endDate    = null,
         public readonly array   $departmentIds = [],
         public readonly ?string $employeeType = null,
+        public readonly ?int    $unitId = null,
+        public readonly ?int    $sectionId = null,
+        public readonly ?int    $subsectionId = null,
+        public readonly bool    $includeOutsourced = false,
 
     ) {}
 
@@ -46,6 +50,10 @@ class AttendanceFullExport implements WithMultipleSheets
             $this->endDate,
             $this->departmentIds,
             $this->employeeType,
+            $this->unitId,
+            $this->sectionId,
+            $this->subsectionId,
+            $this->includeOutsourced,
         ];
 
         // Load master records once — derive other sheets from it

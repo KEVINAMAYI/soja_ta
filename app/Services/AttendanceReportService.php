@@ -172,6 +172,10 @@ class AttendanceReportService
         ?string $endDate = null,
         array   $departmentIds = [],
         ?string $employeeType = null,
+        ?int    $unitId = null,
+        ?int    $sectionId = null,
+        ?int    $subsectionId = null,
+        bool    $includeOutsourced = false,
     )
     {
         $startDate = Carbon::parse($startDate ?? now()->toDateString())->toDateString();
@@ -180,6 +184,9 @@ class AttendanceReportService
         $query = Attendance::with([
             'employee.shift',
             'employee.department',
+            'employee.unit',
+            'employee.sectionRecord',
+            'employee.subsectionRecord',
             'employee.shifts',
             'shift',
             'breakLogs',
@@ -191,6 +198,22 @@ class AttendanceReportService
 
         if (!empty($ids)) $query->whereIn('attendances.id', $ids);
         if (!empty($departmentIds)) $query->whereIn('employees.department_id', $departmentIds);
+
+        // Unit > Department > Section > Subsection filter. Outsourced employees have
+        // null unit/department/section/subsection by definition, so they're excluded
+        // unless includeOutsourced ORs them back in.
+        if ($unitId || $sectionId || $subsectionId) {
+            $query->where(function ($q) use ($unitId, $sectionId, $subsectionId, $includeOutsourced) {
+                $q->where(function ($h) use ($unitId, $sectionId, $subsectionId) {
+                    if ($unitId) $h->where('employees.unit_id', $unitId);
+                    if ($sectionId) $h->where('employees.section_id', $sectionId);
+                    if ($subsectionId) $h->where('employees.subsection_id', $subsectionId);
+                });
+                if ($includeOutsourced) {
+                    $q->orWhere('employees.employee_type', 'Outsourced');
+                }
+            });
+        }
 
         if ($employeeType && $employeeType !== 'all') {
             $query->where('employees.employee_type', $employeeType);

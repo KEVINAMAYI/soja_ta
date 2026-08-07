@@ -31,6 +31,99 @@ new class extends Component {
     public $name, $email, $phone, $employee_type_id, $department_id, $id_number, $active = true;
     public $editId, $employeeTypes, $departments;
     public $roleId;
+
+    // ── ORG HIERARCHY: list filter (Unit > Department > Section > Subsection) ─────
+    public $hierarchyUnitId = '';
+    public $hierarchyDepartmentId = '';
+    public $hierarchySectionId = '';
+    public $hierarchySubsectionId = '';
+    public bool $includeOutsourcedInHierarchy = false;
+
+    // ── ORG HIERARCHY: create/edit form cascading selects ──────────────────────
+    public $form_unit_id = '';
+    public $form_section_id = '';
+    public $form_subsection_id = '';
+
+    public function units()
+    {
+        return \App\Models\Unit::where('organization_id', auth()->user()->employee->organization_id)
+            ->orderBy('name')->get();
+    }
+
+    public function departmentsForUnit()
+    {
+        if (!$this->hierarchyUnitId) return collect();
+        return \App\Models\Department::where('unit_id', $this->hierarchyUnitId)->orderBy('name')->get();
+    }
+
+    public function sectionsForDepartment()
+    {
+        if (!$this->hierarchyDepartmentId) return collect();
+        return \App\Models\Section::where('department_id', $this->hierarchyDepartmentId)->orderBy('name')->get();
+    }
+
+    public function subsectionsForSection()
+    {
+        if (!$this->hierarchySectionId) return collect();
+        return \App\Models\Subsection::where('section_id', $this->hierarchySectionId)->orderBy('name')->get();
+    }
+
+    public function departmentsForFormUnit()
+    {
+        if (!$this->form_unit_id) return collect();
+        return \App\Models\Department::where('unit_id', $this->form_unit_id)->orderBy('name')->get();
+    }
+
+    public function sectionsForFormDepartment()
+    {
+        if (!$this->department_id) return collect();
+        return \App\Models\Section::where('department_id', $this->department_id)->orderBy('name')->get();
+    }
+
+    public function subsectionsForFormSection()
+    {
+        if (!$this->form_section_id) return collect();
+        return \App\Models\Subsection::where('section_id', $this->form_section_id)->orderBy('name')->get();
+    }
+
+    // Explicit action, not a Livewire "updatedX()" magic hook — triggered by wire:change,
+    // same convention as the rest of the codebase (e.g. reports' wire:change="$dispatch('filter-updated')").
+    public function onHierarchyChange(string $level): void
+    {
+        if ($level === 'unit') {
+            $this->hierarchyDepartmentId = $this->hierarchySectionId = $this->hierarchySubsectionId = '';
+        } elseif ($level === 'department') {
+            $this->hierarchySectionId = $this->hierarchySubsectionId = '';
+        } elseif ($level === 'section') {
+            $this->hierarchySubsectionId = '';
+        }
+
+        $this->dispatch('employee-hierarchy-filter-updated',
+            unitId: (string) $this->hierarchyUnitId,
+            departmentId: (string) $this->hierarchyDepartmentId,
+            sectionId: (string) $this->hierarchySectionId,
+            subsectionId: (string) $this->hierarchySubsectionId,
+            includeOutsourced: $this->includeOutsourcedInHierarchy,
+        );
+    }
+
+    public function clearHierarchyFilter(): void
+    {
+        $this->hierarchyUnitId = $this->hierarchyDepartmentId = $this->hierarchySectionId = $this->hierarchySubsectionId = '';
+        $this->includeOutsourcedInHierarchy = false;
+        $this->onHierarchyChange('clear');
+    }
+
+    public function onFormHierarchyChange(string $level): void
+    {
+        if ($level === 'unit') {
+            $this->department_id = $this->form_section_id = $this->form_subsection_id = '';
+        } elseif ($level === 'department') {
+            $this->form_section_id = $this->form_subsection_id = '';
+        } elseif ($level === 'section') {
+            $this->form_subsection_id = '';
+        }
+    }
     public $shifts;
     public $shift_id;
     public $role;
@@ -351,8 +444,9 @@ new class extends Component {
                     'shift' => $defaultShift?->name ?? '?',
                     'department' => $user['department'] ?? null,   // from AD
                     'employee_id' => $user['employeeId'] ?? null,   // e.g. M1ALI748
+                    'unit' => $ous['unit'] ?? null,
                     'section' => $ous['section'] ?? null,
-                    'division' => $ous['division'] ?? null,
+                    'subsection' => $ous['subsection'] ?? null,
                     'isNew' => $isNew,
                 ];
             }
@@ -385,8 +479,9 @@ new class extends Component {
                     'shift' => '—',
                     'department' => $emp->department?->name ?? '—',
                     'employee_id' => $emp->ad_employee_id ?? null,
+                    'unit' => $emp->division ?? null,
                     'section' => $emp->section ?? null,
-                    'division' => $emp->division ?? null,
+                    'subsection' => null,
                     'isNew' => false,
                     'action' => in_array($emp->ad_object_id, $disabledAdIds) ? 'disabled' : 'removed',
                 ];
@@ -441,6 +536,9 @@ new class extends Component {
                     })->first();
 
                 if ($existing) {
+                    $departmentId = $this->resolveDepartment($org, $row['department']) ?? $existing->department_id;
+                    ['unitId' => $unitId, 'sectionId' => $sectionId, 'subsectionId' => $subsectionId] = $this->resolveOrgHierarchy($org, $departmentId, $row);
+
                     $existing->update([
                         'name' => $row['name'],
                         'email' => $row['email'] ?: $existing->email,
@@ -450,8 +548,11 @@ new class extends Component {
                         'ad_synced_at' => now(),
                         'ad_employee_id' => $row['employee_id'],
                         'section' => $row['section'],
-                        'division' => $row['division'],
-                        'department_id' => $this->resolveDepartment($org, $row['department']) ?? $existing->department_id,
+                        'division' => $row['unit'],
+                        'department_id' => $departmentId,
+                        'unit_id' => $unitId,
+                        'section_id' => $sectionId,
+                        'subsection_id' => $subsectionId,
                     ]);
 
                     if ($existing->user) {
@@ -490,6 +591,9 @@ new class extends Component {
 
                     $user = User::create(['name' => $row['name'], 'email' => $email, 'password' => Hash::make('password')]);
 
+                    $departmentId = $this->resolveDepartment($org, $row['department']) ?? $defaultDept?->id;
+                    ['unitId' => $unitId, 'sectionId' => $sectionId, 'subsectionId' => $subsectionId] = $this->resolveOrgHierarchy($org, $departmentId, $row);
+
                     $employee = Employee::create([
                         'name' => $row['name'],
                         'email' => $email,
@@ -507,8 +611,11 @@ new class extends Component {
                         'employee_title' => $row['job_title'] !== '—' ? $row['job_title'] : null,
                         'ad_employee_id' => $row['employee_id'],
                         'section' => $row['section'],
-                        'division' => $row['division'],
-                        'department_id' => $this->resolveDepartment($org, $row['department']) ?? $defaultDept?->id,
+                        'division' => $row['unit'],
+                        'department_id' => $departmentId,
+                        'unit_id' => $unitId,
+                        'section_id' => $sectionId,
+                        'subsection_id' => $subsectionId,
                     ]);
 
                     $user->assignRole('employee');
@@ -660,6 +767,24 @@ new class extends Component {
         }
 
         return $dept->id;
+    }
+
+    private function resolveOrgHierarchy($org, ?int $departmentId, array $row): array
+    {
+        $resolver = app(\App\Services\OrgHierarchyResolver::class);
+
+        $unitId = $resolver->resolveUnit($org, $row['unit'] ?? null);
+
+        // First sync sets the department's unit; later syncs don't silently move it,
+        // since messy AD data could otherwise make it flap between units.
+        if ($unitId && $departmentId) {
+            \App\Models\Department::whereKey($departmentId)->whereNull('unit_id')->update(['unit_id' => $unitId]);
+        }
+
+        $sectionId = $resolver->resolveSection($org->id, $departmentId, $row['section'] ?? null);
+        $subsectionId = $resolver->resolveSubsection($org->id, $sectionId, $row['subsection'] ?? null);
+
+        return compact('unitId', 'sectionId', 'subsectionId');
     }
 
     public function toggleImportPanel(): void
@@ -1189,6 +1314,9 @@ new class extends Component {
             'active' => 'boolean',
             'roleName' => 'required|string',
             'employee_title' => 'nullable|string|max:255',
+            'form_unit_id' => 'nullable|exists:units,id',
+            'form_section_id' => 'nullable|exists:sections,id',
+            'form_subsection_id' => 'nullable|exists:subsections,id',
         ];
     }
 
@@ -1220,6 +1348,9 @@ new class extends Component {
                 'active' => $this->active,
                 'user_id' => $user->id,
                 'department_id' => $deptId,
+                'unit_id' => $this->form_unit_id ?: null,
+                'section_id' => $this->form_section_id ?: null,
+                'subsection_id' => $this->form_subsection_id ?: null,
                 'grade' => $isStudent ? $this->grade : null,
                 'employee_title' => $this->employee_title,
                 'is_student' => $isStudent ? 1 : 0,
@@ -1287,6 +1418,9 @@ new class extends Component {
         $this->phone = $employee->phone;
         $this->shift_id = $employee->shift_id;
         $this->department_id = $employee->department_id;
+        $this->form_unit_id = $employee->unit_id ?? '';
+        $this->form_section_id = $employee->section_id ?? '';
+        $this->form_subsection_id = $employee->subsection_id ?? '';
         $this->id_number = $employee->id_number;
         $this->active = $employee->active;
         $this->roleName = $employee->user?->roles->first()?->name ?? '';
@@ -1316,6 +1450,9 @@ new class extends Component {
                 'phone' => $phone,
                 'shift_id' => $this->shift_id,
                 'department_id' => $deptId,
+                'unit_id' => $this->form_unit_id ?: null,
+                'section_id' => $this->form_section_id ?: null,
+                'subsection_id' => $this->form_subsection_id ?: null,
                 'grade' => $isStudent ? $this->grade : null,
                 'id_number' => $this->id_number,
                 'active' => $this->active,
@@ -1468,7 +1605,7 @@ new class extends Component {
     {
         $this->reset(['name', 'email', 'phone', 'employee_type_id', 'department_id',
             'id_number', 'editId', 'shift_id', 'employee_title', 'roleName', 'grade',
-            'newEmployeeAreas']);
+            'newEmployeeAreas', 'form_unit_id', 'form_section_id', 'form_subsection_id']);
         $this->active = true;
         $this->roleName = 'employee';
         $this->shift_id = $this->shifts->firstWhere('name', 'Day Shift')?->id
@@ -3351,10 +3488,13 @@ new class extends Component {
                                                 Department
                                             </th>
                                             <th style="padding:8px 12px;color:#1e4d8c;font-size:0.72rem;text-transform:uppercase;">
-                                                Division
+                                                Unit
                                             </th>
                                             <th style="padding:8px 12px;color:#1e4d8c;font-size:0.72rem;text-transform:uppercase;">
                                                 Section
+                                            </th>
+                                            <th style="padding:8px 12px;color:#1e4d8c;font-size:0.72rem;text-transform:uppercase;">
+                                                Subsection
                                             </th>
                                             <th style="padding:8px 12px;color:#1e4d8c;font-size:0.72rem;text-transform:uppercase;">
                                                 Phone
@@ -3402,10 +3542,10 @@ new class extends Component {
                                                     @endif
                                                 </td>
                                                 <td style="padding:7px 12px;">
-                                                    @if($row['division'])
+                                                    @if($row['unit'])
                                                         <span
                                                             style="font-size:0.7rem;font-weight:600;background:#e0f2fe;color:#0369a1;border-radius:5px;padding:2px 8px;">
-                            {{ $row['division'] }}
+                            {{ $row['unit'] }}
                         </span>
                                                     @else
                                                         <span class="text-muted">—</span>
@@ -3416,6 +3556,16 @@ new class extends Component {
                                                         <span
                                                             style="font-size:0.7rem;font-weight:600;background:#dcfce7;color:#15803d;border-radius:5px;padding:2px 8px;">
                             {{ $row['section'] }}
+                        </span>
+                                                    @else
+                                                        <span class="text-muted">—</span>
+                                                    @endif
+                                                </td>
+                                                <td style="padding:7px 12px;">
+                                                    @if($row['subsection'] ?? null)
+                                                        <span
+                                                            style="font-size:0.7rem;font-weight:600;background:#f1f5f9;color:#475569;border-radius:5px;padding:2px 8px;">
+                            {{ $row['subsection'] }}
                         </span>
                                                     @else
                                                         <span class="text-muted">—</span>
@@ -3621,6 +3771,66 @@ new class extends Component {
             @endif
             {{-- /AD sync panel --}}
 
+            @if(!$isStudentOrg)
+                <div class="border rounded-3 bg-light-subtle p-3 mb-3">
+                    <div class="d-flex align-items-center justify-content-between mb-3">
+                        <span class="fw-bold text-uppercase small text-muted" style="letter-spacing:.04em;">
+                            <i class="ti ti-sitemap me-1"></i>Filter by Organization
+                        </span>
+                        <button type="button" class="btn btn-sm btn-link text-decoration-none p-0" wire:click="clearHierarchyFilter">
+                            <i class="ti ti-x me-1"></i>Clear filters
+                        </button>
+                    </div>
+
+                    <div class="row g-3">
+                        <div class="col-6 col-md-3">
+                            <label class="form-label small fw-semibold text-uppercase text-muted mb-1">Unit</label>
+                            <select wire:model="hierarchyUnitId" wire:change="onHierarchyChange('unit')" class="form-control">
+                                <option value="">All Units</option>
+                                @foreach ($this->units() as $unit)
+                                    <option value="{{ $unit->id }}">{{ $unit->name }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+                        <div class="col-6 col-md-3">
+                            <label class="form-label small fw-semibold text-uppercase text-muted mb-1">Department</label>
+                            <select wire:model="hierarchyDepartmentId" wire:change="onHierarchyChange('department')" class="form-control" @disabled(!$hierarchyUnitId)>
+                                <option value="">{{ $hierarchyUnitId ? 'All Departments' : 'Select a Unit first' }}</option>
+                                @foreach ($this->departmentsForUnit() as $dept)
+                                    <option value="{{ $dept->id }}">{{ $dept->name }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+                        <div class="col-6 col-md-3">
+                            <label class="form-label small fw-semibold text-uppercase text-muted mb-1">Section</label>
+                            <select wire:model="hierarchySectionId" wire:change="onHierarchyChange('section')" class="form-control" @disabled(!$hierarchyDepartmentId)>
+                                <option value="">{{ $hierarchyDepartmentId ? 'All Sections' : '—' }}</option>
+                                @foreach ($this->sectionsForDepartment() as $section)
+                                    <option value="{{ $section->id }}">{{ $section->name }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+                        <div class="col-6 col-md-3">
+                            <label class="form-label small fw-semibold text-uppercase text-muted mb-1">Subsection</label>
+                            <select wire:model="hierarchySubsectionId" wire:change="onHierarchyChange('subsection')" class="form-control" @disabled(!$hierarchySectionId)>
+                                <option value="">{{ $hierarchySectionId ? 'All Subsections' : '—' }}</option>
+                                @foreach ($this->subsectionsForSection() as $sub)
+                                    <option value="{{ $sub->id }}">{{ $sub->name }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="d-flex align-items-center gap-2 border border-dashed rounded-2 px-3 py-2 mt-3" style="background:rgba(0,0,0,.015);">
+                        <input type="checkbox" class="form-check-input mt-0 flex-shrink-0" id="inclOutsourced" wire:model="includeOutsourcedInHierarchy" wire:change="onHierarchyChange('outsourced')">
+                        <label class="form-check-label small mb-0" for="inclOutsourced">
+                            <span class="fw-semibold">Include Outsourced staff</span>
+                            <span class="text-muted d-block d-md-inline"> — excluded by default since they don't sit under Unit/Department/Section.</span>
+                        </label>
+                    </div>
+                </div>
+            @endif
+
             <livewire:employee-table
                 :type="$userType ?? null"
                 theme="bootstrap-4"
@@ -3717,14 +3927,41 @@ new class extends Component {
                                 </div>
                             @else
                                 <div class="col-md-6 mb-3">
+                                    <label class="form-label">Unit</label>
+                                    <select wire:model="form_unit_id" wire:change="onFormHierarchyChange('unit')" class="form-control">
+                                        <option value="">Select Unit</option>
+                                        @foreach ($this->units() as $unit)
+                                            <option value="{{ $unit->id }}">{{ $unit->name }}</option>
+                                        @endforeach
+                                    </select>
+                                </div>
+                                <div class="col-md-6 mb-3">
                                     <label class="form-label">Department <span class="text-danger">*</span></label>
-                                    <select wire:model="department_id" class="form-control">
-                                        <option value="">Select Department</option>
-                                        @foreach ($departments as $dept)
+                                    <select wire:model="department_id" wire:change="onFormHierarchyChange('department')" class="form-control" @disabled(!$form_unit_id)>
+                                        <option value="">{{ $form_unit_id ? 'Select Department' : 'Select a Unit first' }}</option>
+                                        @foreach ($this->departmentsForFormUnit() as $dept)
                                             <option value="{{ $dept->id }}">{{ $dept->name }}</option>
                                         @endforeach
                                     </select>
                                     @error('department_id') <small class="text-danger">{{ $message }}</small> @enderror
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label">Section</label>
+                                    <select wire:model="form_section_id" wire:change="onFormHierarchyChange('section')" class="form-control" @disabled(!$department_id)>
+                                        <option value="">{{ $department_id ? 'Select Section' : '—' }}</option>
+                                        @foreach ($this->sectionsForFormDepartment() as $section)
+                                            <option value="{{ $section->id }}">{{ $section->name }}</option>
+                                        @endforeach
+                                    </select>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label">Subsection</label>
+                                    <select wire:model="form_subsection_id" class="form-control" @disabled(!$form_section_id)>
+                                        <option value="">{{ $form_section_id ? 'Select Subsection' : '—' }}</option>
+                                        @foreach ($this->subsectionsForFormSection() as $sub)
+                                            <option value="{{ $sub->id }}">{{ $sub->name }}</option>
+                                        @endforeach
+                                    </select>
                                 </div>
                             @endif
 

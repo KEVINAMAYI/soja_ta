@@ -18,14 +18,24 @@ use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 class AttendanceMonthlyExcelExport implements FromView, ShouldAutoSize, WithTitle, WithStyles
 {
     protected array $selected;
-    protected array $department_ids;
+    protected $unitId;
+    protected $departmentId;
+    protected $sectionId;
+    protected $subsectionId;
+    protected bool $includeOutsourced;
     protected $startDate;
     protected $endDate;
 
-    public function __construct($selected = [], $department_ids = [], $startDate = null, $endDate = null)
-    {
+    public function __construct(
+        $selected = [], $unitId = null, $departmentId = null, $sectionId = null,
+        $subsectionId = null, $includeOutsourced = false, $startDate = null, $endDate = null
+    ) {
         $this->selected = $selected;
-        $this->department_ids = (array) $department_ids;
+        $this->unitId = $unitId;
+        $this->departmentId = $departmentId;
+        $this->sectionId = $sectionId;
+        $this->subsectionId = $subsectionId;
+        $this->includeOutsourced = (bool) $includeOutsourced;
         $this->startDate = $startDate;
         $this->endDate = $endDate;
     }
@@ -38,9 +48,22 @@ class AttendanceMonthlyExcelExport implements FromView, ShouldAutoSize, WithTitl
             ->join('employees', 'attendances.employee_id', '=', 'employees.id')
             ->where('employees.organization_id', $orgId);
 
-        // Filter by department (a single department, or every department in a derived group)
-        if (!empty($this->department_ids)) {
-            $query->whereIn('employees.department_id', $this->department_ids);
+        // Unit > Department > Section > Subsection filter. Outsourced employees have
+        // null unit/department/section/subsection by definition, so they're excluded
+        // unless includeOutsourced ORs them back in.
+        $hierarchyActive = $this->unitId || $this->departmentId || $this->sectionId || $this->subsectionId;
+        if ($hierarchyActive) {
+            $query->where(function ($q) {
+                $q->where(function ($h) {
+                    if ($this->unitId) $h->where('employees.unit_id', $this->unitId);
+                    if ($this->departmentId) $h->where('employees.department_id', $this->departmentId);
+                    if ($this->sectionId) $h->where('employees.section_id', $this->sectionId);
+                    if ($this->subsectionId) $h->where('employees.subsection_id', $this->subsectionId);
+                });
+                if ($this->includeOutsourced) {
+                    $q->orWhere('employees.employee_type', 'Outsourced');
+                }
+            });
         }
 
         // Date filtering

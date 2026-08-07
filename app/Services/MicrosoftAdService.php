@@ -85,18 +85,25 @@ class MicrosoftAdService
     }
 
     /**
-     * Parse section and division from onPremisesDistinguishedName
+     * Parse Unit / Department / Section / Subsection from onPremisesDistinguishedName.
      * DN example: CN=Name,OU=CSV,OU=Quality Assurance,OU=Quality,OU=COSMOS,DC=cosmos,DC=local
-     * OU order (left to right): section, department, division, company
+     * OUs appear innermost -> outermost; the outermost OU is always the company (e.g. COSMOS).
+     * Anchoring from that end inward keeps levels correct whether an employee's path is
+     * 4 OUs deep (no Subsection) or 5 OUs deep (full Unit>Department>Section>Subsection) —
+     * unlike the previous fixed-position-from-innermost approach, which silently mislabeled
+     * levels whenever depth changed.
      */
     public function parseDnOUs(string $dn): array
     {
         preg_match_all('/OU=([^,]+)/', $dn, $matches);
         $ous = $matches[1] ?? [];
+        $n = count($ous);
 
         return [
-            'section'  => $ous[0] ?? null, // e.g. CSV
-            'division' => $ous[2] ?? null, // e.g. Quality
+            'unit'       => $n >= 2 ? $ous[$n - 2] : null,
+            'department' => $n >= 3 ? $ous[$n - 3] : null, // diagnostic only — department_id still resolves from the flat AD `department` field, unchanged
+            'section'    => $n >= 4 ? $ous[$n - 4] : null,
+            'subsection' => $n >= 5 ? $ous[$n - 5] : null,
         ];
     }
 }
