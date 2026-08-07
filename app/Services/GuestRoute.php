@@ -25,7 +25,7 @@ class GuestRoute
      * @param string|null $receiverEmail
      * @return string
      */
-    public static function make(string $routeName, $leave_start_date, array $routeParams = [], array $query = [], ?string $receiverEmail = null): string
+    public static function make(string $routeName, string $leave_start_date, array $routeParams = [], array $query = [], ?string $receiverEmail = null): string
     {
         if ($receiverEmail !== null) {
             $query['receiver_email'] = $receiverEmail;
