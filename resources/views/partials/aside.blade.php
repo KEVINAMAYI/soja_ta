@@ -418,7 +418,7 @@
                                     @can('approve-checkin-requests')
                                         <li class="sidebar-item">
                                             <a class="sidebar-link d-flex align-items-center {{ request()->routeIs('checkin-requests.index') ? 'active' : '' }}"
-                                               href="{{ route('checkin-requests.index') }}">
+                                               href="{{ --route('checkin-requests.index') --}}">
                                                 <iconify-icon icon="mdi:clock-alert-outline"></iconify-icon>
                                                 <span class="hide-menu">Check-in Requests</span>
                                                 @if($pendingCheckinCount > 0)
