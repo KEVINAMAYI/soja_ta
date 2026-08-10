@@ -27,8 +27,6 @@ class GuestApproverLoginRedirectController extends Controller
 
         $targetUrl = GuestRoute::decryptRedirectToken($token);
 
-        Log::info('Decrypted target URL from redirect token', ['target_url' => $targetUrl]);
-
         if ($targetUrl === null) {
             return redirect()->route('login')
                 ->withErrors(['redirect_token' => 'Invalid or expired login link.']);
@@ -49,8 +47,7 @@ class GuestApproverLoginRedirectController extends Controller
                 ->withErrors(['redirect_token' => 'Invalid details provided.']);
         }
 
-        Log::info('Guest approver login redirect request received12345', ['request' => $parsedTargetUrl]);
-
+        
         // Consider link expired only when the leave start date is strictly
         // before today. If the start date is today the link remains valid
         // for the whole day.
