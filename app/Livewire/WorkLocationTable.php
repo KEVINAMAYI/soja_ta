@@ -24,6 +24,8 @@ class WorkLocationTable extends DataTableComponent
 
         $query = WorkLocation::query()->select('work_locations.*')
             ->with(['assignments'])
+            ->withCount('deviceLocations')
+            ->withCount('assignments')
             ->where('organization_id', $orgId);
 
         if ($this->search !== null && $this->search !== '') {
@@ -40,7 +42,7 @@ class WorkLocationTable extends DataTableComponent
         return [
 
             // 🏷️ Location Name
-            Column::make("Name", "name")
+            Column::make("Location", "name")
                 ->sortable()
                 ->format(function ($value) {
                     $formattedName = str_replace('_', ' ', $value);
@@ -49,28 +51,38 @@ class WorkLocationTable extends DataTableComponent
                 ->html(),
 
             // 🏷️ Type
-            Column::make("Type", "type")
+            Column::make("Checkpoints")
                 ->sortable()
-                ->format(fn($value) => "<span class='text-primary fw-semibold'>{$value}</span>")
-                ->html(),
+                ->label(fn($row) =>
+                        "<span class='fw-semibold'>{$row->device_locations_count}</span>"
+                    )
+                    ->html(),
 
-            // 🏠 Address
-            Column::make("Address", "address")
+            // 🏷️ Type
+            Column::make("Employees Assigned")
                 ->sortable()
-                ->format(fn($value) => "<span class='text-muted'>{$value}</span>")
-                ->html(),
+                ->label(fn($row) =>
+                        "<span class='fw-semibold'>{$row->assignments_count}</span>"
+                    )
+                    ->html(),
 
-            // 📏 Geofence Radius
-            Column::make("Geofence Radius(m)", "radius_m")
-                ->sortable()
-                ->format(fn($value) => "<span class='fw-semibold text-info'>{$value} m</span>")
-                ->html(),
+            // // 🏠 Address
+            // Column::make("Address", "address")
+            //     ->sortable()
+            //     ->format(fn($value) => "<span class='text-muted'>{$value}</span>")
+            //     ->html(),
 
-            // 📝 Description
-            Column::make("Description", "description")
-                ->sortable()
-                ->format(fn($value) => "<span class='text-muted'>{$value}</span>")
-                ->html(),
+            // // 📏 Geofence Radius
+            // Column::make("Geofence Radius(m)", "radius_m")
+            //     ->sortable()
+            //     ->format(fn($value) => "<span class='fw-semibold text-info'>{$value} m</span>")
+            //     ->html(),
+
+            // // 📝 Description
+            // Column::make("Description", "description")
+            //     ->sortable()
+            //     ->format(fn($value) => "<span class='text-muted'>{$value}</span>")
+            //     ->html(),
 
             // ✅ Active Status
             BooleanColumn::make('Active')
