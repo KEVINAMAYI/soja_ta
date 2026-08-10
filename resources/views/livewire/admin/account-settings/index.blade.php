@@ -269,22 +269,6 @@ new class extends Component {
                     </button>
                 </li>
 
-                <!-- Roles & Permissions -->
-                <li class="nav-item" role="presentation">
-                    <button
-                        class="nav-link position-relative rounded-0 {{ $activeTab === 'roles' ? 'active' : '' }} d-flex align-items-center justify-content-center bg-transparent fs-3 py-3"
-                        id="tab-roles-permissions-tab"
-                        data-bs-toggle="pill"
-                        data-bs-target="#tab-roles-permissions"
-                        type="button"
-                        role="tab"
-                        aria-controls="tab-roles-permissions"
-                        aria-selected="false">
-                        <i class="ti ti-shield mx-1 fs-6"></i>
-                        <span class="d-none d-md-block">Access & Security</span>
-                    </button>
-                </li>
-
 
                 <li class="nav-item" role="presentation">
                     <button
@@ -297,9 +281,10 @@ new class extends Component {
                         aria-controls="tab-location-assignment"
                         aria-selected="false">
                         <i class="ti ti-map-pin mx-1 fs-6"></i>
-                        <span class="d-none d-md-block">Locations & Assignments</span>
+                        <span class="d-none d-md-block">Locations & Checkpoints</span>
                     </button>
                 </li>
+
 
                 <!-- User -->
                 <li class="nav-item" role="presentation">
@@ -317,6 +302,39 @@ new class extends Component {
                             {{ auth()->user()->employee?->organization?->is_student_record ? 'Users' :
                             'Employees & Departments' }}
                         </span>
+                    </button>
+                </li>
+
+
+                <li class="nav-item" role="presentation">
+                    <button
+                        class="nav-link position-relative rounded-0 {{ $activeTab === 'devices' ? 'active' : '' }} d-flex align-items-center justify-content-center bg-transparent fs-3 py-3"
+                        id="tab-location-assignment-tab"
+                        data-bs-toggle="pill"
+                        data-bs-target="#tab-devices"
+                        type="button"
+                        role="tab"
+                        aria-controls="tab-location-assignment"
+                        aria-selected="false">
+                        <i class="ti ti-phone mx-1 fs-6"></i>
+                        <span class="d-none d-md-block">Devices</span>
+                    </button>
+                </li>
+
+
+                <!-- Roles & Permissions -->
+                <li class="nav-item" role="presentation">
+                    <button
+                        class="nav-link position-relative rounded-0 {{ $activeTab === 'roles' ? 'active' : '' }} d-flex align-items-center justify-content-center bg-transparent fs-3 py-3"
+                        id="tab-roles-permissions-tab"
+                        data-bs-toggle="pill"
+                        data-bs-target="#tab-roles-permissions"
+                        type="button"
+                        role="tab"
+                        aria-controls="tab-roles-permissions"
+                        aria-selected="false">
+                        <i class="ti ti-shield mx-1 fs-6"></i>
+                        <span class="d-none d-md-block">Access & Security</span>
                     </button>
                 </li>
 
