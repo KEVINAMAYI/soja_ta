@@ -1344,6 +1344,26 @@ new class extends Component {
                             $leave = $viewingRecord;
                             $canAct = $leave->activeApprovalLog && app(\App\Services\LeaveApprovalService::class)->canAct($leave, auth()->user());
                             $sortedLogs = $leave->approvalLogs->sortBy('level_number');
+                            $activeApprovalLog = $leave->activeApprovalLog;
+                            $alreadyApprovedByCurrentUser = false;
+
+                            if ($activeApprovalLog) {
+                                if ($activeApprovalLog->approver_type === 'user') {
+                                    $levelSettings = \App\Services\LeaveApprovalSettings::get($leave->organization_id, $leave->department_id);
+                                    $levelConfig = $levelSettings['levels'][$activeApprovalLog->level_number - 1] ?? null;
+                                    $isAllApproveRule = ($levelConfig['approver_rule'] ?? 'anyone_approve') === 'all_approve';
+
+                                    if ($isAllApproveRule) {
+                                        $alreadyApprovedByCurrentUser = $activeApprovalLog->levelApprovers->contains(function ($levelApprover) {
+                                            return (int) $levelApprover->level_approver_id === auth()->id();
+                                        });
+                                    } else {
+                                        $alreadyApprovedByCurrentUser = (int) ($activeApprovalLog->actioned_by ?? 0) === auth()->id();
+                                    }
+                                } else {
+                                    $alreadyApprovedByCurrentUser = (int) ($activeApprovalLog->actioned_by ?? 0) === auth()->id();
+                                }
+                            }
                         @endphp
 
                         <div class="modal-header border-0 pb-0">
@@ -1545,7 +1565,9 @@ new class extends Component {
                         @if($canAct)
                             <div class="modal-footer">
                                 <button class="btn-ld-reject" wire:click="rejectFromDetails">Reject</button>
-                                <button class="btn-ld-approve" wire:click="approveFromDetails">Approve</button>
+                                <button class="btn-ld-approve" wire:click="approveFromDetails" {{ $alreadyApprovedByCurrentUser ? 'disabled' : '' }}>
+                                    {{ $alreadyApprovedByCurrentUser ? 'Approved' : 'Approve' }}
+                                </button>
                             </div>
                         @endif
                     @endif
