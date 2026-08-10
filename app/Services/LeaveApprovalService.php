@@ -10,6 +10,9 @@ use App\Models\LeaveType;
 use App\Models\LevelApprover;
 use App\Models\User;
 use App\Notifications\LeaveApprovalRequiredNotification;
+use App\Notifications\LeaveApprovedNotification;
+use App\Notifications\LeaveRejectedNotification;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Notification;
 
@@ -118,6 +121,7 @@ class LeaveApprovalService
             LevelApprover::firstOrCreate([
                 'leave_approval_log_id' => $activeLog->id,
                 'level_approver_id' => $actor->id,
+                'action' => 'approved',
             ]);
 
             if(LevelApprover::getActionedApproversCountForLog($activeLog->id) < count($activeLog->approver_user_ids)) {
@@ -134,6 +138,8 @@ class LeaveApprovalService
 
         $this->advanceOrFinalize($leave, $activeLog->level_number, $settings, $notes);
 
+        // TODO(SIR-DOMMY): Send mails to those who are to be CCed at this level
+
         return $leave->fresh();
     }
 
@@ -149,19 +155,57 @@ class LeaveApprovalService
             throw new \RuntimeException('No pending approval level found for this leave.');
         }
 
-        $this->authorizeActor($actor, $activeLog);
+        try {
+            DB::beginTransaction();
 
-        $activeLog->update([
-            'status' => 'rejected',
-            'closed_at' => now(),
-            'actioned_by' => $actor->id,
-            'notes' => $notes,
-        ]);
+            $this->authorizeActor($actor, $activeLog);
 
-        $leave->status = 'rejected';
-        $leave->save();
+            $activeLog->update([
+                'status' => 'rejected',
+                'closed_at' => now(),
+                'actioned_by' => $actor->id,
+                'notes' => $notes,
+            ]);
 
-        return $leave->fresh();
+            $leave->status = 'rejected';
+            $leave->save();
+
+            // now save these details to list of approvers if rule applies
+            if ($activeLog->approver_type === 'user') {
+                $existingApprover = LevelApprover::where('leave_approval_log_id', $activeLog->id)
+                    ->where('level_approver_id', $actor->id)
+                    ->first();
+                
+                if(!$existingApprover) {
+                    LevelApprover::create([
+                        'leave_approval_log_id' => $activeLog->id,
+                        'level_approver_id' => $actor->id,
+                        'action' => 'rejected',
+                    ]);
+                } else {
+                    $existingApprover->update([
+                        'action' => 'rejected',
+                    ]);
+                }
+            }
+
+            // send rejection email to applicant
+            $this->sendRejectionNotification($leave);           
+
+            // commit db changes
+            DB::commit();
+
+            return $leave->fresh();
+
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            Log::error('Error while rejecting leave approval', [
+                'leave_id' => $leave->id,
+                'actor_id' => $actor->id,
+                'error' => $e->getMessage(),
+            ]);
+            throw $e;
+        }
     }
 
     private function authorizeActor(User $actor, LeaveApprovalLog $log): void
@@ -238,6 +282,54 @@ class LeaveApprovalService
         $leave->save();
 
         $this->incrementBalance($leave);
+
+        $this->sendApprovedNotification($leave);
+    }
+
+    private function sendApprovedNotification(Leave $leave): void
+    {
+        $leave->loadMissing(['employee.organization', 'leaveType']);
+
+        $employee = $leave->employee;
+        if (!$employee) {
+            return;
+        }
+
+        $email = $employee->email ?? $employee->user?->email;
+        if (empty($email)) {
+            Log::warning('No email found for leave applicant', [
+                'leave_id' => $leave->id,
+                'employee_id' => $employee->id,
+            ]);
+
+            return;
+        }
+
+        Notification::route('mail', $email)
+            ->notify(new LeaveApprovedNotification($leave));
+    }
+
+    private function sendRejectionNotification(Leave $leave): void
+    {
+        $leave->loadMissing(['employee.organization', 'leaveType']);
+
+        $employee = $leave->employee;
+        if (!$employee) {
+            return;
+        }
+
+        $email = $employee->email ?? $employee->user?->email;
+        if (empty($email)) {
+            Log::warning('No email found for leave applicant while rejecting', [
+                'leave_id' => $leave->id,
+                'employee_id' => $employee->id,
+            ]);
+
+            return;
+        }
+
+        Notification::route('mail', $email)
+            ->notify(new LeaveRejectedNotification($leave));
     }
 
     private function incrementBalance(Leave $leave): void
