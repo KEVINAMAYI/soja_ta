@@ -42,7 +42,7 @@
                             color: #111827;
                             padding-bottom: 24px;
                         ">
-                            Your leave request ahs been reviewed and, unfortunately, was not approved at tis time.
+                            Your leave request has been reviewed and, unfortunately, was not approved at tis time.
                         </td>
                     </tr>
 
