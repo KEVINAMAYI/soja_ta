@@ -71,8 +71,8 @@ class DevicesTable extends DataTableComponent
 
             Column::make("Status", "active")
                 ->format(fn($value) => $value
-                    ? '<span class="badge bg-success">Active</span>'
-                    : '<span class="badge bg-danger">Inactive</span>'
+                    ? '<span class="badge bg-success">Online</span>'
+                    : '<span class="badge bg-danger">Offline</span>'
                 )
                 ->html(),
 
