@@ -47,6 +47,14 @@ class GuestApproverLoginRedirectController extends Controller
                 ->withErrors(['redirect_token' => 'Invalid details provided.']);
         }
 
+        // strip the receiver_email query parameter from the target URL to avoid exposing it in the URL after redirection
+        $targetUrl = preg_replace('/([?&])receiver_email=[^&]*/', '', $targetUrl);
+        $targetUrl = str_replace(['?&', '&&'], ['?', '&'], $targetUrl);
+        $targetUrl = rtrim($targetUrl, '&');
+        if (str_ends_with($targetUrl, '?')) {
+            $targetUrl = rtrim($targetUrl, '?');
+        }
+
         
         // Consider link expired only when the leave start date is strictly
         // before today. If the start date is today the link remains valid
@@ -67,6 +75,7 @@ class GuestApproverLoginRedirectController extends Controller
         }
 
         $user = User::where('email', $receiverEmail)->first();
+
 
         if (!$user || !$user->employee) {
             Log::info('Guest approver login redirect request received - user not found or has no employee record', ['receiver_email' => $receiverEmail]);
