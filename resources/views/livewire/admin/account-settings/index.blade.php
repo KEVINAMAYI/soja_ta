@@ -314,14 +314,14 @@ new class extends Component {
                 <li class="nav-item" role="presentation">
                     <button
                         class="nav-link position-relative rounded-0 {{ $activeTab === 'devices' ? 'active' : '' }} d-flex align-items-center justify-content-center bg-transparent fs-3 py-3"
-                        id="tab-location-assignment-tab"
+                        id="tab-devices-tab"
                         data-bs-toggle="pill"
                         data-bs-target="#tab-devices"
                         type="button"
                         role="tab"
-                        aria-controls="tab-location-assignment"
+                        aria-controls="tab-devices"
                         aria-selected="false">
-                        <i class="ti ti-phone mx-1 fs-6"></i>
+                        <i class="ti ti-device-mobile fs-5"></i>
                         <span class="d-none d-md-block">Devices</span>
                     </button>
                 </li>
@@ -369,7 +369,7 @@ new class extends Component {
                     <div class="tab-pane fade {{ $activeTab === 'devices' ? 'show active' : '' }}"
                          id="tab-devices">
 
-                        <livewire:admin.location-assignment.index/>
+                        <livewire:admin.devices.index/>
 
                     </div>
 
@@ -506,6 +506,9 @@ new class extends Component {
                             break;
                         case 'tab-location-assignment-tab':
                             mappedTab = 'location-assignment';
+                            break;
+                        case 'tab-devices-tab':
+                            mappedTab = 'devices';
                             break;
                         default:
                             mappedTab = 'company';
