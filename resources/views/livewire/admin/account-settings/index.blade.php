@@ -59,7 +59,12 @@ new class extends Component {
                 break;
 
             case 'location-assignment':
-                $this->tabTitle = 'Locations & Assignments';
+                $this->tabTitle = 'Locations & Checkpoints';
+                $this->tabIcon = '<iconify-icon icon="mdi:map-marker-outline" class="fs-5"></iconify-icon>';
+                break;
+
+            case 'devices':
+                $this->tabTitle = 'Devices';
                 $this->tabIcon = '<iconify-icon icon="mdi:map-marker-outline" class="fs-5"></iconify-icon>';
                 break;
 
@@ -355,6 +360,14 @@ new class extends Component {
                     <!-- Locations and Assignments Tab -->
                     <div class="tab-pane fade {{ $activeTab === 'location-assignment' ? 'show active' : '' }}"
                          id="tab-location-assignment">
+
+                        <livewire:admin.location-assignment.index/>
+
+                    </div>
+
+                    <!-- Devices Tab -->
+                    <div class="tab-pane fade {{ $activeTab === 'devices' ? 'show active' : '' }}"
+                         id="tab-devices">
 
                         <livewire:admin.location-assignment.index/>
 
