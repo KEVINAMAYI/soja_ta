@@ -266,7 +266,7 @@ new class extends Component {
             <div class="card card-body">
                 <div class="row">
                     <div class="d-flex flex-wrap justify-content-between align-items-center mb-4">
-                        <div></div>
+                        <div> Sites where clock-in point and check-in-points are configured</div>
                         <a href="javascript:void(0)" class="btn btn-primary" data-bs-toggle="modal"
                            data-bs-target="#worklocationModal">
                             <i class="ti ti-map-pin"></i> Add Work Location
