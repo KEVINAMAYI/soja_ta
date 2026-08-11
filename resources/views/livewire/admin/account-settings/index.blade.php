@@ -12,6 +12,7 @@ new class extends Component {
 
     public $organizationId;
     public $org;
+    public $editId;
     public string $activeTab = 'company';
     public string $tabTitle;
     public string $tabIcon;
