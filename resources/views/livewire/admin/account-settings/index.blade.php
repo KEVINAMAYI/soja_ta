@@ -4,6 +4,7 @@ use App\Models\Department;
 use App\Models\Organization;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Jantinnerezo\LivewireAlert\Facades\LivewireAlert;
 use Livewire\Attributes\On;
 use Livewire\Volt\Component;
@@ -12,7 +13,10 @@ new class extends Component {
 
     public $organizationId;
     public $org;
+    public $name;
     public $editId;
+    public $description;
+    public $manager_id;
     public string $activeTab = 'company';
     public string $tabTitle;
     public string $tabIcon;
