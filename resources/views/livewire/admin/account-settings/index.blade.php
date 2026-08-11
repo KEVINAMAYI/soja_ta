@@ -74,6 +74,15 @@ new class extends Component {
             ->show();
     }
 
+    // department creation validation rules
+    public function rules()
+    {
+        return [
+            'name' => 'required|string|max:255|unique:departments,name,' . $this->editId,
+            'description' => 'nullable|string|max:1000',
+            'manager_id' => 'nullable|exists:users,id',
+        ];
+    }
 
     public function createDepartment()
     {
