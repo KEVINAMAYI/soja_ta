@@ -1,6 +1,9 @@
 <?php
 
+use App\Models\Department;
 use App\Models\Organization;
+use App\Models\User;
+use Illuminate\Support\Facades\DB;
 use Jantinnerezo\LivewireAlert\Facades\LivewireAlert;
 use Livewire\Attributes\On;
 use Livewire\Volt\Component;
@@ -72,6 +75,58 @@ new class extends Component {
     }
 
 
+    public function createDepartment()
+    {
+        $this->validate();
+
+        try {
+
+            DB::beginTransaction();
+
+            $org = auth()->user()->employee->organization;
+
+            Department::create([
+                'name' => $this->name,
+                'description' => $this->description,
+                'manager_id' => $this->manager_id,
+                'organization_id' => $org->id
+            ]);
+
+
+            if ($this->manager_id) {
+                $manager = User::find($this->manager_id);
+                if ($manager && !$manager->hasRole('department-manager')) {
+                    $manager->assignRole('department-manager');
+                }
+            }
+
+
+            DB::commit();
+
+            $this->dispatch('hide-department-modal');
+
+            LivewireAlert::title('Awesome!')
+                ->text('Department added successfully.')
+                ->success()
+                ->toast()
+                ->position('top-end')
+                ->show();
+
+            $this->resetForm();
+            $this->dispatch('refreshDatatable');
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            report($e);
+
+            LivewireAlert::title('Error!')
+                ->text('Failed to add department.')
+                ->error()
+                ->toast()
+                ->position('top-end')
+                ->show();
+        }
+    }
 
     public function saveEmployeePhotoSetting($value)
     {
