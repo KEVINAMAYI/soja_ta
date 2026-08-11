@@ -940,7 +940,7 @@ new class extends Component {
                     aria-controls="tab-attendance"
                     aria-selected="{{ $activeParentTab === 'attendance' ? 'true' : 'false' }}">
                     <i class="ti ti-clock me-2 fs-6"></i>
-                    <span class="d-none d-md-block">Attendance</span>
+                    <span class="d-none d-md-block">Attendance Settings</span>
                 </button>
             </li>
 
@@ -955,7 +955,7 @@ new class extends Component {
                     aria-controls="tab-leaves"
                     aria-selected="{{ $activeParentTab === 'leaves' ? 'true' : 'false' }}">
                     <i class="ti ti-calendar-check me-2 fs-6"></i>
-                    <span class="d-none d-md-block">Leave</span>
+                    <span class="d-none d-md-block">Leave Settings</span>
                 </button>
             </li>
 
@@ -976,7 +976,7 @@ new class extends Component {
         </ul>
 
         @if($activeParentTab === 'attendance')
-            <ul class="nav nav-pills user-profile-tab" id="pills-tab" role="tablist">
+            <ul class="nav nav-pills user-profile-tab" id="pills-tab" role="tablist" style="background-color: #F3F4F6;">
 
 
                 <li class="nav-item" role="presentation">
@@ -1010,7 +1010,7 @@ new class extends Component {
         @endif
 
         @if($activeParentTab === 'leaves')
-            <ul class="nav nav-pills user-profile-tab" id="pills-tab" role="tablist">
+            <ul class="nav nav-pills user-profile-tab" id="pills-tab" role="tablist" style="background-color: #F3F4F6;">
 
                 <li class="nav-item" role="presentation">
                     <button
@@ -1045,7 +1045,7 @@ new class extends Component {
 
 
         <div class="card-body">
-            <div class="tab-content" id="pills-tabContent">
+            <div class="tab-content " id="pills-tabContent">
 
                 {{-- Shift Management Tab --}}
                 <div class="tab-pane fade {{ $activeTab === 'shift_management' ? 'show active' : '' }}"
@@ -1615,13 +1615,13 @@ new class extends Component {
                                                             <label class="form-label small text-uppercase text-muted fw-semibold">Approver Type</label>
                                                             <div class="btn-group btn-group-sm w-100" role="group">
                                                                 <button type="button"
-                                                                        class="btn {{ $level['approver_type'] === 'role' ? 'btn-danger' : 'btn-outline-danger' }}"
+                                                                        class="btn {{ $level['approver_type'] === 'role' ? 'btn-primary' : 'btn-outline-primary' }}"
                                                                         wire:click="$set('leaveApproval.levels.{{ $i }}.approver_type', 'role')"
                                                                     {{ $level['enabled'] ? '' : 'disabled' }}>
                                                                     Role
                                                                 </button>
                                                                 <button type="button"
-                                                                        class="btn {{ $level['approver_type'] === 'user' ? 'btn-danger' : 'btn-outline-danger' }}"
+                                                                        class="btn {{ $level['approver_type'] === 'user' ? 'btn-primary' : 'btn-outline-primary' }}"
                                                                         wire:click="$set('leaveApproval.levels.{{ $i }}.approver_type', 'user')"
                                                                     {{ $level['enabled'] ? '' : 'disabled' }}>
                                                                     Specific user
@@ -1699,7 +1699,7 @@ new class extends Component {
                                                                 @endif
 
                                                                 @if($selectedUsers->count() >= 2)
-                                                                    <div class="d-flex flex-wrap gap-2 align-items-center mb-2 rounded-3 p-2" style="border:1px solid #cbd1d6; box-shadow: 0 6px 18px #D9B84A; background-color: #FAF7F0; color: #D9B84A;">
+                                                                    <div class="align-items-center mb-2 rounded-3 p-2" style="border:1px solid #cbd1d6; box-shadow: 0 6px 18px #D9B84A; background-color: #FAF7F0; color: #D9B84A;">
 
                                                                         <div class="mb-1">
                                                                             <label class="form-label small text-uppercase text-muted fw-semibold" style="color: #D9B84A;">Approver Rule</label>
@@ -1723,7 +1723,11 @@ new class extends Component {
 
                                                                         @if($level['approver_rule'] === 'all_approve')
                                                                             <div class="small p-1" style="color: #D9B84A;">
-                                                                                Every selected approver must act before this level clears.
+                                                                                Every one of the {{ count($level['approver_user_ids'])}} approvers must act before this level clears.
+                                                                            </div>
+                                                                        @else
+                                                                            <div class="small p-1" style="color: #D9B84A;">
+                                                                                Level clears as soon as one of the {{ count($level['approver_user_ids'])}} approvers acts.
                                                                             </div>
                                                                         @endif
 
