@@ -16,6 +16,7 @@ use Livewire\Volt\Component;
 new class extends Component {
 
     public $settings;
+    public $activeParentTab = 'attendance'; // default
     public string $activeTab = 'shift_management'; // default
     public string $tabTitle = '';
     public string $tabIcon = '';
@@ -103,7 +104,40 @@ new class extends Component {
     #[On('systemSettingsTabChanged')]
     public function systemSettingsTabChanged($tabId)
     {
+        $this->setActiveTab($tabId);
+    }
+
+    public function setActiveParentTab(string $parentTab): void
+    {
+        if (!in_array($parentTab, ['attendance', 'leaves', 'help_support'], true)) {
+            return;
+        }
+
+        $this->activeParentTab = $parentTab;
+
+        if ($parentTab === 'attendance') {
+            $this->activeTab = 'shift_management';
+        } elseif ($parentTab === 'leaves') {
+            $this->activeTab = 'leave_approval';
+        } else {
+            $this->activeTab = 'help_support';
+        }
+
+        $this->changeSystemSettingsBreadcrumb();
+    }
+
+    public function setActiveTab(string $tabId): void
+    {
         $this->activeTab = $tabId;
+
+        if (in_array($tabId, ['shift_management', 'checkin_approval'], true)) {
+            $this->activeParentTab = 'attendance';
+        } elseif (in_array($tabId, ['leave_approval', 'leave_types'], true)) {
+            $this->activeParentTab = 'leaves';
+        } elseif ($tabId === 'help_support') {
+            $this->activeParentTab = 'help_support';
+        }
+
         $this->changeSystemSettingsBreadcrumb();
     }
 
@@ -893,85 +927,122 @@ new class extends Component {
     />
 
     <div class="card">
-        <ul class="nav nav-pills user-profile-tab" id="pills-tab" role="tablist">
+        <ul class="nav nav-pills user-profile-tab" id="parent-pills-tab" role="tablist">
 
 
             <li class="nav-item" role="presentation">
                 <button
-                    class="nav-link position-relative rounded-0 {{ $activeTab === 'shift_management' ? 'active' : '' }} d-flex align-items-center justify-content-center bg-transparent fs-3 py-3"
-                    id="tab-shift-management-tab"
-                    data-bs-toggle="pill"
-                    data-bs-target="#tab-shift-management"
+                    class="nav-link position-relative rounded-0 {{ $activeParentTab === 'attendance' ? 'active' : '' }} d-flex align-items-center justify-content-center bg-transparent fs-3 py-3"
+                    id="tab-attendance-tab"
                     type="button"
+                    wire:click="setActiveParentTab('attendance')"
                     role="tab"
-                    aria-controls="tab-shift-management"
-                    aria-selected="false">
-                    <i class="ti ti-calendar-time me-2 fs-6"></i>
-                    <span class="d-none d-md-block">{{ auth()->user()->employee?->organization?->is_student_record ? 'Session' : 'Shift' }} Management</span>
+                    aria-controls="tab-attendance"
+                    aria-selected="{{ $activeParentTab === 'attendance' ? 'true' : 'false' }}">
+                    <i class="ti ti-clock me-2 fs-6"></i>
+                    <span class="d-none d-md-block">Attendance</span>
                 </button>
             </li>
 
-            <li class="nav-item" role="presentation">
-                <button
-                    class="nav-link position-relative rounded-0 {{ $activeTab === 'checkin_approval' ? 'active' : '' }} d-flex align-items-center justify-content-center bg-transparent fs-3 py-3"
-                    id="tab-checkin-approval-tab"
-                    data-bs-toggle="pill"
-                    data-bs-target="#tab-checkin-approval"
-                    type="button"
-                    role="tab"
-                    aria-controls="tab-checkin-approval"
-                    aria-selected="false">
-                    <i class="ti ti-shield-check me-2 fs-6"></i>
-                    <span class="d-none d-md-block">Check-in Approval</span>
-                </button>
-            </li>
 
             <li class="nav-item" role="presentation">
                 <button
-                    class="nav-link position-relative rounded-0 {{ $activeTab === 'leave_approval' ? 'active' : '' }} d-flex align-items-center justify-content-center bg-transparent fs-3 py-3"
-                    id="tab-leave-approval-tab"
-                    data-bs-toggle="pill"
-                    data-bs-target="#tab-leave-approval"
+                    class="nav-link position-relative rounded-0 {{ $activeParentTab === 'leaves' ? 'active' : '' }} d-flex align-items-center justify-content-center bg-transparent fs-3 py-3"
+                    id="tab-leaves-tab"
                     type="button"
+                    wire:click="setActiveParentTab('leaves')"
                     role="tab"
-                    aria-controls="tab-leave-approval"
-                    aria-selected="false">
+                    aria-controls="tab-leaves"
+                    aria-selected="{{ $activeParentTab === 'leaves' ? 'true' : 'false' }}">
                     <i class="ti ti-calendar-check me-2 fs-6"></i>
-                    <span class="d-none d-md-block">Leave Approval</span>
+                    <span class="d-none d-md-block">Leave</span>
                 </button>
             </li>
 
             <li class="nav-item" role="presentation">
                 <button
-                    class="nav-link position-relative rounded-0 {{ $activeTab === 'leave_types' ? 'active' : '' }} d-flex align-items-center justify-content-center bg-transparent fs-3 py-3"
-                    id="tab-leave-types-tab"
-                    data-bs-toggle="pill"
-                    data-bs-target="#tab-leave-types"
-                    type="button"
-                    role="tab"
-                    aria-controls="tab-leave-types"
-                    aria-selected="false">
-                    <i class="ti ti-calendar-cog me-2 fs-6"></i>
-                    <span class="d-none d-md-block">Leave Types</span>
-                </button>
-            </li>
-
-            <li class="nav-item" role="presentation">
-                <button
-                    class="nav-link position-relative rounded-0 {{ $activeTab === 'help_support' ? 'active' : '' }} d-flex align-items-center justify-content-center bg-transparent fs-3 py-3"
+                    class="nav-link position-relative rounded-0 {{ $activeParentTab === 'help_support' ? 'active' : '' }} d-flex align-items-center justify-content-center bg-transparent fs-3 py-3"
                     id="tab-help-support-tab"
-                    data-bs-toggle="pill"
-                    data-bs-target="#tab-help-support"
                     type="button"
+                    wire:click="setActiveParentTab('help_support')"
                     role="tab"
                     aria-controls="tab-help-support"
-                    aria-selected="false">
+                    aria-selected="{{ $activeParentTab === 'help_support' ? 'true' : 'false' }}">
                     <i class="ti ti-help-circle me-2 fs-6"></i>
                     <span class="d-none d-md-block">Help & Support</span>
                 </button>
             </li>
 
         </ul>
+
+        @if($activeParentTab === 'attendance')
+            <ul class="nav nav-pills user-profile-tab" id="pills-tab" role="tablist">
+
+
+                <li class="nav-item" role="presentation">
+                    <button
+                        class="nav-link position-relative rounded-0 {{ $activeTab === 'shift_management' ? 'active' : '' }} d-flex align-items-center justify-content-center bg-transparent fs-3 py-3"
+                        id="tab-shift-management-tab"
+                        type="button"
+                        wire:click="setActiveTab('shift_management')"
+                        role="tab"
+                        aria-controls="tab-shift-management"
+                        aria-selected="{{ $activeTab === 'shift_management' ? 'true' : 'false' }}">
+                        <i class="ti ti-calendar-time me-2 fs-6"></i>
+                        <span class="d-none d-md-block">{{ auth()->user()->employee?->organization?->is_student_record ? 'Session' : 'Shift' }} Management</span>
+                    </button>
+                </li>
+
+                <li class="nav-item" role="presentation">
+                    <button
+                        class="nav-link position-relative rounded-0 {{ $activeTab === 'checkin_approval' ? 'active' : '' }} d-flex align-items-center justify-content-center bg-transparent fs-3 py-3"
+                        id="tab-checkin-approval-tab"
+                        type="button"
+                        wire:click="setActiveTab('checkin_approval')"
+                        role="tab"
+                        aria-controls="tab-checkin-approval"
+                        aria-selected="{{ $activeTab === 'checkin_approval' ? 'true' : 'false' }}">
+                        <i class="ti ti-shield-check me-2 fs-6"></i>
+                        <span class="d-none d-md-block">Check-in Approval</span>
+                    </button>
+                </li>
+            </ul>
+        @endif
+
+        @if($activeParentTab === 'leaves')
+            <ul class="nav nav-pills user-profile-tab" id="pills-tab" role="tablist">
+
+                <li class="nav-item" role="presentation">
+                    <button
+                        class="nav-link position-relative rounded-0 {{ $activeTab === 'leave_approval' ? 'active' : '' }} d-flex align-items-center justify-content-center bg-transparent fs-3 py-3"
+                        id="tab-leave-approval-tab"
+                        type="button"
+                        wire:click="setActiveTab('leave_approval')"
+                        role="tab"
+                        aria-controls="tab-leave-approval"
+                        aria-selected="{{ $activeTab === 'leave_approval' ? 'true' : 'false' }}">
+                        <i class="ti ti-calendar-check me-2 fs-6"></i>
+                        <span class="d-none d-md-block">Leave Approval</span>
+                    </button>
+                </li>
+
+                <li class="nav-item" role="presentation">
+                    <button
+                        class="nav-link position-relative rounded-0 {{ $activeTab === 'leave_types' ? 'active' : '' }} d-flex align-items-center justify-content-center bg-transparent fs-3 py-3"
+                        id="tab-leave-types-tab"
+                        type="button"
+                        wire:click="setActiveTab('leave_types')"
+                        role="tab"
+                        aria-controls="tab-leave-types"
+                        aria-selected="{{ $activeTab === 'leave_types' ? 'true' : 'false' }}">
+                        <i class="ti ti-calendar-cog me-2 fs-6"></i>
+                        <span class="d-none d-md-block">Leave Types</span>
+                    </button>
+                </li>
+
+            </ul>
+        @endif
+
 
         <div class="card-body">
             <div class="tab-content" id="pills-tabContent">
@@ -1982,42 +2053,6 @@ new class extends Component {
 
 @push('scripts')
     <script>
-        document.addEventListener('DOMContentLoaded', function () {
-            const tabs = document.querySelectorAll('#pills-tab button[data-bs-toggle="pill"]');
-
-            tabs.forEach(tab => {
-                tab.addEventListener('shown.bs.tab', function (event) {
-                    const tabId = event.target.id;
-
-                    let mappedTab;
-                    switch (tabId) {
-                        case 'tab-qr-code-tab':
-                            mappedTab = 'qr_code';
-                            break;
-                        case 'tab-shift-management-tab':
-                            mappedTab = 'shift_management';
-                            break;
-                        case 'tab-checkin-approval-tab':
-                            mappedTab = 'checkin_approval';
-                            break;
-                        case 'tab-leave-approval-tab':
-                            mappedTab = 'leave_approval';
-                            break;
-                        case 'tab-leave-types-tab':
-                            mappedTab = 'leave_types';
-                            break;
-                        case 'tab-help-support-tab':
-                            mappedTab = 'help_support';
-                            break;
-                        default:
-                            mappedTab = 'qr_code';
-                    }
-
-                    Livewire.dispatch('systemSettingsTabChanged', {tabId: mappedTab});
-                });
-            });
-        });
-
         window.addEventListener('show-leave-type-modal', () => {
             new bootstrap.Modal(document.getElementById('leaveTypeModal')).show();
         });
