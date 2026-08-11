@@ -1565,7 +1565,6 @@ new class extends Component {
                                                         if (!$enabled_check) {
                                                             $this->dispatch('uncheck-leave-level', index: $i);
                                                         }
-                                                        Log::info("ENABLED CHECK SAA HII NI: " . json_encode($enabled_check));
                                                     @endphp
                                                     <div wire:key="leave-approval-level-nav-{{ $i }}"
                                                          class="leave-level-item {{ $isActive ? 'active' : '' }} {{ $isLockedByParent ? 'locked' : '' }}"
