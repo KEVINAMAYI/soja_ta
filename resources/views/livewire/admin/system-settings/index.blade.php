@@ -8,6 +8,7 @@ use App\Models\User;
 use App\Services\CheckInApprovalSettings;
 use App\Services\LeaveApprovalSettings;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Jantinnerezo\LivewireAlert\Facades\LivewireAlert;
 use Livewire\Attributes\On;
 use Livewire\Volt\Component;
@@ -15,7 +16,7 @@ use Livewire\Volt\Component;
 new class extends Component {
 
     public $settings;
-    public string $activeTab = 'qr_code'; // default
+    public string $activeTab = 'shift_management'; // default
     public string $tabTitle = '';
     public string $tabIcon = '';
     public array $breadcrumbItems = [];
@@ -37,6 +38,7 @@ new class extends Component {
     public array $leaveApprovalUserSearch = [];
     public array $leaveApprovalEmailDropdownOpen = [];
     public array $leaveApprovalEmailSearch = [];
+    public int $activeLeaveApprovalLevel = 0;
 
     // ── Leave Types tab state ─────────────────────────────────────────────
     public $ltName;
@@ -75,6 +77,7 @@ new class extends Component {
         // ── Load leave approval settings ──
         $this->leaveApproval = LeaveApprovalSettings::get($orgId);
         $this->normalizeLeaveApprovalUserIds();
+        $this->applyLeaveApprovalLevelRules();
         $this->leaveApprovalOverriddenDepartmentIds = LeaveApprovalSettings::departmentIdsWithOverride($orgId);
 
         $this->availableDepartments = Department::where('organization_id', $orgId)
@@ -242,6 +245,12 @@ new class extends Component {
         if (preg_match('/^levels\.(\d+)\.enabled$/', $key, $matches)) {
             $levelIndex = (int) $matches[1];
 
+            if ($levelIndex === 0) {
+                $this->leaveApproval['levels'][0]['enabled'] = true;
+            }
+
+            $this->applyLeaveApprovalLevelRules();
+
             if (!$value) {
                 // Keep the notify_email setting independent, but close the email picker
                 // when the level itself is disabled.
@@ -286,10 +295,12 @@ new class extends Component {
 
     public function addLeaveApprovalUser(int $levelIndex, int $userId): void
     {
+
         if (!isset($this->leaveApproval['levels'][$levelIndex]['approver_user_ids'])) {
             $this->leaveApproval['levels'][$levelIndex]['approver_user_ids'] = [];
         }
 
+        // commented out to accommodate the new approver_user_ids array structure only when approver_type is 'user'
         if (!in_array($userId, $this->leaveApproval['levels'][$levelIndex]['approver_user_ids'], true)) {
             $this->leaveApproval['levels'][$levelIndex]['approver_user_ids'][] = $userId;
         }
@@ -369,9 +380,9 @@ new class extends Component {
                 $ids = $level['approver_user_ids'];
             }
 
-            if (!empty($level['approver_user_id'])) {
-                $ids[] = $level['approver_user_id'];
-            }
+            // if (!empty($level['approver_user_id'])) {
+            //     $ids[] = $level['approver_user_id'];
+            // }
 
             $ids = array_values(array_unique(array_filter(array_map(
                 fn ($id) => is_numeric($id) ? (int) $id : null,
@@ -400,6 +411,33 @@ new class extends Component {
         $this->refreshLeaveApprovalForm();
     }
 
+    public function selectLeaveApprovalLevel(int $levelIndex): void
+    {
+        if (!isset($this->leaveApproval['levels'][$levelIndex])) {
+            return;
+        }
+
+        $this->activeLeaveApprovalLevel = $levelIndex;
+    }
+
+    public function setLeaveApprovalLevelEnabled(int $levelIndex, bool $enabled): void
+    {
+        if (!isset($this->leaveApproval['levels'][$levelIndex])) {
+            return;
+        }
+
+        // Level 1 is always enabled.
+        if ($levelIndex === 0) {
+            $this->leaveApproval['levels'][0]['enabled'] = true;
+            $this->applyLeaveApprovalLevelRules();
+            return;
+        }
+
+        $this->leaveApproval['levels'][$levelIndex]['enabled'] = $enabled;
+
+        $this->applyLeaveApprovalLevelRules();
+    }
+
     private function refreshLeaveApprovalForm(): void
     {
         $orgId = auth()->user()->employee?->organization_id;
@@ -414,10 +452,43 @@ new class extends Component {
         }
 
         $this->normalizeLeaveApprovalUserIds();
+        $this->applyLeaveApprovalLevelRules();
+    }
+
+    private function applyLeaveApprovalLevelRules(): void
+    {
+        if (empty($this->leaveApproval['levels']) || !is_array($this->leaveApproval['levels'])) {
+            return;
+        }
+
+        $this->leaveApproval['levels'][0]['enabled'] = true;
+
+        $count = count($this->leaveApproval['levels']);
+        for ($i = 1; $i < $count; $i++) {
+            $prevEnabled = (bool)($this->leaveApproval['levels'][$i - 1]['enabled'] ?? false);
+            if (!$prevEnabled) {
+                $this->leaveApproval['levels'][$i]['enabled'] = false;
+                $this->leaveApprovalUserDropdownOpen[$i] = false;
+                $this->leaveApprovalEmailDropdownOpen[$i] = false;
+            }
+        }
+
+        $active = $this->activeLeaveApprovalLevel;
+        if (!isset($this->leaveApproval['levels'][$active]) || empty($this->leaveApproval['levels'][$active]['enabled'])) {
+            $fallback = 0;
+            foreach ($this->leaveApproval['levels'] as $idx => $level) {
+                if (!empty($level['enabled'])) {
+                    $fallback = $idx;
+                }
+            }
+            $this->activeLeaveApprovalLevel = $fallback;
+        }
     }
 
     public function saveLeaveApprovalSettings(): void
     {
+        $this->applyLeaveApprovalLevelRules();
+
         $this->validate([
             'leaveApproval.enabled'                              => 'boolean',
             'leaveApproval.levels'                               => 'array|size:3',
@@ -439,6 +510,10 @@ new class extends Component {
                 return;
             }
         }
+
+
+
+         Log::info("Saving setting: " . json_encode($this->leaveApproval));
 
         if ($this->leaveApprovalScope === 'department') {
             if (!$this->leaveApprovalDepartmentId) {
@@ -480,6 +555,7 @@ new class extends Component {
         $this->leaveApprovalHasOverride = false;
         $this->leaveApprovalOverriddenDepartmentIds = LeaveApprovalSettings::departmentIdsWithOverride($orgId);
         $this->leaveApproval = LeaveApprovalSettings::get($orgId, $deptId);
+        $this->applyLeaveApprovalLevelRules();
 
         LivewireAlert::title('Reset!')
             ->text('This department now uses the organization-wide default.')
@@ -660,10 +736,6 @@ new class extends Component {
     public function changeSystemSettingsBreadcrumb()
     {
         switch ($this->activeTab) {
-            case 'qr_code':
-                $this->tabTitle = 'QR Code Settings';
-                $this->tabIcon = '<iconify-icon icon="mdi:qrcode-scan" class="fs-5"></iconify-icon>';
-                break;
 
             case 'shift_management':
                 $this->tabTitle = 'Shift Management';
@@ -691,8 +763,8 @@ new class extends Component {
                 break;
 
             default:
-                $this->tabTitle = 'Settings';
-                $this->tabIcon = '<iconify-icon icon="mdi:cog-outline" class="fs-5"></iconify-icon>';
+                $this->tabTitle = 'Shift Management';
+                $this->tabIcon = '<iconify-icon icon="mdi:calendar-clock-outline" class="fs-5"></iconify-icon>';
                 break;
         }
 
@@ -716,6 +788,103 @@ new class extends Component {
 
 }; ?>
 
+@push('styles')
+    <style>
+        .leave-level-layout {
+            --leave-red: #c92a2f;
+            --leave-red-soft: #fdf1f1;
+            --leave-border: #e7e9ef;
+        }
+
+        .leave-level-list {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+
+        .leave-level-item {
+            border: 1px solid var(--leave-border);
+            border-radius: 12px;
+            padding: 0.75rem 0.9rem;
+            background: #fff;
+            cursor: pointer;
+            transition: all 0.18s ease;
+        }
+
+        .leave-level-item.active {
+            border-color: #ea3c45;
+            background: var(--leave-red-soft);
+            box-shadow: 0 0 0 1px rgba(201, 42, 47, 0.1);
+        }
+
+        .leave-level-item.locked {
+            opacity: 0.6;
+        }
+
+        .leave-level-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #9ca3af;
+            flex-shrink: 0;
+        }
+
+        .leave-level-item.active .leave-level-dot,
+        .leave-level-dot.on {
+            background: var(--leave-red);
+        }
+
+        .leave-level-status {
+            font-size: 0.72rem;
+            color: #9ca3af;
+            font-weight: 700;
+            text-transform: uppercase;
+            margin-left: 0.4rem;
+        }
+
+        .leave-level-panel {
+            border: 1.5px solid #ef5962;
+            border-radius: 14px;
+            padding: 1rem;
+            background: #fff;
+        }
+
+        .leave-level-panel-header {
+            border-bottom: 1px solid #eef0f4;
+            padding-bottom: 0.8rem;
+            margin-bottom: 0.9rem;
+        }
+
+        .leave-level-panel-title {
+            margin: 0;
+            color: #212529;
+            font-size: 1.35rem;
+            font-weight: 700;
+        }
+
+        .leave-level-panel-sub {
+            margin: 0;
+            color: #6c757d;
+            font-size: 0.8rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.03em;
+        }
+
+        .leave-red-btn {
+            background: #c92a2f;
+            border-color: #c92a2f;
+            color: #fff;
+        }
+
+        .leave-red-btn:hover {
+            background: #b02327;
+            border-color: #b02327;
+            color: #fff;
+        }
+    </style>
+@endpush
+
 <div class="container-fluid">
 
     <livewire:admin.system-settings.bread-crumb
@@ -726,20 +895,6 @@ new class extends Component {
     <div class="card">
         <ul class="nav nav-pills user-profile-tab" id="pills-tab" role="tablist">
 
-            <li class="nav-item" role="presentation">
-                <button
-                    class="nav-link position-relative rounded-0 {{ $activeTab === 'qr_code' ? 'active' : '' }} d-flex align-items-center justify-content-center bg-transparent fs-3 py-3"
-                    id="tab-qr-code-tab"
-                    data-bs-toggle="pill"
-                    data-bs-target="#tab-qr-code"
-                    type="button"
-                    role="tab"
-                    aria-controls="tab-qr-code"
-                    aria-selected="false">
-                    <i class="ti ti-qrcode me-2 fs-6"></i>
-                    <span class="d-none d-md-block">QR Code</span>
-                </button>
-            </li>
 
             <li class="nav-item" role="presentation">
                 <button
@@ -820,33 +975,6 @@ new class extends Component {
 
         <div class="card-body">
             <div class="tab-content" id="pills-tabContent">
-
-                {{-- QR Code Settings Tab --}}
-                <div class="tab-pane fade {{ $activeTab === 'qr_code' ? 'show active' : '' }}" id="tab-qr-code">
-                    <div class="row justify-content-center">
-                        <div class="col-lg-12">
-                            <div class="card border shadow-none">
-                                <div class="card-body p-4">
-                                    <h4 class="card-title mb-4">QR Code Settings</h4>
-
-                                    <div class="form-check form-switch">
-                                        <input class="form-check-input" type="checkbox" role="switch"
-                                               id="generateQrOnCreate"
-                                               wire:model.defer="settings.generate_employee_qr_on_create">
-                                        <label class="form-check-label" for="generateQrOnCreate">
-                                            Generate QR code when adding a new employee
-                                        </label>
-                                    </div>
-
-                                    <div class="d-flex align-items-center justify-content-end gap-6 mt-4">
-                                        <button wire:click="storeSettings" class="btn btn-primary">Save</button>
-                                    </div>
-
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
 
                 {{-- Shift Management Tab --}}
                 <div class="tab-pane fade {{ $activeTab === 'shift_management' ? 'show active' : '' }}"
@@ -1335,7 +1463,7 @@ new class extends Component {
                             </div>
 
                             {{-- Approval levels --}}
-                            <div class="card border shadow-none mb-4">
+                            <div class="card border shadow-none mb-4 leave-level-layout">
                                 <div class="card-body p-4">
                                     <div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
                                         <h5 class="mb-0 d-flex align-items-center gap-2">
@@ -1344,164 +1472,213 @@ new class extends Component {
                                         </h5>
                                     </div>
 
-                                    <div class="row g-3">
-                                        @foreach($leaveApproval['levels'] as $i => $level)
-                                            <div wire:key="leave-approval-level-{{ $i }}" class="col-lg-4 col-12">
-                                                <div class="border rounded-3 p-3 h-100 {{ $level['enabled'] ? 'border-primary-subtle' : '' }}"
-                                                     style="{{ $level['enabled'] ? 'border-color:#0d6efd !important;' : '' }}">
+                                    @php
+                                        $activeLevelIndex = isset($leaveApproval['levels'][$activeLeaveApprovalLevel]) ? $activeLeaveApprovalLevel : 0;
+                                    @endphp
 
-                                                    {{-- Level header --}}
-                                                    <div class="d-flex align-items-center justify-content-between mb-3">
-                            <span class="fw-bold small {{ $level['enabled'] ? 'text-primary' : 'text-muted' }}">
-                                LEVEL {{ $i + 1 }}
-                            </span>
-                                                        <div class="form-check form-switch m-0">
-                                                            <input class="form-check-input" type="checkbox" role="switch"
-                                                                   id="leaveLevel{{ $i }}Enabled"
-                                                                   wire:model="leaveApproval.levels.{{ $i }}.enabled">
-                                                        </div>
-                                                    </div>
+                                    <div class="row g-3 align-items-start">
+                                        <div class="col-lg-4 col-12">
+                                            <div class="leave-level-list">
+                                                @foreach($leaveApproval['levels'] as $i => $level)
+                                                    @php
+                                                        $isActive = $activeLevelIndex === $i;
+                                                        $isLockedByParent = $i > 0 && empty($leaveApproval['levels'][$i - 1]['enabled']);
 
-                                                    {{-- Approver type --}}
-                                                    <div class="mb-2">
-                                                        <label class="form-label small text-uppercase text-muted fw-semibold">Approver Type</label>
-                                                        <div class="btn-group btn-group-sm w-100" role="group">
-                                                            <button type="button"
-                                                                    class="btn {{ $level['approver_type'] === 'role' ? 'btn-primary' : 'btn-outline-primary' }}"
-                                                                    wire:click="$set('leaveApproval.levels.{{ $i }}.approver_type', 'role')"
-                                                                {{ $level['enabled'] ? '' : 'disabled' }}>
-                                                                Role
-                                                            </button>
-                                                            <button type="button"
-                                                                    class="btn {{ $level['approver_type'] === 'user' ? 'btn-primary' : 'btn-outline-primary' }}"
-                                                                    wire:click="$set('leaveApproval.levels.{{ $i }}.approver_type', 'user')"
-                                                                {{ $level['enabled'] ? '' : 'disabled' }}>
-                                                                Specific user
-                                                            </button>
-                                                        </div>
-                                                    </div>
+                                                        $enabled_check = true;
+                                                        if($isLockedByParent) {
+                                                            $enabled_check = false;
+                                                        } else {
+                                                            $enabled_check = !empty($level['enabled']) ? true : false;
+                                                        }
 
-                                                    @if($level['approver_type'] === 'user')
-                                                        <div class="mb-2">
-                                                            <label class="form-label small text-uppercase text-muted fw-semibold">Approvers</label>
-                                                            @php
-                                                                $selectedUserIds = $level['approver_user_ids'] ?? [];
-                                                                $selectedUsers = collect($availableUsers)
-                                                                    ->whereIn('id', $selectedUserIds)
-                                                                    ->values();
-                                                                $availableToAdd = collect($availableUsers)
-                                                                    ->reject(fn($u) => in_array($u['id'], $selectedUserIds, true))
-                                                                    ->values();
-
-                                                                $searchTerm = trim($leaveApprovalUserSearch[$i] ?? '');
-                                                                if ($searchTerm !== '') {
-                                                                    $availableToAdd = $availableToAdd
-                                                                        ->filter(fn($u) => str_contains(strtolower($u['name']), strtolower($searchTerm))
-                                                                            || str_contains(strtolower($u['email']), strtolower($searchTerm)))
-                                                                        ->values();
-                                                                }
-                                                            @endphp
-                                                            <div class="d-flex flex-wrap gap-2 align-items-center mb-2 rounded-3 p-2" style="border:1px solid #cbd1d6; box-shadow: 0 6px 18px rgba(0, 0, 0, 0.06); background-color: #fff;">
-                                                                @foreach($selectedUsers as $userIndex => $user)
-                                                                    <div wire:key="leave-approver-{{ $i }}-{{ $user['id'] }}" class="d-flex align-items-center gap-2 rounded-pill px-3 py-1" style="background-color: #F4E9E9; border:1px solid #cbd1d6;">
-                                                                        <span class="fw-semibold" style="color: #A53437;">{{ $user['name'] }}</span>
-                                                                        <button type="button"
-                                                                                class="btn btn-sm btn-outline-danger p-0 border-0"
-                                                                                style="width: 1.5rem; height: 1.2rem; line-height: 1.2rem;  color: #A53437;"
-                                                                                wire:click="removeLeaveApprovalUser({{ $i }}, {{ $user['id'] }})"
-                                                                                {{ $level['enabled'] ? '' : 'disabled' }}>
-                                                                            &times;
-                                                                        </button>
-                                                                    </div>
-                                                                @endforeach
-                                                                <div class="dropdown leave-approval-user-dropdown" onclick="event.stopPropagation()">
-                                                                    <button type="button"
-                                                                            class="btn btn-sm text-dark"
-                                                                            style="border:1px dashed #6c757d; border-radius:999px; background-color:transparent;"
-                                                                            wire:click="toggleLeaveApprovalUserDropdown({{ $i }})"
-                                                                            {{ $level['enabled'] ? '' : 'disabled' }}>
-                                                                        + Add approver
-                                                                    </button>
-                                                                    @if($leaveApprovalUserDropdownOpen[$i] ?? false)
-                                                                        <div class="dropdown-menu show mt-2 p-2" style="position: absolute; z-index: 1000; min-width: 18rem; max-height: 20rem; overflow:auto;">
-                                                                            <div class="mb-2">
-                                                                                <input type="text"
-                                                                                       class="form-control form-control-sm"
-                                                                                       placeholder="Search users..."
-                                                                                       value="{{ $leaveApprovalUserSearch[$i] ?? '' }}"
-                                                                                       wire:input="setLeaveApprovalUserSearch({{ $i }}, $event.target.value)">
-                                                                            </div>
-                                                                            @if($availableToAdd->isNotEmpty())
-                                                                                @foreach($availableToAdd as $availableUser)
-                                                                                    <button type="button"
-                                                                                            class="dropdown-item"
-                                                                                            wire:click="addLeaveApprovalUser({{ $i }}, {{ $availableUser['id'] }})">
-                                                                                        {{ $availableUser['name'] }}
-                                                                                    </button>
-                                                                                @endforeach
-                                                                            @else
-                                                                                <div class="dropdown-item text-muted">No users match your search.</div>
-                                                                            @endif
-                                                                        </div>
-                                                                    @endif
-                                                                </div>
+                                                        if (!$enabled_check) {
+                                                            $this->dispatch('uncheck-leave-level', index: $i);
+                                                        }
+                                                        Log::info("ENABLED CHECK SAA HII NI: " . json_encode($enabled_check));
+                                                    @endphp
+                                                    <div wire:key="leave-approval-level-nav-{{ $i }}"
+                                                         class="leave-level-item {{ $isActive ? 'active' : '' }} {{ $isLockedByParent ? 'locked' : '' }}"
+                                                         wire:click="selectLeaveApprovalLevel({{ $i }})">
+                                                        <div class="d-flex align-items-center justify-content-between gap-2">
+                                                            <div class="d-flex align-items-center gap-2">
+                                                                <span class="leave-level-dot {{ !empty($level['enabled']) ? 'on' : '' }}"></span>
+                                                                <span class="fw-semibold">Level {{ $i + 1 }}</span>
+                                                                @if(empty($level['enabled']))
+                                                                    <span class="leave-level-status">off</span>
+                                                                @endif
                                                             </div>
-                                                            @if(empty($selectedUserIds))
-                                                                <div class="form-text text-muted">Select one or more users who can approve at this level.</div>
-                                                            @endif
-
-                                                            @if($selectedUsers->count() >= 2)
-                                                                <div class="d-flex flex-wrap gap-2 align-items-center mb-2 rounded-3 p-2" style="border:1px solid #cbd1d6; box-shadow: 0 6px 18px #D9B84A; background-color: #FAF7F0; color: #D9B84A;">
-
-                                                                    <div class="mb-1">
-                                                                        <label class="form-label small text-uppercase text-muted fw-semibold" style="color: #D9B84A;">Approver Rule</label>
-                                                                        <div class="btn-group btn-group-sm w-100" role="group">
-                                                                            <button type="button"
-                                                                                    class="btn"
-                                                                                    style="background-color: {{ $level['approver_rule'] === 'anyone_approve' ? '#D9B84A' : '#FFFFFF' }}; color: {{ $level['approver_rule'] === 'anyone_approve' ? '#FFFFFF' : '#D9B84A' }}; border: 1px solid {{ $level['approver_rule'] === 'anyone_approve' ? '#D9B84A' : '#cbd1d6' }}; font-weight: 700;"
-                                                                                    wire:click="$set('leaveApproval.levels.{{ $i }}.approver_rule', 'anyone_approve')"
-                                                                                {{ $level['enabled'] ? '' : 'disabled' }}>
-                                                                                Anyone Approves
-                                                                            </button>
-                                                                            <button type="button"
-                                                                                    class="btn"
-                                                                                    style="background-color: {{ $level['approver_rule'] === 'all_approve' ? '#D9B84A' : '#FFFFFF' }}; color: {{ $level['approver_rule'] === 'all_approve' ? '#FFFFFF' : '#D9B84A' }}; border: 1px solid {{ $level['approver_rule'] === 'all_approve' ? '#D9B84A' : '#cbd1d6' }}; font-weight: 700;"
-                                                                                    wire:click="$set('leaveApproval.levels.{{ $i }}.approver_rule', 'all_approve')"
-                                                                                {{ $level['enabled'] ? '' : 'disabled' }}>
-                                                                                All Must Approve
-                                                                            </button>
-                                                                        </div>
-                                                                    </div>
-
-                                                                    @if($level['approver_rule'] === 'all_approve')
-                                                                        <div class="small p-1" style="color: #D9B84A;">
-                                                                            Every selected approver must act before this level clears.
-                                                                        </div>
-                                                                    @endif
-
-                                                                </div>
-                                                            @endif
+                                                            <div class="form-check form-switch m-0">
+                                                                <input class="form-check-input" type="checkbox" role="switch"
+                                                                       id="leaveLevelNav{{ $i }}Enabled"
+                                                                       @checked($enabled_check)
+                                                                       wire:change="setLeaveApprovalLevelEnabled({{ $i }}, $event.target.checked)"
+                                                                       wire:click.stop
+                                                                    {{ $i === 0 || $isLockedByParent ? 'disabled' : '' }}>
+                                                            </div>
                                                         </div>
-                                                    @else
+                                                    </div>
+                                                @endforeach
+                                            </div>
+                                        </div>
+
+                                        <div class="col-lg-8 col-12">
+                                            @foreach($leaveApproval['levels'] as $i => $level)
+                                                @if($activeLevelIndex === $i)
+                                                    <div wire:key="leave-approval-level-detail-{{ $i }}" class="leave-level-panel">
+                                                        <div class="leave-level-panel-header d-flex align-items-center justify-content-between gap-2 flex-wrap">
+                                                            <h6 class="leave-level-panel-title d-flex align-items-center gap-2">
+                                                                <span class="leave-level-dot {{ !empty($level['enabled']) ? 'on' : '' }}"></span>
+                                                                Level {{ $i + 1 }}
+                                                            </h6>
+                                                            <p class="leave-level-panel-sub mb-0">
+                                                                @if($i === 0)
+                                                                    Always on
+                                                                @elseif(!empty($level['enabled']))
+                                                                    Enabled
+                                                                @else
+                                                                    Disabled
+                                                                @endif
+                                                            </p>
+                                                        </div>
+
                                                         <div class="mb-2">
-                                                            <label class="form-label small text-uppercase text-muted fw-semibold">Role</label>
-                                                            <select class="form-select form-select-sm"
-                                                                    wire:model="leaveApproval.levels.{{ $i }}.approver_role"
-                                                                {{ $level['enabled'] ? '' : 'disabled' }}>
-                                                                <option value="">— Select Role —</option>
-                                                                @foreach($availableRoles as $role)
-                                                                    <option value="{{ $role }}">{{ $role }}</option>
-                                                                @endforeach
-                                                            </select>
+                                                            <label class="form-label small text-uppercase text-muted fw-semibold">Approver Type</label>
+                                                            <div class="btn-group btn-group-sm w-100" role="group">
+                                                                <button type="button"
+                                                                        class="btn {{ $level['approver_type'] === 'role' ? 'btn-danger' : 'btn-outline-danger' }}"
+                                                                        wire:click="$set('leaveApproval.levels.{{ $i }}.approver_type', 'role')"
+                                                                    {{ $level['enabled'] ? '' : 'disabled' }}>
+                                                                    Role
+                                                                </button>
+                                                                <button type="button"
+                                                                        class="btn {{ $level['approver_type'] === 'user' ? 'btn-danger' : 'btn-outline-danger' }}"
+                                                                        wire:click="$set('leaveApproval.levels.{{ $i }}.approver_type', 'user')"
+                                                                    {{ $level['enabled'] ? '' : 'disabled' }}>
+                                                                    Specific user
+                                                                </button>
+                                                            </div>
                                                         </div>
-                                                    @endif
 
-                                                    {{-- Notifications --}}
-                                                    <div wire:key="leave-approval-level-{{ $i }}-notifications" class="mb-2">
-                                                        <label class="form-label small text-uppercase text-muted fw-semibold d-flex align-items-center gap-1">
-                                                            <iconify-icon icon="mdi:bell-outline"></iconify-icon>
-                                                            CC on approval/rejection
-                                                        </label>
+                                                        @if($level['approver_type'] === 'user')
+                                                            <div class="mb-2">
+                                                                <label class="form-label small text-uppercase text-muted fw-semibold">Approvers</label>
+                                                                @php
+                                                                    $selectedUserIds = $level['approver_user_ids'] ?? [];
+                                                                    $selectedUsers = collect($availableUsers)
+                                                                        ->whereIn('id', $selectedUserIds)
+                                                                        ->values();
+                                                                    $availableToAdd = collect($availableUsers)
+                                                                        ->reject(fn($u) => in_array($u['id'], $selectedUserIds, true))
+                                                                        ->values();
+
+                                                                    $searchTerm = trim($leaveApprovalUserSearch[$i] ?? '');
+                                                                    if ($searchTerm !== '') {
+                                                                        $availableToAdd = $availableToAdd
+                                                                            ->filter(fn($u) => str_contains(strtolower($u['name']), strtolower($searchTerm))
+                                                                                || str_contains(strtolower($u['email']), strtolower($searchTerm)))
+                                                                            ->values();
+                                                                    }
+                                                                @endphp
+                                                                <div class="d-flex flex-wrap gap-2 align-items-center mb-2 rounded-3 p-2" style="border:1px solid #cbd1d6; box-shadow: 0 6px 18px rgba(0, 0, 0, 0.06); background-color: #fff;">
+                                                                    @foreach($selectedUsers as $userIndex => $user)
+                                                                        <div wire:key="leave-approver-{{ $i }}-{{ $user['id'] }}" class="d-flex align-items-center gap-2 rounded-pill px-3 py-1" style="background-color: #F4E9E9; border:1px solid #cbd1d6;">
+                                                                            <span class="fw-semibold" style="color: #A53437;">{{ $user['name'] }}</span>
+                                                                            <button type="button"
+                                                                                    class="btn btn-sm btn-outline-danger p-0 border-0"
+                                                                                    style="width: 1.5rem; height: 1.2rem; line-height: 1.2rem;  color: #A53437;"
+                                                                                    wire:click="removeLeaveApprovalUser({{ $i }}, {{ $user['id'] }})"
+                                                                                    {{ $level['enabled'] ? '' : 'disabled' }}>
+                                                                                &times;
+                                                                            </button>
+                                                                        </div>
+                                                                    @endforeach
+                                                                    <div class="dropdown leave-approval-user-dropdown" onclick="event.stopPropagation()">
+                                                                        <button type="button"
+                                                                                class="btn btn-sm text-dark"
+                                                                                style="border:1px dashed #6c757d; border-radius:999px; background-color:transparent;"
+                                                                                wire:click="toggleLeaveApprovalUserDropdown({{ $i }})"
+                                                                                {{ $level['enabled'] ? '' : 'disabled' }}>
+                                                                            + Add approver
+                                                                        </button>
+                                                                        @if($leaveApprovalUserDropdownOpen[$i] ?? false)
+                                                                            <div class="dropdown-menu show mt-2 p-2" style="position: absolute; z-index: 1000; min-width: 18rem; max-height: 20rem; overflow:auto;">
+                                                                                <div class="mb-2">
+                                                                                    <input type="text"
+                                                                                           class="form-control form-control-sm"
+                                                                                           placeholder="Search users..."
+                                                                                           value="{{ $leaveApprovalUserSearch[$i] ?? '' }}"
+                                                                                           wire:input="setLeaveApprovalUserSearch({{ $i }}, $event.target.value)">
+                                                                                </div>
+                                                                                @if($availableToAdd->isNotEmpty())
+                                                                                    @foreach($availableToAdd as $availableUser)
+                                                                                        <button type="button"
+                                                                                                class="dropdown-item"
+                                                                                                wire:click="addLeaveApprovalUser({{ $i }}, {{ $availableUser['id'] }})">
+                                                                                            {{ $availableUser['name'] }}
+                                                                                        </button>
+                                                                                    @endforeach
+                                                                                @else
+                                                                                    <div class="dropdown-item text-muted">No users match your search.</div>
+                                                                                @endif
+                                                                            </div>
+                                                                        @endif
+                                                                    </div>
+                                                                </div>
+                                                                @if(empty($selectedUserIds))
+                                                                    <div class="form-text text-muted">Select one or more users who can approve at this level.</div>
+                                                                @endif
+
+                                                                @if($selectedUsers->count() >= 2)
+                                                                    <div class="d-flex flex-wrap gap-2 align-items-center mb-2 rounded-3 p-2" style="border:1px solid #cbd1d6; box-shadow: 0 6px 18px #D9B84A; background-color: #FAF7F0; color: #D9B84A;">
+
+                                                                        <div class="mb-1">
+                                                                            <label class="form-label small text-uppercase text-muted fw-semibold" style="color: #D9B84A;">Approver Rule</label>
+                                                                            <div class="btn-group btn-group-sm w-100" role="group">
+                                                                                <button type="button"
+                                                                                        class="btn"
+                                                                                        style="background-color: {{ $level['approver_rule'] === 'anyone_approve' ? '#D9B84A' : '#FFFFFF' }}; color: {{ $level['approver_rule'] === 'anyone_approve' ? '#FFFFFF' : '#D9B84A' }}; border: 1px solid {{ $level['approver_rule'] === 'anyone_approve' ? '#D9B84A' : '#cbd1d6' }}; font-weight: 700;"
+                                                                                        wire:click="$set('leaveApproval.levels.{{ $i }}.approver_rule', 'anyone_approve')"
+                                                                                    {{ $level['enabled'] ? '' : 'disabled' }}>
+                                                                                    Anyone Approves
+                                                                                </button>
+                                                                                <button type="button"
+                                                                                        class="btn"
+                                                                                        style="background-color: {{ $level['approver_rule'] === 'all_approve' ? '#D9B84A' : '#FFFFFF' }}; color: {{ $level['approver_rule'] === 'all_approve' ? '#FFFFFF' : '#D9B84A' }}; border: 1px solid {{ $level['approver_rule'] === 'all_approve' ? '#D9B84A' : '#cbd1d6' }}; font-weight: 700;"
+                                                                                        wire:click="$set('leaveApproval.levels.{{ $i }}.approver_rule', 'all_approve')"
+                                                                                    {{ $level['enabled'] ? '' : 'disabled' }}>
+                                                                                    All Must Approve
+                                                                                </button>
+                                                                            </div>
+                                                                        </div>
+
+                                                                        @if($level['approver_rule'] === 'all_approve')
+                                                                            <div class="small p-1" style="color: #D9B84A;">
+                                                                                Every selected approver must act before this level clears.
+                                                                            </div>
+                                                                        @endif
+
+                                                                    </div>
+                                                                @endif
+                                                            </div>
+                                                        @else
+                                                            <div class="mb-2">
+                                                                <label class="form-label small text-uppercase text-muted fw-semibold">Role</label>
+                                                                <select class="form-select form-select-sm"
+                                                                        wire:model="leaveApproval.levels.{{ $i }}.approver_role"
+                                                                    {{ $level['enabled'] ? '' : 'disabled' }}>
+                                                                    <option value="">— Select Role —</option>
+                                                                    @foreach($availableRoles as $role)
+                                                                        <option value="{{ $role }}">{{ $role }}</option>
+                                                                    @endforeach
+                                                                </select>
+                                                            </div>
+                                                        @endif
+
+                                                        <div wire:key="leave-approval-level-{{ $i }}-notifications" class="mb-2">
+                                                            <label class="form-label small text-uppercase text-muted fw-semibold d-flex align-items-center gap-1">
+                                                                <iconify-icon icon="mdi:bell-outline"></iconify-icon>
+                                                                CC on approval/rejection
+                                                            </label>
 
                                                             <div class="form-check form-switch m-0">
                                                                 <input class="form-check-input" type="checkbox" role="switch"
@@ -1531,8 +1708,6 @@ new class extends Component {
                                                                             ->values();
                                                                     }
                                                                 @endphp
-
-
 
                                                                 <div class="d-flex flex-wrap gap-2 align-items-center mt-3 mb-2 rounded-3 p-2" style="border:1px solid #cbd1d6; box-shadow: 0 6px 18px rgba(0, 0, 0, 0.06); background-color: #fff;">
                                                                     @foreach($selectedEmailUsers as $user)
@@ -1581,18 +1756,15 @@ new class extends Component {
                                                                     </div>
                                                                 </div>
                                                             @endif
-
-
-
+                                                        </div>
                                                     </div>
-
-                                                </div>
-                                            </div>
-                                        @endforeach
+                                                @endif
+                                            @endforeach
+                                        </div>
                                     </div>
 
                                     <div class="d-flex align-items-center justify-content-end gap-2 mt-4">
-                                        <button wire:click="saveLeaveApprovalSettings" class="btn btn-primary">
+                                        <button wire:click="saveLeaveApprovalSettings" class="btn leave-red-btn">
                                             <iconify-icon icon="mdi:content-save-outline" class="me-1"></iconify-icon>
                                             {{ $leaveApprovalScope === 'department' ? 'Save for Selected Department' : 'Save Organization Default' }}
                                         </button>
@@ -1862,5 +2034,16 @@ new class extends Component {
                 livewire?.dispatch?.('closeLeaveApprovalUserDropdowns');
             }
         });
+
+        document.addEventListener('livewire:init', () => {
+            Livewire.on('uncheck-leave-level', ({ index }) => {
+                const checkbox = document.getElementById(`leaveLevelNav${index}Enabled`);
+
+                if (checkbox) {
+                    checkbox.checked = false;
+                }
+            });
+        });
+
     </script>
 @endpush
