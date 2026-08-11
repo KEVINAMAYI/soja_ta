@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\Organization;
+use Jantinnerezo\LivewireAlert\Facades\LivewireAlert;
 use Livewire\Attributes\On;
 use Livewire\Volt\Component;
 
@@ -12,6 +13,8 @@ new class extends Component {
     public string $tabTitle;
     public string $tabIcon;
     public array $breadcrumbItems = [];
+    public int $requireEmployeePhoto;
+    public int $autoAssignEmployeeId;
 
     public function mount()
     {
@@ -42,6 +45,76 @@ new class extends Component {
         $this->activeTab = $tabId;
         $this->changeBreadcrumb();
 
+    }
+
+
+
+    public function saveQrCodeSetting($value)
+    {
+        $org = auth()->user()->employee->organization;
+        $value = (int)$value;
+
+        $key = 'generate_employee_qr_on_create';
+        $org->settings()->updateOrCreate(
+            ['key' => $key],
+            ['value' => $value],
+            ['type' => 'boolean']
+        );
+
+        $this->generateQrOnCreate = $value;
+
+        LivewireAlert::title('Success!')
+            ->text('QR code generation setting updated.')
+            ->success()
+            ->toast()
+            ->position('top-end')
+            ->show();
+    }
+
+
+
+    public function saveEmployeePhotoSetting($value)
+    {
+        $org = auth()->user()->employee->organization;
+        $value = (int)$value;
+
+        $key = 'require_employee_photo';
+        $org->settings()->updateOrCreate(
+            ['key' => $key],
+            ['value' => $value],
+            ['type' => 'boolean']
+        );
+
+        $this->requireEmployeePhoto = $value;
+
+        LivewireAlert::title('Success!')
+            ->text('Employee photo requirement setting updated.')
+            ->success()
+            ->toast()
+            ->position('top-end')
+            ->show();
+    }
+
+    public function saveAutoAssignEmployeeIdSetting($value)
+    {
+        $org = auth()->user()->employee->organization;
+        $value = (int)$value;
+
+        $key = 'auto_assign_employee_id';
+        $org->settings()->updateOrCreate(
+            ['key' => $key],
+            ['value' => $value],
+            ['type' => 'boolean']
+        );
+
+        $this->autoAssignEmployeeId = $value;
+
+        LivewireAlert::title('Success!')
+            ->text('Auto-assign employee ID setting updated.')
+            ->success()
+            ->toast()
+            ->position('top-end')
+            ->show();
     }
 
     public function changeBreadcrumb()
@@ -435,7 +508,7 @@ new class extends Component {
                         <div class="accordion" id="customAccordion">
                             <div class="accordion-item border-0 mb-3 shadow-sm rounded">
                                 <h2 class="accordion-header" id="headingOne">
-                                    <button class="fs-4 accordion-button fw-bold collapsed" type="button"
+                                    <button class="fs-4 accordion-button fw-bold collapsed mb-2" type="button"
                                             data-bs-toggle="collapse" data-bs-target="#collapseOne"
                                             aria-expanded="false" aria-controls="collapseOne">
                                         Departments
@@ -443,11 +516,11 @@ new class extends Component {
                                 </h2>
 
 
-                                <div id="collapseOne" class="accordion-collapse collapse"
+                                <!-- <div id="collapseOne" class="accordion-collapse collapse"
                                      aria-labelledby="headingOne"
                                      data-bs-parent="#customAccordion">
                                     <livewire:admin.departments.index/>
-                                </div>
+                                </div> -->
                             </div>
 
 
