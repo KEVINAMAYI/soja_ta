@@ -14,7 +14,9 @@ new class extends Component {
     public $device_location_id;
     public $editId;
     public $locations = [];
-    public $device_count;
+    public int $active_device_count = 0;
+    public int $inactive_device_count = 0;
+    public $device = null;
 
     public function mount()
     {
@@ -25,13 +27,16 @@ new class extends Component {
             ->pluck('name', 'id')
             ->toArray();
 
-        $this->device_count = Device::query()
+        $device_count = Device::query()
             ->where('organization_id', $orgId)
             ->selectRaw('
                 SUM(active = 1) as active_devices_count,
                 SUM(active = 0) as inactive_devices_count
             ')
             ->first();
+
+        $this->active_device_count = $device_count->active_devices_count ?? 0;
+        $this->inactive_device_count = $device_count->inactive_devices_count ?? 0;
     }
 
     public function rules()
@@ -105,18 +110,17 @@ new class extends Component {
         }
     }
 
-    #[On('show-device1')]
-    public function showDevice1($id)
+    #[On('show-device')]
+    public function showDevice($id)
     {
-        //$device = Device::where('id', $id)->first();
-        Log::info("SHOWING DEVICE...");
-        //$this->dispatch('show-view-device-modal');
-        return;
+        $this->device = Device::where('id', $id)->first();
+        Log::info("SHOWING DEVICE...". json_encode($this->device));
+        $this->dispatch('show-view-device-modal', ['device' => $this->device->toArray()]);
     }
 
 
-    #[On('remove-device1')]
-    public function removeDevice1($id)
+    #[On('remove-device')]
+    public function removeDevice($id)
     {
 
         DB::beginTransaction();
@@ -154,7 +158,7 @@ new class extends Component {
         }
     }
 
-    public function resetForm1()
+    public function resetForm()
     {
         Log::info("RESETTING FORM...");
         $this->reset(['device_name', 'platform', 'device_location_id', 'checkpoint_id', 'pin', 'editId']);
@@ -165,13 +169,78 @@ new class extends Component {
 ?>
 
 
+
+@push('styles')
+    <style>
+
+
+        .import-summary-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.8rem;
+            font-weight: 700;
+        }
+
+        .summary-card {
+            background: #fff;
+            border: 1px solid rgba(0, 0, 0, 0.06);
+            border-radius: 14px;
+            padding: 1.4rem 1.5rem 1.2rem;
+            height: 100%;
+            transition: transform 0.25s ease, box-shadow 0.25s ease;
+        }
+
+        .summary-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.09);
+        }
+
+        .summary-card-icon {
+            width: 42px;
+            height: 42px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 22px;
+            margin-bottom: 0.9rem;
+        }
+
+        .summary-card-title {
+            font-size: 0.72rem;
+            font-weight: 600;
+            color: #94a3b8;
+            text-transform: uppercase;
+            letter-spacing: 0.6px;
+            margin-bottom: 0.35rem;
+        }
+
+        .summary-card-value {
+            font-size: 2rem;
+            font-weight: 700;
+            line-height: 1;
+            color: #1e293b;
+            margin-bottom: 0.3rem;
+        }
+
+        .summary-card-subtitle {
+            font-size: 0.8rem;
+            color: #64748b;
+            margin: 0;
+        }
+
+    </style>
+@endpush
+
+
 <div class="">
     <div class="row">
-        <div class="col-lg-4 col-md-6 col-12">
+        <div class="col-lg-4 col-md-6 col-12 border-radius-1">
             <div class="summary-card">
                 <p class="summary-card-title">Total Devices</p>
                 <div class="summary-card-value">{{
-                    $device_count->active_devices_count + $device_count->inactive_devices_count
+                    $active_device_count + $inactive_device_count
                     }}</div>
             </div>
         </div>
@@ -179,29 +248,17 @@ new class extends Component {
         <div class="col-lg-4 col-md-6 col-12">
             <div class="summary-card">
                 <p class="summary-card-title">Online</p>
-                <div class="summary-card-value text-secondary">{{$device_count->active_devices_count}}</div>
+                <div class="summary-card-value text-secondary">{{$active_device_count}}</div>
             </div>
         </div>
 
         <div class="col-lg-4 col-md-6 col-12">
             <div class="summary-card">
                 <p class="summary-card-title">Offline</p>
-                <div class="summary-card-value text-danger">{{$device_count->inactive_devices_count}}</div>
+                <div class="summary-card-value text-danger">{{$inactive_device_count}}</div>
             </div>
         </div>
 
-                <button
-                    type="button"
-                    class="dropdown-item d-flex align-items-center gap-2"
-                    wire:click="resetForm1"
-                >
-                    <iconify-icon
-                        icon="mdi:eye-outline"
-                        class="text-success w-4 h-4"
-                    ></iconify-icon>
-
-                    <span>View</span>
-                </button>
     </div>
 
     <div class="col-12">
@@ -325,8 +382,8 @@ new class extends Component {
                         <!-- Device Name -->
                         <div class="col-12">
                             <label class="form-label">Device Name</label>
-                            <input type="text" class="form-control" wire:model="device_name"
-                                   placeholder="e.g., Main Entrance Tablet">
+                            <input type="text" class="form-control"
+                                value="{{ $device? $device->device_name : '' }}">
                             @error('device_name') <small class="text-danger">{{ $message }}</small>@enderror
                         </div>
 
@@ -334,8 +391,8 @@ new class extends Component {
                         <div class="col-md-12">
                             <label class="form-label">Platform</label>
                             <select class="form-select" wire:model="platform">
-                                <option value="android">Android</option>
-                                <option value="ios">iOS</option>
+                                <option value="android" {{ $device && $device->platform === 'android' ? 'selected' : '' }}>Android</option>
+                                <option value="ios" {{ $device && $device->platform === 'ios' ? 'selected' : '' }}>iOS</option>
                             </select>
                             @error('platform') <small class="text-danger">{{ $message }}</small>@enderror
                         </div>
@@ -346,7 +403,7 @@ new class extends Component {
                             <select class="form-select" wire:model="device_location_id">
                                 <option value="">Select Location</option>
                                 @foreach($locations as $id => $name)
-                                    <option value="{{ $id }}">{{ $name }}</option>
+                                    <option value="{{ $id }}" {{ $device && $device->device_location_id == $id ? 'selected' : '' }}>{{ $name }}</option>
                                 @endforeach
                             </select>
                             @error('device_location_id') <small class="text-danger">{{ $message }}</small>@enderror
@@ -358,13 +415,12 @@ new class extends Component {
                             <div class="input-group">
                                 <input type="text"
                                        class="form-control"
-                                       wire:model="checkpoint_id"
-                                       placeholder="e.g., CHKPT-005">
-                                <button type="button"
+                                       value="{{ $device? $device->checkpoint_id : '' }}" readonly>
+                                <!-- <button type="button"
                                         wire:click="generateCheckpointId"
                                         class="custom-hover-white btn btn-outline-primary">
                                     Auto-generate
-                                </button>
+                                </button> -->
                             </div>
                             @error('checkpoint_id') <small class="text-danger">{{ $message }}</small> @enderror
                         </div>
@@ -375,13 +431,12 @@ new class extends Component {
                             <div class="input-group">
                                 <input type="text"
                                        class="form-control"
-                                       wire:model="pin"
-                                       placeholder="Leave empty to auto-generate">
-                                <button type="button"
+                                       value="{{ $device? $device->pin : '' }}" readonly>
+                                <!-- <button type="button"
                                         wire:click="generatePin"
                                         class="custom-hover-white btn btn-outline-primary">
                                     Auto-generate
-                                </button>
+                                </button> -->
                             </div>
                             @error('pin') <small class="text-danger">{{ $message }}</small> @enderror
                         </div>
@@ -414,7 +469,12 @@ new class extends Component {
         });
 
         window.addEventListener('show-view-device-modal', () => {
-            bootstrap.Modal.getInstance(document.getElementById('showDeviceModal'))?.show();
+            new bootstrap.Modal(document.getElementById('showDeviceModal')).show();
+        });
+
+        window.addEventListener('hide-view-device-modal', () => {
+            console.log("HIDING VIEW DEVICE MODAL...");
+            bootstrap.Modal.getInstance(document.getElementById('showDeviceModal'))?.hide();
         });
     </script>
 @endpush
