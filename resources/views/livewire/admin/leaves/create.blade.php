@@ -8,6 +8,7 @@ use App\Services\AttendanceSeeder;
 use App\Services\LeaveApprovalService;
 use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\Log;
 use Livewire\Attributes\On;
 use Livewire\Volt\Component;
 use Jantinnerezo\LivewireAlert\Facades\LivewireAlert;
@@ -34,6 +35,8 @@ new class extends Component {
     public $contact_during_leave = '';
     public $emergency_contact = '';
     public $handover_to = '';
+
+    public $selectedLeaveType;
 
 
     public function mount()
@@ -133,6 +136,14 @@ new class extends Component {
     {
         // ... (existing calculate logic) ...
         if (!$this->startDate || !$this->endDate) return 0;
+
+        if (!empty($this->leaveType)) {
+            $this->getSelectedLeaveType(); // Ensure selectedLeaveType is set
+            return $this->getSelectedLeaveType()->calculateNumberOfDaysFromLeaveStartAndEndDates(
+                Carbon::parse($this->startDate),
+                Carbon::parse($this->endDate)
+                )['effective_leave_days'];
+        }
         $start = Carbon::parse($this->startDate);
         $end = Carbon::parse($this->endDate);
         return $start->diffInDays($end) + 1;
@@ -142,6 +153,13 @@ new class extends Component {
     {
         // ... (existing selected leave type logic) ...
         return collect($this->leaveTypes)->firstWhere('id', $this->leaveType);
+    }
+    public function getSelectedLeaveType()
+    {
+        if (($this->selectedLeaveType == null || $this->selectedLeaveType->code !== $this->leaveType) && !empty($this->leaveType)) {
+            $this->selectedLeaveType = LeaveType::where('code', $this->leaveType)->first();
+        }
+        return $this->selectedLeaveType;
     }
 
     private function getConflictingEmployees(array $employeeIds, string $startDate, string $endDate): array
@@ -187,11 +205,16 @@ new class extends Component {
 
             if ($this->durationType === 'numberOfDays') {
                 $start = Carbon::parse($this->startDate);
-                $end = $start->copy()->addDays($this->numberOfDays - 1);
+
+                $end = $this->getSelectedLeaveType()->calculateEndDateWithStartDateAndNumberOfDays($start, $this->numberOfDays)['end_date'];
+                //$end = $start->copy()->addDays($this->numberOfDays - 1);
                 $endDate = $end->format('Y-m-d');
             } else {
                 $endDate = $this->endDate;
             }
+
+            // set end date for num of days calculation
+            $this->endDate = $endDate;
 
             $selectedEmployeeIds = $employeesToAssign->pluck('id')->toArray();
             $conflictingIds = $this->getConflictingEmployees($selectedEmployeeIds, $this->startDate, $endDate);
@@ -286,6 +309,7 @@ new class extends Component {
                         'leave_type_id' => $leaveTypeModel?->id,
                         'start_date' => $this->startDate,
                         'end_date' => $endDate,
+                        'num_of_days' => $this->calculateWorkingDays(),
                         'reason' => $this->reason,
                         'contact_during_leave' => $this->contact_during_leave ?? null,
                         'emergency_contact' => $this->emergency_contact ?? null,
