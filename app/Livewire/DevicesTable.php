@@ -76,23 +76,6 @@ class DevicesTable extends DataTableComponent
                 )
                 ->html(),
 
-            // TODO(SIR-DOMMY): This field is inaccurate. Consider polling the device for its last seen status instead of relying on updated_at.
-            Column::make("Last Seen", "updated_at")
-            ->format(function ($value, $row) {
-                if ($row->active) {
-                    return '<span class="badge bg-success">Just now</span>';
-                }
-
-                if (!$value) {
-                    return '<span class="badge bg-danger">Never</span>';
-                }
-
-                return '<span class="badge bg-primary">'
-                    . \Carbon\Carbon::parse($value)->diffForHumans()
-                    . '</span>';
-            })
-            ->html(),
-
             Column::make("Action")
                 ->label(fn($row) => view('livewire.admin.devices.actions', ['device' => $row]))
         ];
