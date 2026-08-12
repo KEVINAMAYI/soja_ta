@@ -258,15 +258,6 @@ new class extends Component {
     }
 
 
-    #[On('show-device')]
-    public function showDevice($id)
-    {
-        //$device = Device::where('id', $id)->first();
-        Log::info("SHOWING DEVICE...");
-        //$this->dispatch('show-view-device-modal');
-    }
-
-
     #[On('remove-device')]
     public function removeDevice($id)
     {

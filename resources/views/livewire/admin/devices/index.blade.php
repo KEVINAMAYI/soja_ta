@@ -114,7 +114,6 @@ new class extends Component {
     public function showDevice($id)
     {
         $this->device = Device::where('id', $id)->first();
-        Log::info("SHOWING DEVICE...". json_encode($this->device));
         $this->dispatch('show-view-device-modal', ['device' => $this->device->toArray()]);
     }
 
@@ -160,7 +159,6 @@ new class extends Component {
 
     public function resetForm()
     {
-        Log::info("RESETTING FORM...");
         $this->reset(['device_name', 'platform', 'device_location_id', 'checkpoint_id', 'pin', 'editId']);
         $this->platform = 'android';
     }
