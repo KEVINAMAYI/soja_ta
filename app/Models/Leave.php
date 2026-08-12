@@ -20,6 +20,7 @@ class Leave extends Model
         'total_levels',
         'start_date',
         'end_date',
+        'num_of_days',
         'reason',
         'contact_during_leave',
         'emergency_contact',
