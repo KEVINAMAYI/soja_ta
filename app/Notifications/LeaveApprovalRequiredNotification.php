@@ -30,7 +30,7 @@ class LeaveApprovalRequiredNotification extends Notification implements ShouldQu
         $employee = $this->leave->employee;
         $leaveType = $this->leave->leaveType;
         $employeeName = $employee->name ?? 'An employee';
-        $totalDays = $this->leave->start_date->diffInDays($this->leave->end_date) + 1;
+        $totalDays = $this->leave->num_of_days;
 
 
         // Resolve the recipient email reliably. When notifications are sent
