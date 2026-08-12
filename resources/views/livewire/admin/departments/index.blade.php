@@ -362,13 +362,13 @@ new class extends Component {
             font-weight: 600;
             line-height: 1.2;
         }
-
         .dept-toggle {
             position: relative;
-            width: 64px;
-            height: 34px;
+            width: 40px;
+            height: 24px;
             border-radius: 999px;
             border: 0;
+            padding: 0;
             cursor: pointer;
             flex-shrink: 0;
             transition: background 0.2s ease;
@@ -377,10 +377,10 @@ new class extends Component {
         .dept-toggle::after {
             content: '';
             position: absolute;
-            top: 4px;
-            left: 4px;
-            width: 26px;
-            height: 26px;
+            top: 3px;
+            left: 3px;
+            width: 18px;
+            height: 18px;
             border-radius: 50%;
             background: #ffffff;
             box-shadow: 0 1px 2px rgba(0, 0, 0, 0.18);
@@ -392,7 +392,7 @@ new class extends Component {
         }
 
         .dept-toggle.is-on::after {
-            transform: translateX(30px);
+            transform: translateX(16px);
         }
 
         .dept-toggle.is-off {
@@ -409,7 +409,7 @@ new class extends Component {
             }
 
             .dept-toggle {
-                width: 52px;
+                width: 45px;
                 height: 30px;
             }
 
