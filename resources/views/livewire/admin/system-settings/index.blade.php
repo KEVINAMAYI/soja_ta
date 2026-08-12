@@ -46,6 +46,8 @@ new class extends Component {
     public $ltCode;
     public $ltIcon;
     public $ltAnnualEntitlementDays;
+    public $ltIncludeWeekends;
+    public $ltIncludeHolidays;
     public $ltIsActive = true;
     public $ltEditId;
 
@@ -616,6 +618,8 @@ new class extends Component {
             'ltIcon' => 'nullable|string|max:10',
             'ltAnnualEntitlementDays' => 'nullable|numeric|min:0|max:999',
             'ltIsActive' => 'boolean',
+            'ltIncludeWeekends' => 'boolean',
+            'ltIncludeHolidays' => 'boolean',
         ];
     }
 
@@ -635,6 +639,8 @@ new class extends Component {
                 'icon' => $this->ltIcon,
                 'annual_entitlement_days' => $this->ltAnnualEntitlementDays,
                 'is_active' => $this->ltIsActive,
+                'weekends_included' => $this->ltIncludeWeekends,
+                'holidays_included' => $this->ltIncludeHolidays,
             ]);
 
             DB::commit();
@@ -672,6 +678,8 @@ new class extends Component {
         $this->ltCode = $type->code;
         $this->ltIcon = $type->icon;
         $this->ltAnnualEntitlementDays = $type->annual_entitlement_days;
+        $this->ltIncludeWeekends = $type->weekends_included;
+        $this->ltIncludeHolidays = $type->holidays_included;
         $this->ltIsActive = $type->is_active;
 
         $this->dispatch('show-leave-type-modal');
@@ -689,6 +697,8 @@ new class extends Component {
                 'code' => $this->ltCode,
                 'icon' => $this->ltIcon,
                 'annual_entitlement_days' => $this->ltAnnualEntitlementDays,
+                'weekends_included' => $this->ltIncludeWeekends ? true : false,
+                'holidays_included' => $this->ltIncludeHolidays ? true : false,
                 'is_active' => $this->ltIsActive,
             ]);
 
@@ -759,7 +769,7 @@ new class extends Component {
 
     public function resetLeaveTypeForm(): void
     {
-        $this->reset(['ltName', 'ltCode', 'ltIcon', 'ltAnnualEntitlementDays', 'ltEditId']);
+        $this->reset(['ltName', 'ltCode', 'ltIcon', 'ltAnnualEntitlementDays', 'ltIncludeWeekends', 'ltIncludeHolidays', 'ltEditId']);
         $this->ltIsActive = true;
     }
 
@@ -911,6 +921,10 @@ new class extends Component {
             background: #b02327;
             border-color: #b02327;
             color: #fff;
+        }
+        
+        .table-header {
+            background-color: #a2a4a7;
         }
     </style>
 @endpush
@@ -1884,16 +1898,19 @@ new class extends Component {
                                     </div>
 
                                     <div class="table-responsive">
-                                        <table class="table table-hover align-middle">
-                                            <thead>
-                                            <tr>
-                                                <th>Name</th>
-                                                <th>Code</th>
-                                                <th>Icon</th>
-                                                <th class="text-end">Annual Entitlement (days)</th>
-                                                <th>Active</th>
-                                                <th>Actions</th>
-                                            </tr>
+                                        <table class="table table-hover table-striped align-middle">
+                                            
+                                            <thead class = "table-header">
+                                                <tr>
+                                                    <th>Name</th>
+                                                    <th>Code</th>
+                                                    <th>Icon</th>
+                                                    <th class="text-end">Annual Entitlement (days)</th>
+                                                    <th class="text-end">Weekends Inc</th>
+                                                    <th class="text-end">Holidays Inc</th>
+                                                    <th>Active</th>
+                                                    <th>Actions</th>
+                                                </tr>
                                             </thead>
                                             <tbody>
                                             @forelse($this->leaveTypesList as $lt)
@@ -1904,6 +1921,11 @@ new class extends Component {
                                                     </td>
                                                     <td>{{ $lt->icon }}</td>
                                                     <td class="text-end">{{ $lt->annual_entitlement_days ?? 'Unlimited' }}</td>
+
+                                                    <!-- Rows for holidays and weekends inclusion -->
+                                                    <td class="text-end">{{ $lt->weekends_included ? 'Yes' : 'No' }}</td>
+                                                    <td class="text-end">{{ $lt->holidays_included ? 'Yes' : 'No' }}</td>
+
                                                     <td>
                                                         @if($lt->is_active)
                                                             <span
@@ -1979,7 +2001,7 @@ new class extends Component {
                                         <div class="mb-3">
                                             <label for="ltAnnualEntitlementDays" class="form-label">Annual
                                                 entitlement (days)</label>
-                                            <input type="number" step="0.5" min="0"
+                                            <input type="number" step="0.5" min="0.5" max="365"
                                                    wire:model="ltAnnualEntitlementDays"
                                                    id="ltAnnualEntitlementDays" class="form-control"
                                                    placeholder="Leave blank for unlimited / not balance-tracked"/>
@@ -1988,6 +2010,30 @@ new class extends Component {
                                             @error('ltAnnualEntitlementDays') <small
                                                 class="text-danger">{{ $message }}</small> @enderror
                                         </div>
+
+
+                                        <!-- Include Weekends -->
+                                        <div class="mb-3">
+                                            <label for="ltIncludeWeekends" class="form-label">Include weekends</label>
+                                            <select class="form-select" wire:model="ltIncludeWeekends" id="ltIncludeWeekends">
+                                                <option value="1" selected>Yes</option>
+                                                <option value="0" >No</option>
+                                            </select>
+                                            <small class="text-muted">Are weekends included in leave days?</small>
+                                            @error('ltIncludeWeekends') <small class="text-danger">{{ $message }}</small>@enderror
+                                        </div>
+
+                                        <!-- Include Holidays -->
+                                        <div class="mb-3">
+                                            <label for="ltIncludeHolidays" class="form-label">Include holidays</label>
+                                            <select class="form-select" wire:model="ltIncludeHolidays" id="ltIncludeHolidays">
+                                                <option value="1" selected>Yes</option>
+                                                <option value="0" >No</option>
+                                            </select>
+                                            <small class="text-muted">Are holidays included in leave days?</small>
+                                            @error('ltIncludeHolidays') <small class="text-danger">{{ $message }}</small>@enderror
+                                        </div>
+
 
                                         <div class="form-check form-switch">
                                             <input class="form-check-input" type="checkbox" role="switch"
