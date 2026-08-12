@@ -233,7 +233,8 @@ new class extends Component {
 
 
 <div class="">
-    <div class="row">
+    <!-- Commented out summary of devices... might be needed in the future -->
+    <!-- <div class="row">
         <div class="col-lg-4 col-md-6 col-12 border-radius-1">
             <div class="summary-card">
                 <p class="summary-card-title">Total Devices</p>
@@ -257,7 +258,7 @@ new class extends Component {
             </div>
         </div>
 
-    </div>
+    </div> -->
 
     <div class="col-12">
         <div class="card card-body">
