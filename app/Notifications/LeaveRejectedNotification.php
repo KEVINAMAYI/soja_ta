@@ -30,7 +30,7 @@ class LeaveRejectedNotification extends Notification implements ShouldQueue
         $employee = $this->leave->employee;
         $leaveType = $this->leave->leaveType;
         $employeeName = $employee->name ?? 'Employee';
-        $totalDays = $this->leave->start_date->diffInDays($this->leave->end_date) + 1;
+        $totalDays = $this->leave->num_of_days;
 
         $activeLog = LeaveApprovalLog::where('leave_id', $this->leave->id)
             ->where('status', 'rejected')
