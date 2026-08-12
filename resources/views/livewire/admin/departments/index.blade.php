@@ -443,150 +443,31 @@ new class extends Component {
     $departmentTags = auth()->user()->employee->organization->departments;
 @endphp
 
-<div class="row g-3">
+
+<div class="row">
     <div class="col-12">
-        <div class="dept-shell">
-            <div class="dept-shell-header mb-2">
-                <p class="dept-shell-title">Departments</p>
-                <div class="dept-chip-wrap">
-                    @foreach($departmentTags as $department)
-                        <span class="dept-chip">{{ $department->name }}</span>
-                    @endforeach
-
-                    <a href="javascript:void(0)"
-                       class="dept-chip dept-chip-add"
-                       data-bs-toggle="modal"
-                       data-bs-target="#departmentModal">
-                        + Add department
-                    </a>
-                </div>
-            </div>
-
-            <h3 class="dept-defaults-title">New employee defaults</h3>
-            <p class="dept-defaults-sub">Applied automatically when an employee record is created.</p>
-
-            <div class="dept-setting-row">
-                <div>
-                    <p class="dept-setting-label">Generate QR code on creation</p>
-                    <p class="">Issues a QR code for the employee at the time their record is added.</p>
-                </div>
-                <button type="button"
-                        class="dept-toggle {{ $generateQrOnCreate ? 'is-on' : 'is-off' }}"
-                        wire:click="saveQrCodeSetting({{ $generateQrOnCreate ? 0 : 1 }})"
-                        aria-label="Generate QR code on creation"></button>
-            </div>
-
-            <div class="dept-setting-row">
-                <div>
-                    <p class="dept-setting-label">Require employee photo</p>
-                    <p class="">Blocks saving a new employee until a photo is uploaded.</p>
+        <div class="card card-body">
+            {{-- Top Bar: Search + Create Button --}}
+            <div class="d-flex flex-wrap justify-content-between align-items-center mb-3">
+                {{-- Left side: Optional Search (if added) --}}
+                <div class="mb-2">
+                    {{-- Placeholder for filters/search --}}
                 </div>
 
-                <button type="button"
-                        class="dept-toggle {{ $requireEmployeePhoto ? 'is-on' : 'is-off' }}"
-                        wire:click="saveEmployeePhotoSetting({{ $requireEmployeePhoto ? 0 : 1 }})"
-                        aria-label="Require employee photo"></button>
-                <!-- <button type="button" class="dept-toggle is-off" aria-label="Require employee photo"></button> -->
+                {{-- Right side: Create Department button --}}
+                <a href="javascript:void(0)" class="btn btn-primary" data-bs-toggle="modal"
+                    data-bs-target="#departmentModal">
+                    <i class="ti ti-building fs-5"></i> Add Department
+                </a>
+
             </div>
 
-            <div class="dept-setting-row">
-                <div>
-                    <p class="dept-setting-label">Auto-assign employee ID</p>
-                    <p class="">Generates a sequential ID instead of requiring manual entry.</p>
-                </div>
+            {{-- Livewire Table --}}
+            <livewire:department-table theme="bootstrap-4"/>
 
-                <button type="button"
-                        class="dept-toggle {{ $autoAssignEmployeeId ? 'is-on' : 'is-off' }}"
-                        wire:click="saveAutoAssignEmployeeIdSetting({{ $autoAssignEmployeeId ? 0 : 1 }})"
-                        aria-label="Auto-assign employee ID"></button>
-                <!-- <button type="button" class="dept-toggle is-on" aria-label="Auto-assign employee ID"></button> -->
-            </div>
         </div>
     </div>
-
-
-
-    <div class="modal fade" id="departmentModal" tabindex="-1"
-        aria-labelledby="departmentModalTitle" aria-hidden="true" wire:ignore.self>
-        <div class="modal-dialog modal-md modal-dialog-centered">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title">{{ $editId ? 'Edit Department' : 'New Department' }}</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-
-                <form wire:submit.prevent="{{ $editId ? 'updateDepartment' : 'createDepartment' }}">
-                    <div class="modal-body">
-                        <div class="mb-3">
-                            <label for="name" class="form-label">Name</label>
-                            <input type="text" wire:model="name" id="name" class="form-control"
-                                placeholder="Department Name"/>
-                            @error('name') <small class="text-danger">{{ $message }}</small> @enderror
-                        </div>
-
-                        <div class="mb-3">
-                            <label for="description" class="form-label">Description</label>
-                            <textarea wire:model="description" id="description" class="form-control" rows="3"
-                                    placeholder="Write a short description..."></textarea>
-                            @error('description') <small class="text-danger">{{ $message }}</small> @enderror
-                        </div>
-
-                        <div class="mb-3">
-                            <label for="manager_id" class="form-label">Manager</label>
-                            <select wire:model="manager_id" id="manager_id" class="form-control">
-                                <option value="">Select Manager (Optional)</option>
-                                @foreach(User::whereHas('employee', fn($q) => $q->where('organization_id', auth()->user()->employee->organization_id))->get() as $user)
-                                    <option value="{{ $user->id }}">{{ $user->name }}</option>
-                                @endforeach
-                            </select>
-                            @error('manager_id') <small class="text-danger">{{ $message }}</small> @enderror
-                        </div>
-                    </div>
-
-                    <div class="modal-footer d-flex gap-1">
-                        <button type="submit" class="btn btn-success">
-                            {{ $editId ? 'Save' : 'Add' }}
-                        </button>
-                        <button wire:click="$dispatch('discard-department-modal')" type="button"
-                                class="btn btn-outline-danger" data-bs-dismiss="modal">
-                            Discard
-                        </button>
-                    </div>
-                </form>
-            </div>
-        </div>
-    </div>
-
 </div>
-
-{{-- Original parent div kept for future use --}}
-@if(false)
-    <div class="row">
-        <div class="col-12">
-            <div class="card card-body">
-                {{-- Top Bar: Search + Create Button --}}
-                <div class="d-flex flex-wrap justify-content-between align-items-center mb-3">
-                    {{-- Left side: Optional Search (if added) --}}
-                    <div class="mb-2">
-                        {{-- Placeholder for filters/search --}}
-                    </div>
-
-                    {{-- Right side: Create Department button --}}
-                    <a href="javascript:void(0)" class="btn btn-primary" data-bs-toggle="modal"
-                       data-bs-target="#departmentModal">
-                        <i class="ti ti-building fs-5"></i> Add Department
-                    </a>
-
-                </div>
-
-                {{-- Livewire Table --}}
-                <livewire:department-table theme="bootstrap-4"/>
-
-            </div>
-        </div>
-    </div>
-@endif
-
 @push('scripts')
     <script>
         window.addEventListener('show-department-modal', () => {
