@@ -545,10 +545,6 @@ new class extends Component {
             }
         }
 
-
-
-         Log::info("Saving setting: " . json_encode($this->leaveApproval));
-
         if ($this->leaveApprovalScope === 'department') {
             if (!$this->leaveApprovalDepartmentId) {
                 LivewireAlert::title('Select a department')
