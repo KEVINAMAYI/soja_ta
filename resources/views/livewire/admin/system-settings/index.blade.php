@@ -892,8 +892,8 @@ new class extends Component {
         .leave-level-panel-title {
             margin: 0;
             color: #212529;
-            font-size: 1.35rem;
-            font-weight: 700;
+            font-size: 1.05rem;
+            font-weight: 600;
         }
 
         .leave-level-panel-sub {
@@ -901,7 +901,7 @@ new class extends Component {
             color: #6c757d;
             font-size: 0.8rem;
             font-weight: 600;
-            text-transform: uppercase;
+            /* text-transform: lowercase; */
             letter-spacing: 0.03em;
         }
 
@@ -1498,7 +1498,7 @@ new class extends Component {
 
                             @if($leaveApprovalScope === 'organization' || $leaveApprovalDepartmentId)
 
-                            {{-- Approval system master toggle --}}
+                            <!-- {{-- Approval system master toggle --}}
                             <div class="card border shadow-none mb-4">
                                 <div class="card-body p-4">
                                     <div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
@@ -1524,14 +1524,14 @@ new class extends Component {
                                                       class="fs-5 flex-shrink-0"
                                                       style="color:#0d6efd;margin-top:1px;"></iconify-icon>
                                         <span style="color:#084298;line-height:1.6;">
-                When enabled, a submitted leave request must be approved sequentially through each
-                <strong>enabled</strong> level below (Level 1 → Level 2 → Level 3). A rejection at any
-                level immediately finalizes the request as rejected. You don't need to enable all 3 —
-                only the enabled levels are used.
-            </span>
+                                            When enabled, a submitted leave request must be approved sequentially through each
+                                            <strong>enabled</strong> level below (Level 1 → Level 2 → Level 3). A rejection at any
+                                            level immediately finalizes the request as rejected. You don't need to enable all 3 —
+                                            only the enabled levels are used.
+                                        </span>
                                     </div>
                                 </div>
-                            </div>
+                            </div> -->
 
                             {{-- Approval levels --}}
                             <div class="card border shadow-none mb-4 leave-level-layout">
@@ -1596,10 +1596,10 @@ new class extends Component {
                                                 @if($activeLevelIndex === $i)
                                                     <div wire:key="leave-approval-level-detail-{{ $i }}" class="leave-level-panel">
                                                         <div class="leave-level-panel-header d-flex align-items-center justify-content-between gap-2 flex-wrap">
-                                                            <h6 class="leave-level-panel-title d-flex align-items-center gap-2">
+                                                            <h4 class="leave-level-panel-title d-flex align-items-center gap-2">
                                                                 <span class="leave-level-dot {{ !empty($level['enabled']) ? 'on' : '' }}"></span>
                                                                 Level {{ $i + 1 }}
-                                                            </h6>
+                                                            </h4>
                                                             <p class="leave-level-panel-sub mb-0">
                                                                 @if($i === 0)
                                                                     Always on
@@ -1630,7 +1630,7 @@ new class extends Component {
                                                         </div>
 
                                                         @if($level['approver_type'] === 'user')
-                                                            <div class="mb-2">
+                                                            <div class="mb-2 mt-4">
                                                                 <label class="form-label small text-uppercase text-muted fw-semibold">Approvers</label>
                                                                 @php
                                                                     $selectedUserIds = $level['approver_user_ids'] ?? [];
@@ -1699,7 +1699,7 @@ new class extends Component {
                                                                 @endif
 
                                                                 @if($selectedUsers->count() >= 2)
-                                                                    <div class="align-items-center mb-2 rounded-3 p-2" style="border:1px solid #cbd1d6; box-shadow: 0 6px 18px #D9B84A; background-color: #FAF7F0; color: #D9B84A;">
+                                                                    <div class="align-items-center mb-2 mt-4 rounded-3 p-2" style="border:1px solid #cbd1d6; box-shadow: 0 6px 18px #D9B84A; background-color: #FAF7F0; color: #D9B84A;">
 
                                                                         <div class="mb-1">
                                                                             <label class="form-label small text-uppercase text-muted fw-semibold" style="color: #D9B84A;">Approver Rule</label>
@@ -1735,7 +1735,7 @@ new class extends Component {
                                                                 @endif
                                                             </div>
                                                         @else
-                                                            <div class="mb-2">
+                                                            <div class="mb-2 mt-4">
                                                                 <label class="form-label small text-uppercase text-muted fw-semibold">Role</label>
                                                                 <select class="form-select form-select-sm"
                                                                         wire:model="leaveApproval.levels.{{ $i }}.approver_role"
@@ -1748,7 +1748,7 @@ new class extends Component {
                                                             </div>
                                                         @endif
 
-                                                        <div wire:key="leave-approval-level-{{ $i }}-notifications" class="mb-2">
+                                                        <div wire:key="leave-approval-level-{{ $i }}-notifications" class="mb-2 mt-4">
                                                             <label class="form-label small text-uppercase text-muted fw-semibold d-flex align-items-center gap-1">
                                                                 <iconify-icon icon="mdi:bell-outline"></iconify-icon>
                                                                 CC on approval/rejection
@@ -1772,6 +1772,11 @@ new class extends Component {
                                                                         ->values();
                                                                     $availableEmailUsers = collect($availableUsers)
                                                                         ->reject(fn($u) => in_array($u['email'], $selectedEmailAddresses, true) || empty($u['email']))
+                                                                        ->values();
+
+                                                                    
+                                                                    $availableEmailUsers = collect($availableUsers)
+                                                                        ->reject(fn($u) => in_array($u['id'], $selectedUserIds, true))
                                                                         ->values();
 
                                                                     $emailSearchTerm = trim($leaveApprovalEmailSearch[$i] ?? '');
@@ -1837,10 +1842,16 @@ new class extends Component {
                                         </div>
                                     </div>
 
+
                                     <div class="d-flex align-items-center justify-content-end gap-2 mt-4">
-                                        <button wire:click="saveLeaveApprovalSettings" class="btn leave-red-btn">
+                                        <button wire:click="saveLeaveApprovalSettings"
+                                                class="btn leave-red-btn d-inline-flex align-items-center">
                                             <iconify-icon icon="mdi:content-save-outline" class="me-1"></iconify-icon>
-                                            {{ $leaveApprovalScope === 'department' ? 'Save for Selected Department' : 'Save Organization Default' }}
+                                            <span>
+                                                {{ $leaveApprovalScope === 'department'
+                                                    ? 'Save for Selected Department'
+                                                    : 'Save Organization Default' }}
+                                            </span>
                                         </button>
                                     </div>
 
