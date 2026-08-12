@@ -17,6 +17,7 @@ new class extends Component {
     public $editId;
     public $description;
     public $manager_id;
+    public string $activeParentTab = 'company';
     public string $activeTab = 'company';
     public string $tabTitle;
     public string $tabIcon;
@@ -186,6 +187,28 @@ new class extends Component {
             ->show();
     }
 
+
+    public function setActiveParentTab(string $parentTab, string $defaultChildTab = ''): void
+    {
+        // if (!in_array($parentTab, ['attendance', 'leaves', 'help_support'], true)) {
+        //     return;
+        // }
+
+        $this->activeParentTab = $parentTab;
+        $this->activeTab = $defaultChildTab ? $defaultChildTab : $this->activeTab;
+
+        $this->changeBreadcrumb();
+    }
+
+
+    public function setActiveTab(string $tabId, string $defaultParentTab = ''): void
+    {
+        $this->activeTab = $tabId;
+        $this->activeParentTab = $defaultParentTab ?: $this->activeParentTab;
+
+        $this->changeBreadcrumb();
+    }
+
     public function changeBreadcrumb()
     {
         switch ($this->activeTab) {
@@ -195,24 +218,39 @@ new class extends Component {
                 $this->tabIcon = '<iconify-icon icon="mdi:office-building-outline" class="fs-5"></iconify-icon>';
                 break;
 
-            case 'roles':
-                $this->tabTitle = 'Access & Security';
-                $this->tabIcon = '<iconify-icon icon="mdi:shield-check-outline" class="fs-5"></iconify-icon>';
+            case 'employee_defaults':
+                $this->tabTitle = 'Employee Defaults';
+                $this->tabIcon = '<iconify-icon icon="mdi:account-multiple-outline" class="fs-5"></iconify-icon>';
                 break;
 
-            case 'location-assignment':
-                $this->tabTitle = 'Locations & Checkpoints';
+            case 'departments':
+                $this->tabTitle = 'Departments';
+                $this->tabIcon = '<iconify-icon icon="mdi:office-building-outline" class="fs-5"></iconify-icon>';
+                break;
+
+            case 'users':
+                $this->tabTitle = 'Users';
+                $this->tabIcon = '<iconify-icon icon="mdi:user-outline" class="fs-5"></iconify-icon>';
+                break;
+
+            case 'user_roles':
+                $this->tabTitle = 'Roles & Permissions';
+                $this->tabIcon = '<iconify-icon icon="mdi:shield-outline" class="fs-5"></iconify-icon>';
+                break;
+
+            case 'qr_token_management':
+                $this->tabTitle = 'QR Token Management';
+                $this->tabIcon = '<iconify-icon icon="mdi:qrcode-scan" class="fs-5"></iconify-icon>';
+                break;
+
+            case 'location':
+                $this->tabTitle = 'Locations';
                 $this->tabIcon = '<iconify-icon icon="mdi:map-marker-outline" class="fs-5"></iconify-icon>';
                 break;
 
             case 'devices':
                 $this->tabTitle = 'Devices';
-                $this->tabIcon = '<iconify-icon icon="mdi:map-marker-outline" class="fs-5"></iconify-icon>';
-                break;
-
-            case 'users':
-                $this->tabTitle = 'Users & Departments';
-                $this->tabIcon = '<iconify-icon icon="mdi:account-multiple-outline" class="fs-5"></iconify-icon>';
+                $this->tabIcon = '<iconify-icon icon="mdi:device-mobile-outline" class="fs-5"></iconify-icon>';
                 break;
 
             default:
@@ -403,11 +441,12 @@ new class extends Component {
                 <!-- Company Information -->
                 <li class="nav-item" role="presentation">
                     <button
-                        class="nav-link position-relative rounded-0 {{ $activeTab === 'company' ? 'active' : '' }} d-flex align-items-center justify-content-center bg-transparent fs-3 py-3"
+                        class="nav-link position-relative rounded-0 {{ $activeParentTab === 'company' ? 'active' : '' }} d-flex align-items-center justify-content-center bg-transparent fs-3 py-3"
                         id="tab-company-information-tab"
                         data-bs-toggle="pill"
                         data-bs-target="#tab-company-information"
                         type="button"
+                        wire:click="setActiveParentTab('company', 'company')"
                         role="tab"
                         aria-controls="tab-company-information"
                         aria-selected="true">
@@ -419,16 +458,17 @@ new class extends Component {
 
                 <li class="nav-item" role="presentation">
                     <button
-                        class="nav-link position-relative rounded-0 {{ $activeTab === 'location-assignment' ? 'active' : '' }} d-flex align-items-center justify-content-center bg-transparent fs-3 py-3"
+                        class="nav-link position-relative rounded-0 {{ $activeParentTab === 'location-assignment' ? 'active' : '' }} d-flex align-items-center justify-content-center bg-transparent fs-3 py-3"
                         id="tab-location-assignment-tab"
                         data-bs-toggle="pill"
                         data-bs-target="#tab-location-assignment"
                         type="button"
+                        wire:click="setActiveParentTab('location-assignment', 'location')"
                         role="tab"
                         aria-controls="tab-location-assignment"
                         aria-selected="false">
                         <i class="ti ti-map-pin mx-1 fs-6"></i>
-                        <span class="d-none d-md-block">Locations & Checkpoints</span>
+                        <span class="d-none d-md-block">Locations & Devices</span>
                     </button>
                 </li>
 
@@ -436,11 +476,12 @@ new class extends Component {
                 <!-- User -->
                 <li class="nav-item" role="presentation">
                     <button
-                        class="nav-link position-relative rounded-0 {{ $activeTab === 'users' ? 'active' : '' }} d-flex align-items-center justify-content-center bg-transparent fs-3 py-3"
+                        class="nav-link position-relative rounded-0 {{ $activeParentTab === 'users' ? 'active' : '' }} d-flex align-items-center justify-content-center bg-transparent fs-3 py-3"
                         id="tab-users-tab"
                         data-bs-toggle="pill"
                         data-bs-target="#tab-users"
                         type="button"
+                        wire:click="setActiveParentTab('users', 'employee_defaults')"
                         role="tab"
                         aria-controls="tab-users"
                         aria-selected="false">
@@ -453,30 +494,15 @@ new class extends Component {
                 </li>
 
 
-                <li class="nav-item" role="presentation">
-                    <button
-                        class="nav-link position-relative rounded-0 {{ $activeTab === 'devices' ? 'active' : '' }} d-flex align-items-center justify-content-center bg-transparent fs-3 py-3"
-                        id="tab-devices-tab"
-                        data-bs-toggle="pill"
-                        data-bs-target="#tab-devices"
-                        type="button"
-                        role="tab"
-                        aria-controls="tab-devices"
-                        aria-selected="false">
-                        <i class="ti ti-device-mobile fs-5"></i>
-                        <span class="d-none d-md-block">Devices</span>
-                    </button>
-                </li>
-
-
                 <!-- Roles & Permissions -->
                 <li class="nav-item" role="presentation">
                     <button
-                        class="nav-link position-relative rounded-0 {{ $activeTab === 'roles' ? 'active' : '' }} d-flex align-items-center justify-content-center bg-transparent fs-3 py-3"
+                        class="nav-link position-relative rounded-0 {{ $activeParentTab === 'roles' ? 'active' : '' }} d-flex align-items-center justify-content-center bg-transparent fs-3 py-3"
                         id="tab-roles-permissions-tab"
                         data-bs-toggle="pill"
                         data-bs-target="#tab-roles-permissions"
                         type="button"
+                        wire:click="setActiveParentTab('roles', 'user_roles')"
                         role="tab"
                         aria-controls="tab-roles-permissions"
                         aria-selected="false">
@@ -488,11 +514,151 @@ new class extends Component {
             </ul>
 
 
+            @if($activeParentTab === 'location-assignment')
+                <ul class="nav nav-pills user-profile-tab" id="pills-tab" role="tablist"  style="background-color: #F3F4F6;">
+                    
+                    <li class="nav-item" role="presentation">
+                        <button
+                            class="nav-link position-relative rounded-0 {{ $activeTab === 'location' ? 'active' : '' }} d-flex align-items-center justify-content-center bg-transparent fs-3 py-3"
+                            id="tab-location-assignment-tab"
+                            data-bs-toggle="pill"
+                            data-bs-target="#tab-location-assignment"
+                            wire:click="setActiveTab('location')"
+                            type="button"
+                            role="tab"
+                            aria-controls="tab-location-assignment"
+                            aria-selected="false">
+                            <i class="ti ti-map-pin mx-1 fs-6"></i>
+                            <span class="d-none d-md-block">Locations</span>
+                        </button>
+                    </li>
+
+                    <li class="nav-item" role="presentation">
+                        <button
+                            class="nav-link position-relative rounded-0 {{ $activeTab === 'devices' ? 'active' : '' }} d-flex align-items-center justify-content-center bg-transparent fs-3 py-3"
+                            id="tab-devices-tab"
+                            data-bs-toggle="pill"
+                            data-bs-target="#tab-devices"
+                            wire:click="setActiveTab('devices')"
+                            type="button"
+                            role="tab"
+                            aria-controls="tab-devices"
+                            aria-selected="false">
+                            <i class="ti ti-device-mobile fs-5"></i>
+                            <span class="d-none d-md-block">Devices</span>
+                        </button>
+                    </li>
+
+                </ul>
+            @endif
+
+            @if($activeParentTab === 'users')
+                <ul class="nav nav-pills user-profile-tab" id="pills-tab" role="tablist"  style="background-color: #F3F4F6;">
+                    
+
+                    <!-- User -->
+                    <li class="nav-item" role="presentation">
+                        <button
+                            class="nav-link position-relative rounded-0 {{ $activeTab === 'employee_defaults' ? 'active' : '' }} d-flex align-items-center justify-content-center bg-transparent fs-3 py-3"
+                            id="tab-employee-defaults-tab"
+                            data-bs-toggle="pill"
+                            data-bs-target="#tab-employee-defaults"
+                            type="button"
+                            wire:click="setActiveTab('employee_defaults')"
+                            role="tab"
+                            aria-controls="tab-employee-defaults"
+                            aria-selected="false">
+                            <i class="ti ti-users mx-1 fs-6"></i>
+                            <span class="d-none d-md-block"> Employee Defaults</span>
+                        </button>
+                    </li>
+
+
+                    <li class="nav-item" role="presentation">
+                        <button
+                            class="nav-link position-relative rounded-0 {{ $activeTab === 'departments' ? 'active' : '' }} d-flex align-items-center justify-content-center bg-transparent fs-3 py-3"
+                            id="tab-departments-tab"
+                            data-bs-toggle="pill"
+                            data-bs-target="#tab-departments"
+                            type="button"
+                            wire:click="setActiveTab('departments')"
+                            role="tab"
+                            aria-controls="tab-departments"
+                            aria-selected="false">
+                            <i class="ti ti-building-warehouse mx-1 fs-6"></i>
+                            <span class="d-none d-md-block">Departments</span>
+                        </button>
+                    </li>
+
+                </ul>
+            @endif
+
+            @if($activeParentTab === 'roles')
+                <ul class="nav nav-pills user-profile-tab" id="pills-tab" role="tablist"  style="background-color: #F3F4F6;">
+                    
+
+                    <!-- User -->
+                    <li class="nav-item" role="presentation">
+                        <button
+                            class="nav-link position-relative rounded-0 {{ $activeTab === 'users' ? 'active' : '' }} d-flex align-items-center justify-content-center bg-transparent fs-3 py-3"
+                            id="tab-users-tab"
+                            data-bs-toggle="pill"
+                            data-bs-target="#tab-users"
+                            type="button"
+                            wire:click="setActiveTab('users')"
+                            role="tab"
+                            aria-controls="tab-users"
+                            aria-selected="false">
+                            <i class="ti ti-users mx-1 fs-6"></i>
+                            <span class="d-none d-md-block"> Users</span>
+                        </button>
+                    </li>
+
+
+                    <li class="nav-item" role="presentation">
+                        <button
+                            class="nav-link position-relative rounded-0 {{ $activeTab === 'user_roles' ? 'active' : '' }} d-flex align-items-center justify-content-center bg-transparent fs-3 py-3"
+                            id="tab-user-roles-tab"
+                            data-bs-toggle="pill"
+                            data-bs-target="#user-roles"
+                            type="button"
+                            wire:click="setActiveTab('user_roles')"
+                            role="tab"
+                            aria-controls="tab-user-roles"
+                            aria-selected="false">
+                            <i class="ti ti-building-warehouse mx-1 fs-6"></i>
+                            <span class="d-none d-md-block">Roles & Permissions</span>
+                        </button>
+                    </li>
+
+
+
+                    <!-- Roles & Permissions -->
+                    <li class="nav-item" role="presentation">
+                        <button
+                            class="nav-link position-relative rounded-0 {{ $activeTab === 'qr_token_management' ? 'active' : '' }} d-flex align-items-center justify-content-center bg-transparent fs-3 py-3"
+                            id="tab-qr-token-management-tab"
+                            data-bs-toggle="pill"
+                            data-bs-target="#qr-token"
+                            type="button"
+                            wire:click="setActiveTab('qr_token_management')"
+                            role="tab"
+                            aria-controls="tab-qr-token-management"
+                            aria-selected="false">
+                            <i class="ti ti-qrcode mx-1 fs-6"></i>
+                            <span class="d-none d-md-block">QR Token Management</span>
+                        </button>
+                    </li>
+
+                </ul>
+            @endif
+
+
             <div class="card-body">
                 <div class="tab-content" id="pills-tabContent">
 
                     <!-- Working Hours Tab -->
-                    <div class="tab-pane fade {{ $activeTab === 'company' ? 'show active' : '' }}"
+                    <div class="tab-pane fade {{ $activeParentTab === 'company' || $activeTab === 'company'  ? 'show active' : '' }}"
                          id="tab-company-information">
 
                         <livewire:admin.organizations.edit :id="$org->id"/>
@@ -500,7 +666,7 @@ new class extends Component {
                     </div>
 
                     <!-- Locations and Assignments Tab -->
-                    <div class="tab-pane fade {{ $activeTab === 'location-assignment' ? 'show active' : '' }}"
+                    <div class="tab-pane fade {{ $activeTab === 'location' ? 'show active' : '' }}"
                          id="tab-location-assignment">
 
                         <livewire:admin.location-assignment.index/>
@@ -516,103 +682,27 @@ new class extends Component {
                     </div>
 
 
-                    <!-- Overtime Policy Tab -->
-                    <div class="tab-pane fade {{ $activeTab === 'roles' ? 'show active' : '' }}"
-                         id="tab-roles-permissions">
 
-                        <!-- Inner Nav Tabs -->
-                        <ul class="nav nav-pills user-profile-tab border-bottom mb-4" id="innerRolesTab" role="tablist">
-                            <li class="nav-item" role="presentation">
-                                <button
-                                    class="nav-link position-relative rounded-0 active d-flex align-items-center justify-content-center bg-transparent fs-3 py-3"
-                                    id="user-roles-tab"
-                                    data-bs-toggle="tab"
-                                    data-bs-target="#user-roles"
-                                    type="button"
-                                    role="tab"
-                                    aria-controls="user-roles"
-                                    aria-selected="true">
-                                    <i class="ti ti-shield mx-1 fs-6"></i>
-                                    <span class="d-none d-md-block">User Roles & Permissions</span>
-                                </button>
-                            </li>
-                            <li class="nav-item" role="presentation">
-                                <button
-                                    class="nav-link position-relative rounded-0 d-flex align-items-center justify-content-center bg-transparent fs-3 py-3"
-                                    id="qr-token-tab"
-                                    data-bs-toggle="tab"
-                                    data-bs-target="#qr-token"
-                                    type="button"
-                                    role="tab"
-                                    aria-controls="qr-token"
-                                    aria-selected="false">
-                                    <i class="ti ti-qrcode mx-1 fs-6"></i>
-                                    <span class="d-none d-md-block">QR Token Management</span>
-                                </button>
-                            </li>
-                        </ul>
+                     <!-- User Roles & Permissions Content -->
+                    <div class="tab-pane fade  {{ $activeTab === 'user_roles' ? 'show active' : '' }}" id="user-roles" role="tabpanel"
+                            aria-labelledby="user-roles-tab">
+                        <livewire:admin.roles.index/>
+                    </div>
 
-                        <!-- Inner Tab Content -->
-                        <div class="tab-content" id="innerRolesTabContent">
-
-                            <!-- User Roles & Permissions Content -->
-                            <div class="tab-pane fade show active" id="user-roles" role="tabpanel"
-                                 aria-labelledby="user-roles-tab">
-                                <livewire:admin.roles.index/>
-                            </div>
-
-                            <!-- QR Token Management Placeholder -->
-                            <div class="tab-pane fade" id="qr-token" role="tabpanel" aria-labelledby="qr-token-tab">
-                                <livewire:admin.account-settings.token_management/>
-                            </div>
-                        </div>
-
+                    <!-- QR Token Management Placeholder -->
+                    <div class="tab-pane fade  {{ $activeTab === 'qr_token_management' ? 'show active' : '' }}" id="qr-token" role="tabpanel" aria-labelledby="qr-token-tab">
+                        <livewire:admin.account-settings.token_management/>
                     </div>
 
 
-                    <!-- Overtime Policy Tab -->
-                    <div class="tab-pane fade {{ $activeTab === 'users' ? 'show active' : '' }}"
-                         id="tab-users">
+                    <!-- Employee defaults -->                        
+                    <div class="tab-pane fade {{ $activeTab === 'employee_defaults' ? 'show active' : '' }}" id="tab-employee-defaults" role="tabpanel" aria-labelledby="employee-defaults-tab">
+                        <livewire:admin.account-settings.employee_defaults/>
+                    </div>
 
-                        <div class="accordion" id="customAccordion">
-                            <div class="accordion-item border-0 mb-3 shadow-sm rounded">
-                                <h2 class="accordion-header" id="headingOne">
-                                    <button class="fs-4 accordion-button fw-bold collapsed mb-2" type="button"
-                                            data-bs-toggle="collapse" data-bs-target="#collapseOne"
-                                            aria-expanded="false" aria-controls="collapseOne">
-                                        Departments
-                                    </button>
-                                </h2>
-
-
-                                <!-- <div id="collapseOne" class="accordion-collapse collapse"
-                                     aria-labelledby="headingOne"
-                                     data-bs-parent="#customAccordion">
-                                    <livewire:admin.departments.index/>
-                                </div> -->
-                            </div>
-
-
-                            <div class="accordion" id="userAccordion">
-                                <div class="accordion-item border-0 shadow-sm rounded">
-                                    <h2 class="accordion-header" id="headingUsers">
-                                        <button class="fs-4 accordion-button fw-bold collapsed" type="button"
-                                                data-bs-toggle="collapse" data-bs-target="#collapseUsers"
-                                                aria-expanded="false" aria-controls="collapseUsers">
-                                            {{ auth()->user()->employee?->organization?->is_student_record ? 'Users' : 'Employees'}}
-                                        </button>
-                                    </h2>
-                                    <div id="collapseUsers" class="accordion-collapse collapse"
-                                         aria-labelledby="headingUsers"
-                                         data-bs-parent="#userAccordion">
-                                        <livewire:admin.employees.index :roleId="null"/>
-                                    </div>
-                                </div>
-                            </div>
-
-
-                        </div>
-
+                    <!-- Employee defaults -->                        
+                    <div class="tab-pane fade {{ $activeTab === 'departments' ? 'show active' : '' }}" id="tab-departments" role="tabpanel" aria-labelledby="departments-tab">                        
+                        <livewire:admin.departments.index/>
                     </div>
 
 
