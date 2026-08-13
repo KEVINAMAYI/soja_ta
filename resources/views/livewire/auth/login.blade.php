@@ -60,6 +60,19 @@ class extends Component {
         }
 
 
+        if (!$user->is_active) {
+            Auth::logout();
+
+            throw ValidationException::withMessages([
+                'account' => 'Your account inactive. Contact your administrator.',
+            ]);
+        }
+
+        // save last login timestamp and IP address
+        $user->last_login_at = now();
+        $user->last_login_ip = request()->ip();
+        $user->save();
+
         RateLimiter::clear($this->throttleKey());
         Session::regenerate();
 
