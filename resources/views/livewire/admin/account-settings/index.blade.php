@@ -507,7 +507,7 @@ new class extends Component {
                         data-bs-toggle="pill"
                         data-bs-target="#tab-roles-permissions"
                         type="button"
-                        wire:click="setActiveParentTab('roles', 'user_roles')"
+                        wire:click="setActiveParentTab('roles', 'users')"
                         role="tab"
                         aria-controls="tab-roles-permissions"
                         aria-selected="false">
@@ -686,6 +686,13 @@ new class extends Component {
 
                     </div>
 
+
+
+                    <!-- User Content -->
+                    <div class="tab-pane fade  {{ $activeTab === 'users' ? 'show active' : '' }}" id="users" role="tabpanel"
+                            aria-labelledby="users-tab">
+                        <livewire:admin.users.index/>
+                    </div>
 
 
                      <!-- User Roles & Permissions Content -->
