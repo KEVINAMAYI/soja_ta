@@ -342,14 +342,22 @@ new class extends Component {
                                         <button type="button" class="btn p-0 ms-1 fw-bold dropdown-item" wire:click="openEditUserModal({{ $user->id }})">Edit user</button></li>
                                     
                                     <li class="d-flex align-items-center dropdown-item">
-                                        <span class="me-0">
-                                            <i class="ti ti-lock-open"></i>
-                                        </span>
+                                        @if ($user->is_active)
+                                            <span class="me-0">
+                                                <i class="ti ti-lock"></i>
+                                            </span>
+                                        @else
+                                            <span class="me-0">
+                                                <i class="ti ti-lock-open"></i>
+                                            </span>
+                                        @endif
                                         <button type="button" class="btn p-0 ms-1 fw-bold dropdown-item" wire:click="toggleUserAccess({{ $user->id }})">
-                                            {{ ($user->employee?->active ?? false) ? 'Deactivate user' : 'Reactivate user' }}
+                                            {{ $user->is_active ? 'Deactivate user' : 'Reactivate user' }}
                                         </button>
                                     </li>
 
+                                    <!-- Add line break -->
+                                    <li><hr class="dropdown-divider"></li>
                                     <li class="d-flex align-items-center dropdown-item text-danger">
                                         <span class="me-0">
                                             <i class="ti ti-trash-x-filled"></i>
