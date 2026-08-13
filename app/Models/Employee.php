@@ -33,7 +33,8 @@ class Employee extends Model
         'end_off_shift_date',
         'zkbio_pin',
         'grade',
-        'is_student'
+        'is_student',
+        'is_user'
     ];
 
 
