@@ -402,15 +402,16 @@ new class extends Component {
         /* Inner tabs underline style */
         #innerRolesTab .nav-link {
             border: none !important;
-            border-bottom: 2px solid transparent !important;
+            border-bottom: 40px solid transparent !important;
             color: #6b7280 !important; /* neutral gray */
-            font-weight: 500 !important;
+            font-size: 14.5px !important;
+            font-weight: 600 !important;
             transition: all 0.2s ease-in-out !important;
             background-color: transparent !important;
         }
 
         #innerRolesTab .nav-link.active {
-            border-bottom: 2px solid #e14326 !important; /* custom underline color */
+            border-bottom: 40px solid #e14326 !important; /* custom underline color */
             color: #e14326 !important;
             background-color: transparent !important;
         }
@@ -422,6 +423,10 @@ new class extends Component {
         /* Remove the gray divider completely */
         #innerRolesTab {
             border: none !important;
+        }
+
+        .user-profile-tab .nav-link.active {
+            border-bottom: 3.0px solid #e14326 !important;
         }
 
 
@@ -441,7 +446,7 @@ new class extends Component {
                 <!-- Company Information -->
                 <li class="nav-item" role="presentation">
                     <button
-                        class="nav-link position-relative rounded-0 {{ $activeParentTab === 'company' ? 'active' : '' }} d-flex align-items-center justify-content-center bg-transparent fs-3 py-3"
+                        class="nav-link position-relative rounded-0 {{ $activeParentTab === 'company' ? 'active' : '' }} d-flex align-items-center justify-content-center bg-transparent fs-3 py-3 fw-bold"
                         id="tab-company-information-tab"
                         data-bs-toggle="pill"
                         data-bs-target="#tab-company-information"
@@ -458,7 +463,7 @@ new class extends Component {
 
                 <li class="nav-item" role="presentation">
                     <button
-                        class="nav-link position-relative rounded-0 {{ $activeParentTab === 'location-assignment' ? 'active' : '' }} d-flex align-items-center justify-content-center bg-transparent fs-3 py-3"
+                        class="nav-link position-relative rounded-0 {{ $activeParentTab === 'location-assignment' ? 'active' : '' }} d-flex align-items-center justify-content-center bg-transparent fs-3 py-3 fw-bold"
                         id="tab-location-assignment-tab"
                         data-bs-toggle="pill"
                         data-bs-target="#tab-location-assignment"
@@ -476,7 +481,7 @@ new class extends Component {
                 <!-- User -->
                 <li class="nav-item" role="presentation">
                     <button
-                        class="nav-link position-relative rounded-0 {{ $activeParentTab === 'users' ? 'active' : '' }} d-flex align-items-center justify-content-center bg-transparent fs-3 py-3"
+                        class="nav-link position-relative rounded-0 {{ $activeParentTab === 'users' ? 'active' : '' }} d-flex align-items-center justify-content-center bg-transparent fs-3 py-3 fw-bold"
                         id="tab-users-tab"
                         data-bs-toggle="pill"
                         data-bs-target="#tab-users"
@@ -497,7 +502,7 @@ new class extends Component {
                 <!-- Roles & Permissions -->
                 <li class="nav-item" role="presentation">
                     <button
-                        class="nav-link position-relative rounded-0 {{ $activeParentTab === 'roles' ? 'active' : '' }} d-flex align-items-center justify-content-center bg-transparent fs-3 py-3"
+                        class="nav-link position-relative rounded-0 {{ $activeParentTab === 'roles' ? 'active' : '' }} d-flex align-items-center justify-content-center bg-transparent fs-3 py-3 fw-bold"
                         id="tab-roles-permissions-tab"
                         data-bs-toggle="pill"
                         data-bs-target="#tab-roles-permissions"
@@ -519,7 +524,7 @@ new class extends Component {
                     
                     <li class="nav-item" role="presentation">
                         <button
-                            class="nav-link position-relative rounded-0 {{ $activeTab === 'location' ? 'active' : '' }} d-flex align-items-center justify-content-center bg-transparent fs-3 py-3"
+                            class="nav-link position-relative rounded-0 {{ $activeTab === 'location' ? 'active' : '' }} d-flex align-items-center justify-content-center bg-transparent fs-3 py-3 fw-medium"
                             id="tab-location-assignment-tab"
                             data-bs-toggle="pill"
                             data-bs-target="#tab-location-assignment"
@@ -528,14 +533,14 @@ new class extends Component {
                             role="tab"
                             aria-controls="tab-location-assignment"
                             aria-selected="false">
-                            <i class="ti ti-map-pin mx-1 fs-6"></i>
+                            <i class="ti ti-map-pin mx-1 fs-3"></i>
                             <span class="d-none d-md-block">Locations</span>
                         </button>
                     </li>
 
                     <li class="nav-item" role="presentation">
                         <button
-                            class="nav-link position-relative rounded-0 {{ $activeTab === 'devices' ? 'active' : '' }} d-flex align-items-center justify-content-center bg-transparent fs-3 py-3"
+                            class="nav-link position-relative rounded-0 {{ $activeTab === 'devices' ? 'active' : '' }} d-flex align-items-center justify-content-center bg-transparent fs-3 py-3 fw-medium"
                             id="tab-devices-tab"
                             data-bs-toggle="pill"
                             data-bs-target="#tab-devices"
@@ -544,7 +549,7 @@ new class extends Component {
                             role="tab"
                             aria-controls="tab-devices"
                             aria-selected="false">
-                            <i class="ti ti-device-mobile fs-5"></i>
+                            <i class="ti ti-device-mobile fs-3"></i>
                             <span class="d-none d-md-block">Devices</span>
                         </button>
                     </li>
@@ -559,7 +564,7 @@ new class extends Component {
                     <!-- User -->
                     <li class="nav-item" role="presentation">
                         <button
-                            class="nav-link position-relative rounded-0 {{ $activeTab === 'employee_defaults' ? 'active' : '' }} d-flex align-items-center justify-content-center bg-transparent fs-3 py-3"
+                            class="nav-link position-relative rounded-0 {{ $activeTab === 'employee_defaults' ? 'active' : '' }} d-flex align-items-center justify-content-center bg-transparent fs-3 py-3 fw-medium"
                             id="tab-employee-defaults-tab"
                             data-bs-toggle="pill"
                             data-bs-target="#tab-employee-defaults"
@@ -568,7 +573,7 @@ new class extends Component {
                             role="tab"
                             aria-controls="tab-employee-defaults"
                             aria-selected="false">
-                            <i class="ti ti-users mx-1 fs-6"></i>
+                            <i class="ti ti-users mx-1 fs-3"></i>
                             <span class="d-none d-md-block"> Employee Defaults</span>
                         </button>
                     </li>
@@ -576,7 +581,7 @@ new class extends Component {
 
                     <li class="nav-item" role="presentation">
                         <button
-                            class="nav-link position-relative rounded-0 {{ $activeTab === 'departments' ? 'active' : '' }} d-flex align-items-center justify-content-center bg-transparent fs-3 py-3"
+                            class="nav-link position-relative rounded-0 {{ $activeTab === 'departments' ? 'active' : '' }} d-flex align-items-center justify-content-center bg-transparent fs-3 py-3 fw-medium"
                             id="tab-departments-tab"
                             data-bs-toggle="pill"
                             data-bs-target="#tab-departments"
@@ -585,7 +590,7 @@ new class extends Component {
                             role="tab"
                             aria-controls="tab-departments"
                             aria-selected="false">
-                            <i class="ti ti-building-warehouse mx-1 fs-6"></i>
+                            <i class="ti ti-building-warehouse mx-1 fs-3"></i>
                             <span class="d-none d-md-block">Departments</span>
                         </button>
                     </li>
@@ -600,7 +605,7 @@ new class extends Component {
                     <!-- User -->
                     <li class="nav-item" role="presentation">
                         <button
-                            class="nav-link position-relative rounded-0 {{ $activeTab === 'users' ? 'active' : '' }} d-flex align-items-center justify-content-center bg-transparent fs-3 py-3"
+                            class="nav-link position-relative rounded-0 {{ $activeTab === 'users' ? 'active' : '' }} d-flex align-items-center justify-content-center bg-transparent fs-3 py-3 fw-medium"
                             id="tab-users-tab"
                             data-bs-toggle="pill"
                             data-bs-target="#tab-users"
@@ -609,7 +614,7 @@ new class extends Component {
                             role="tab"
                             aria-controls="tab-users"
                             aria-selected="false">
-                            <i class="ti ti-users mx-1 fs-6"></i>
+                            <i class="ti ti-users mx-1 fs-3"></i>
                             <span class="d-none d-md-block"> Users</span>
                         </button>
                     </li>
@@ -617,7 +622,7 @@ new class extends Component {
 
                     <li class="nav-item" role="presentation">
                         <button
-                            class="nav-link position-relative rounded-0 {{ $activeTab === 'user_roles' ? 'active' : '' }} d-flex align-items-center justify-content-center bg-transparent fs-3 py-3"
+                            class="nav-link position-relative rounded-0 {{ $activeTab === 'user_roles' ? 'active' : '' }} d-flex align-items-center justify-content-center bg-transparent fs-3 py-3 fw-medium"
                             id="tab-user-roles-tab"
                             data-bs-toggle="pill"
                             data-bs-target="#user-roles"
@@ -626,7 +631,7 @@ new class extends Component {
                             role="tab"
                             aria-controls="tab-user-roles"
                             aria-selected="false">
-                            <i class="ti ti-building-warehouse mx-1 fs-6"></i>
+                            <i class="ti ti-building-warehouse mx-1 fs-3"></i>
                             <span class="d-none d-md-block">Roles & Permissions</span>
                         </button>
                     </li>
@@ -636,7 +641,7 @@ new class extends Component {
                     <!-- Roles & Permissions -->
                     <li class="nav-item" role="presentation">
                         <button
-                            class="nav-link position-relative rounded-0 {{ $activeTab === 'qr_token_management' ? 'active' : '' }} d-flex align-items-center justify-content-center bg-transparent fs-3 py-3"
+                            class="nav-link position-relative rounded-0 {{ $activeTab === 'qr_token_management' ? 'active' : '' }} d-flex align-items-center justify-content-center bg-transparent fs-3 py-3 fw-medium"
                             id="tab-qr-token-management-tab"
                             data-bs-toggle="pill"
                             data-bs-target="#qr-token"
@@ -645,7 +650,7 @@ new class extends Component {
                             role="tab"
                             aria-controls="tab-qr-token-management"
                             aria-selected="false">
-                            <i class="ti ti-qrcode mx-1 fs-6"></i>
+                            <i class="ti ti-qrcode mx-1 fs-3"></i>
                             <span class="d-none d-md-block">QR Token Management</span>
                         </button>
                     </li>
