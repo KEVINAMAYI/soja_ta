@@ -27,7 +27,7 @@ new class extends Component {
     ];
 
     public ?string $grade = null;
-    public $name, $email, $phone, $employee_type_id, $department_id, $id_number, $active = true;
+    public $name, $email, $phone, $is_user, $employee_type_id, $department_id, $id_number, $active = true;
     public $editId, $employeeTypes, $departments;
     public $roleId;
     public $shifts;
@@ -980,6 +980,7 @@ new class extends Component {
             'active' => 'boolean',
             'roleName' => 'required|string',
             'employee_title' => 'nullable|string|max:255',
+            'is_user' => 'nullable|boolean',
         ];
     }
 
@@ -995,11 +996,18 @@ new class extends Component {
             $isStudent = $this->isCreatingStudent();
             $roleName = $this->resolveRoleName();
 
+            $is_user_creating = false;
+            if (auth()->user()->can('create-organization-users')) {
+                $is_user_creating = $this->is_user;
+            }
+
             $email = $isStudent ? "student_{$this->id_number}@{$org->id}.local" : $this->email;
             $phone = $isStudent ? ($org->phone_number ?? '') : PhoneSanitizer::sanitize($this->phone);
             $deptId = $isStudent ? ($this->department_id ?? $org->departments->first()?->id) : $this->department_id;
 
+            
             $user = User::create(['name' => $this->name, 'email' => $email, 'password' => Hash::make('password')]);
+            
 
             $employee = Employee::create([
                 'name' => $this->name,
@@ -1009,15 +1017,16 @@ new class extends Component {
                 'organization_id' => $org->id,
                 'id_number' => $this->id_number,
                 'active' => $this->active,
-                'user_id' => $user->id,
+                'user_id' => $user?->id,
                 'department_id' => $deptId,
                 'grade' => $isStudent ? $this->grade : null,
                 'employee_title' => $this->employee_title,
                 'is_student' => $isStudent ? 1 : 0,
+                'is_user' => $is_user_creating ? 1 : 0,
             ]);
 
-            $user->assignRole($roleName);
-            $user->createToken('Api Token')->plainTextToken;
+            $user?->assignRole($roleName);
+            $user?->createToken('Api Token')->plainTextToken;
 
             $defaultLocation = WorkLocation::where('organization_id', $org->id)->where('is_default', true)->first();
             if ($defaultLocation) {
@@ -1078,6 +1087,11 @@ new class extends Component {
             $phone = $isStudent ? $employee->phone : PhoneSanitizer::sanitize($this->phone);
             $deptId = $isStudent ? ($this->department_id ?? $employee->department_id) : $this->department_id;
 
+            $is_user_updating = false;
+            if (auth()->user()->can('edit-organization-users')) {
+                $is_user_updating = $this->is_user;
+            }
+
             $employee->update([
                 'name' => $this->name,
                 'email' => $email,
@@ -1089,9 +1103,17 @@ new class extends Component {
                 'active' => $this->active,
                 'employee_title' => $this->employee_title,
                 'is_student' => $isStudent ? 1 : 0,
+                'is_user' => $is_user_updating ? 1 : 0,
             ]);
 
-            $employee->user->syncRoles([$roleName]);
+            if (!$employee->user && $is_user_updating) {
+                $newUser = User::create(['name' => $this->name, 'email' => $email, 'password' => Hash::make('password')]);
+                $employee->update(['user_id' => $newUser->id]);
+                $newUser->assignRole($roleName);
+                $newUser->createToken('Api Token')->plainTextToken;
+            }
+
+            $employee->user?->syncRoles([$roleName]);
             if ($employee->user) {
                 $employee->user->update(['name' => $this->name, 'email' => $email]);
             }
@@ -2837,6 +2859,21 @@ new class extends Component {
                                 </div>
                             @endif
 
+                            @php
+                                $canAddOrEditUsers = auth()->user()->can('add-organization-users') || auth()->user()->can('edit-organization-users');
+                            @endphp
+                            @if($canAddOrEditUsers)
+                                
+                                <div class="col-md-6 mb-3 rounded border p-3" style="background:#f8fafc;">
+                                    <label class="form-label">Is User? <span class="text-danger">*</span></label>
+                                    <select wire:model="is_user" class="form-control">
+                                        <option value="0" selected>No</option>
+                                        <option value="1">Yes</option>
+                                    </select>
+                                    @error('is_user') <small class="text-danger">{{ $message }}</small> @enderror
+                                </div>
+                            @endif
+
                             @if(!$isStudent)
                                 <div class="col-12 mb-3">
                                     <div class="form-check">
@@ -2846,6 +2883,7 @@ new class extends Component {
                                     </div>
                                 </div>
                             @endif
+
 
                         </div>
                     </div>
