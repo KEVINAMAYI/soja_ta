@@ -12,16 +12,16 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::table('leave_approval_logs', function (Blueprint $table) {
-            $table->json('approver_user_ids')->after('approver_user_id');
+        // Schema::table('leave_approval_logs', function (Blueprint $table) {
+        //     $table->json('approver_user_ids')->after('approver_user_id');
 
-        });
+        // });
     }
 
     public function down(): void
     {
-        Schema::table('leave_approval_logs', function (Blueprint $table) {
-            $table->dropColumn(['approver_user_ids']);
-        });
+        // Schema::table('leave_approval_logs', function (Blueprint $table) {
+        //     $table->dropColumn(['approver_user_ids']);
+        // });
     }
 };
