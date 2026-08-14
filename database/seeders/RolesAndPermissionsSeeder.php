@@ -16,6 +16,12 @@ class RolesAndPermissionsSeeder extends Seeder
 
         $permissions = [
 
+            // organization users
+            ['name' => 'view-organization-users', 'category' => 'Organization Users'],
+            ['name' => 'add-organization-users', 'category' => 'Organization Users'],
+            ['name' => 'edit-organization-users', 'category' => 'Organization Users'],
+            ['name' => 'delete-organization-users', 'category' => 'Organization Users'],
+
             // Organizations
             ['name' => 'view-organizations', 'category' => 'Organizations'],
             ['name' => 'add-organizations', 'category' => 'Organizations'],
