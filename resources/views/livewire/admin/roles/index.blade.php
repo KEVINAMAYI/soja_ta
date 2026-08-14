@@ -52,7 +52,7 @@ new class extends Component {
                 'edit-organizations',
                 'delete-organizations',
             ];
-            if (!auth()->user()->hasRole('super-admin') && array_intersect($this->selectedPermissions, $super_admin_permissions)) {
+            if (array_intersect($this->selectedPermissions, $super_admin_permissions)) {
                 Log::info('MALICIOUS ATTEMPT ROLE PERMISSIONS CREATION.');
                 abort(403, 'Unauthorized.');
             }
@@ -111,7 +111,7 @@ new class extends Component {
                 'edit-organizations',
                 'delete-organizations',
             ];
-            if (!auth()->user()->hasRole('super-admin') && array_intersect($this->selectedPermissions, $super_admin_permissions)) {
+            if (array_intersect($this->selectedPermissions, $super_admin_permissions)) {
                 Log::info('MALICIOUS ATTEMPT ROLE PERMISSIONS UPDATE.');
                 abort(403, 'Unauthorized.');
             }
@@ -280,7 +280,7 @@ new class extends Component {
                                     <label class="form-label small fs-4 my-2 fw-semibold"></label>
                                     <div class="row gy-1">
                                         @foreach ($groupedPermissions as $module => $perms)
-                                            @if(ucfirst($module) == 'Organizations' && !auth()->user()->hasRole('super-admin'))
+                                            @if(ucfirst($module) == 'Organizations')
                                                 @continue
                                             @endif
                                             
