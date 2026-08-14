@@ -44,6 +44,19 @@ new class extends Component {
         try {
             DB::beginTransaction();
 
+
+            // super admin permissions only
+            $super_admin_permissions = [
+                'view-organizations',
+                'add-organizations',
+                'edit-organizations',
+                'delete-organizations',
+            ];
+            if (!auth()->user()->hasRole('super-admin') && array_intersect($this->selectedPermissions, $super_admin_permissions)) {
+                Log::info('MALICIOUS ATTEMPT ROLE PERMISSIONS CREATION.');
+                abort(403, 'Unauthorized.');
+            }
+
             $orgId = auth()->user()->employee->organization_id ?? null;
             $role = Role::create(['name' => strtolower($this->name), 'organization_id' => $orgId]);
             $role->syncPermissions($this->selectedPermissions);
@@ -90,6 +103,20 @@ new class extends Component {
             DB::beginTransaction();
 
             $orgId = auth()->user()->employee->organization_id ?? null;
+
+            // super admin permissions only
+            $super_admin_permissions = [
+                'view-organizations',
+                'add-organizations',
+                'edit-organizations',
+                'delete-organizations',
+            ];
+            if (!auth()->user()->hasRole('super-admin') && array_intersect($this->selectedPermissions, $super_admin_permissions)) {
+                Log::info('MALICIOUS ATTEMPT ROLE PERMISSIONS UPDATE.');
+                abort(403, 'Unauthorized.');
+            }
+
+            auth()->user()->hasRole('admin') ?? abort(403, 'Unauthorized.');
 
             // Manual uniqueness check scoped to organization
             $exists = DB::table('roles')
@@ -253,6 +280,11 @@ new class extends Component {
                                     <label class="form-label small fs-4 my-2 fw-semibold"></label>
                                     <div class="row gy-1">
                                         @foreach ($groupedPermissions as $module => $perms)
+                                            @if(ucfirst($module) == 'Organizations' && !auth()->user()->hasRole('super-admin'))
+                                                @continue
+                                            @endif
+                                            
+                                            
                                             <div class="col-12 my-3">
                                                 <h6 class="text-primary fw-bold text-uppercase border-bottom pb-1 mb-1"
                                                     style="font-size: 0.85rem;">
