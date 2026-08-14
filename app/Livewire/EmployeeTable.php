@@ -124,7 +124,8 @@ class EmployeeTable extends DataTableComponent
 
         $query = Employee::query()
             ->select('employees.*')
-            ->where('organization_id', $orgId);
+            ->where('organization_id', $orgId)
+            ->where('is_user', false);
 
         // For school orgs, eager load the last attendance record per pembroke
         if ($isStudentOrg) {
