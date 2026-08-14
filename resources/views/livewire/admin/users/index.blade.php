@@ -187,6 +187,32 @@ new class extends Component {
         
     }
 
+    public function demoteToEmployee(?int $id = null): void
+    {
+        $targetId = $id ?? $this->editingUserId;
+
+        if (! $targetId) {
+            return;
+        }
+
+        $user = $this->usersQuery()->whereKey($targetId)->firstOrFail();
+
+        if (!$user->employee) {
+            return;
+        }
+
+        $user->employee->update([
+            'is_user' => false
+        ]);
+
+        if ($this->editingUserId === $user->id) {
+            $this->accountActive = (bool) $user->fresh()->is_active;
+        }
+        
+        LivewireAlert::title('Success!')->text($user->name . ' Moved successfully.')->success()->toast()->position('top-end')->show();
+        
+    }
+
     public function deleteUser(int $id): void
     {
         // $this->usersQuery()->whereKey($id)->delete();
@@ -330,8 +356,8 @@ new class extends Component {
                         </td>
                         <td class="last-login">{{ $user->last_login_at ? $user->last_login_at : 'Never' }}</td>
                         <td class="text-end">
-                            <div class="dropdown table-actions">
-                                <button class="action-menu-btn" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="User actions">
+                            <div class="dropdown table-actions dropup">
+                                <button class="action-menu-btn" type="button" data-bs-toggle="dropdown" data-bs-placement="top-end" aria-expanded="false" aria-label="User actions">
                                     <span></span><span></span><span></span>
                                 </button>
                                 <ul class="dropdown-menu dropdown-menu-end">
@@ -353,6 +379,15 @@ new class extends Component {
                                         @endif
                                         <button type="button" class="btn p-0 ms-1 fw-bold dropdown-item" wire:click="toggleUserAccess({{ $user->id }})">
                                             {{ $user->is_active ? 'Deactivate user' : 'Reactivate user' }}
+                                        </button>
+                                    </li>
+
+                                    <li class="d-flex align-items-center dropdown-item">
+                                        <span class="me-0">
+                                            <i class="ti ti-lock-off"></i>
+                                        </span>
+                                        <button type="button" class="btn p-0 ms-1 fw-bold dropdown-item" wire:click="demoteToEmployee({{ $user->id }})">
+                                            Move to employees
                                         </button>
                                     </li>
 
@@ -638,7 +673,7 @@ new class extends Component {
         .users-table-wrap {
             background: #f8f8f8;
             border-radius: 16px;
-            overflow: hidden;
+            overflow: visible;
             border: 1px solid #e5e7eb;
         }
 
