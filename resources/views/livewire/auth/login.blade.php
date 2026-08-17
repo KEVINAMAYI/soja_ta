@@ -2,6 +2,7 @@
 
 use Illuminate\Auth\Events\Lockout;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Session;
@@ -75,6 +76,12 @@ class extends Component {
 
         RateLimiter::clear($this->throttleKey());
         Session::regenerate();
+
+        if (Auth::user()->hasRole('super-admin')) {
+            Log::info('Redirecting super-admin to platform-admin dashboard');
+            $this->redirect(route('platform-admin.index', absolute: false));
+            return;
+        }
 
         $this->redirectIntended(default: route('dashboard', absolute: false));
     }
