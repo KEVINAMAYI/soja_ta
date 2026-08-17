@@ -126,6 +126,20 @@ $helpTooltipLabel = $orgSettings['help_icon_tooltip_label'] ?? 'Help';
                                     <iconify-icon icon="mdi:user" style="font-size: 1.2em;"></iconify-icon>
                                 </a>
 
+                                @php
+                                    $user = Auth::user();
+                                    $isSuperAdmin = $user->hasRole('super-admin');
+                                @endphp
+
+                                @if($isSuperAdmin)
+                                    <a href="{{ route('platform-admin.index') }}"
+                                       class="p-2 dropdown-item h6 rounded-1 d-flex justify-content-between align-items-center">
+                                        Platform Admin
+                                        <iconify-icon icon="eos-icons:admin" style="font-size: 1.2em;"></iconify-icon>
+                                        <!-- <iconify-icon icon="mdi:cog-outline" style="font-size: 1.2em;"></iconify-icon> -->
+                                    </a>
+                                @endif
+
                                 @can('view-settings')
                                     <a href="{{ route('system-settings.index') }}"
                                        class="p-2 dropdown-item h6 rounded-1 d-flex justify-content-between align-items-center">
