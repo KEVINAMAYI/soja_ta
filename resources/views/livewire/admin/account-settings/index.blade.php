@@ -595,6 +595,23 @@ new class extends Component {
                         </button>
                     </li>
 
+
+                    <li class="nav-item" role="presentation">
+                        <button
+                            class="nav-link position-relative rounded-0 {{ $activeTab === 'job-titles' ? 'active' : '' }} d-flex align-items-center justify-content-center bg-transparent fs-3 py-3 fw-medium"
+                            id="tab-job-titles-tab"
+                            data-bs-toggle="pill"
+                            data-bs-target="#tab-job-titles"
+                            type="button"
+                            wire:click="setActiveTab('job-titles')"
+                            role="tab"
+                            aria-controls="tab-job-titles"
+                            aria-selected="false">
+                            <i class="ti ti-briefcase mx-1 fs-3"></i>
+                            <span class="d-none d-md-block">Job Titles</span>
+                        </button>
+                    </li>
+
                 </ul>
             @endif
 
@@ -712,9 +729,14 @@ new class extends Component {
                         <livewire:admin.account-settings.employee_defaults/>
                     </div>
 
-                    <!-- Employee defaults -->                        
+                    <!-- Departments -->                        
                     <div class="tab-pane fade {{ $activeTab === 'departments' ? 'show active' : '' }}" id="tab-departments" role="tabpanel" aria-labelledby="departments-tab">                        
                         <livewire:admin.departments.index/>
+                    </div>
+
+                    <!-- Job Titles -->                        
+                    <div class="tab-pane fade {{ $activeTab === 'job-titles' ? 'show active' : '' }}" id="tab-job-titles" role="tabpanel" aria-labelledby="job-titles-tab">                        
+                        <livewire:admin.job-titles.index/>
                     </div>
 
 
