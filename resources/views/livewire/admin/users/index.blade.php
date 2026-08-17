@@ -279,95 +279,88 @@ new class extends Component {
 ?>
 
 
-<div class="user-management-wrapper">
-    <div class="user-header d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
-        <div class="d-flex align-items-center gap-2 fw-bold fs-1 user-title">
-            <span>Users</span>
-            <span class="count-badge">{{ $this->usersCount }}</span>
-        </div>
+<div class="sj-users-shell">
 
-        <div class="d-flex align-items-center gap-3 user-toolbar">
-            <div class="search-box position-relative">
-                <span class="search-icon">
-                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10.5 3a7.5 7.5 0 0 1 5.944 12.444l4.361 4.36 1.414-1.414-4.36-4.361A7.5 7.5 0 1 1 10.5 3Zm0 2a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11Z"/></svg>
-                </span>
-                <input
-                    type="text"
-                    wire:model.live="search"
-                    class="form-control search-input"
-                    placeholder="Search by name or email"
-                    aria-label="Search users"
-                />
+        <div class="toolbar">
+            <div class="toolbar-left">
+                <h2>Users</h2>
+                <span class="count-pill">{{ $this->usersCount }}</span>
             </div>
 
-            <div class="dropdown">
-                <button class="btn filter-btn dropdown-toggle d-flex align-items-center gap-2" type="button" data-bs-toggle="dropdown" aria-expanded="false">
-                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16v2H4zm4 6h8v2H8zm3 6h2v2h-2z"/></svg>
-                    <span>Filter</span>
+            <div class="toolbar-right">
+                <div class="search">
+                    <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="M21 21l-4.3-4.3"></path></svg>
+                    <input
+                        type="text"
+                        wire:model.live="search"
+                        placeholder="Search by name or email"
+                        aria-label="Search users"
+                    >
+                </div>
+
+                <div class="dropdown">
+                    <button class="btn" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16M7 12h10M10 19h4"></path></svg>
+                        Filter
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end sj-filter-menu">
+                        <li><button type="button" class="dropdown-item {{ $roleFilter === 'All' ? 'active' : '' }}" wire:click="setRoleFilter('All')">All roles</button></li>
+                        <li><button type="button" class="dropdown-item {{ $roleFilter === 'Admin' ? 'active' : '' }}" wire:click="setRoleFilter('Admin')">Admin</button></li>
+                        <li><button type="button" class="dropdown-item {{ $roleFilter === 'Employee' ? 'active' : '' }}" wire:click="setRoleFilter('Employee')">Employee</button></li>
+                        <li><button type="button" class="dropdown-item {{ $roleFilter === 'Supervisor' ? 'active' : '' }}" wire:click="setRoleFilter('Supervisor')">Supervisor</button></li>
+                    </ul>
+                </div>
+
+                <button class="btn btn-primary" type="button" wire:click="openAddUserModal">
+                    <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>
+                    Add user
                 </button>
-                <ul class="dropdown-menu dropdown-menu-end">
-                    <li><button type="button" class="dropdown-item {{ $roleFilter === 'All' ? 'active' : '' }}" wire:click="setRoleFilter('All')">All roles</button></li>
-                    <li><button type="button" class="dropdown-item {{ $roleFilter === 'Admin' ? 'active' : '' }}" wire:click="setRoleFilter('Admin')">Admin</button></li>
-                    <li><button type="button" class="dropdown-item {{ $roleFilter === 'Employee' ? 'active' : '' }}" wire:click="setRoleFilter('Employee')">Employee</button></li>
-                    <li><button type="button" class="dropdown-item {{ $roleFilter === 'Supervisor' ? 'active' : '' }}" wire:click="setRoleFilter('Supervisor')">Supervisor</button></li>
-                </ul>
             </div>
-
-            <button type="button" class="btn btn-danger add-user-btn" wire:click="openAddUserModal">
-                <span class="plus-sign">+</span>
-                <span>Add user</span>
-            </button>
         </div>
-    </div>
 
-    <div class="users-table-wrap">
-        <table class="table users-table align-middle mb-0">
+        <table class="p-0">
             <thead>
                 <tr>
-                    <th class="text-uppercase">Name</th>
-                    <th class="text-uppercase">Role</th>
-                    <th class="text-uppercase">Status</th>
-                    <th class="text-uppercase">Last login</th>
-                    <th class="text-uppercase text-end">Actions</th>
+                    <th>Name</th>
+                    <th>Role</th>
+                    <th>Status</th>
+                    <th>Last login</th>
+                    <th style="text-align: right;">Actions</th>
                 </tr>
             </thead>
             <tbody>
                 @forelse ($this->paginatedUsers as $user)
                     <tr>
                         <td>
-                            <div class="user-info d-flex align-items-center gap-3">
-                                <div class="user-avatar" style="background: #eaeefc; color: #1f2937;">
-                                    {{ strtoupper(substr($user->name, 0, 2)) }}
-                                </div>
-                                <div class="user-meta">
-                                    <div class="user-name">{{ $user->name }}</div>
-                                    <div class="user-email">{{ $user->email }}</div>
+                            <div class="user-cell">
+                                <div class="avatar">{{ strtoupper(substr($user->name, 0, 2)) }}</div>
+                                <div>
+                                    <div class="u-name">{{ $user->name }}</div>
+                                    <div class="u-email">{{ $user->email }}</div>
                                 </div>
                             </div>
                         </td>
+                        <td><span class="role-pill">{{ $user->roles->first()?->name ?? 'N/A' }}</span></td>
                         <td>
-                            <span class="role-pill">{{ $user->roles->first()?->name ?? 'N/A' }}</span>
-                        </td>
-                        <td>
-                            <span class="status-pill {{ ($user->employee?->active ?? false) ? 'active' : 'inactive' }}">
-                                <span class="status-dot"></span>
+                            <span class="status {{ $user->is_active ? 'active' : 'inactive' }}">
                                 {{ $user->is_active ? 'Active' : 'Inactive' }}
                             </span>
                         </td>
-                        <td class="last-login">{{ $user->last_login_at ? $user->last_login_at : 'Never' }}</td>
-                        <td class="text-end">
-                            <div class="dropdown table-actions dropup">
-                                <button class="action-menu-btn" type="button" data-bs-toggle="dropdown" data-bs-placement="top-end" aria-expanded="false" aria-label="User actions">
-                                    <span></span><span></span><span></span>
+                        <td class="last-login">{{ $user->last_login_at ?: 'Never' }}</td>
+                        <td class="action-cell">
+                            <div class="dropdown">
+                                <button class="kebab" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="User actions">
+                                    <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="5" r="1.5"></circle><circle cx="12" cy="12" r="1.5"></circle><circle cx="12" cy="19" r="1.5"></circle></svg>
                                 </button>
-                                <ul class="dropdown-menu dropdown-menu-end">
-                                    <li class="d-flex align-items-center dropdown-item">
+
+                                <ul class="dropdown-menu dropdown-menu-end sj-action-menu">
+                                    <li class="menu-item p-2">
                                         <span class="me-0">
                                             <i class="ti ti-pencil"></i>
                                         </span>
-                                        <button type="button" class="btn p-0 ms-1 fw-bold dropdown-item" wire:click="openEditUserModal({{ $user->id }})">Edit user</button></li>
-                                    
-                                    <li class="d-flex align-items-center dropdown-item">
+                                        <button type="button" class="menu-item m-0" wire:click="openEditUserModal({{ $user->id }})">Edit user</button>
+                                    </li>
+                                    <li class="menu-item p-2">
                                         @if ($user->is_active)
                                             <span class="me-0">
                                                 <i class="ti ti-lock"></i>
@@ -377,33 +370,20 @@ new class extends Component {
                                                 <i class="ti ti-lock-open"></i>
                                             </span>
                                         @endif
-                                        <button type="button" class="btn p-0 ms-1 fw-bold dropdown-item" wire:click="toggleUserAccess({{ $user->id }})">
-                                            {{ $user->is_active ? 'Deactivate user' : 'Reactivate user' }}
-                                        </button>
+                                        <button type="button" class="menu-item" wire:click="toggleUserAccess({{ $user->id }})">{{ $user->is_active ? 'Deactivate user' : 'Reactivate user' }}</button>
                                     </li>
-
-                                    <li class="d-flex align-items-center dropdown-item">
+                                    <li class="menu-item p-2">
                                         <span class="me-0">
                                             <i class="ti ti-lock-off"></i>
                                         </span>
-                                        <button type="button" class="btn p-0 ms-1 fw-bold dropdown-item" wire:click="demoteToEmployee({{ $user->id }})">
-                                            Move to employees
-                                        </button>
+                                        <button type="button" class="menu-item" wire:click="demoteToEmployee({{ $user->id }})">Move to employees</button>
                                     </li>
-
-                                    <!-- Add line break -->
-                                    <li><hr class="dropdown-divider"></li>
-                                    <li class="d-flex align-items-center dropdown-item text-danger">
+                                    <li><hr class="menu-divider"></li>
+                                    <li class="menu-item p-2">
                                         <span class="me-0">
                                             <i class="ti ti-trash-x-filled"></i>
                                         </span>
-
-                                        <button
-                                            type="button"
-                                            class="text-danger btn p-0 ms-1 fw-bold"
-                                            wire:click="deleteUser({{ $user->id }})">
-                                            Delete user
-                                        </button>
+                                        <button type="button" class="menu-item danger" wire:click="deleteUser({{ $user->id }})">Delete user</button>
                                     </li>
                                 </ul>
                             </div>
@@ -411,130 +391,806 @@ new class extends Component {
                     </tr>
                 @empty
                     <tr>
-                        <td colspan="5" class="text-center py-4 text-muted">No users match your search.</td>
+                        <td colspan="5" style="text-align: center; color: var(--ink-3);">No users match your search.</td>
                     </tr>
                 @endforelse
             </tbody>
         </table>
 
-        <div class="users-pagination d-flex flex-column flex-md-row align-items-center justify-content-between gap-3 px-3 py-3 border-top bg-white">
-            <div class="pagination-summary text-muted small">
+        <div class="footer-row">
+            <span>
                 @if ($this->paginatedUsers->total() > 0)
                     Showing {{ $this->paginatedUsers->firstItem() }} to {{ $this->paginatedUsers->lastItem() }} of {{ $this->paginatedUsers->total() }} users
                 @else
                     Showing 0 users
                 @endif
-            </div>
-
-            <div class="d-flex align-items-center gap-2">
-                <button
-                    type="button"
-                    class="btn btn-sm users-page-btn"
-                    wire:click="previousPage"
-                    @disabled($this->paginatedUsers->onFirstPage())
-                >
-                    Previous
-                </button>
-
-                <span class="small text-muted px-1">Page {{ $this->paginatedUsers->currentPage() }} of {{ $this->paginatedUsers->lastPage() }}</span>
-
-                <button
-                    type="button"
-                    class="btn btn-sm users-page-btn"
-                    wire:click="nextPage"
-                    @disabled(! $this->paginatedUsers->hasMorePages())
-                >
-                    Next
-                </button>
+            </span>
+            <div class="page-btns">
+                <button class="page-btn" type="button" wire:click="previousPage" @disabled($this->paginatedUsers->onFirstPage())>&lsaquo;</button>
+                <button class="page-btn current" type="button">{{ $this->paginatedUsers->currentPage() }}</button>
+                <button class="page-btn" type="button" wire:click="nextPage" @disabled(! $this->paginatedUsers->hasMorePages())>&rsaquo;</button>
             </div>
         </div>
-    </div>
 
-    <div class="modal fade {{ $showUserModal ? 'show d-block' : '' }}" id="userModal" tabindex="-1" role="dialog" aria-labelledby="user-modal-label" aria-hidden="{{ $showUserModal ? 'false' : 'true' }}" style="{{ $showUserModal ? 'display: block; background: rgba(15, 23, 42, 0.24);' : 'display: none;' }}">
-        <div class="modal-dialog modal-dialog-centered" role="document" style="max-width: 900px;">
-            <div class="modal-content user-modal-content shadow-sm border-0">
-                <div class="modal-header border-0 align-items-center px-4 pt-4 pb-2">
-                    <div class="d-flex align-items-center gap-3 modal-title-wrap">
-                        <div class="modal-user-icon">
-                            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.5 8a3.5 3.5 0 1 1-7 0 3.5 3.5 0 0 1 7 0Zm-9 10a5.5 5.5 0 0 1 11 0v1h-11v-1Zm2 0v-.5A3.5 3.5 0 0 1 12 14.5a3.5 3.5 0 0 1 3.5 3.5v.5H8.5Zm12.5-9h-1.5v2h-2v1.5h2v2H21v-2h2V13h-2v-2h-1.5V10h1.5V8Z"/></svg>
+    <div class="holding-modal">
+        <div class="modal fade {{ $showUserModal ? 'show d-block' : '' }}" id="userModal" tabindex="-1" role="dialog" aria-labelledby="user-modal-label" aria-hidden="{{ $showUserModal ? 'false' : 'true' }}" style="{{ $showUserModal ? 'display: block; background: rgba(15, 23, 42, 0.24);' : 'display: none;' }}">
+            <div class="modal-dialog modal-dialog-centered" role="document" style="max-width: 900px;">
+                <div class="modal-content user-modal-content shadow-sm border-0">
+                    <div class="modal-header border-0 align-items-center px-4 pt-4 pb-2">
+                        <div class="d-flex align-items-center gap-1 modal-title-wrap">
+                            <div class="modal-user-icon">
+                                <i class="ti ti-user-plus text-primary me-0"></i>
+                                <!-- <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.5 8a3.5 3.5 0 1 1-7 0 3.5 3.5 0 0 1 7 0Zm-9 10a5.5 5.5 0 0 1 11 0v1h-11v-1Zm2 0v-.5A3.5 3.5 0 0 1 12 14.5a3.5 3.5 0 0 1 3.5 3.5v.5H8.5Zm12.5-9h-1.5v2h-2v1.5h2v2H21v-2h2V13h-2v-2h-1.5V10h1.5V8Z"/></svg> -->
+                            </div>
+                            <h5 id="user-modal-label" class=" mb-0 ms-0">{{ $editingUserId ? 'Edit user' : 'Add user' }}</h5>
                         </div>
-                        <h2 id="user-modal-label" class="modal-title mb-0">{{ $editingUserId ? 'Edit user' : 'Add user' }}</h2>
+                        <button type="button" class="btn-close" aria-label="Close" wire:click="closeUserModal"></button>
                     </div>
-                    <button type="button" class="btn-close" aria-label="Close" wire:click="closeUserModal"></button>
-                </div>
 
-                <div class="modal-body px-4 pb-4">
-                    <p class="modal-subtitle">{{ $editingUserId ? 'Update account details and access.' : 'Create an account and assign access.' }}</p>
-                    <form wire:submit.prevent="saveUser" class="user-form">
-                        <div class="mb-3">
-                            <label for="user-name" class="form-label d-block mb-2">Full name</label>
-                            <input id="user-name" type="text" class="form-control user-field" wire:model.defer="name" placeholder="Jane Wambui" />
-                            @error('name')
-                                <small class="text-danger d-block mt-1">{{ $message }}</small>
-                            @enderror
-                        </div>
+                    <div class="modal-body px-4 pb-4">
+                        <p class="modal-subtitle">{{ $editingUserId ? 'Update account details and access.' : 'Create an account and assign access.' }}</p>
+                        <form wire:submit.prevent="saveUser" class="user-form">
+                            <div class="field">
+                                <label for="user-name" >Full name</label>
+                                <input id="user-name" type="text" wire:model.defer="name" placeholder="Jane Wambui" />
+                                @error('name')
+                                    <small class="text-danger d-block mt-1">{{ $message }}</small>
+                                @enderror
+                            </div>
 
-                        <div class="mb-3">
-                            <label for="user-email" class="form-label d-block mb-2">Email</label>
-                            <input id="user-email" type="email" class="form-control user-field" wire:model.defer="email" placeholder="jane.wambui@statpak.co.ke" />
-                            @error('email')
-                                <small class="text-danger d-block mt-1">{{ $message }}</small>
-                            @enderror
-                        </div>
+                            <div class="field mt-1">
+                                <label for="user-email" class="">Email</label>
+                                <input id="user-email" type="email" class="" wire:model.defer="email" placeholder="jane.wambui@statpak.co.ke" />
+                                @error('email')
+                                    <small class="text-danger d-block mt-1">{{ $message }}</small>
+                                @enderror
+                            </div>
 
-                        <div class="mb-3">
-                            <label for="user-phone" class="form-label d-block mb-2">Phone</label>
-                            <input id="user-phone" type="text" class="form-control user-field" wire:model.defer="phone" placeholder="+254 7XX XXX XXX" />
-                        </div>
+                            <div class="field mt-1">
+                                <label for="user-phone" >Phone</label>
+                                <input id="user-phone" type="text" wire:model.defer="phone" placeholder="+254 7XX XXX XXX" />
+                            </div>
 
-                        <div class="mb-4">
-                            <label for="user-role" class="form-label d-block mb-2">Role</label>
-                            <select id="user-role" class="form-select user-field" wire:model.defer="role">
-                                <option value="">Select role</option>
-                                <option value="Admin">Admin</option>
-                                <option value="Employee">Employee</option>
-                                <option value="Supervisor">Supervisor</option>
-                            </select>
-                            @error('role')
-                                <small class="text-danger d-block mt-1">{{ $message }}</small>
-                            @enderror
-                        </div>
+                            <div class="field mt-1">
+                                <label for="user-role" >Role</label>
+                                <select id="user-role" wire:model.defer="role">
+                                    <option value="">Select role</option>
+                                    <option value="Admin">Admin</option>
+                                    <option value="Employee">Employee</option>
+                                    <option value="Supervisor">Supervisor</option>
+                                </select>
+                                @error('role')
+                                    <small class="text-danger d-block mt-1">{{ $message }}</small>
+                                @enderror
+                            </div>
 
-                        <div class="account-access-card mb-4" @if(! $editingUserId) style="display: none;" @endif>
-                            <div class="d-flex flex-column flex-md-row align-items-start align-items-md-center justify-content-between gap-3">
-                                <div>
-                                    <div class="account-access-title">Account access</div>
-                                    <div class="account-access-subtitle">
-                                        {{ $accountActive ? 'Active - the user can currently sign in.' : 'Inactive - the user cannot currently sign in.' }}
+                            <div class="account-access-card mb-1 mt-3" @if(! $editingUserId) style="display: none;" @endif>
+                                <div class="d-flex flex-column flex-md-row align-items-start align-items-md-center justify-content-between gap-3">
+                                    <div>
+                                        <div class="account-access-title">Account access</div>
+                                        <div class="account-access-subtitle">
+                                            {{ $accountActive ? 'Active - the user can currently sign in.' : 'Inactive - the user cannot currently sign in.' }}
+                                        </div>
                                     </div>
-                                </div>
 
-                                <button
-                                    type="button"
-                                    class="btn account-access-btn {{ $accountActive ? 'account-access-btn-danger' : 'account-access-btn-success' }}"
-                                    wire:click="toggleUserAccess"
-                                >
-                                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17 8h-1V6a4 4 0 0 0-8 0v2H7a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2Zm-7-2a2 2 0 1 1 4 0v2h-4V6Zm7 12H7v-8h10v8Z"/></svg>
-                                    <span>{{ $accountActive ? 'Deactivate account' : 'Reactivate account' }}</span>
+                                    <button
+                                        type="button"
+                                        class="btn account-access-btn {{ $accountActive ? 'account-access-btn-danger' : 'account-access-btn-success' }}
+                                                {{ $accountActive ? 'text-primary' : 'text-success' }}"
+                                        wire:click="toggleUserAccess"
+                                    >
+                                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17 8h-1V6a4 4 0 0 0-8 0v2H7a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2Zm-7-2a2 2 0 1 1 4 0v2h-4V6Zm7 12H7v-8h10v8Z"/></svg>
+                                        <span>{{ $accountActive ? 'Deactivate account' : 'Reactivate account' }}</span>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div class="modal-foot">
+                                <button type="button" class="btn" wire:click="closeUserModal">
+                                    Cancel
+                                </button>
+                                <button type="submit" class="btn btn-primary">
+                                    {{ $editingUserId ? 'Save changes' : 'Add user' }}
                                 </button>
                             </div>
-                        </div>
-
-                        <div class="d-flex justify-content-end gap-3 pt-2">
-                            <button type="button" class="btn btn-outline-secondary user-cancel-btn" wire:click="closeUserModal">
-                                Cancel
-                            </button>
-                            <button type="submit" class="btn btn-danger user-submit-btn">
-                                {{ $editingUserId ? 'Save changes' : 'Add user' }}
-                            </button>
-                        </div>
-                    </form>
+                        </form>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
 
 </div>
+
+@push('styles')
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
+        .sj-users-shell {
+            --sj-red: #c81e2c;
+            --sj-red-dark: #9e1622;
+            --sj-red-tint: #fbe9ea;
+            --ink: #1b1d22;
+            --ink-2: #565b66;
+            --ink-3: #8b9099;
+            --line: #e7e8ec;
+            --line-strong: #d7d9e0;
+            --surface: #ffffff;
+            --page: #f5f6f8;
+            --panel: #fafafb;
+            --green: #1c8a4e;
+            --green-tint: #e8f6ee;
+            --gray-tint: #efeff1;
+            --radius: 10px;
+            --shadow: 0 1px 2px rgba(20, 20, 30, 0.04), 0 8px 24px rgba(20, 20, 30, 0.05);
+            font-family: 'Inter', -apple-system, sans-serif;
+            /* background: var(--page); */
+            color: var(--ink);
+            /* border: 1px solid var(--line);
+            border-radius: 12px;*/
+            padding: 0; 
+        }
+
+
+        .sj-users-shell .icon {
+            width: 16px;
+            height: 16px;
+            flex-shrink: 0;
+            stroke: currentColor;
+            fill: none;
+            stroke-width: 2;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+            vertical-align: -3px;
+        }
+
+        .sj-users-shell .pageheader {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: var(--surface);
+            border: 1px solid var(--line);
+            border-radius: var(--radius);
+            /* padding: 20px 24px; */
+            margin-bottom: 16px;
+            box-shadow: var(--shadow);
+        }
+
+        .sj-users-shell .pageheader h1 {
+            font-size: 26px;
+            font-weight: 800;
+            margin: 0;
+            letter-spacing: -0.01em;
+        }
+
+        .sj-users-shell .crumbs {
+            display: flex;
+            align-items: center;
+            gap: 9px;
+            font-size: 14px;
+            color: var(--ink-3);
+        }
+
+        .sj-users-shell .sep {
+            color: var(--ink-3);
+            font-size: 13px;
+        }
+
+        .sj-users-shell .crumb-pill {
+            background: var(--sj-red-tint);
+            color: var(--sj-red);
+            border-radius: 100px;
+            padding: 7px 14px;
+            font-weight: 600;
+        }
+
+        .sj-users-shell .sectionnav {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: var(--surface);
+            border: 1px solid var(--line);
+            border-radius: var(--radius) var(--radius) 0 0;
+            padding: 0 14px;
+        }
+
+        .sj-users-shell .section-tab {
+            padding: 17px 16px;
+            font-size: 14.5px;
+            font-weight: 600;
+            color: var(--ink-2);
+            border-bottom: 2.5px solid transparent;
+        }
+
+        .sj-users-shell .section-tab.active {
+            color: var(--sj-red);
+            border-bottom-color: var(--sj-red);
+        }
+
+        .sj-users-shell .tabnav {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            background: var(--panel);
+            border: 1px solid var(--line);
+            border-top: none;
+            padding: 0 14px;
+        }
+
+        .sj-users-shell .tab {
+            padding: 14px 12px;
+            font-size: 13.5px;
+            font-weight: 500;
+            color: var(--ink-2);
+            border-bottom: 2px solid transparent;
+        }
+
+        .sj-users-shell .tab.active {
+            color: var(--sj-red);
+            border-bottom-color: var(--sj-red);
+            font-weight: 600;
+        }
+
+        .sj-users-shell .card {
+            background: var(--surface);
+            border: 1px solid var(--line);
+            border-top: none;
+            border-radius: 0 0 var(--radius) var(--radius);
+            box-shadow: var(--shadow);
+        }
+
+        .sj-users-shell .toolbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            padding: 18px 22px;
+            border-bottom: 1px solid var(--line);
+            flex-wrap: wrap;
+        }
+
+        .sj-users-shell .toolbar-left {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .sj-users-shell .toolbar h2 {
+            font-size: 17px;
+            font-weight: 600;
+            margin: 0;
+        }
+
+        .sj-users-shell .count-pill {
+            background: var(--gray-tint);
+            color: var(--ink-2);
+            font-size: 12px;
+            font-weight: 600;
+            padding: 3px 9px;
+            border-radius: 100px;
+        }
+
+        .sj-users-shell .toolbar-right {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex: 1;
+            justify-content: flex-end;
+        }
+
+        .sj-users-shell .search {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            border: 1px solid var(--line-strong);
+            border-radius: 8px;
+            padding: 8px 12px;
+            min-width: 220px;
+            background: var(--panel);
+        }
+
+        .sj-users-shell .search input {
+            border: none;
+            background: transparent;
+            outline: none;
+            font-size: 13px;
+            width: 100%;
+            color: var(--ink);
+            font-family: inherit;
+        }
+
+        .sj-users-shell .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-family: inherit;
+            font-size: 13px;
+            font-weight: 600;
+            padding: 9px 14px;
+            border-radius: 8px;
+            cursor: pointer;
+            border: 1px solid var(--line-strong);
+            background: var(--surface);
+            color: var(--ink);
+            transition: background 0.12s ease, border-color 0.12s ease;
+        }
+
+        .sj-users-shell .btn:hover {
+            background: var(--panel);
+        }
+
+        .sj-users-shell .btn-primary {
+            background: var(--sj-red);
+            border-color: var(--sj-red);
+            color: #fff;
+        }
+
+        .sj-users-shell .btn-primary:hover {
+            background: var(--sj-red-dark);
+            border-color: var(--sj-red-dark);
+            color: #fff;
+        }
+
+        .sj-users-shell .sj-filter-menu,
+        .sj-users-shell .sj-action-menu {
+            border: 1px solid var(--line);
+            border-radius: 9px;
+            box-shadow: var(--shadow);
+            padding: 5px;
+            min-width: 190px;
+        }
+
+        .sj-users-shell table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13.5px;
+        }
+
+        .sj-users-shell thead th {
+            text-align: left;
+            font-size: 11.5px;
+            font-weight: 600;
+            letter-spacing: 0.03em;
+            text-transform: uppercase;
+            color: var(--ink-3);
+            padding: 12px 22px;
+            border-bottom: 1px solid var(--line);
+            background: var(--panel);
+        }
+
+        .sj-users-shell tbody td {
+            padding: 14px 22px;
+            border-bottom: 1px solid var(--line);
+            vertical-align: middle;
+            color: var(--ink);
+        }
+
+        .sj-users-shell tbody tr:hover {
+            background: #fcfcfd;
+        }
+
+        .sj-users-shell .user-cell {
+            display: flex;
+            align-items: center;
+            gap: 11px;
+        }
+
+        .sj-users-shell .avatar {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 11.5px;
+            font-weight: 700;
+            background: var(--sj-red-tint);
+            color: var(--sj-red-dark);
+            flex-shrink: 0;
+        }
+
+        .sj-users-shell .u-name {
+            font-weight: 600;
+            font-size: 13.5px;
+        }
+
+        .sj-users-shell .u-email {
+            color: var(--ink-2);
+            font-size: 12.5px;
+            margin-top: 1px;
+        }
+
+        .sj-users-shell .role-pill {
+
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 12px;
+            font-weight: 600;
+            padding: 4px 10px;
+            border-radius: 100px;
+
+            background: var(--gray-tint);
+            color: var(--ink-2);
+        }
+
+        .sj-users-shell .status {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 12px;
+            font-weight: 600;
+            padding: 4px 10px;
+            border-radius: 100px;
+        }
+
+        .sj-users-shell .status::before {
+            content: '';
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+        }
+
+        .sj-users-shell .status.active {
+            background: var(--green-tint);
+            color: var(--green);
+        }
+
+        .sj-users-shell .status.active::before {
+            background: var(--green);
+        }
+
+        .sj-users-shell .status.inactive {
+            background: var(--gray-tint);
+            color: var(--ink-2);
+        }
+
+        .sj-users-shell .status.inactive::before {
+            background: var(--ink-3);
+        }
+
+        .sj-users-shell .last-login {
+            color: var(--ink-3);
+            font-size: 12.5px;
+            white-space: nowrap;
+        }
+
+        .sj-users-shell .action-cell {
+            text-align: right;
+        }
+
+        .sj-users-shell .kebab {
+            width: 32px;
+            height: 32px;
+            border-radius: 7px;
+            border: 1px solid var(--line-strong);
+            background: var(--surface);
+            color: var(--ink-2);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .sj-users-shell .kebab:hover {
+            background: var(--panel);
+            color: var(--ink);
+            border-color: var(--ink-3);
+        }
+
+        .sj-users-shell .menu-item {
+            width: 100%;
+            display: flex;
+            align-items: center;
+            gap: 9px;
+            padding: 0;
+            font-size: 13px;
+            border-radius: 6px;
+            color: var(--ink);
+            border: none;
+            background: transparent;
+            text-align: left;
+        }
+
+        .sj-users-shell .menu-item:hover {
+            background: var(--panel);
+        }
+
+        .sj-users-shell .menu-item.danger {
+            color: var(--sj-red);
+        }
+
+        .sj-users-shell .menu-divider {
+            height: 1px;
+            background: var(--line);
+            margin: 5px 2px;
+            border: 0;
+        }
+
+        .sj-users-shell .footer-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 14px 22px;
+            font-size: 12.5px;
+            color: var(--ink-3);
+        }
+
+        .sj-users-shell .page-btns {
+            display: flex;
+            gap: 6px;
+        }
+
+        .sj-users-shell .page-btn {
+            width: 28px;
+            height: 28px;
+            border-radius: 6px;
+            border: 1px solid var(--line-strong);
+            background: var(--surface);
+            font-size: 12.5px;
+            color: var(--ink-2);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .sj-users-shell .page-btn.current {
+            background: var(--ink);
+            border-color: var(--ink);
+            color: #fff;
+            font-weight: 600;
+        }
+
+        .sj-users-shell .overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(20, 20, 28, 0.44);
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+            padding: 20px;
+        }
+
+        .sj-users-shell .overlay.open {
+            display: flex;
+        }
+
+
+        .sj-users-shell .holding-modal .modal {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+
+
+            background: var(--surface);
+            border-radius: 14px;
+            width: 100%;
+            max-width: 500px;
+            box-shadow: 0 24px 60px rgba(0, 0, 0, 0.22);
+            max-height: 80vh; 
+            overflow-y: auto;
+            scrollbar-width: none;
+            -ms-overflow-style: none;
+        }
+
+        .sj-users-shell .modal::-webkit-scrollbar {
+            display: none;
+        }
+
+        .sj-users-shell .modal-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 20px 22px 0;
+        }
+
+        .sj-users-shell .title-row {
+            display: flex;
+            align-items: center;
+            gap: 9px;
+        }
+
+        .sj-users-shell .title-row .icon {
+            width: 19px;
+            height: 19px;
+            color: var(--sj-red);
+        }
+
+        .sj-users-shell .modal-head h2 {
+            font-size: 1px;
+            font-weight: 600;
+            margin: 0;
+        }
+
+        .sj-users-shell .modal-close {
+            width: 28px;
+            height: 28px;
+            border: none;
+            background: transparent;
+            border-radius: 7px;
+            color: var(--ink-3);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .sj-users-shell .modal-close:hover {
+            background: var(--panel);
+            color: var(--ink);
+        }
+
+        .sj-users-shell .modal-sub {
+            font-size: 10px;
+            color: var(--ink-2);
+            padding: 6px 22px 18px;
+            margin: 0;
+        }
+
+        .sj-users-shell .modal-body {
+            padding: 0 22px 6px;
+            display: flex;
+            flex-direction: column;
+            /* gap: 14px; */
+        }
+
+        .sj-users-shell .field label {
+            display: block;
+            font-size: 12.5px;
+            font-weight: 600;
+            color: var(--ink-2);
+            margin-bottom: 6px;
+        }
+
+        .sj-users-shell .field input,
+        .sj-users-shell .field select {
+            width: 100%;
+            padding: 9px 11px;
+            border-radius: 8px;
+            border: 1px solid var(--line-strong);
+            font-family: inherit;
+            font-size: 13.5px;
+            color: var(--ink);
+            background: var(--surface);
+            outline: none;
+        }
+
+        .sj-users-shell .field input:focus,
+        .sj-users-shell .field select:focus {
+            border-color: var(--sj-red);
+        }
+
+        .sj-users-shell .form-error {
+            font-size: 12.5px;
+            color: var(--sj-red);
+            margin: 6px 0 0;
+        }
+
+        .sj-users-shell .account-actions {
+            display: none;
+            flex-direction: column;
+            gap: 10px;
+            margin-top: 2px;
+        }
+
+        .sj-users-shell .account-actions.show {
+            display: flex;
+        }
+
+        .sj-users-shell .account-action-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            background: var(--panel);
+            border: 1px solid var(--line);
+            border-radius: 9px;
+            padding: 12px 14px;
+        }
+
+        .sj-users-shell .aa-title {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--ink);
+        }
+
+        .sj-users-shell .aa-sub {
+            font-size: 12px;
+            color: var(--ink-2);
+            margin-top: 2px;
+        }
+
+        .sj-users-shell .account-action-row .btn {
+            white-space: nowrap;
+            padding: 8px 12px;
+            font-size: 12.5px;
+        }
+
+        .sj-users-shell .is-deactivate {
+            color: var(--sj-red);
+            border-color: var(--sj-red-tint);
+        }
+
+        .sj-users-shell .is-deactivate:hover {
+            background: var(--sj-red-tint);
+        }
+
+        .sj-users-shell .is-reactivate {
+            color: var(--green);
+            border-color: var(--green-tint);
+        }
+
+        .sj-users-shell .is-reactivate:hover {
+            background: var(--green-tint);
+        }
+
+        .sj-users-shell .modal-foot {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            padding: 20px 22px 22px;
+        }
+
+        @media (max-width: 640px) {
+            .sj-users-shell .toolbar {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .sj-users-shell .toolbar-right {
+                width: 100%;
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .sj-users-shell .search {
+                width: 100%;
+            }
+
+            .sj-users-shell .footer-row {
+                flex-direction: column;
+                gap: 10px;
+                align-items: flex-start;
+            }
+
+            .sj-users-shell thead {
+                display: none;
+            }
+
+            .sj-users-shell table,
+            .sj-users-shell tbody,
+            .sj-users-shell tr,
+            .sj-users-shell td {
+                display: block;
+                width: 100%;
+            }
+
+            .sj-users-shell tbody tr {
+                border-bottom: 1px solid var(--line);
+                padding: 12px 4px;
+            }
+
+            .sj-users-shell tbody td {
+                border-bottom: none;
+                padding: 6px 18px;
+            }
+
+            .sj-users-shell .action-cell {
+                text-align: left;
+            }
+
+            .sj-users-shell .pageheader {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 12px;
+            }
+
+            .sj-users-shell .sectionnav {
+                overflow-x: auto;
+            }
+        }
+    </style>
+@endpush
 
 
 @push('scripts')
@@ -558,461 +1214,3 @@ new class extends Component {
     </script>
 @endpush
 
-@push('styles')
-    <style>
-        .user-management-wrapper {
-            background: #f5f5f5;
-            border-radius: 18px;
-            padding: 28px 26px 10px;
-            border: 1px solid #e5e5e5;
-        }
-
-        .user-title {
-            font-size: 2rem;
-            color: #1f2937;
-            letter-spacing: -0.03em;
-        }
-
-        .count-badge {
-            min-width: 32px;
-            height: 32px;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            border-radius: 999px;
-            background: #e5e7eb;
-            color: #1f2937;
-            font-size: 1.25rem;
-            padding: 0 10px;
-            font-weight: 700;
-        }
-
-        .user-toolbar {
-            flex-wrap: wrap;
-        }
-
-        .search-box {
-            width: min(430px, 52vw);
-        }
-
-        .search-input {
-            border-radius: 12px;
-            border: 1px solid #d3d7dc;
-            background: #f9fafb;
-            height: 48px;
-            padding-left: 46px;
-            font-size: 1.1rem;
-            color: #111827;
-        }
-
-        .search-input:focus {
-            border-color: #c7ccd4;
-            box-shadow: none;
-            background: #fff;
-        }
-
-        .search-icon {
-            position: absolute;
-            left: 15px;
-            top: 50%;
-            transform: translateY(-50%);
-            width: 20px;
-            height: 20px;
-            color: #475467;
-        }
-
-        .search-icon svg {
-            width: 100%;
-            height: 100%;
-            fill: currentColor;
-        }
-
-        .filter-btn {
-            height: 48px;
-            min-width: 112px;
-            border-radius: 12px;
-            border: 1px solid #d3d7dc;
-            background: #fff;
-            color: #1f2937;
-            font-weight: 600;
-        }
-
-        .filter-btn svg {
-            width: 18px;
-            height: 18px;
-            fill: currentColor;
-        }
-
-        .filter-btn::after {
-            margin-left: 10px;
-        }
-
-        .add-user-btn {
-            height: 48px;
-            border-radius: 12px;
-            padding: 0 20px;
-            font-size: 1.08rem;
-            font-weight: 700;
-            background: #d91c1c;
-            border: 0;
-            display: inline-flex;
-            align-items: center;
-            gap: 10px;
-        }
-
-        .add-user-btn:hover {
-            background: #c11313;
-        }
-
-        .plus-sign {
-            font-size: 2rem;
-            line-height: 1;
-            margin-top: -2px;
-        }
-
-        .users-table-wrap {
-            background: #f8f8f8;
-            border-radius: 16px;
-            overflow: visible;
-            border: 1px solid #e5e7eb;
-        }
-
-        .users-table {
-            margin-bottom: 0;
-            border-collapse: separate;
-            border-spacing: 0;
-        }
-
-        .users-table thead th {
-            background: #f3f4f6;
-            color: #667085;
-            font-size: 0.82rem;
-            letter-spacing: 0.08em;
-            font-weight: 700;
-            padding: 1.1rem 1.2rem;
-            border-bottom: 1px solid #e5e7eb;
-        }
-
-        .users-table tbody td {
-            background: #fff;
-            padding: 1rem 1.2rem;
-            border-bottom: 1px solid #eceef1;
-            vertical-align: middle;
-            font-size: 1.05rem;
-        }
-
-        .users-table tbody tr:hover td {
-            background: #fafbfc;
-        }
-
-        .users-pagination {
-            background: #fff;
-        }
-
-        .users-page-btn {
-            min-width: 90px;
-            height: 36px;
-            border-radius: 10px;
-            border: 1px solid #d4d9e1;
-            color: #344054;
-            font-weight: 600;
-            background: #fff;
-        }
-
-        .users-page-btn:hover {
-            background: #f8fafc;
-            border-color: #cbd5e1;
-        }
-
-        .users-page-btn:disabled {
-            opacity: 0.55;
-            cursor: not-allowed;
-        }
-
-        .user-info {
-            min-width: 260px;
-        }
-
-        .user-avatar {
-            width: 40px;
-            height: 40px;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 0.9rem;
-            font-weight: 700;
-            letter-spacing: 0.04em;
-            border: 1px solid rgba(15, 23, 42, 0.06);
-        }
-
-        .user-meta {
-            line-height: 1.25;
-        }
-
-        .user-name {
-            font-size: 0.85rem;
-            font-weight: 700;
-            color: #111827;
-        }
-
-        .user-email {
-            font-size: 0.76rem;
-            color: #4b5563;
-            margin-top: 4px;
-        }
-
-        .role-pill {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            background: #eef0f3;
-            color: #475467;
-            border-radius: 999px;
-            min-width: 90px;
-            height: 34px;
-            font-size: 0.95rem;
-            font-weight: 600;
-            padding: 0 14px;
-        }
-
-        .status-pill {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            gap: 8px;
-            min-width: 120px;
-            height: 34px;
-            border-radius: 999px;
-            font-weight: 700;
-            font-size: 0.92rem;
-            padding: 0 12px;
-            border: 1px solid transparent;
-        }
-
-        .status-pill.active {
-            background: #dff5e7;
-            color: #1f8c4d;
-            border-color: rgba(31, 140, 77, 0.12);
-        }
-
-        .status-pill.inactive {
-            background: #eef0f3;
-            color: #475467;
-            border-color: rgba(71, 84, 103, 0.12);
-        }
-
-        .status-dot {
-            width: 9px;
-            height: 9px;
-            border-radius: 50%;
-            background: currentColor;
-            display: inline-block;
-        }
-
-        .last-login {
-            color: #475467;
-            font-weight: 500;
-        }
-
-        .table-actions {
-            display: inline-block;
-        }
-
-        .action-menu-btn {
-            width: 38px;
-            height: 38px;
-            border-radius: 10px;
-            background: #fff;
-            border: 1px solid #e5e7eb;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            gap: 4px;
-            padding: 0;
-        }
-
-        .action-menu-btn span {
-            width: 4px;
-            height: 4px;
-            background: #475467;
-            border-radius: 50%;
-            display: block;
-        }
-
-        .user-modal-content {
-            border-radius: 22px;
-            overflow: hidden;
-        }
-
-        .modal-title-wrap {
-            padding: 8px 0 0;
-        }
-
-        .modal-user-icon {
-            width: 26px;
-            height: 26px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: #ef4444;
-        }
-
-        .modal-user-icon svg {
-            width: 100%;
-            height: 100%;
-            fill: currentColor;
-        }
-
-        .modal-title {
-            font-size: 2.15rem;
-            font-weight: 700;
-            color: #1f2937;
-            letter-spacing: -0.02em;
-        }
-
-        .modal-subtitle {
-            font-size: 1.1rem;
-            color: #475467;
-            margin-bottom: 1.4rem;
-        }
-
-        .user-form label {
-            font-size: 1.02rem;
-            font-weight: 600;
-            color: #1f2937;
-        }
-
-        .user-field {
-            width: 100%;
-            min-height: 48px;
-            border-radius: 12px;
-            border: 1px solid #d2d6dc;
-            background: #fff;
-            padding: 0.8rem 1rem;
-            font-size: 1.05rem;
-            color: #111827;
-        }
-
-        .user-field:focus {
-            border-color: #a7b0bc;
-            box-shadow: none;
-        }
-
-        .user-cancel-btn {
-            border-radius: 12px;
-            min-width: 120px;
-            height: 48px;
-            border: 1px solid #d6dbe2;
-            background: #fff;
-            color: #1f2937;
-            font-weight: 700;
-        }
-
-        .user-submit-btn {
-            border-radius: 12px;
-            min-width: 140px;
-            height: 48px;
-            background: #d91c1c;
-            border: 0;
-            color: #fff;
-            font-weight: 700;
-        }
-
-        .user-submit-btn:hover {
-            background: #c11313;
-        }
-
-        .account-access-card {
-            border: 1px solid #d9dee6;
-            border-radius: 14px;
-            padding: 14px 16px;
-            background: #fcfcfd;
-        }
-
-        .account-access-title {
-            font-size: 1.15rem;
-            font-weight: 700;
-            color: #101828;
-            line-height: 1.2;
-        }
-
-        .account-access-subtitle {
-            margin-top: 4px;
-            color: #344054;
-            font-size: 1.02rem;
-            line-height: 1.35;
-            max-width: 360px;
-        }
-
-        .account-access-btn {
-            border-radius: 12px;
-            min-height: 44px;
-            padding: 0 16px;
-            display: inline-flex;
-            align-items: center;
-            gap: 10px;
-            font-weight: 700;
-            border: 1px solid transparent;
-        }
-
-        .account-access-btn svg {
-            width: 18px;
-            height: 18px;
-            fill: currentColor;
-        }
-
-        .account-access-btn-danger {
-            color: #d92d20;
-            background: #fff5f5;
-            border-color: #f5c8c5;
-        }
-
-        .account-access-btn-danger:hover {
-            color: #b32318;
-            border-color: #efb0ac;
-            background: #ffeded;
-        }
-
-        .account-access-btn-success {
-            color: #067647;
-            background: #ecfdf3;
-            border-color: #b7ebcd;
-        }
-
-        .account-access-btn-success:hover {
-            color: #085d3a;
-            border-color: #9fe3be;
-            background: #e2f9ed;
-        }
-
-        @media (max-width: 767.98px) {
-            .user-management-wrapper {
-                padding: 18px 14px 8px;
-            }
-
-            .search-box {
-                width: 100%;
-                min-width: 100%;
-            }
-
-            .user-toolbar {
-                width: 100%;
-            }
-
-            .filter-btn,
-            .add-user-btn {
-                width: 100%;
-                justify-content: center;
-            }
-
-            .users-table-wrap {
-                overflow-x: auto;
-            }
-
-            .users-table {
-                min-width: 760px;
-            }
-        }
-    </style>
-@endpush
