@@ -12,7 +12,6 @@ new class extends Component {
     public $name;
     public $editId;
     public $description;
-    public $manager_id;
     public int $generateQrOnCreate = 1;
     public int $requireEmployeePhoto;
     public int $autoAssignEmployeeId;
@@ -33,7 +32,6 @@ new class extends Component {
         return [
             'name' => 'required|string|max:255|unique:departments,name,' . $this->editId,
             'description' => 'nullable|string|max:1000',
-            'manager_id' => 'nullable|exists:users,id',
         ];
     }
 
@@ -50,17 +48,9 @@ new class extends Component {
             Department::create([
                 'name' => $this->name,
                 'description' => $this->description,
-                'manager_id' => $this->manager_id,
                 'organization_id' => $org->id
             ]);
 
-
-            if ($this->manager_id) {
-                $manager = User::find($this->manager_id);
-                if ($manager && !$manager->hasRole('department-manager')) {
-                    $manager->assignRole('department-manager');
-                }
-            }
 
 
             DB::commit();
@@ -163,7 +153,6 @@ new class extends Component {
         $this->editId = $id;
         $this->name = $dept->name;
         $this->description = $dept->description;
-        $this->manager_id = $dept->manager_id;
 
         $this->dispatch('show-department-modal');
     }
@@ -179,16 +168,8 @@ new class extends Component {
                 [
                     'name' => $this->name,
                     'description' => $this->description,
-                    'manager_id' => $this->manager_id,
 
                 ]);
-
-            if ($this->manager_id) {
-                $manager = User::find($this->manager_id);
-                if ($manager && !$manager->hasRole('department-manager')) {
-                    $manager->assignRole('department-manager');
-                }
-            }
 
             DB::commit();
 
@@ -493,16 +474,6 @@ new class extends Component {
                             @error('description') <small class="text-danger">{{ $message }}</small> @enderror
                         </div>
 
-                        <div class="mb-3">
-                            <label for="manager_id" class="form-label">Manager</label>
-                            <select wire:model="manager_id" id="manager_id" class="form-control">
-                                <option value="">Select Manager (Optional)</option>
-                                @foreach(User::whereHas('employee', fn($q) => $q->where('organization_id', auth()->user()->employee->organization_id))->get() as $user)
-                                    <option value="{{ $user->id }}">{{ $user->name }}</option>
-                                @endforeach
-                            </select>
-                            @error('manager_id') <small class="text-danger">{{ $message }}</small> @enderror
-                        </div>
                     </div>
 
                     <div class="modal-footer d-flex gap-1">
