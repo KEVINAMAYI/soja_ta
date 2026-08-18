@@ -13,6 +13,7 @@ class JobTitle extends Model
     protected $fillable = [
         'name',
         'description',
+        'department_id',
         'organization_id',
         'is_active',
         'created_by',
@@ -32,5 +33,10 @@ class JobTitle extends Model
     public function updatedBy()
     {
         return $this->belongsTo(User::class, 'updated_by');
+    }
+
+    public function department()
+    {
+        return $this->belongsTo(Department::class, 'department_id');
     }
 }
