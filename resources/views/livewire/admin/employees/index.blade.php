@@ -13,10 +13,12 @@ use Livewire\Attributes\On;
 use Livewire\Attributes\Url;
 use Livewire\Volt\Component;
 use App\Helpers\PhoneSanitizer;
+use App\Models\JobTitle;
 use App\Services\ZKBioPersonService;
 use Spatie\Permission\Models\Role as SpatieRole;
 use Livewire\WithFileUploads;
 use App\Services\MicrosoftAdService;
+use Illuminate\Support\Facades\Log;
 
 new class extends Component {
 
@@ -41,6 +43,10 @@ new class extends Component {
     public $end_date;
     public $roleName = 'employee';
     public $roles = [];
+    public $jobTitles = [];
+    public $reportsToEmployees = [];
+    public $jobTitleId = '';
+    public $reportsToJobTitleId = '';
     public $employee_title;
     public $editEmployee = null;
     public $employeeName;
@@ -128,6 +134,9 @@ new class extends Component {
                 ->where('organization_id', $orgId)
                 ->pluck('name', 'id');
         }
+
+        $this->jobTitles = JobTitle::where('organization_id', $orgId)
+            ->pluck('name', 'id');
 
         $this->loadSummaryStats();
 
@@ -986,6 +995,14 @@ new class extends Component {
 
     public function createEmployee(): void
     {
+        Log::info('Creating employee', ['data' => $this->getAttributes()]);
+
+        if ($this->jobTitleId == '') {
+            $this->jobTitleId = null;
+        }
+        if ($this->reportsToJobTitleId == '') {
+            $this->reportsToJobTitleId = null;
+        }
 
         $this->validate();
 
@@ -1019,6 +1036,8 @@ new class extends Component {
                 'active' => $this->active,
                 'user_id' => $user?->id,
                 'department_id' => $deptId,
+                'job_title_id' => $this->jobTitleId,
+                'reports_to_job_title_id' => $this->reportsToJobTitleId,
                 'grade' => $isStudent ? $this->grade : null,
                 'employee_title' => $this->employee_title,
                 'is_student' => $isStudent ? 1 : 0,
@@ -1074,6 +1093,14 @@ new class extends Component {
 
     public function updateEmployee(): void
     {
+
+        if ($this->jobTitleId == '') {
+            $this->jobTitleId = null;
+        }
+        if ($this->reportsToJobTitleId == '') {
+            $this->reportsToJobTitleId = null;
+        }
+        
         $this->validate();
         try {
             DB::beginTransaction();
@@ -1104,6 +1131,8 @@ new class extends Component {
                 'employee_title' => $this->employee_title,
                 'is_student' => $isStudent ? 1 : 0,
                 'is_user' => $is_user_updating ? 1 : 0,
+                'job_title_id' => $this->jobTitleId,
+                'reports_to_job_title_id' => $this->reportsToJobTitleId,
             ]);
 
             if (!$employee->user && $is_user_updating) {
@@ -1197,7 +1226,7 @@ new class extends Component {
     public function resetForm(): void
     {
         $this->reset(['name', 'email', 'phone', 'employee_type_id', 'department_id',
-            'id_number', 'editId', 'shift_id', 'employee_title', 'roleName', 'grade']);
+            'id_number', 'editId', 'shift_id', 'employee_title', 'roleName', 'grade', 'jobTitleId', 'reportsToJobTitleId', 'is_user']);
         $this->active = true;
         $this->roleName = 'employee';
     }
@@ -1349,6 +1378,12 @@ new class extends Component {
             grid-template-columns: repeat(3, 1fr);
             gap: 1rem;
             margin-bottom: 1.5rem;
+        }
+        select.form-control:disabled {
+            background-color: #d5d7d8 !important;
+            /* color: #6c757d; */
+            /* opacity: 1; */
+            cursor: not-allowed;
         }
 
         @media (max-width: 768px) {
@@ -2839,11 +2874,28 @@ new class extends Component {
                             @endif
 
                             <div class="col-md-6 mb-3">
-                                <label
-                                    class="form-label">{{ $isStudent ? 'Stream (optional)' : 'Title / Role' }}</label>
-                                <input type="text" wire:model="employee_title" class="form-control"
-                                       placeholder="{{ $isStudent ? 'e.g. North, East, Blue' : 'e.g. Teacher, Nurse, Housemaster' }}"/>
-                                @error('employee_title') <small class="text-danger">{{ $message }}</small> @enderror
+                                <label class="form-label">Job Title <span class="text-danger">*</span></label>
+                                <select wire:model.live="jobTitleId" class="form-control" required>
+                                    <option value="">Select Job Title</option>
+                                    @foreach ($jobTitles as $id => $jobTitle)
+                                        Log::info("ID NI: $id, Job Title: $jobTitle");
+                                        <option value="{{ $id }}">{{ ucfirst($jobTitle) }}</option>
+                                    @endforeach
+                                </select>
+                                @error('jobTitleId') <small class="text-danger">{{ $message }}</small> @enderror
+                            </div>
+
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Reports to Job Title <span class="text-danger">*</span></label>
+                                <select wire:model.live="reportsToJobTitleId" class="form-control" {{ empty($jobTitleId) ? 'disabled' : '' }}>
+                                    <option value="">Select Job Title this employee reports to</option>
+                                    @foreach ($jobTitles as $id => $jobTitle)
+                                        @if($id != $jobTitleId)  {{-- Exclude the current job title from the options --}}
+                                            <option value="{{ $id }}">{{ ucfirst($jobTitle) }}</option>
+                                        @endif
+                                    @endforeach
+                                </select>
+                                @error('reportsToJobTitleId') <small class="text-danger">{{ $message }}</small> @enderror
                             </div>
 
                             @if(!$isStudentOrg || $personType === 'staff')
