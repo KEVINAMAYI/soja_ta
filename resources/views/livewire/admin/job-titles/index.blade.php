@@ -365,7 +365,7 @@ new class extends Component {
                             }
 
                         @endphp
-                        <td><span class="{{ $reports_to_class }}">{{ $reports_to }}</span></td>
+                        <td><span class="{{ $reports_to_class }}" style="white-space: nowrap; display: inline-block;">{{ $reports_to }}</span></td>
                         @php
                             $level_class = 'role-pill';
                             if (isset($jobTitle['level']) && $jobTitle['level'] > 1) {
@@ -375,7 +375,9 @@ new class extends Component {
                             }
 
                         @endphp
-                        <td><span class="{{$level_class}}">{{ 'Level-' . ($jobTitle['level'] ?? 'N/A') }}</span></td>
+                        <td style="white-space: nowrap;">
+                            <span class="{{$level_class}}" style="white-space: nowrap; display: inline-block;">{{ 'Level-' . ($jobTitle['level'] ?? 'N/A') }}</span>
+                        </td>
                         <td>
                             
                             <div>
