@@ -4,7 +4,7 @@
         <i class="ti ti-edit"></i>
     </button>
 
-    <button class="btn btn-sm btn-danger"
+    <button class="btn btn-sm btn-primary"
             onclick="confirm('Are you sure?') || event.stopImmediatePropagation()"
             wire:click="$dispatch('delete-department',{ 'id' : {{ $department->id }}})">
         <i class="ti ti-trash"></i>
