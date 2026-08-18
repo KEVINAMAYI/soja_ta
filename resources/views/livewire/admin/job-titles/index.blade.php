@@ -121,7 +121,7 @@ new class extends Component {
 
         $holder_name = $holders .'- Holders';
         if($holders == 1) {
-            $holder_name = $node['employees'][0]['employee_name'];
+            $holder_name = isset($node['employees'][0]['employee_name']) ? $node['employees'][0]['employee_name'] : $holders .'- Holders';
         }
 
         $rows[] = [
