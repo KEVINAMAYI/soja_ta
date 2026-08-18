@@ -216,7 +216,7 @@ new class extends Component {
             // set end date for num of days calculation
             $this->endDate = $endDate;
 
-            $resumptionDate = $this->getSelectedLeaveType()->calculateEndDateWithStartDateAndNumberOfDays(Carbon::parse($this->endDate), $this->numberOfDays)['end_date'];
+            $resumptionDate = $this->getSelectedLeaveType()->calculateEndDateWithStartDateAndNumberOfDays(Carbon::parse($this->endDate), (int) $this->numberOfDays)['end_date'];
 
             $selectedEmployeeIds = $employeesToAssign->pluck('id')->toArray();
             $conflictingIds = $this->getConflictingEmployees($selectedEmployeeIds, $this->startDate, $endDate);
