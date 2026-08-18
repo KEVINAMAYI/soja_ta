@@ -314,7 +314,16 @@ new class extends Component {
                                 </div>
                             </div>
                         </td>
-                        <td><span class="su-name">{{ $jobTitle['reports_to'] }}</span></td>
+                        @php
+                            $reports_to_class = 'role-pill';
+                            $reports_to = 'unassigned';
+                            if (isset($jobTitle['reports_to']) && $jobTitle['reports_to'] != 'dangling') {
+                                $reports_to_class = "su-name";
+                                $reports_to = $jobTitle['reports_to'];
+                            }
+
+                        @endphp
+                        <td><span class="{{ $reports_to_class }}">{{ $jobTitle['reports_to'] }}</span></td>
                         @php
                             $level_class = 'role-pill';
                             if (isset($jobTitle['level']) && $jobTitle['level'] > 1) {
