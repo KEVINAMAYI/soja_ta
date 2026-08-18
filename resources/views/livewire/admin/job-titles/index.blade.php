@@ -58,8 +58,8 @@ new class extends Component {
     public function openAddJobTitleModal(): void
     {
         $this->resetForm();
-        $this->showJobTitleModal = true;
-        $this->dispatch('show-job-title-modal');
+        // $this->showJobTitleModal = true;
+        // $this->dispatch('show-job-title-modal');
     }
 
     public function openEditJobTitleModal(int $id): void
