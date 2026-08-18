@@ -234,6 +234,7 @@ new class extends Component {
                     'end_date' => $leave->end_date,
                     'status' => $leave->status,
                     'expected_resumption' => $leave->expected_resumption,
+                    'num_of_days' => $leave->num_of_days,
                     'reason' => $leave->reason,
                     'original' => $leave
                 ];
@@ -262,6 +263,9 @@ new class extends Component {
                     'end_date' => $employee->end_off_shift_date ? Carbon::parse($employee->end_off_shift_date) : null,
                     'status' => 'active',
                     'expected_resumption' => $employee->end_off_shift_date ? Carbon::parse($employee->end_off_shift_date)->addDay() : null,
+                    'num_of_days' => $employee->start_off_shift_date && $employee->end_off_shift_date
+                        ? Carbon::parse($employee->start_off_shift_date)->diffInDays(Carbon::parse($employee->end_off_shift_date)) + 1
+                        : null,
                     'reason' => null,
                     'original' => $employee
                 ];
@@ -1095,7 +1099,7 @@ new class extends Component {
                                             {{ $record['end_date']->format('d M Y') }}
                                         </span>
                                     <small class="text-muted mt-1">
-                                        Return: {{ $record['expected_resumption']?->format('d M Y') ?? '-' }}
+                                        ({{$record['num_of_days']}} days)Return: {{ $record['expected_resumption']?->format('d M Y') ?? '-' }}
                                     </small>
                                 @else
                                     <span class="text-muted">-</span>
@@ -1393,10 +1397,10 @@ new class extends Component {
                                 </div>
                                 <div>
                                     <span class="ld-detail-label">Duration</span>
-                                    <div class="ld-detail-value">{{ $leave->start_date->format('d – d M Y') }}</div>
+                                    <div class="ld-detail-value">{{ $leave->start_date->format('d M') }} - {{ $leave->end_date->format('d M Y') }}</div>
                                     <div
                                         class="ld-detail-sub">{{ $leave->num_of_days }}
-                                        working days
+                                        working day(s)
                                     </div>
                                 </div>
                                 <div>
@@ -1435,7 +1439,13 @@ new class extends Component {
                                             // Who is the designated approver for this specific log (used both for
                                             // the header name shown once closed, and for the "awaiting X" label
                                             // while still pending)
-                                            $approverLabel = $log->approverUser->name ?? ucfirst($log->approver_role ?? 'Approver');
+                                            if ($log->approver_type === 'user') {
+                                                $approverLabel = $log->approverUser->name ?? ucfirst($log->approver_role ?? 'Approver');
+                                            } else {
+                                                // get job title name from job title model where id = $log->approver_role
+                                                $approverLabel = \App\Models\JobTitle::find($log->approver_role)?->name ?? ucfirst($log->approver_role ?? 'Approver');
+                                            }
+                                            //$approverLabel = $log->approverUser->name ?? ucfirst($log->approver_role ?? 'Approver');
                                         @endphp
                                         <li class="ld-timeline-item">
                                             <div class="ld-step-icon {{ $stepColor }}">
@@ -1480,7 +1490,9 @@ new class extends Component {
                                                                 ? implode(', ', array_column($approverUsers, 'name'))
                                                                 : ($approverUsers[0]['name'] ?? ucfirst($log->approver_role ?? 'Approver'));
                                                         } else {
-                                                            $approverLabel = ucfirst($log->approver_role ?? 'Approver');
+                                                            // get job title name from job title model where id = $log->approver_role
+                                                            $approverLabel = \App\Models\JobTitle::find($log->approver_role)?->name ?? ucfirst($log->approver_role ?? 'Approver');
+                                                            //$approverLabel = ucfirst($log->approver_role ?? 'Approver');
                                                         }
                                                     @endphp
 
