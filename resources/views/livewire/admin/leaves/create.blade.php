@@ -216,6 +216,8 @@ new class extends Component {
             // set end date for num of days calculation
             $this->endDate = $endDate;
 
+            $resumptionDate = $this->getSelectedLeaveType()->calculateEndDateWithStartDateAndNumberOfDays(Carbon::parse($this->endDate), $this->numberOfDays)['end_date'];
+
             $selectedEmployeeIds = $employeesToAssign->pluck('id')->toArray();
             $conflictingIds = $this->getConflictingEmployees($selectedEmployeeIds, $this->startDate, $endDate);
 
@@ -314,7 +316,7 @@ new class extends Component {
                         'contact_during_leave' => $this->contact_during_leave ?? null,
                         'emergency_contact' => $this->emergency_contact ?? null,
                         'handover_to' => $this->handover_to ?? null,
-                        'expected_resumption' => Carbon::parse($endDate)->addDay()->format('Y-m-d'),
+                        'expected_resumption' => $resumptionDate,
                         'status' => 'pending',
                     ];
 
