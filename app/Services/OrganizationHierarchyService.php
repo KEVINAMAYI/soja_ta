@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\Department;
 use App\Models\Employee;
 use App\Models\JobTitle;
 use Illuminate\Support\Collection;
@@ -158,11 +159,13 @@ class OrganizationHierarchyService
     protected function loadJobTitles(int $organizationId): Collection
     {
         return JobTitle::query()
+            ->with('department')
             ->where('organization_id', $organizationId)
             ->get([
                 'id',
                 'name',
                 'description',
+                'department_id',
                 'organization_id',
                 'is_active',
             ]);
@@ -223,6 +226,10 @@ class OrganizationHierarchyService
                 'name' => $jobTitle->name,
 
                 'description' => $jobTitle->description,
+
+                'department_id' => $jobTitle->department_id,
+
+                'department_name' => $jobTitle->department?->name,
 
                 'organization_id' => $jobTitle->organization_id,
 
@@ -730,6 +737,10 @@ class OrganizationHierarchyService
 
             'name' => $node['name'],
 
+            'department_id' => $node['department_id'],
+
+            'department_name' => $node['department_name'],
+
             'description' => $node['description'],
 
             'organization_id' =>
@@ -784,6 +795,10 @@ class OrganizationHierarchyService
             'id' => $node['id'],
 
             'name' => $node['name'],
+
+            'department_id' => $node['department_id'] ?? null,
+
+            'department_name' => $node['department_name'] ?? null,
 
             'description' => $node['description'],
 
