@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\Department;
 use App\Models\JobTitle;
 use App\Models\Organization;
 use App\Services\OrganizationHierarchyService;
@@ -21,8 +22,11 @@ new class extends Component {
     public ?int $editingJobTitleId = null;
     public bool $jobTitleActive = true;
 
+    public $departments = null;
+
     public string $name = '';
     public string $description = '';
+    public ?int $departmentId = null;
     public int $isActive = 1;
 
     public function mount(): void
@@ -31,6 +35,7 @@ new class extends Component {
 
         if ($user && $user->employee && $user->employee->organization_id) {
             $this->organizationId = $user->employee->organization_id;
+            $this->departments = Department::where('organization_id', $this->organizationId)->get();
             $this->org = Organization::findOrFail($this->organizationId);
 
             return;
@@ -51,6 +56,9 @@ new class extends Component {
         return [
             'name' => ['required', 'string', 'max:255'],
             'isActive' => ['required', 'integer', Rule::in([0, 1])],
+            'departmentId' => ['required', 'integer', Rule::exists('departments', 'id')->where(function ($query) {
+                $query->where('organization_id', $this->organizationId);
+            })],
             'description' => ['nullable', 'string', 'max:250'],
         ];
     }
@@ -69,6 +77,7 @@ new class extends Component {
         $this->editingJobTitleId = $jobTitle->id;
         $this->name = $jobTitle->name;
         $this->description = $jobTitle->description;
+        $this->departmentId = $jobTitle->department_id;
         $this->isActive = (int) $jobTitle->is_active;
         $this->jobTitleActive = (bool) $jobTitle->is_active;
 
@@ -80,7 +89,7 @@ new class extends Component {
     {
         $hierarchy = app(OrganizationHierarchyService::class)->build($this->organizationId); 
 
-        $flattened_hierarchy = $this->flattenHierarchyRows($hierarchy);
+        Log::info('Job Titles Hierarchy: ' . json_encode($hierarchy));
         return $this->flattenHierarchyRows($hierarchy);
     }
 
@@ -89,9 +98,8 @@ new class extends Component {
         $rows = [];
 
         foreach ($hierarchy['trees'] ?? [] as $rootNode) {
-            $children_count = $this->countAllChildren($rootNode) + 1;
-            $this->appendHierarchyRow($rows, $rootNode, null, true, $children_count);
-
+            $rootLevel = $this->calculateMaxDepthFromNode($rootNode);
+            $this->appendHierarchyRow($rows, $rootNode, null, true, $rootLevel);
         }
 
         foreach ($hierarchy['dangling'] ?? [] as $danglingNode) {
@@ -118,9 +126,10 @@ new class extends Component {
     {
         $titleName = (string) ($node['name'] ?? 'N/A');
         $holders = (int) ($node['employee_count'] ?? count($node['employees'] ?? []));
+        $effectiveLevel = max(0, (int) $level);
 
         $holder_name = $holders .'- Holders';
-        if($holders == 1) {
+        if ($holders == 1) {
             $holder_name = isset($node['employees'][0]['employee_name']) ? $node['employees'][0]['employee_name'] : $holders .'- Holders';
         }
 
@@ -128,34 +137,62 @@ new class extends Component {
             'id' => $node['id'] ?? null,
             'name' => $titleName,
             'description' => $node['description'] ?? null,
-            'level' => $level ?? null,
+            'level' => $effectiveLevel,
             'reports_to' => $parentTitleName ?? '--top of chain --',
             'parent_title_name' => $parentTitleName,
             'employee_name' => $holder_name,
+            'department_name' => $node['department_name'] ?? 'N/A',
             'holders' => $holders,
             'is_active' => (bool) ($node['is_active'] ?? false),
         ];
 
-        if (!$isParent) {
-            // append current employees count to reporter
-            $row_count = count($rows);
-            $rows[$row_count-2]['direct_reporters_count'] = $holders; 
-            $rows[$row_count-2]['direct_reporters_title'] = $titleName;
+        $parentId = $node['parent_id'] ?? null;
+
+        if ($parentId !== null && $parentId !== '') {
+            foreach ($rows as $index => $row) {
+                if (($row['id'] ?? null) == $parentId) {
+                    if (isset($rows[$index]['direct_reporters_count'])) {
+                        $rows[$index]['direct_reporters_count'] += $holders;
+                        $rows[$index]['direct_reporters_title'] = 'employees';
+                    } else {
+                        $rows[$index]['direct_reporters_count'] = $holders;
+                        $rows[$index]['direct_reporters_title'] = $titleName;
+                    }
+                    // $rows[$index]['direct_reporters_count'] = $holders;
+                    // $rows[$index]['direct_reporters_title'] = $titleName;
+                    // break;
+                }
+            }
         }
 
-        $level -= 1;
         foreach ($node['children'] ?? [] as $childNode) {
-            $this->appendHierarchyRow($rows, $childNode, $titleName, false, $level);
+            $this->appendHierarchyRow($rows, $childNode, $titleName, false, $effectiveLevel - 1);
         }
+    }
+
+    private function calculateMaxDepthFromNode(array $node): int
+    {
+        $childDepths = [];
+
+        foreach ($node['children'] ?? [] as $childNode) {
+            $childDepths[] = $this->calculateMaxDepthFromNode($childNode);
+        }
+
+        if ($childDepths === []) {
+            return 0;
+        }
+
+        return 1 + max($childDepths);
     }
 
     private function countAllChildren(array $node): int
     {
         $count = 0;
+
         foreach ($node['children'] ?? [] as $childNode) {
-            $count += 1;
-            $this->countAllChildren($childNode);
+            $count += 1 + $this->countAllChildren($childNode);
         }
+
         return $count;
     }
 
@@ -183,6 +220,8 @@ new class extends Component {
             ]);
         }
 
+
+
         DB::transaction(function () use ($validated) {
             if ($this->editingJobTitleId) {
                 $jobTitle = $this->jobTitlesQuery()->whereKey($this->editingJobTitleId)->firstOrFail();
@@ -190,6 +229,7 @@ new class extends Component {
                 $jobTitle->update([
                     'name' => $validated['name'],
                     'description' => $validated['description'],
+                    'department_id' => $validated['departmentId'],
                     'is_active' => (bool) $validated['isActive'],
                     'updated_by' => Auth::id(),
                 ]);
@@ -200,6 +240,7 @@ new class extends Component {
             JobTitle::create([
                 'name' => $validated['name'],
                 'description' => $validated['description'],
+                'department_id' => $validated['departmentId'],
                 'is_active' => (bool) $validated['isActive'],
                 'organization_id' => $this->organizationId,
                 'created_by' => Auth::id(),
@@ -242,6 +283,7 @@ new class extends Component {
         $this->editingJobTitleId = null;
         $this->name = '';
         $this->description = '';
+        $this->departmentId = null;
         $this->isActive = 1;
     }
 
@@ -309,7 +351,7 @@ new class extends Component {
                                 <div class="avatar">{{ strtoupper(substr($jobTitle['name'], 0, 2)) }}</div>
                                 <div>
                                     <div class="u-name">{{ $jobTitle['name'] }}</div>
-                                    <div class="u-email">{{ $jobTitle['description'] ?? 'N/A' }}</div>
+                                    <div class="u-email">{{ $jobTitle['department_name'] ?? 'N/A' }}</div>
                                     
                                 </div>
                             </div>
@@ -323,7 +365,7 @@ new class extends Component {
                             }
 
                         @endphp
-                        <td><span class="{{ $reports_to_class }}">{{ $jobTitle['reports_to'] }}</span></td>
+                        <td><span class="{{ $reports_to_class }}">{{ $reports_to }}</span></td>
                         @php
                             $level_class = 'role-pill';
                             if (isset($jobTitle['level']) && $jobTitle['level'] > 1) {
@@ -426,6 +468,17 @@ new class extends Component {
                                 <label for="job-title-description" >Description</label>
                                 <input id="job-title-description" type="text" wire:model.defer="description" placeholder="Responsible for developing software applications." />
                             </div>
+
+                            <label class="form-label">Department</label>
+                            <select wire:model.defer="departmentId" class="form-control">
+                                <option value="">Select a department</option>
+                                @foreach ($this->departments as $department)
+                                    <option value="{{ $department->id }}">{{ $department->name }}</option>
+                                @endforeach
+                            </select>
+                            @error('departmentId')
+                                <small class="text-danger d-block mt-1">{{ $message }}</small>
+                            @enderror
 
                             <label class="form-label">Status</label>
                             <select wire:model.defer="isActive" class="form-control">
