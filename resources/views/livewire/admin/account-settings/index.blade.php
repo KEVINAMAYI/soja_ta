@@ -25,6 +25,8 @@ new class extends Component {
     public int $requireEmployeePhoto;
     public int $autoAssignEmployeeId;
 
+    public $showJobTitleModal = false;
+
     public function mount()
     {
         // Get the logged in user
