@@ -41,6 +41,13 @@ new class extends Component {
     public array $leaveApprovalEmailSearch = [];
     public int $activeLeaveApprovalLevel = 0;
 
+
+    // public $selectedUserIds;
+    // public $selectedEmailAddresses;
+    // public $selectedEmailUsers;
+    // public $selectedUsers;
+    public $selectedUserIds = [];
+
     // ── Leave Types tab state ─────────────────────────────────────────────
     public $ltName;
     public $ltCode;
@@ -942,7 +949,7 @@ new class extends Component {
 
             <li class="nav-item" role="presentation">
                 <button
-                    class="nav-link position-relative rounded-0 {{ $activeParentTab === 'attendance' ? 'active' : '' }} d-flex align-items-center justify-content-center bg-transparent fs-3 py-3"
+                    class="nav-link position-relative rounded-0 {{ $activeParentTab === 'attendance' ? 'active' : '' }} d-flex align-items-center justify-content-center bg-transparent fs-3 py-3 fw-bold"
                     id="tab-attendance-tab"
                     type="button"
                     wire:click="setActiveParentTab('attendance')"
@@ -957,7 +964,7 @@ new class extends Component {
 
             <li class="nav-item" role="presentation">
                 <button
-                    class="nav-link position-relative rounded-0 {{ $activeParentTab === 'leaves' ? 'active' : '' }} d-flex align-items-center justify-content-center bg-transparent fs-3 py-3"
+                    class="nav-link position-relative rounded-0 {{ $activeParentTab === 'leaves' ? 'active' : '' }} d-flex align-items-center justify-content-center bg-transparent fs-3 py-3 fw-bold"
                     id="tab-leaves-tab"
                     type="button"
                     wire:click="setActiveParentTab('leaves')"
@@ -971,7 +978,7 @@ new class extends Component {
 
             <li class="nav-item" role="presentation">
                 <button
-                    class="nav-link position-relative rounded-0 {{ $activeParentTab === 'help_support' ? 'active' : '' }} d-flex align-items-center justify-content-center bg-transparent fs-3 py-3"
+                    class="nav-link position-relative rounded-0 {{ $activeParentTab === 'help_support' ? 'active' : '' }} d-flex align-items-center justify-content-center bg-transparent fs-3 py-3 fw-bold"
                     id="tab-help-support-tab"
                     type="button"
                     wire:click="setActiveParentTab('help_support')"
