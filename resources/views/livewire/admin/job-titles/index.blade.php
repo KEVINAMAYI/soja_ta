@@ -1,279 +1,259 @@
 <?php
 
-use App\Models\Department;
-use App\Models\Employee;
+use App\Models\JobTitle;
 use App\Models\Organization;
-use App\Models\Shift;
-use App\Models\User;
+use App\Services\OrganizationHierarchyService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Jantinnerezo\LivewireAlert\Facades\LivewireAlert;
 use Livewire\Attributes\On;
 use Livewire\Volt\Component;
-use Livewire\WithPagination;
 
 new class extends Component {
-    use WithPagination;
-
     public $organizationId;
     public string $search = '';
-    public string $roleFilter = 'All';
-    public bool $showUserModal = false;
-    public ?int $editingUserId = null;
-    public bool $accountActive = true;
+    public bool $showJobTitleModal = false;
+    public ?int $editingJobTitleId = null;
+    public bool $jobTitleActive = true;
 
     public string $name = '';
-    public string $email = '';
-    public string $phone = '';
-    public string $role = '';
+    public string $description = '';
+    public int $isActive = 1;
 
     public function mount(): void
     {
-        $user = auth()->user();
+        $user = Auth::user();
 
         if ($user && $user->employee && $user->employee->organization_id) {
             $this->organizationId = $user->employee->organization_id;
             $this->org = Organization::findOrFail($this->organizationId);
+
             return;
         }
 
         abort(403, 'No organization found for this user.');
     }
 
-    protected function usersQuery(): Builder
+    protected function jobTitlesQuery(): Builder
     {
-        return User::query()
-            ->with(['roles:id,name', 'employee:id,user_id,organization_id,phone,active,is_user'])
-            ->whereHas('employee', function ($query) {
-                $query->where('organization_id', $this->organizationId)
-                    ->where('is_user', true);
-            });
+        return JobTitle::query()
+            ->with(['organization:id,name', 'createdBy:id,name', 'updatedBy:id,name'])
+            ->where('organization_id', $this->organizationId);
     }
 
     public function rules(): array
     {
         return [
             'name' => ['required', 'string', 'max:255'],
-            'email' => [
-                'required',
-                'email',
-                'max:255',
-                Rule::unique('users', 'email')->ignore($this->editingUserId),
-            ],
-            'phone' => ['nullable', 'string', 'max:50'],
-            'role' => ['required', 'string', Rule::in(['Admin', 'Employee', 'Supervisor'])],
+            'isActive' => ['required', 'integer', Rule::in([0, 1])],
+            'description' => ['nullable', 'string', 'max:250'],
         ];
     }
 
-    public function openAddUserModal(): void
+    public function openAddJobTitleModal(): void
     {
         $this->resetForm();
-        $this->showUserModal = true;
-        $this->dispatch('show-user-modal');
+        $this->showJobTitleModal = true;
+        $this->dispatch('show-job-title-modal');
     }
 
-    public function openEditUserModal(int $id): void
+    public function openEditJobTitleModal(int $id): void
     {
-        $user = $this->usersQuery()->whereKey($id)->firstOrFail();
+        $jobTitle = $this->jobTitlesQuery()->whereKey($id)->firstOrFail();
 
-        $this->editingUserId = $user->id;
-        $this->name = $user->name;
-        $this->email = $user->email;
-        $this->phone = (string) ($user->employee?->phone ?? '');
-        $this->role = $user->roles->first()?->name ?? '';
-        $this->accountActive = (bool) ($user->employee?->active ?? true);
+        $this->editingJobTitleId = $jobTitle->id;
+        $this->name = $jobTitle->name;
+        $this->description = $jobTitle->description;
+        $this->isActive = (int) $jobTitle->is_active;
+        $this->jobTitleActive = (bool) $jobTitle->is_active;
 
-        $this->showUserModal = true;
-        $this->dispatch('show-user-modal');
+        $this->showJobTitleModal = true;
+        $this->dispatch('show-job-title-modal');
     }
 
-    public function closeUserModal(): void
+    public function getJobTitlesHierarchyProperty(): array
     {
-        $this->showUserModal = false;
+        $hierarchy = app(OrganizationHierarchyService::class)->build($this->organizationId); 
+
+        $flattened_hierarchy = $this->flattenHierarchyRows($hierarchy);
+        return $this->flattenHierarchyRows($hierarchy);
+    }
+
+    protected function flattenHierarchyRows(array $hierarchy): array
+    {
+        $rows = [];
+
+        foreach ($hierarchy['trees'] ?? [] as $rootNode) {
+            $children_count = $this->countAllChildren($rootNode) + 1;
+            $this->appendHierarchyRow($rows, $rootNode, null, true, $children_count);
+
+        }
+
+        foreach ($hierarchy['dangling'] ?? [] as $danglingNode) {
+            $this->appendHierarchyRow($rows, $danglingNode, 'dangling', false, 0);
+        }
+
+        $search = trim($this->search);
+
+        if ($search === '') {
+            return $rows;
+        }
+
+        $search = Str::lower($search);
+
+        return array_values(array_filter($rows, function (array $row) use ($search) {
+            return Str::contains(Str::lower((string) ($row['name'] ?? '')), $search)
+                || Str::contains(Str::lower((string) ($row['description'] ?? '')), $search)
+                || Str::contains(Str::lower((string) ($row['reports_to'] ?? '')), $search)
+                || Str::contains(Str::lower((string) ($row['parent_title_name'] ?? '')), $search);
+        }));
+    }
+
+    protected function appendHierarchyRow(array &$rows, array $node, ?string $parentTitleName, bool $isParent, int $level): void
+    {
+        $titleName = (string) ($node['name'] ?? 'N/A');
+        $holders = (int) ($node['employee_count'] ?? count($node['employees'] ?? []));
+
+        $holder_name = $holders .'- Holders';
+        if($holders == 1) {
+            $holder_name = $node['employees'][0]['employee_name'];
+        }
+
+        $rows[] = [
+            'id' => $node['id'] ?? null,
+            'name' => $titleName,
+            'description' => $node['description'] ?? null,
+            'level' => $level ?? null,
+            'reports_to' => $parentTitleName ?? '--top of chain --',
+            'parent_title_name' => $parentTitleName,
+            'employee_name' => $holder_name,
+            'holders' => $holders,
+            'is_active' => (bool) ($node['is_active'] ?? false),
+        ];
+
+        if (!$isParent) {
+            // append current employees count to reporter
+            $row_count = count($rows);
+            $rows[$row_count-2]['direct_reporters_count'] = $holders; 
+            $rows[$row_count-2]['direct_reporters_title'] = $titleName;
+        }
+
+        $level -= 1;
+        foreach ($node['children'] ?? [] as $childNode) {
+            $this->appendHierarchyRow($rows, $childNode, $titleName, false, $level);
+        }
+    }
+
+    private function countAllChildren(array $node): int
+    {
+        $count = 0;
+        foreach ($node['children'] ?? [] as $childNode) {
+            $count += 1;
+            $this->countAllChildren($childNode);
+        }
+        return $count;
+    }
+
+    public function closeJobTitleModal(): void
+    {
+        $this->showJobTitleModal = false;
         $this->resetForm();
-        $this->dispatch('hide-user-modal');
+        $this->dispatch('hide-job-title-modal');
     }
 
-    public function saveUser(): void
+    public function saveJobTitle(): void
     {
         $validated = $this->validate();
 
+        $existingJobTitle = JobTitle::where('organization_id', $this->organizationId)
+            ->where('name', $validated['name'])
+            ->when($this->editingJobTitleId, function ($query) {
+                $query->where('id', '!=', $this->editingJobTitleId);
+            })
+            ->first();
+
+        if ($existingJobTitle) {
+            throw ValidationException::withMessages([
+                'name' => 'A job title with this name already exists for this organization.',
+            ]);
+        }
+
         DB::transaction(function () use ($validated) {
-            if ($this->editingUserId) {
-                $user = $this->usersQuery()->whereKey($this->editingUserId)->firstOrFail();
+            if ($this->editingJobTitleId) {
+                $jobTitle = $this->jobTitlesQuery()->whereKey($this->editingJobTitleId)->firstOrFail();
 
-                $user->update([
+                $jobTitle->update([
                     'name' => $validated['name'],
-                    'email' => $validated['email'],
+                    'description' => $validated['description'],
+                    'is_active' => (bool) $validated['isActive'],
+                    'updated_by' => Auth::id(),
                 ]);
-
-                if ($user->employee) {
-                    $user->employee->update([
-                        'name' => $validated['name'],
-                        'email' => $validated['email'],
-                        'phone' => $validated['phone'] ?: null,
-                    ]);
-                }
-
-                $user->syncRoles([$validated['role']]);
 
                 return;
             }
 
-            $departmentId = auth()->user()?->employee?->department_id
-                ?? Department::where('organization_id', $this->organizationId)->value('id');
-
-            if (! $departmentId) {
-                throw ValidationException::withMessages([
-                    'role' => 'No department is configured for this organization. Please create one first.',
-                ]);
-            }
-
-            $shiftId = Shift::where('organization_id', $this->organizationId)->value('id');
-
-            $user = User::create([
+            JobTitle::create([
                 'name' => $validated['name'],
-                'email' => $validated['email'],
-                'password' => Str::random(32),
-            ]);
-
-            Employee::create([
+                'description' => $validated['description'],
+                'is_active' => (bool) $validated['isActive'],
                 'organization_id' => $this->organizationId,
-                'department_id' => $departmentId,
-                'shift_id' => $shiftId,
-                'user_id' => $user->id,
-                'name' => $validated['name'],
-                'email' => $validated['email'],
-                'phone' => $validated['phone'] ?: null,
-                'active' => true,
-                'is_user' => true,
+                'created_by' => Auth::id(),
             ]);
-
-            $user->assignRole($validated['role']);
         });
 
-        $this->closeUserModal();
+        $this->closeJobTitleModal();
 
         LivewireAlert::title('Success!')->text($validated['name'] . ' saved successfully.')->success()->toast()->position('top-end')->show();
-            
     }
 
-    public function toggleUserAccess(?int $id = null): void
+    public function toggleJobTitleStatus(?int $id = null): void
     {
-        $targetId = $id ?? $this->editingUserId;
+        $targetId = $id ?? $this->editingJobTitleId;
 
         if (! $targetId) {
             return;
         }
 
-        $user = $this->usersQuery()->whereKey($targetId)->firstOrFail();
+        $jobTitle = $this->jobTitlesQuery()->whereKey($targetId)->firstOrFail();
 
-        if (! $user->employee) {
-            return;
-        }
-
-        $user->update([
-            'is_active' => ! ((bool) $user->is_active),
+        $jobTitle->update([
+            'is_active' => ! ((bool) $jobTitle->is_active),
         ]);
 
-        if ($this->editingUserId === $user->id) {
-            $this->accountActive = (bool) $user->fresh()->is_active;
-        }
-        
-        LivewireAlert::title('Success!')->text($user->name . ' updated successfully.')->success()->toast()->position('top-end')->show();
-        
-    }
-
-    public function demoteToEmployee(?int $id = null): void
-    {
-        $targetId = $id ?? $this->editingUserId;
-
-        if (! $targetId) {
-            return;
+        if ($this->editingJobTitleId === $jobTitle->id) {
+            $this->jobTitleActive = (bool) $jobTitle->fresh()->is_active;
         }
 
-        $user = $this->usersQuery()->whereKey($targetId)->firstOrFail();
-
-        if (!$user->employee) {
-            return;
-        }
-
-        $user->employee->update([
-            'is_user' => false
-        ]);
-
-        if ($this->editingUserId === $user->id) {
-            $this->accountActive = (bool) $user->fresh()->is_active;
-        }
-        
-        LivewireAlert::title('Success!')->text($user->name . ' Moved successfully.')->success()->toast()->position('top-end')->show();
-        
+        LivewireAlert::title('Success!')->text($jobTitle->name . ' updated successfully.')->success()->toast()->position('top-end')->show();
     }
 
-    public function deleteUser(int $id): void
+    public function deleteJobTitle(int $id): void
     {
-        // $this->usersQuery()->whereKey($id)->delete();
-
-        // if ($this->getPaginatedUsersProperty()->isEmpty() && $this->getPage() > 1) {
-        //     $this->previousPage();
-        // }
-
-        $this->toggleUserAccess($id);
-    }
-
-    public function setRoleFilter(string $role): void
-    {
-        $this->roleFilter = $role;
-        $this->resetPage();
-    }
-
-    public function updatedSearch(): void
-    {
-        $this->resetPage();
+        $this->toggleJobTitleStatus($id);
     }
 
     public function resetForm(): void
     {
-        $this->editingUserId = null;
+        $this->editingJobTitleId = null;
         $this->name = '';
-        $this->email = '';
-        $this->phone = '';
-        $this->role = '';
-        $this->accountActive = true;
+        $this->description = '';
+        $this->isActive = 1;
     }
 
     #[On('discard-user-modal')]
-    public function discardUserModal(): void
+    public function discardJobTitleModal(): void
     {
-        $this->closeUserModal();
+        $this->closeJobTitleModal();
     }
 
-    public function getPaginatedUsersProperty()
+    public function getJobTitlesCountProperty(): int
     {
-        $search = trim($this->search);
-
-        return $this->usersQuery()
-            ->when($search !== '', function (Builder $query) use ($search) {
-                $query->where(function (Builder $subQuery) use ($search) {
-                    $subQuery->where('name', 'like', "%{$search}%")
-                        ->orWhere('email', 'like', "%{$search}%");
-                });
-            })
-            ->when($this->roleFilter !== 'All', function (Builder $query) {
-                $query->whereHas('roles', function (Builder $roleQuery) {
-                    $roleQuery->where('name', $this->roleFilter);
-                });
-            })
-            ->latest('id')
-            ->paginate(10);
-    }
-
-    public function getUsersCountProperty(): int
-    {
-        return $this->usersQuery()->count();
+        return count($this->jobTitlesHierarchy);
     }
 };
 ?>
@@ -283,8 +263,8 @@ new class extends Component {
 
         <div class="toolbar">
             <div class="toolbar-left">
-                <h2>Users</h2>
-                <span class="count-pill">{{ $this->usersCount }}</span>
+                <h2>Job Titles</h2>
+                <span class="count-pill">{{ $this->jobTitlesCount }}</span>
             </div>
 
             <div class="toolbar-right">
@@ -293,27 +273,14 @@ new class extends Component {
                     <input
                         type="text"
                         wire:model.live="search"
-                        placeholder="Search by name or email"
-                        aria-label="Search users"
+                        placeholder="Search by job title"
+                        aria-label="Search job titles"
                     >
                 </div>
 
-                <div class="dropdown">
-                    <button class="btn" type="button" data-bs-toggle="dropdown" aria-expanded="false">
-                        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16M7 12h10M10 19h4"></path></svg>
-                        Filter
-                    </button>
-                    <ul class="dropdown-menu dropdown-menu-end sj-filter-menu">
-                        <li><button type="button" class="dropdown-item {{ $roleFilter === 'All' ? 'active' : '' }}" wire:click="setRoleFilter('All')">All roles</button></li>
-                        <li><button type="button" class="dropdown-item {{ $roleFilter === 'Admin' ? 'active' : '' }}" wire:click="setRoleFilter('Admin')">Admin</button></li>
-                        <li><button type="button" class="dropdown-item {{ $roleFilter === 'Employee' ? 'active' : '' }}" wire:click="setRoleFilter('Employee')">Employee</button></li>
-                        <li><button type="button" class="dropdown-item {{ $roleFilter === 'Supervisor' ? 'active' : '' }}" wire:click="setRoleFilter('Supervisor')">Supervisor</button></li>
-                    </ul>
-                </div>
-
-                <button class="btn btn-primary" type="button" wire:click="openAddUserModal">
+                <button class="btn btn-primary" type="button" wire:click="openAddJobTitleModal">
                     <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>
-                    Add user
+                        Add Job Title
                 </button>
             </div>
         </div>
@@ -321,32 +288,50 @@ new class extends Component {
         <table class="p-0">
             <thead>
                 <tr>
-                    <th>Name</th>
-                    <th>Role</th>
+                    <th>Position</th>
+                    <th>Reports To</th>
+                    <th>Levels</th>
+                    <th>Holders</th>
                     <th>Status</th>
-                    <th>Last login</th>
                     <th style="text-align: right;">Actions</th>
                 </tr>
             </thead>
             <tbody>
-                @forelse ($this->paginatedUsers as $user)
+                @forelse ($this->jobTitlesHierarchy as $jobTitle)
                     <tr>
                         <td>
                             <div class="user-cell">
-                                <div class="avatar">{{ strtoupper(substr($user->name, 0, 2)) }}</div>
+                                <div class="avatar">{{ strtoupper(substr($jobTitle['name'], 0, 2)) }}</div>
                                 <div>
-                                    <div class="u-name">{{ $user->name }}</div>
-                                    <div class="u-email">{{ $user->email }}</div>
+                                    <div class="u-name">{{ $jobTitle['name'] }}</div>
+                                    <div class="u-email">{{ $jobTitle['description'] ?? 'N/A' }}</div>
+                                    
                                 </div>
                             </div>
                         </td>
-                        <td><span class="role-pill">{{ $user->roles->first()?->name ?? 'N/A' }}</span></td>
+                        <td><span class="su-name">{{ $jobTitle['reports_to'] }}</span></td>
+                        @php
+                            $level_class = 'role-pill';
+                            if (isset($jobTitle['level']) && $jobTitle['level'] > 1) {
+                                $level_class = "be-red text-primary";
+                            } else if (isset($jobTitle['level']) && $jobTitle['level'] > 0) {
+                                $level_class = 'small-red text-primary';
+                            }
+
+                        @endphp
+                        <td><span class="{{$level_class}}">{{ 'Level-' . ($jobTitle['level'] ?? 'N/A') }}</span></td>
                         <td>
-                            <span class="status {{ $user->is_active ? 'active' : 'inactive' }}">
-                                {{ $user->is_active ? 'Active' : 'Inactive' }}
+                            
+                            <div>
+                                <div class="u-name">{{ $jobTitle['employee_name'] }}</div>
+                                <div class="u-email">{{ isset($jobTitle['direct_reporters_count']) ? $jobTitle['direct_reporters_count'] . ' '. $jobTitle['direct_reporters_title'] . ' report here' : 'N/A' }}</div>
+                                
+                            </div>
+                        <td>
+                            <span class="status {{ $jobTitle['is_active'] ? 'active' : 'inactive' }}">
+                                {{ $jobTitle['is_active'] ? 'Active' : 'Inactive' }}
                             </span>
                         </td>
-                        <td class="last-login">{{ $user->last_login_at ?: 'Never' }}</td>
                         <td class="action-cell">
                             <div class="dropdown">
                                 <button class="kebab" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="User actions">
@@ -358,10 +343,10 @@ new class extends Component {
                                         <span class="me-0">
                                             <i class="ti ti-pencil"></i>
                                         </span>
-                                        <button type="button" class="menu-item m-0" wire:click="openEditUserModal({{ $user->id }})">Edit user</button>
+                                        <button type="button" class="menu-item m-0" wire:click="openEditJobTitleModal({{ $jobTitle['id'] }})">Edit job title</button>
                                     </li>
                                     <li class="menu-item p-2">
-                                        @if ($user->is_active)
+                                        @if ($jobTitle['is_active'])
                                             <span class="me-0">
                                                 <i class="ti ti-lock"></i>
                                             </span>
@@ -370,20 +355,14 @@ new class extends Component {
                                                 <i class="ti ti-lock-open"></i>
                                             </span>
                                         @endif
-                                        <button type="button" class="menu-item" wire:click="toggleUserAccess({{ $user->id }})">{{ $user->is_active ? 'Deactivate user' : 'Reactivate user' }}</button>
-                                    </li>
-                                    <li class="menu-item p-2">
-                                        <span class="me-0">
-                                            <i class="ti ti-lock-off"></i>
-                                        </span>
-                                        <button type="button" class="menu-item" wire:click="demoteToEmployee({{ $user->id }})">Move to employees</button>
+                                        <button type="button" class="menu-item" wire:click="toggleJobTitleStatus({{ $jobTitle['id'] }})">{{ $jobTitle['is_active'] ? 'Deactivate Job Title' : 'Reactivate job title' }}</button>
                                     </li>
                                     <li><hr class="menu-divider"></li>
                                     <li class="menu-item p-2">
                                         <span class="me-0">
                                             <i class="ti ti-trash-x-filled"></i>
                                         </span>
-                                        <button type="button" class="menu-item danger" wire:click="deleteUser({{ $user->id }})">Delete user</button>
+                                        <button type="button" class="menu-item danger" wire:click="deleteJobTitle({{ $jobTitle['id'] }})">Delete job title</button>
                                     </li>
                                 </ul>
                             </div>
@@ -391,7 +370,7 @@ new class extends Component {
                     </tr>
                 @empty
                     <tr>
-                        <td colspan="5" style="text-align: center; color: var(--ink-3);">No users match your search.</td>
+                        <td colspan="6" style="text-align: center; color: var(--ink-3);">No job titles match your search.</td>
                     </tr>
                 @endforelse
             </tbody>
@@ -399,98 +378,53 @@ new class extends Component {
 
         <div class="footer-row">
             <span>
-                @if ($this->paginatedUsers->total() > 0)
-                    Showing {{ $this->paginatedUsers->firstItem() }} to {{ $this->paginatedUsers->lastItem() }} of {{ $this->paginatedUsers->total() }} users
-                @else
-                    Showing 0 users
-                @endif
+                Showing {{ count($this->jobTitlesHierarchy) }} job titles
             </span>
-            <div class="page-btns">
-                <button class="page-btn" type="button" wire:click="previousPage" @disabled($this->paginatedUsers->onFirstPage())>&lsaquo;</button>
-                <button class="page-btn current" type="button">{{ $this->paginatedUsers->currentPage() }}</button>
-                <button class="page-btn" type="button" wire:click="nextPage" @disabled(! $this->paginatedUsers->hasMorePages())>&rsaquo;</button>
-            </div>
         </div>
 
-    <div class="holding-modal">
-        <div class="modal fade {{ $showUserModal ? 'show d-block' : '' }}" id="userModal" tabindex="-1" role="dialog" aria-labelledby="user-modal-label" aria-hidden="{{ $showUserModal ? 'false' : 'true' }}" style="{{ $showUserModal ? 'display: block; background: rgba(15, 23, 42, 0.24);' : 'display: none;' }}">
-            <div class="modal-dialog modal-dialog-centered" role="document" style="max-width: 900px;">
-                <div class="modal-content user-modal-content shadow-sm border-0">
+    <div class="holding-modal p-0 m-0">
+        <div class="modal p-0 m-0 fade {{ $showJobTitleModal ? 'show d-block' : '' }}" id="jobModal" tabindex="-1" role="dialog" aria-labelledby="user-modal-label" aria-hidden="{{ $showJobTitleModal ? 'false' : 'true' }}" style="{{ $showJobTitleModal ? 'display: block;' : 'display: none;' }}">
+            <div class="modal-dialog modal-dialog-centered p-0 m-0" role="document" style="max-width: 900px;">
+                <div class="modal-content user-modal-content shadow-sm border-0 m-0">
                     <div class="modal-header border-0 align-items-center px-4 pt-4 pb-2">
                         <div class="d-flex align-items-center gap-1 modal-title-wrap">
                             <div class="modal-user-icon">
                                 <i class="ti ti-user-plus text-primary me-0"></i>
                                 <!-- <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.5 8a3.5 3.5 0 1 1-7 0 3.5 3.5 0 0 1 7 0Zm-9 10a5.5 5.5 0 0 1 11 0v1h-11v-1Zm2 0v-.5A3.5 3.5 0 0 1 12 14.5a3.5 3.5 0 0 1 3.5 3.5v.5H8.5Zm12.5-9h-1.5v2h-2v1.5h2v2H21v-2h2V13h-2v-2h-1.5V10h1.5V8Z"/></svg> -->
                             </div>
-                            <h5 id="user-modal-label" class=" mb-0 ms-0">{{ $editingUserId ? 'Edit user' : 'Add user' }}</h5>
+                            <h5 id="user-modal-label" class=" mb-0 ms-0">{{ $editingJobTitleId ? 'Edit job title' : 'Add job title' }}</h5>
                         </div>
-                        <button type="button" class="btn-close" aria-label="Close" wire:click="closeUserModal"></button>
+                        <button type="button" class="btn-close" aria-label="Close" wire:click="closeJobTitleModal"></button>
                     </div>
 
                     <div class="modal-body px-4 pb-4">
-                        <p class="modal-subtitle">{{ $editingUserId ? 'Update account details and access.' : 'Create an account and assign access.' }}</p>
-                        <form wire:submit.prevent="saveUser" class="user-form">
+                        <p class="modal-subtitle">{{ $editingJobTitleId ? 'Update job title details.' : 'Create a new job title.' }}</p>
+                        <form wire:submit.prevent="saveJobTitle" class="job-title-form">
                             <div class="field">
-                                <label for="user-name" >Full name</label>
-                                <input id="user-name" type="text" wire:model.defer="name" placeholder="Jane Wambui" />
+                                <label for="job-title-name" >Job Title</label>
+                                <input id="job-title-name" type="text" wire:model.defer="name" placeholder="Software Engineer" />
                                 @error('name')
                                     <small class="text-danger d-block mt-1">{{ $message }}</small>
                                 @enderror
                             </div>
 
                             <div class="field mt-1">
-                                <label for="user-email" class="">Email</label>
-                                <input id="user-email" type="email" class="" wire:model.defer="email" placeholder="jane.wambui@statpak.co.ke" />
-                                @error('email')
-                                    <small class="text-danger d-block mt-1">{{ $message }}</small>
-                                @enderror
+                                <label for="job-title-description" >Description</label>
+                                <input id="job-title-description" type="text" wire:model.defer="description" placeholder="Responsible for developing software applications." />
                             </div>
 
-                            <div class="field mt-1">
-                                <label for="user-phone" >Phone</label>
-                                <input id="user-phone" type="text" wire:model.defer="phone" placeholder="+254 7XX XXX XXX" />
-                            </div>
-
-                            <div class="field mt-1">
-                                <label for="user-role" >Role</label>
-                                <select id="user-role" wire:model.defer="role">
-                                    <option value="">Select role</option>
-                                    <option value="Admin">Admin</option>
-                                    <option value="Employee">Employee</option>
-                                    <option value="Supervisor">Supervisor</option>
-                                </select>
-                                @error('role')
-                                    <small class="text-danger d-block mt-1">{{ $message }}</small>
-                                @enderror
-                            </div>
-
-                            <div class="account-access-card mb-1 mt-3" @if(! $editingUserId) style="display: none;" @endif>
-                                <div class="d-flex flex-column flex-md-row align-items-start align-items-md-center justify-content-between gap-3">
-                                    <div>
-                                        <div class="account-access-title">Account access</div>
-                                        <div class="account-access-subtitle">
-                                            {{ $accountActive ? 'Active - the user can currently sign in.' : 'Inactive - the user cannot currently sign in.' }}
-                                        </div>
-                                    </div>
-
-                                    <button
-                                        type="button"
-                                        class="btn account-access-btn {{ $accountActive ? 'account-access-btn-danger' : 'account-access-btn-success' }}
-                                                {{ $accountActive ? 'text-primary' : 'text-success' }}"
-                                        wire:click="toggleUserAccess"
-                                    >
-                                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17 8h-1V6a4 4 0 0 0-8 0v2H7a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2Zm-7-2a2 2 0 1 1 4 0v2h-4V6Zm7 12H7v-8h10v8Z"/></svg>
-                                        <span>{{ $accountActive ? 'Deactivate account' : 'Reactivate account' }}</span>
-                                    </button>
-                                </div>
-                            </div>
+                            <label class="form-label">Status</label>
+                            <select wire:model.defer="isActive" class="form-control">
+                                <option value="1">Active</option>
+                                <option value="0">Inactive</option>
+                            </select>
 
                             <div class="modal-foot">
-                                <button type="button" class="btn" wire:click="closeUserModal">
+                                <button type="button" class="btn" wire:click="closeJobTitleModal">
                                     Cancel
                                 </button>
                                 <button type="submit" class="btn btn-primary">
-                                    {{ $editingUserId ? 'Save changes' : 'Add user' }}
+                                    {{ $editingJobTitleId ? 'Save changes' : 'Add job title' }}
                                 </button>
                             </div>
                         </form>
@@ -794,6 +728,11 @@ new class extends Component {
             font-size: 13.5px;
         }
 
+        .sj-users-shell .su-name {
+            font-weight: 500;
+            font-size: 11.5px;
+        }
+
         .sj-users-shell .u-email {
             color: var(--ink-2);
             font-size: 12.5px;
@@ -812,6 +751,30 @@ new class extends Component {
 
             background: var(--gray-tint);
             color: var(--ink-2);
+        }  
+
+        .sj-users-shell .be-red {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 12px;
+            font-weight: 600;
+            padding: 4px 10px;
+            border-radius: 100px;
+
+            background: #FCE8CF !important;
+        }
+
+        .sj-users-shell .small-red {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 12px;
+            font-weight: 600;
+            padding: 4px 10px;
+            border-radius: 100px;
+
+            background: #FDECEA !important;
         }
 
         .sj-users-shell .status {
@@ -955,26 +918,50 @@ new class extends Component {
             display: flex;
         }
 
-
         .sj-users-shell .holding-modal .modal {
             position: fixed;
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
 
-
-            background: var(--surface);
-            border-radius: 14px;
             width: 100%;
             max-width: 500px;
-            box-shadow: 0 24px 60px rgba(0, 0, 0, 0.22);
-            max-height: 80vh; 
-            overflow-y: auto;
-            scrollbar-width: none;
-            -ms-overflow-style: none;
+            height: auto;
+            max-height: 90vh;
+            min-height: 0;
+
+            margin: 0;
+            padding: 0;
+
+            background: transparent;
+            border: none;
+            box-shadow: none;
+
+            overflow: visible;
         }
 
-        .sj-users-shell .modal::-webkit-scrollbar {
+        .sj-users-shell .holding-modal .modal-dialog {
+            width: 100%;
+            max-width: 500px;
+            height: auto;
+            min-height: 0;
+
+            margin: 0;
+        }
+
+        .sj-users-shell .holding-modal .modal-content {
+            width: 100%;
+            height: auto;
+            min-height: 0;
+
+            margin: 0;
+            padding: 0;
+
+            border: none;
+            border-radius: 14px;
+        }
+
+        .sj-users-shell  .holding-modal .modal::-webkit-scrollbar {
             display: none;
         }
 
@@ -1127,8 +1114,8 @@ new class extends Component {
         .sj-users-shell .modal-foot {
             display: flex;
             justify-content: flex-end;
-            gap: 10px;
-            padding: 20px 22px 22px;
+            /* gap: 10px; */
+            /* padding: 20px 22px 22px; */
         }
 
         @media (max-width: 640px) {
