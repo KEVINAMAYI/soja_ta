@@ -206,7 +206,7 @@ new class extends Component {
             if ($this->durationType === 'numberOfDays') {
                 $start = Carbon::parse($this->startDate);
 
-                $end = $this->getSelectedLeaveType()->calculateEndDateWithStartDateAndNumberOfDays($start, $this->numberOfDays)['end_date'];
+                $end = $this->getSelectedLeaveType()->calculateEndDateWithStartDateAndNumberOfDays($start, (int) $this->numberOfDays)['end_date'];
                 //$end = $start->copy()->addDays($this->numberOfDays - 1);
                 $endDate = $end->format('Y-m-d');
             } else {
