@@ -29,7 +29,7 @@ new class extends Component {
     ];
 
     public ?string $grade = null;
-    public $name, $email, $phone, $is_user, $employee_type_id, $department_id, $id_number, $active = true;
+    public $name, $email, $phone, $is_user = false, $employee_type_id, $department_id, $id_number, $active = true;
     public $editId, $employeeTypes, $departments;
     public $roleId;
     public $shifts;
@@ -136,7 +136,7 @@ new class extends Component {
         }
 
         $this->jobTitles = JobTitle::where('organization_id', $orgId)
-            ->pluck('name', 'id');
+            ->get(['name', 'id', 'department_id']);
 
         $this->loadSummaryStats();
 
@@ -972,7 +972,7 @@ new class extends Component {
             return [
                 'name' => 'required|string|max:255',
                 'shift_id' => 'required|exists:shifts,id',
-                'id_number' => 'required|string|unique:employees,id_number,' . $this->editId,
+                'id_number' => 'string|unique:employees,id_number,' . $this->editId,
                 'active' => 'boolean',
                 'employee_title' => 'nullable|string|max:255',
                 'department_id' => 'nullable|exists:departments,id',
@@ -985,9 +985,9 @@ new class extends Component {
             'phone' => 'required|string|max:20',
             'shift_id' => 'required|exists:shifts,id',
             'department_id' => 'required|exists:departments,id',
-            'id_number' => 'required|string|unique:employees,id_number,' . $this->editId,
+            'id_number' => 'string|unique:employees,id_number,' . $this->editId,
             'active' => 'boolean',
-            'roleName' => 'required|string',
+            'roleName' => 'nullable|string|required_if:is_user,1',
             'employee_title' => 'nullable|string|max:255',
             'is_user' => 'nullable|boolean',
         ];
@@ -995,7 +995,6 @@ new class extends Component {
 
     public function createEmployee(): void
     {
-        Log::info('Creating employee', ['data' => $this->getAttributes()]);
 
         if ($this->jobTitleId == '') {
             $this->jobTitleId = null;
@@ -1083,15 +1082,19 @@ new class extends Component {
         $this->phone = $employee->phone;
         $this->shift_id = $employee->shift_id;
         $this->department_id = $employee->department_id;
-        $this->jobTitleId = $jobTitleOptions->has($employee->job_title_id)
-            ? (string) $employee->job_title_id
-            : '';
-        $this->reportsToJobTitleId = $jobTitleOptions->has($employee->reports_to_job_title_id)
-            ? (string) $employee->reports_to_job_title_id
-            : '';
+        // $this->jobTitleId = $jobTitleOptions->has($employee->job_title_id)
+        //     ? (string) $employee->job_title_id
+        //     : '';
+        $this->jobTitleId = $employee->job_title_id;
+        // $this->reportsToJobTitleId = $jobTitleOptions->has($employee->reports_to_job_title_id)
+        //     ? (string) $employee->reports_to_job_title_id
+        //     : '';
+        $this->reportsToJobTitleId = $employee->reports_to_job_title_id;
+
         $this->id_number = $employee->id_number;
         $this->active = $employee->active;
         $this->roleName = $employee->user?->roles->first()?->name ?? '';
+        $this->is_user = $employee->is_user;
         $this->employee_title = $employee->employee_title;
         $this->grade = $employee->grade;
         $this->personType = $employee->is_student ? 'student' : 'staff';
@@ -1236,6 +1239,7 @@ new class extends Component {
         $this->reset(['name', 'email', 'phone', 'employee_type_id', 'department_id',
             'id_number', 'editId', 'shift_id', 'employee_title', 'roleName', 'grade', 'jobTitleId', 'reportsToJobTitleId', 'is_user']);
         $this->active = true;
+        $this->is_user = false;
         $this->roleName = 'employee';
     }
 
@@ -1251,6 +1255,13 @@ new class extends Component {
             $this->end_off_shift_date = $employee->end_off_shift_date;
         }
         $this->dispatch('show-off-shift-modal');
+    }
+
+    public function updatedIsUser($value)
+    {
+        if (!$value) {
+            $this->roleName = 'employee';
+        }
     }
 
     public function saveOffShiftDates(): void
@@ -2825,7 +2836,7 @@ new class extends Component {
 
                             <div class="col-md-6 mb-3">
                                 <label class="form-label">{{ $isStudent ? 'Student ID / Admission No.' : 'ID Number' }}
-                                    <span class="text-danger">*</span></label>
+                                    </label>
                                 <input type="text" wire:model="id_number" class="form-control"
                                        placeholder="{{ $isStudent ? 'e.g. STU-0041' : 'e.g. 12345678' }}"/>
                                 @error('id_number') <small class="text-danger">{{ $message }}</small> @enderror
@@ -2871,7 +2882,7 @@ new class extends Component {
                             @else
                                 <div class="col-md-6 mb-3">
                                     <label class="form-label">Department <span class="text-danger">*</span></label>
-                                    <select wire:model="department_id" class="form-control">
+                                    <select wire:model.live="department_id" class="form-control" >
                                         <option value="">Select Department</option>
                                         @foreach ($departments as $dept)
                                             <option value="{{ $dept->id }}">{{ $dept->name }}</option>
@@ -2883,10 +2894,12 @@ new class extends Component {
 
                             <div class="col-md-6 mb-3">
                                 <label class="form-label">Job Title <span class="text-danger">*</span></label>
-                                <select wire:model.live="jobTitleId" class="form-control" required>
+                                <select wire:model.live="jobTitleId" class="form-control" required {{ empty($department_id) ? 'disabled' : '' }}>
                                     <option value="">Select Job Title</option>
                                     @foreach ($jobTitles as $id => $jobTitle)
-                                        <option value="{{ $id }}">{{ ucfirst($jobTitle) }}</option>
+                                        @if (!empty($department_id) && $jobTitle->department_id == $department_id)
+                                            <option value="{{ $id }}" {{ $jobTitleId == $id ? 'selected' : '' }}>{{ ucfirst($jobTitle->name) }}</option>
+                                        @endif
                                     @endforeach
                                 </select>
                                 @error('jobTitleId') <small class="text-danger">{{ $message }}</small> @enderror
@@ -2898,40 +2911,13 @@ new class extends Component {
                                     <option value="">Select Job Title this employee reports to</option>
                                     @foreach ($jobTitles as $id => $jobTitle)
                                         @if($id != $jobTitleId)  {{-- Exclude the current job title from the options --}}
-                                            <option value="{{ $id }}" {{ $reportsToJobTitleId == $id ? 'selected' : '' }}>{{ ucfirst($jobTitle) }}</option>
+                                            <option value="{{ $id }}" {{ $reportsToJobTitleId == $id ? 'selected' : '' }}>{{ ucfirst($jobTitle->name) }}</option>
                                         @endif
                                     @endforeach
                                 </select>
                                 @error('reportsToJobTitleId') <small class="text-danger">{{ $message }}</small> @enderror
                             </div>
 
-                            @if(!$isStudentOrg || $personType === 'staff')
-                                <div class="col-md-6 mb-3">
-                                    <label class="form-label">System Role <span class="text-danger">*</span></label>
-                                    <select wire:model="roleName" class="form-control">
-                                        <option value="">Select Role</option>
-                                        @foreach ($roles as $id => $name)
-                                            <option value="{{ $name }}">{{ ucfirst($name) }}</option>
-                                        @endforeach
-                                    </select>
-                                    @error('roleName') <small class="text-danger">{{ $message }}</small> @enderror
-                                </div>
-                            @endif
-
-                            @php
-                                $canAddOrEditUsers = auth()->user()->can('add-organization-users') || auth()->user()->can('edit-organization-users');
-                            @endphp
-                            @if($canAddOrEditUsers)
-                                
-                                <div class="col-md-6 mb-3 rounded border p-3" style="background:#f8fafc;">
-                                    <label class="form-label">Is User? <span class="text-danger">*</span></label>
-                                    <select wire:model="is_user" class="form-control">
-                                        <option value="0" selected>No</option>
-                                        <option value="1">Yes</option>
-                                    </select>
-                                    @error('is_user') <small class="text-danger">{{ $message }}</small> @enderror
-                                </div>
-                            @endif
 
                             @if(!$isStudent)
                                 <div class="col-12 mb-3">
@@ -2939,6 +2925,45 @@ new class extends Component {
                                         <input type="checkbox" wire:model="active" class="form-check-input"
                                                id="activeToggle"/>
                                         <label for="activeToggle" class="form-check-label">Active</label>
+                                    </div>
+                                </div>
+                            @endif
+
+
+                            @php
+                                $canAddOrEditUsers = auth()->user()->can('add-organization-users') || auth()->user()->can('edit-organization-users');
+                            @endphp
+                            @if($canAddOrEditUsers && (!$isStudentOrg || $personType === 'staff'))
+                                <div class="col-12 mt-2 mb-2">
+                                    <div class="rounded border p-3" style="background:#f8fafc; border-color:#dfe6ee !important;">
+                                        <div class="row align-items-center g-3">
+                                            <div class="col-md-6">
+                                                <div class="">
+                                                    <label class="form-label mb-0">Create a user account for this employee?</label>
+                                                    <div class="d-flex align-items-center gap-2">
+                                                        <div class="fw-semibold text-muted small" style="min-width:32px; text-align:left;">
+                                                            {{ $is_user ? 'ON' : 'OFF' }}
+                                                        </div>
+                                                        <div class="form-check form-switch mb-0">
+                                                            <input type="checkbox" wire:model.live="is_user" class="form-check-input" id="isUserToggle" role="switch" style="width: 3.2rem; height: 1.8rem;">
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                @error('is_user') <small class="text-danger d-block mt-2">{{ $message }}</small> @enderror
+                                            </div>
+
+                                            <div class="col-md-6">
+                                                <label for="systemRoleSelect" class="form-label">System Role <span class="text-danger">*</span></label>
+                                                <select id="systemRoleSelect" wire:model="roleName" class="form-control" {{ !$is_user ? 'disabled' : '' }}
+                                                        style="background-color: {{ $is_user ? '#fff' : '#f3f4f6' }}; opacity: {{ $is_user ? '1' : '0.7' }}; cursor: {{ $is_user ? 'pointer' : 'not-allowed' }};">
+                                                    <option value="">Select Role</option>
+                                                    @foreach ($roles as $id => $name)
+                                                        <option value="{{ $name }}">{{ ucfirst($name) }}</option>
+                                                    @endforeach
+                                                </select>
+                                                @error('roleName') <small class="text-danger d-block mt-2">{{ $message }}</small> @enderror
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
                             @endif
