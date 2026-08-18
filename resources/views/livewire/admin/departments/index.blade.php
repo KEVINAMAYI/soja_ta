@@ -467,6 +467,57 @@ new class extends Component {
 
         </div>
     </div>
+
+    <div class="modal fade" id="departmentModal" tabindex="-1"
+         aria-labelledby="departmentModalTitle" aria-hidden="true" wire:ignore.self>
+        <div class="modal-dialog modal-md modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">{{ $editId ? 'Edit Department' : 'New Department' }}</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+
+                <form wire:submit.prevent="{{ $editId ? 'updateDepartment' : 'createDepartment' }}">
+                    <div class="modal-body">
+                        <div class="mb-3">
+                            <label for="name" class="form-label">Name</label>
+                            <input type="text" wire:model="name" id="name" class="form-control"
+                                   placeholder="Department Name"/>
+                            @error('name') <small class="text-danger">{{ $message }}</small> @enderror
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="description" class="form-label">Description</label>
+                            <textarea wire:model="description" id="description" class="form-control" rows="3"
+                                      placeholder="Write a short description..."></textarea>
+                            @error('description') <small class="text-danger">{{ $message }}</small> @enderror
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="manager_id" class="form-label">Manager</label>
+                            <select wire:model="manager_id" id="manager_id" class="form-control">
+                                <option value="">Select Manager (Optional)</option>
+                                @foreach(User::whereHas('employee', fn($q) => $q->where('organization_id', auth()->user()->employee->organization_id))->get() as $user)
+                                    <option value="{{ $user->id }}">{{ $user->name }}</option>
+                                @endforeach
+                            </select>
+                            @error('manager_id') <small class="text-danger">{{ $message }}</small> @enderror
+                        </div>
+                    </div>
+
+                    <div class="modal-footer d-flex gap-1">
+                        <button type="submit" class="btn btn-success">
+                            {{ $editId ? 'Save' : 'Add' }}
+                        </button>
+                        <button wire:click="$dispatch('discard-department-modal')" type="button"
+                                class="btn btn-outline-danger" data-bs-dismiss="modal">
+                            Discard
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
 </div>
 @push('scripts')
     <script>
