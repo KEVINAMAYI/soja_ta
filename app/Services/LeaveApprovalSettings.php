@@ -3,7 +3,9 @@
 namespace App\Services;
 
 use App\Models\DepartmentLeaveApprovalSetting;
+use App\Models\Leave;
 use App\Models\OrganizationSetting;
+use Illuminate\Support\Facades\Log;
 
 class LeaveApprovalSettings
 {
@@ -185,8 +187,26 @@ class LeaveApprovalSettings
     /**
      * Next enabled level strictly after $from (1-based), or null if none remain.
      */
-    public static function nextEnabledLevel(array $settings, int $from): ?int
+    public static function nextEnabledLevel(array $settings, int $from, Leave $leave): ?int
     {
+
+        if ($settings['levels'][$from]['enabled'] && $settings['levels'][$from]['approver_type'] === 'role') {
+            if ($from >= 2 ) {
+                // end of the approval chain, no need for more levels to approve
+                return null;
+            }
+            $employee = $leave->employee;
+            if($employee && $employee?->reportsToJobTitle()->exists()) {
+                return $from + 1;
+            } else {
+                // reject the leave if the employee has no reporting line and the next level approver is based on the reporting line
+                $leave_approval_service = new LeaveApprovalService();
+                $leave_approval_service->reject($leave, null, 'Leave approval chain has no next level approver based on the employee\'s reporting line');
+                return null;
+            }
+        }
+
+        // if user type approver is enabled, we can skip to the next level if it exists
         for ($i = $from; $i < 3; $i++) {
             if (!empty($settings['levels'][$i]['enabled'])) {
                 return $i + 1;
