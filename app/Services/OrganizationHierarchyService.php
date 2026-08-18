@@ -480,16 +480,21 @@ class OrganizationHierarchyService
      *
      * A root has:
      *
-     * parent_id = null
+     * - parent_id = null
+     * - at least one child
      *
-     * It may or may not have children.
+     * Completely isolated titles (no parent + no children) are
+     * treated as dangling and excluded from roots.
      */
     protected function findRoots(array $graph): array
     {
         $roots = [];
 
         foreach ($graph as $jobTitleId => $node) {
-            if ($node['parent_id'] === null) {
+            if (
+                $node['parent_id'] === null &&
+                !empty($node['children'])
+            ) {
                 $roots[] = $jobTitleId;
             }
         }
