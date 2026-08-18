@@ -1753,15 +1753,54 @@ new class extends Component {
                                                             </div>
                                                         @else
                                                             <div class="mb-2 mt-4">
-                                                                <label class="form-label small text-uppercase text-muted fw-semibold">Role</label>
-                                                                <select class="form-select form-select-sm"
+
+                                                                {{-- Keep Livewire model binding while rendering custom role cards. --}}
+                                                                <select class="d-none"
                                                                         wire:model="leaveApproval.levels.{{ $i }}.approver_role"
                                                                     {{ $level['enabled'] ? '' : 'disabled' }}>
-                                                                    <option value="">— Select Role —</option>
-                                                                    @foreach($availableRoles as $role)
-                                                                        <option value="{{ $role }}">{{ $role }}</option>
-                                                                    @endforeach
+                                                                    <option value="direct_supervisor">Direct supervisor</option>
                                                                 </select>
+
+                                                                <div class="mt-2 rounded-3 p-3 d-flex align-items-center justify-content-between gap-3"
+                                                                     style="border:1px solid #b9f2e2;background:#f3fffb;">
+                                                                    <div class="d-flex align-items-start gap-3">
+                                                                        <div class="rounded-circle d-flex align-items-center justify-content-center"
+                                                                             style="width:44px;height:44px;background:#c9f5ea;color:#18a07b;">
+                                                                            @if($i === 0)
+                                                                                <iconify-icon icon="mdi:account-outline" class="fs-5"></iconify-icon>
+                                                                            @elseif($i === 1)
+                                                                                <iconify-icon icon="mdi:account-multiple" class="fs-5"></iconify-icon>
+                                                                            @elseif($i > 1)
+                                                                                <iconify-icon icon="mdi:domain" class="fs-5"></iconify-icon>
+                                                                            @endif
+                                                                        </div>
+                                                                        <div>
+                                                                            @if($i === 0)
+                                                                                <div class="fw-bold" style="color:#1f2d3d;">Direct supervisor</div>
+                                                                                <div class="text-muted small">The employee's direct supervisor will approve this level.</div>
+                                                                            @elseif($i === 1)
+                                                                                <div class="fw-bold" style="color:#1f2d3d;">Supervisor's manager</div>
+                                                                                <div class="text-muted small">The employee's supervisor's manager will approve this level.</div>
+                                                                            @elseif($i > 1)
+                                                                                <div class="fw-bold" style="color:#1f2d3d;">Department head</div>
+                                                                                <div class="text-muted small">The department head or division director will approve this level.</div>
+                                                                            @endif
+                                                                        </div>
+                                                                    </div>
+                                                                    <iconify-icon icon="mdi:check" class="fs-5" style="color:#18a07b;"></iconify-icon>
+                                                                </div>
+
+                                                                <div class="mt-2 rounded-3 p-3 d-flex align-items-start gap-2"
+                                                                     style="border:1px solid #e5e9ef;background:#f8fafc;color:#6b7280;">
+                                                                    <iconify-icon icon="mdi:information-outline" class="fs-5 flex-shrink-0"></iconify-icon>
+                                                                    @if($i === 0)
+                                                                        <span class="small fw-semibold">Level {{ $i + 1 }} approver is automatically determined based on the employee's direct reporting line.</span>
+                                                                    @elseif($i === 1)
+                                                                        <span class="small fw-semibold">Level {{ $i + 1 }} approver is automatically determined based on the employee's reporting hierarchy.</span>
+                                                                    @elseif($i > 1)
+                                                                        <span class="small fw-semibold">Level {{ $i + 1 }} approver is automatically determined based on the employee's department hierarchy.</span>
+                                                                    @endif
+                                                                </div>
                                                             </div>
                                                         @endif
 
