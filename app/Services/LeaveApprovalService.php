@@ -35,6 +35,8 @@ class LeaveApprovalService
 
         $start = LeaveApprovalSettings::firstEnabledLevel($settings);
         if ($start === null) {
+            // reject the leave if there are no enabled levels in the approval chain
+            $this->reject($leave, null, 'Leave approval chain has no enabled levels');
             return null;
         }
 
@@ -59,11 +61,21 @@ class LeaveApprovalService
             return $this->advanceOrFinalize($leave, $level, $settings);
         }
 
+        // TO DO(SIR-DOMMY): We will use this to move up the the approval chain.....
+        $latest_actor = $leave->latestApprovedApprovalLog()->first()?->actioned_by;
+
+        $next_approver_title_id = $leave->employee?->reports_to_job_title_id;
+        if ($latest_actor && $config['approver_type'] == 'role' && $level > 1) {
+            $next_approver_title_id = Employee::where('user_id', $latest_actor)->value('reports_to_job_title_id');
+        }
+
+        // ap
+
         $log = LeaveApprovalLog::create([
             'leave_id' => $leave->id,
             'level_number' => $level,
             'approver_type' => $config['approver_type'],
-            'approver_role' => $config['approver_type'] === 'role' ? $config['approver_role'] : null,
+            'approver_role' => $config['approver_type'] === 'role' ? $next_approver_title_id : null,
             'approver_user_ids' => $config['approver_type'] === 'user'
                 ? array_values(array_unique(array_filter(array_map(
                     fn ($id) => is_numeric($id) ? (int) $id : null,
@@ -87,7 +99,7 @@ class LeaveApprovalService
 
     private function advanceOrFinalize(Leave $leave, int $fromLevel, array $settings, ?string $notes = null): ?LeaveApprovalLog
     {
-        $next = LeaveApprovalSettings::nextEnabledLevel($settings, $fromLevel);
+        $next = LeaveApprovalSettings::nextEnabledLevel($settings, $fromLevel, $leave);
 
         if ($next !== null) {
             return $this->openLevel($leave, $next, $settings);
@@ -147,7 +159,7 @@ class LeaveApprovalService
      * Reject the currently active level. A rejection at any level
      * immediately finalizes the leave as rejected — no further levels open.
      */
-    public function reject(Leave $leave, User $actor, ?string $notes = null): Leave
+    public function reject(Leave $leave, ?User $actor, ?string $notes = null): Leave
     {
         $activeLog = $leave->activeApprovalLog()->first();
 
@@ -163,7 +175,7 @@ class LeaveApprovalService
             $activeLog->update([
                 'status' => 'rejected',
                 'closed_at' => now(),
-                'actioned_by' => $actor->id,
+                'actioned_by' => $actor?->id,
                 'notes' => $notes,
             ]);
 
@@ -179,7 +191,7 @@ class LeaveApprovalService
                 if(!$existingApprover) {
                     LevelApprover::create([
                         'leave_approval_log_id' => $activeLog->id,
-                        'level_approver_id' => $actor->id,
+                        'level_approver_id' => $actor?->id,
                         'action' => 'rejected',
                     ]);
                 } else {
@@ -217,8 +229,17 @@ class LeaveApprovalService
 
     private function matchesApprover(User $actor, LeaveApprovalLog $log): bool
     {
-        if ($log->approver_type !== 'user') {
-            return $log->approver_role && $actor->hasRole($log->approver_role);
+        
+        if ($log->approver_type == 'role') {
+            $employee = Employee::where('user_id', $actor->id)->first();
+            
+            return $employee?->job_title_id == $log->approver_role;
+        }
+
+        // retain this for backward compatibility with legacy single approver ID, but prefer the new array of IDs if present
+        else if ($log->approver_type !== 'user') {
+            $employee = Employee::where('user_id', $actor->id)->first();
+            return $employee?->job_title_id === $log->approver_role;
         }
 
         $approverIds = array_filter(array_unique(array_merge(
@@ -568,12 +589,22 @@ class LeaveApprovalService
                     ->filter()
                     ->all();
             }
-        } elseif ($config['approver_type'] === 'role' && $config['approver_role']) {
-            $recipients = User::role($config['approver_role'])
-                ->whereHas('employee', fn ($q) => $q->where('organization_id', $leave->organization_id))
+        }
+        elseif ($config['approver_type'] === 'role') {
+                        
+            $recipients = Employee::where('organization_id', $leave->organization_id)
+                ->where('job_title_id', $config['approver_role'])
                 ->pluck('email')
                 ->filter()
                 ->all();
+        // avoid using role but report to job title if approver type is role
+        // elseif ($config['approver_type'] === 'role' && $config['approver_role']) {
+        //     $recipients = User::role($config['approver_role'])
+        //         ->whereHas('employee', fn ($q) => $q->where('organization_id', $leave->organization_id))
+        //         ->pluck('email')
+        //         ->filter()
+        //         ->all();
+
         }
 
         // if (!empty($config['notify_email'])) {
