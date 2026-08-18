@@ -381,7 +381,7 @@ class EmployeeTable extends DataTableComponent
                 ->label(function ($row) {
                     if ($row->is_student) {
                         return "<span class='text-muted'>—</span>";
-                    }
+                    };
                     return view('livewire.admin.employees.roles', ['employee' => $row]);
                 })
                 ->html()
