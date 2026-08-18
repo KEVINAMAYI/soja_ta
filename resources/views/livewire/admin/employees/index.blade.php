@@ -1075,12 +1075,20 @@ new class extends Component {
     public function editEmployee($id): void
     {
         $employee = Employee::findOrFail($id);
+        $jobTitleOptions = collect($this->jobTitles);
+
         $this->editId = $id;
         $this->name = $employee->name;
         $this->email = $employee->email;
         $this->phone = $employee->phone;
         $this->shift_id = $employee->shift_id;
         $this->department_id = $employee->department_id;
+        $this->jobTitleId = $jobTitleOptions->has($employee->job_title_id)
+            ? (string) $employee->job_title_id
+            : '';
+        $this->reportsToJobTitleId = $jobTitleOptions->has($employee->reports_to_job_title_id)
+            ? (string) $employee->reports_to_job_title_id
+            : '';
         $this->id_number = $employee->id_number;
         $this->active = $employee->active;
         $this->roleName = $employee->user?->roles->first()?->name ?? '';
@@ -2878,7 +2886,6 @@ new class extends Component {
                                 <select wire:model.live="jobTitleId" class="form-control" required>
                                     <option value="">Select Job Title</option>
                                     @foreach ($jobTitles as $id => $jobTitle)
-                                        Log::info("ID NI: $id, Job Title: $jobTitle");
                                         <option value="{{ $id }}">{{ ucfirst($jobTitle) }}</option>
                                     @endforeach
                                 </select>
@@ -2891,7 +2898,7 @@ new class extends Component {
                                     <option value="">Select Job Title this employee reports to</option>
                                     @foreach ($jobTitles as $id => $jobTitle)
                                         @if($id != $jobTitleId)  {{-- Exclude the current job title from the options --}}
-                                            <option value="{{ $id }}">{{ ucfirst($jobTitle) }}</option>
+                                            <option value="{{ $id }}" {{ $reportsToJobTitleId == $id ? 'selected' : '' }}>{{ ucfirst($jobTitle) }}</option>
                                         @endif
                                     @endforeach
                                 </select>
