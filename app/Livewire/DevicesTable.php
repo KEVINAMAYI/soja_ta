@@ -60,7 +60,7 @@ class DevicesTable extends DataTableComponent
                 ->html()
                 ->sortable(),
 
-            Column::make("PIN", "pin")
+            Column::make("KIOSK MODE PIN", "pin")
                 ->format(fn($value) => $value ? '<span class="text-muted">' . e($value) . '</span>' : '<em class="text-muted">Auto</em>')
                 ->html(),
 
