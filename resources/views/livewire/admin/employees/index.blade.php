@@ -985,7 +985,7 @@ new class extends Component {
             'phone' => 'required|string|max:20',
             'shift_id' => 'required|exists:shifts,id',
             'department_id' => 'required|exists:departments,id',
-            'id_number' => 'string|unique:employees,id_number,' . $this->editId,
+            'id_number' => 'nullable|string|unique:employees,id_number,' . $this->editId,
             'active' => 'boolean',
             'roleName' => 'nullable|string|required_if:is_user,1',
             'employee_title' => 'nullable|string|max:255',
