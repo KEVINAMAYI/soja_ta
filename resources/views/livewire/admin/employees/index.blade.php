@@ -2898,7 +2898,7 @@ new class extends Component {
                                     <option value="">Select Job Title</option>
                                     @foreach ($jobTitles as $id => $jobTitle)
                                         @if (!empty($department_id) && $jobTitle->department_id == $department_id)
-                                            <option value="{{ $id }}" {{ $jobTitleId == $id ? 'selected' : '' }}>{{ ucfirst($jobTitle->name) }}</option>
+                                            <option value="{{ $jobTitle->id  }}" {{ $jobTitleId == $jobTitle->id ? 'selected' : '' }}>{{ ucfirst($jobTitle->name) }}</option>
                                         @endif
                                     @endforeach
                                 </select>
@@ -2910,8 +2910,8 @@ new class extends Component {
                                 <select wire:model.live="reportsToJobTitleId" class="form-control" {{ empty($jobTitleId) ? 'disabled' : '' }}>
                                     <option value="">Select Job Title this employee reports to</option>
                                     @foreach ($jobTitles as $id => $jobTitle)
-                                        @if($id != $jobTitleId)  {{-- Exclude the current job title from the options --}}
-                                            <option value="{{ $id }}" {{ $reportsToJobTitleId == $id ? 'selected' : '' }}>{{ ucfirst($jobTitle->name) }}</option>
+                                        @if($jobTitle->id  != $jobTitleId)  {{-- Exclude the current job title from the options --}}
+                                            <option value="{{ $jobTitle->id  }}" {{ $reportsToJobTitleId == $jobTitle->id ? 'selected' : '' }}>{{ ucfirst($jobTitle->name) }}</option>
                                         @endif
                                     @endforeach
                                 </select>
