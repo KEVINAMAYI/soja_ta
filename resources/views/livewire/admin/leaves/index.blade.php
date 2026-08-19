@@ -1133,7 +1133,10 @@ new class extends Component {
                                             @if($activeLog->approver_type === 'user')
                                                 {{ $activeLog->approverUser->name ?? 'Unknown user' }}
                                             @else
-                                                {{ ucfirst($activeLog->approver_role) }} role
+                                                @php
+                                                    $activeJobTitle = App\Models\JobTitle::find($activeLog->approver_role);
+                                                @endphp
+                                                {{ $activeJobTitle->name ?? 'Unknown job title' }}
                                             @endif
                                         </small>
                                     </div>
