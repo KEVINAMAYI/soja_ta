@@ -972,7 +972,7 @@ new class extends Component {
             return [
                 'name' => 'required|string|max:255',
                 'shift_id' => 'required|exists:shifts,id',
-                'id_number' => 'string|unique:employees,id_number,' . $this->editId,
+                'id_number' => 'nullable|string|unique:employees,id_number,' . $this->editId,
                 'active' => 'boolean',
                 'employee_title' => 'nullable|string|max:255',
                 'department_id' => 'nullable|exists:departments,id',
