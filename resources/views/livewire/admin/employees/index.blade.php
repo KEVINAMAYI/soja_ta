@@ -971,7 +971,7 @@ new class extends Component {
         if ($this->isCreatingStudent()) {
             return [
                 'name' => 'required|string|max:255',
-                'shift_id' => 'required|exists:shifts,id',
+                'shift_id' => 'nullable|exists:shifts,id',
                 'id_number' => 'nullable|string|unique:employees,id_number,' . $this->editId,
                 'active' => 'boolean',
                 'employee_title' => 'nullable|string|max:255',
@@ -983,7 +983,7 @@ new class extends Component {
             'name' => 'required|string|max:255',
             'email' => 'nullable|email|unique:employees,email,' . $this->editId,
             'phone' => 'required|string|max:20',
-            'shift_id' => 'required|exists:shifts,id',
+            'shift_id' => 'nullable|exists:shifts,id',
             'department_id' => 'required|exists:departments,id',
             'id_number' => 'nullable|string|unique:employees,id_number,' . $this->editId,
             'active' => 'boolean',
@@ -1013,7 +1013,7 @@ new class extends Component {
             $roleName = $this->resolveRoleName();
 
             $is_user_creating = false;
-            if (auth()->user()->can('create-organization-users')) {
+            if (auth()->user()->can('add-organization-users')) {
                 $is_user_creating = $this->is_user;
             }
 
