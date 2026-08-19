@@ -332,7 +332,7 @@ new class extends Component {
                 <tr>
                     <th>Position</th>
                     <th>Reports To</th>
-                    <th>Levels</th>
+                    <th>Approver Level</th>
                     <th>Holders</th>
                     <th>Status</th>
                     <th style="text-align: right;">Actions</th>
@@ -754,7 +754,7 @@ new class extends Component {
             font-size: 11.5px;
             font-weight: 600;
             letter-spacing: 0.03em;
-            text-transform: uppercase;
+            text-transform: capitalize;
             color: var(--ink-3);
             padding: 12px 22px;
             border-bottom: 1px solid var(--line);
