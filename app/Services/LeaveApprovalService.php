@@ -181,7 +181,9 @@ class LeaveApprovalService
         try {
             DB::beginTransaction();
 
-            $this->authorizeActor($actor, $activeLog);
+            if ($actor) {
+                $this->authorizeActor($actor, $activeLog);
+            }
 
             $activeLog->update([
                 'status' => 'rejected',
@@ -194,9 +196,9 @@ class LeaveApprovalService
             $leave->save();
 
             // now save these details to list of approvers if rule applies
-            if ($activeLog->approver_type === 'user') {
+            if ($activeLog->approver_type === 'user' && $actor) {
                 $existingApprover = LevelApprover::where('leave_approval_log_id', $activeLog->id)
-                    ->where('level_approver_id', $actor->id)
+                    ->where('level_approver_id', $actor?->id)
                     ->first();
                 
                 if(!$existingApprover) {
@@ -224,7 +226,7 @@ class LeaveApprovalService
             DB::rollBack();
             Log::error('Error while rejecting leave approval', [
                 'leave_id' => $leave->id,
-                'actor_id' => $actor->id,
+                'actor_id' => $actor?->id,
                 'error' => $e->getMessage(),
             ]);
             throw $e;
