@@ -83,6 +83,17 @@ class Leave extends Model
         return $this->hasOne(LeaveApprovalLog::class)->where('status', 'approved')->orderByDesc('level_number');
     }
 
+    public function latestApprovalLog()
+    {
+        // Deliberately NOT filtered by current_level here: only one approval
+        // log is ever 'pending' per leave at a time (the previous level's log
+        // is already closed out before the next one opens), so this alone is
+        // sufficient. Referencing $this->current_level in this closure would
+        // break under eager loading (->with('activeApprovalLog')), since the
+        // constraint gets built once against an unhydrated model instance.
+        return $this->hasOne(LeaveApprovalLog::class)->orderByDesc('created_at');
+    }
+
     public function isPending(): bool
     {
         return $this->status === 'pending';
