@@ -12,6 +12,7 @@ use App\Models\User;
 use App\Notifications\LeaveApprovalRequiredNotification;
 use App\Notifications\LeaveApprovedNotification;
 use App\Notifications\LeaveRejectedNotification;
+use App\Notifications\ApprovalProcessCCNotification;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Notification;
@@ -162,6 +163,7 @@ class LeaveApprovalService
         $this->advanceOrFinalize($leave, $activeLog->level_number, $settings, $notes);
 
         // TODO(SIR-DOMMY): Send mails to those who are to be CCed at this level
+        $this->sendCCNotification($leave);
 
         return $leave->fresh();
     }
@@ -214,11 +216,12 @@ class LeaveApprovalService
                 }
             }
 
-            // send rejection email to applicant
-            $this->sendRejectionNotification($leave);           
-
             // commit db changes
             DB::commit();
+
+            // Send notifications only after commit so queued mail jobs do not
+            // race against uncommitted approval-log updates.
+            $this->sendRejectionNotification($leave);
 
             return $leave->fresh();
 
@@ -364,6 +367,43 @@ class LeaveApprovalService
 
         Notification::route('mail', $email)
             ->notify(new LeaveRejectedNotification($leave));
+
+        // Send CC notification to the relevant parties
+        $this->sendCCNotification($leave);
+    }
+
+    private function sendCCNotification(Leave $leave): void
+    {
+        $activeLog = $leave->latestApprovalLog()->first();
+
+        $settings = LeaveApprovalSettings::get($leave->organization_id, $leave->department_id);
+
+        if (!$activeLog) {
+            Log::error('No active approval log found for leave ID: ' . $leave->id);
+            return;
+        }
+
+        $conf = $settings['levels'][$activeLog->level_number - 1] ?? null;
+
+        if (!$conf || !$conf['enabled']) {
+            Log::error('No enabled configuration found for active approval log of leave ID: ' . $leave->id);
+            return;
+        }
+
+        $emails = $conf['notify_email_addresses'] ?? [];
+
+        foreach ($emails as $email) {
+            if (empty($email)) {
+                Log::warning('Empty email found in CC list for leave notification', [
+                    'leave_id' => $leave->id,
+                ]);
+                continue;
+            }
+            Log::info("SENDING CC NOTIFICATION TO: " . $email);
+
+            Notification::route('mail', $email)
+                ->notify(new ApprovalProcessCCNotification($leave));
+        }
     }
 
     private function incrementBalance(Leave $leave): void
