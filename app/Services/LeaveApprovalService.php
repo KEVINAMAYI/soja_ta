@@ -69,8 +69,6 @@ class LeaveApprovalService
             $next_approver_title_id = Employee::where('user_id', $latest_actor)->value('reports_to_job_title_id');
         }
 
-        // ap
-
         $log = LeaveApprovalLog::create([
             'leave_id' => $leave->id,
             'level_number' => $level,
@@ -91,8 +89,9 @@ class LeaveApprovalService
 
         $leave->current_level = $level;
         $leave->save();
+        $leave->refresh();
 
-        $this->sendNotifications($leave, $config, $level);
+        $this->sendNotifications($leave, $config, $level, $next_approver_title_id);
 
         return $log;
     }
@@ -567,8 +566,9 @@ class LeaveApprovalService
         return $rows;
     }
 
-    private function sendNotifications(Leave $leave, array $config, int $level): void
+    private function sendNotifications(Leave $leave, array $config, int $level, ?int $next_approver_title_id): void
     {
+
         $recipients = [];
 
         if ($config['approver_type'] === 'user') {
@@ -590,13 +590,23 @@ class LeaveApprovalService
                     ->all();
             }
         }
-        elseif ($config['approver_type'] === 'role') {
+        else if ($config['approver_type'] === 'role') {
+
+
+            if (!$next_approver_title_id) {
+                Log::warning('Leave approval notification skipped: applicant has no reports_to_job_title_id', [
+                    'leave_id' => $leave->id,
+                    'employee_id' => $leave->employee_id,
+                ]);
+            }
                         
-            $recipients = Employee::where('organization_id', $leave->organization_id)
-                ->where('job_title_id', $config['approver_role'])
-                ->pluck('email')
-                ->filter()
-                ->all();
+            if ($next_approver_title_id) {
+                $recipients = Employee::where('organization_id', $leave->organization_id)
+                    ->where('job_title_id', $next_approver_title_id)
+                    ->pluck('email')
+                    ->filter()
+                    ->all();
+            }
         // avoid using role but report to job title if approver type is role
         // elseif ($config['approver_type'] === 'role' && $config['approver_role']) {
         //     $recipients = User::role($config['approver_role'])
@@ -612,6 +622,15 @@ class LeaveApprovalService
         // }
 
         $recipients = array_values(array_unique($recipients));
+
+        Log::info('TUNATUMA LEAVE APPROVAL NOTIFICATIONS WITH DETAILS', [
+            'leave_id' => $leave->id,
+            'level' => $level,
+            'approver_type' => $config['approver_type'],
+            'approver_role' => $config['approver_role'] ?? null,
+            'approver_user_ids' => $config['approver_user_ids'] ?? [],
+            'recipients' => $recipients,
+        ]);
 
         if (!empty($recipients)) {
             $approverRoleLabel = $config['approver_type'] === 'role' ? ($config['approver_role'] ?? null) : null;
