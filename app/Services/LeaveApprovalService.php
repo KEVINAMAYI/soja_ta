@@ -92,6 +92,17 @@ class LeaveApprovalService
         $leave->save();
         $leave->refresh();
 
+        $count_leave_logs = $leave->approvalLogs()->count();
+        if ($count_leave_logs == 1 && $log->approver_type === 'role' && !$next_approver_title_id) {
+            Log::warning('Leave approval notification skipped: applicant has no reports_to_job_title_id', [
+                'leave_id' => $leave->id,
+                'employee_id' => $leave->employee_id,
+            ]);
+
+            $this->reject($leave, null, "Leave approval failed: applicant has no reporting level above them for first level approval");
+            return $log;
+        }
+
         $this->sendNotifications($leave, $config, $level, $next_approver_title_id);
 
         return $log;
