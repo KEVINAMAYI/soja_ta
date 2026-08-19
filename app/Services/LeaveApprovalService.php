@@ -29,9 +29,10 @@ class LeaveApprovalService
     {
         $settings = LeaveApprovalSettings::get($leave->organization_id, $leave->department_id);
 
-        if (!$settings['enabled']) {
-            return null;
-        }
+        // TODO(SIR-DOMMY): This value will be controlled by superadmin and will require new field db... for now we disable this check
+        // if (!$settings['enabled']) {
+        //     return null;
+        // }
 
         $start = LeaveApprovalSettings::firstEnabledLevel($settings);
         if ($start === null) {
