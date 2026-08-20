@@ -121,6 +121,7 @@ class LeaveApprovalService
 
         return null;
     }
+    
 
     /**
      * Approve the currently active level for this leave, advancing to the
@@ -417,7 +418,7 @@ class LeaveApprovalService
             return;
         }
 
-        $days = $leave->start_date->diffInDays($leave->end_date) + 1;
+        $days = $leave->num_of_days;
         $year = $leave->start_date->year;
 
         $balance = LeaveBalance::firstOrCreate(
@@ -461,7 +462,7 @@ class LeaveApprovalService
             ->where('status', 'pending')
             ->whereYear('start_date', $year)
             ->get()
-            ->sum(fn ($l) => $l->start_date->diffInDays($l->end_date) + 1);
+            ->sum('num_of_days');
 
         $remaining = $entitled - (float) $used - $pending;
 
@@ -575,7 +576,7 @@ class LeaveApprovalService
             ->whereYear('start_date', $year)
             ->get()
             ->groupBy('employee_id')
-            ->map(fn ($group) => $group->sum(fn ($l) => $l->start_date->diffInDays($l->end_date) + 1));
+            ->map(fn ($group) => (float) $group->sum('num_of_days'));
 
         return $employees->map(function (Employee $employee) use ($type, $balancesByEmployee, $pendingByEmployee, $year) {
             $balance = $balancesByEmployee->get($employee->id);
