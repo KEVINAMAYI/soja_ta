@@ -159,6 +159,7 @@ new class extends Component {
         if (($this->selectedLeaveType == null || $this->selectedLeaveType->code !== $this->leaveType) && !empty($this->leaveType)) {
             $this->selectedLeaveType = LeaveType::where('code', $this->leaveType)->first();
         }
+        
         return $this->selectedLeaveType;
     }
 
@@ -189,6 +190,31 @@ new class extends Component {
         return array_unique(array_merge($conflictingLeaveIds, $conflictingOffShiftIds));
     }
 
+    public function getSelectedLeaveTypeRemainingDays() {
+        
+        $num_of_days = $this->calculateWorkingDays();
+
+        $service = app(LeaveApprovalService::class);
+        $employeeId = $this->selectedEmployees[0] ?? null; // Assuming you want to check for the first selected employee
+
+        if (!$employeeId || !$this->selectedLeaveType) {
+            return null; // Return null if no employee is selected or leave type is not set
+        }
+
+        $employee = Employee::find($employeeId);
+
+        $chosenLeaveType = $this->getSelectedLeaveType();
+
+        if (!$chosenLeaveType) {
+            return null; // Return null if the leave type is not found
+        }
+
+        $remaining = $service->checkBalance($employee, $chosenLeaveType, (float)$num_of_days, Carbon::parse($this->startDate)->year)['remaining'] ?? null;
+
+        return $remaining;
+
+    }
+
 
     public function confirmLeave()
     {
@@ -215,6 +241,14 @@ new class extends Component {
 
             // set end date for num of days calculation
             $this->endDate = $endDate;
+
+            // now check leave bala
+            if (count($this->selectedEmployees) > 0 && $this->leaveType !== 'offshift' && $this->leaveType !== 'sick') {
+                $remainingDays = $this->getSelectedLeaveTypeRemainingDays();
+                if ($remainingDays < $this->calculateWorkingDays()) {
+                    throw new \Exception("Insufficient leave balance for the selected leave type. Remaining days: {$remainingDays}, Requested days: {$this->calculateWorkingDays()}");
+                }
+            }
 
             // we add 2 to the end date to account for the resumption date being the day after the leave ends
             $resumptionDate = $this->getSelectedLeaveType()->calculateEndDateWithStartDateAndNumberOfDays(Carbon::parse($this->endDate), 2)['end_date'];
@@ -711,6 +745,8 @@ new class extends Component {
             <div class="card bg-light p-3 mb-4">
                 @php
                     $this->getSelectedLeaveType(); // Ensure selectedLeaveType is set
+
+                    $this->getSelectedLeaveTypeRemainingDays();
                 @endphp
                 <h3 class="h6 font-weight-bold mb-3">Absence/Leave Assignment Summary</h3>
                 <div class="row g-2">
