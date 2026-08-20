@@ -709,6 +709,9 @@ new class extends Component {
             <h2 class="h5 font-weight-bold mb-4 text-primary">Review & Confirm</h2>
 
             <div class="card bg-light p-3 mb-4">
+                @php
+                    $this->getSelectedLeaveType(); // Ensure selectedLeaveType is set
+                @endphp
                 <h3 class="h6 font-weight-bold mb-3">Absence/Leave Assignment Summary</h3>
                 <div class="row g-2">
                     <div class="col-6"><span class="font-weight-bold">Type:</span></div>
