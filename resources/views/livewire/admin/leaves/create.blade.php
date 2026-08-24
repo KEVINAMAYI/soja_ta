@@ -215,6 +215,44 @@ new class extends Component {
 
     }
 
+    public function getLeaveBalanceProjectionProperty(): ?array
+    {
+        if (count($this->selectedEmployees) !== 1 || empty($this->leaveType) || empty($this->startDate)) {
+            return null;
+        }
+
+        $employee = Employee::find($this->selectedEmployees[0]);
+        $leaveType = $this->getSelectedLeaveType();
+
+        if (!$employee || !$leaveType) {
+            return null;
+        }
+
+        $year = Carbon::parse($this->startDate)->year;
+
+        $balanceRow = collect(app(LeaveApprovalService::class)->balancesForEmployee($employee, $year))
+            ->firstWhere('code', $this->leaveType);
+
+        if (!$balanceRow) {
+            return null;
+        }
+
+        $requestedDays = $this->durationType === 'dateRange'
+            ? (($this->startDate && $this->endDate) ? (float) $this->calculateWorkingDays() : 0.0)
+            : (float) ($this->numberOfDays ?: 0);
+
+        $remainingBefore = $balanceRow['remaining_days'];
+
+        return [
+            'employee_name' => $employee->name,
+            'leave_type_name' => $balanceRow['name'] ?? $leaveType->name,
+            'accrued' => $balanceRow['entitled_days'],
+            'used' => $balanceRow['used_days'],
+            'requested' => $requestedDays,
+            'remaining' => $remainingBefore === null ? null : $remainingBefore - $requestedDays,
+        ];
+    }
+
 
     public function confirmLeave()
     {
@@ -528,6 +566,81 @@ new class extends Component {
             background-color: #eaf1fb;
             color: #0d6efd;
         }
+
+        .balance-projection-card {
+            border: 1px solid #e6ebf2;
+            border-radius: 0.6rem;
+            padding: 1rem 1.25rem;
+            background-color: #F9FAFC;
+        }
+
+        .balance-projection-kicker {
+            font-size: 0.75rem;
+            letter-spacing: 0.08em;
+            font-weight: 700;
+            color: #6b7280;
+            text-transform: uppercase;
+        }
+
+        .balance-projection-meta {
+            color: #2563eb;
+            font-weight: 600;
+        }
+
+        .balance-projection-grid {
+            display: grid;
+            grid-template-columns: 1fr auto 1fr auto 1fr;
+            gap: 0.75rem;
+            align-items: end;
+            border-top: 1px solid #edf2f7;
+            margin-top: 0.9rem;
+            padding-top: 0.9rem;
+        }
+
+        .balance-projection-label {
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: #64748b;
+            line-height: 1.2;
+        }
+
+        .balance-projection-value {
+            font-size: 2rem;
+            font-weight: 700;
+            line-height: 1;
+            color: #1f2937;
+        }
+
+        .balance-projection-value.requested {
+            color: #ef4444;
+        }
+
+        .balance-projection-value.remaining {
+            color: #10b981;
+        }
+
+        .balance-projection-op {
+            font-size: 1.35rem;
+            font-weight: 700;
+            color: #cbd5e1;
+            line-height: 1;
+            padding-bottom: 0.2rem;
+        }
+
+        @media (max-width: 767.98px) {
+            .balance-projection-grid {
+                grid-template-columns: 1fr;
+                gap: 0.5rem;
+            }
+
+            .balance-projection-op {
+                display: none;
+            }
+
+            .balance-projection-value {
+                font-size: 1.75rem;
+            }
+        }
     </style>
 @endpush
 
@@ -725,6 +838,59 @@ new class extends Component {
                     <input type="text" id="handover_to" wire:model="handover_to" class="form-control">
                 </div>
             </div>
+
+            @if(count($selectedEmployees) === 1)
+                @php
+                    $projection = $this->leaveBalanceProjection;
+                @endphp
+
+                @if($projection)
+                    <div class="balance-projection-card mt-4">
+                        <div class="balance-projection-kicker">Balance Projection</div>
+                        <div class="balance-projection-meta">
+                            {{ $projection['employee_name'] }} • {{ $projection['leave_type_name'] }}
+                        </div>
+
+                        <div class="row g-3 row-cols-1 row-cols-sm-2 row-cols-md-4 mt-1">
+                            <div class="col">
+                                <div class="card h-75">
+                                    <div class="card-body p-3">
+                                        <div class="card-title text-center balance-projection-label mb-2">Accrued</div>
+                                        <div class="text-center balance-projection-value">{{ $projection['accrued'] ?? '∞' }}</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="col">
+                                <div class="card h-75">
+                                    <div class="card-body p-3">
+                                        <div class="card-title text-center balance-projection-label mb-2">Used</div>
+                                        <div class="text-center balance-projection-value">{{ $projection['used'] ?? '∞' }}</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="col">
+                                <div class="card h-75">
+                                    <div class="card-body p-3">
+                                        <div class="card-title text-center balance-projection-label mb-2">Requested</div>
+                                        <div class="text-center balance-projection-value requested">{{ $projection['requested'] }}</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="col">
+                                <div class="card h-75">
+                                    <div class="card-body p-3">
+                                        <div class="card-title text-center balance-projection-label mb-2">Remaining</div>
+                                        <div class="text-center balance-projection-value remaining">{{ $projection['remaining'] ?? '∞' }}</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                @endif
+            @endif
 
             <div class="d-flex justify-content-between mt-4">
                 <button wire:click="$set('step',1)" class="btn btn-outline-primary btn-md">
