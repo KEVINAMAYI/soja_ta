@@ -352,13 +352,7 @@ new class extends Component {
             $endDateDiff = $leave1->end_date->diffInDays($this->end_date);
 
             if ($startDateDiff != 0 || $endDateDiff != 0) {
-                Log::info(
-                    "Leave dates changed for leave ID {$leave1->id}. " .
-                    "Start date difference: {$startDateDiff} days. " .
-                    "End date difference: {$endDateDiff} days."
-                );
-
-
+                
                 $new_num_of_days = $leave1->leaveType()?->first()?->calculateNumberOfDaysFromLeaveStartAndEndDates(Carbon::parse($this->start_date), Carbon::parse($this->end_date))['effective_leave_days'];
                 // save change request to db
                 $leaveAlternativeDate = LeaveAlternativeDate::updateOrCreate(
@@ -373,13 +367,6 @@ new class extends Component {
                         'created_by' => auth()->user()->id,
                     ]
                 );
-
-                Log::info("LEAVE NEW DATE RECORD IS: ". json_encode($leaveAlternativeDate));
-                // TODO: Remove my test email and replace with actual employee email when sending notification
-                // recipient is the email of the employee who applied the leave
-                $recipients = [];
-                $recipients[] = $leave1->employee->email;
-                $recipients[] = 'dominickyengo@identigate.co.ke';
 
                 // make accept url
                 $acceptUrl = \App\Services\GuestRoute::makeAnyUrlGuestLoginRedirect(
@@ -409,14 +396,11 @@ new class extends Component {
                     'acceptUrl' => $acceptUrl,
                     'rejectUrl' => $rejectUrl,
                 ];
-                if (!empty($recipients)) {
-                    // use for each since I want to send customized email to each approver with their email in the review link --> SIR-DOMMY
-                    foreach ($recipients as $recipientEmail) {
-                        Log::info("SENDING EMAIL TO: ". $recipientEmail);
-                        Notification::route('mail', $recipientEmail)
-                            ->notify(new LeaveRequestAlternative($leave_email_date));
-                    }
-                }
+
+
+                Notification::route('mail', $leave1->employee->email)
+                    ->notify(new LeaveRequestAlternative($leave_email_date));
+                
                 $this->clearFilters();
                 $this->resetForm();
                 $this->dispatch('hide-leave-modal');
@@ -437,7 +421,6 @@ new class extends Component {
 
 
     public function saveNewLeaveDatesWhenApproving(): bool {
-        Log::info("Checking if new leave dates need to be proposed when approving leave ID {$this->editId}.");
         // check if leave start and end dates have changed for the existing leave record and if so, delete any attendance records in that range
         $leave = $this->viewingRecord;
         if ($leave && $this->proposeNewDates && $this->proposed_start_date && $this->proposed_end_date) {
@@ -446,12 +429,6 @@ new class extends Component {
             $endDateDiff = $leave->end_date->diffInDays($this->proposed_end_date);
 
             if ($startDateDiff != 0 || $endDateDiff != 0) {
-                Log::info(
-                    "Leave dates changed for leave ID {$leave->id}. " .
-                    "Start date difference: {$startDateDiff} days. " .
-                    "End date difference: {$endDateDiff} days."
-                );
-
 
                 $new_num_of_days = $leave->leaveType()?->first()?->calculateNumberOfDaysFromLeaveStartAndEndDates(Carbon::parse($this->proposed_start_date), Carbon::parse($this->proposed_end_date))['effective_leave_days'];
                 // save change request to db
@@ -468,13 +445,7 @@ new class extends Component {
                     ]
                 );
 
-                Log::info("LEAVE NEW DATE RECORD IS: ". json_encode($leaveAlternativeDate));
-                // TODO: Remove my test email and replace with actual employee email when sending notification
-                // recipient is the email of the employee who applied the leave
-                $recipients = [];
-                $recipients[] = $leave->employee->email;
-                $recipients[] = 'dominickyengo@identigate.co.ke';
-
+               
                 // make accept url
                 $acceptUrl = \App\Services\GuestRoute::makeAnyUrlGuestLoginRedirect(
                     'leave.update.guest.login',
@@ -503,14 +474,10 @@ new class extends Component {
                     'acceptUrl' => $acceptUrl,
                     'rejectUrl' => $rejectUrl,
                 ];
-                if (!empty($recipients)) {
-                    // use for each since I want to send customized email to each approver with their email in the review link --> SIR-DOMMY
-                    foreach ($recipients as $recipientEmail) {
-                        Log::info("SENDING EMAIL TO: ". $recipientEmail);
-                        Notification::route('mail', $recipientEmail)
-                            ->notify(new LeaveRequestAlternative($leave_email_date));
-                    }
-                }
+
+                Notification::route('mail', $leave->employee->email)
+                    ->notify(new LeaveRequestAlternative($leave_email_date));
+                
                 $this->clearFilters();
                 $this->resetForm();
                 $this->dispatch('hide-leave-modal');
