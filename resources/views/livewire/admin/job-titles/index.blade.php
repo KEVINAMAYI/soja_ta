@@ -89,7 +89,6 @@ new class extends Component {
     {
         $hierarchy = app(OrganizationHierarchyService::class)->build($this->organizationId); 
 
-        //Log::info('Job Titles Hierarchy: ' . json_encode($hierarchy));
         return $this->flattenHierarchyRows($hierarchy);
     }
 
