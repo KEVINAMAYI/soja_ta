@@ -185,13 +185,8 @@ class LeaveApprovalService
      */
     public function reject(Leave $leave, ?User $actor, ?string $notes = null): Leave
     {
-        $alternative = LeaveAlternativeDate::where('leave_id', $leave->id)
-            ->where('status', 'pending')
-            ->latest()->first();
+        // TO DO(SIR-DOMMY): Will an active leave date change request prevent a leave from being rejected? For now, we allow rejection even if there's a pending alternative date request.
 
-        if ($alternative) {
-            throw new \RuntimeException("There's a pending leave dates changes");
-        }
         $activeLog = $leave->activeApprovalLog()->first();
 
         if (!$activeLog) {
@@ -445,7 +440,6 @@ class LeaveApprovalService
                 ]);
                 continue;
             }
-            Log::info("SENDING CC NOTIFICATION TO: " . $email);
 
             Notification::route('mail', $email)
                 ->notify(new ApprovalProcessCCNotification($leave));
@@ -722,15 +716,6 @@ class LeaveApprovalService
         // }
 
         $recipients = array_values(array_unique($recipients));
-
-        Log::info('TUNATUMA LEAVE APPROVAL NOTIFICATIONS WITH DETAILS', [
-            'leave_id' => $leave->id,
-            'level' => $level,
-            'approver_type' => $config['approver_type'],
-            'approver_role' => $config['approver_role'] ?? null,
-            'approver_user_ids' => $config['approver_user_ids'] ?? [],
-            'recipients' => $recipients,
-        ]);
 
         if (!empty($recipients)) {
             $approverRoleLabel = $config['approver_type'] === 'role' ? ($config['approver_role'] ?? null) : null;
