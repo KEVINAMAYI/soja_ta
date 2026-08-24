@@ -26,8 +26,7 @@ class SendLeaveNotificationJob implements ShouldQueue
 
     public function handle(): void
     {
-        Log::info('SendLeaveNotificationJob started', ['leave_id' => $this->leaveId]);
-
+        
         try {
             $leave = Leave::with(['employee.organization', 'department'])->find($this->leaveId);
 
@@ -50,10 +49,6 @@ class SendLeaveNotificationJob implements ShouldQueue
             Mail::to($supervisor->email)
                 ->send(new LeaveNotificationMail($leave, $employee, $supervisor));
 
-            Log::info('Leave notification sent', [
-                'leave_id'         => $this->leaveId,
-                'supervisor_email' => $supervisor->email,
-            ]);
 
         } catch (\Throwable $e) {
             Log::error('SendLeaveNotificationJob failed', [
