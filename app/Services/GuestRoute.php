@@ -61,6 +61,53 @@ class GuestRoute
     }
 
     /**
+     * Build any URL for a named route and append query parameters.
+     *
+     * Example: GuestRoute::make('leaves.index', [], ['review_modal' => 'details', 'leave_id' => 1])
+     *
+     * @param string $routeName
+     * @param array $routeParams
+     * @param string|null $receiverEmail
+     * @return string
+     */
+    public static function makeAnyUrl(?string $redirectRouteName, array $routeParams = [], ?string $receiverEmail = null): string
+    {
+        if ($receiverEmail !== null) {
+            $routeParams['receiver_email'] = $receiverEmail;
+        }
+
+        // if redirect route name is null, we will just return build query params
+        if ($redirectRouteName === null) {
+            return http_build_query($routeParams);
+        }
+        else {
+            $url = route($redirectRouteName, $routeParams);
+        }
+
+        return $url;
+    }
+
+
+    /**
+     * Build a guest login redirect URL using the any route.
+     * The target URL is base64 encoded and encrypted into redirect_token.
+     *
+     * @param string $loginProcessorRoute the route that will process the guest login and redirect to the target URL
+     * @param string $routeName the named route to generate the target URL (where user is redirected after login)
+     * @param array $routeParams
+     * @param string|null $receiverEmail
+     * @return string
+     */
+    public static function makeAnyUrlGuestLoginRedirect(string $loginProcessorRoute, ?string $redirectRouteName, array $routeParams = [], ?string $receiverEmail = null): string
+    {
+        $targetUrl = self::makeAnyUrl($redirectRouteName, $routeParams, $receiverEmail);
+        $encoded = base64_encode($targetUrl);
+        $encrypted = Crypt::encryptString($encoded);
+
+        return route($loginProcessorRoute, ['redirect_token' => $encrypted]);
+    }
+
+    /**
      * Decrypt the guest redirect token and return the original target URL.
      * Handles invalid tokens and throttles repeated failures.
      *
