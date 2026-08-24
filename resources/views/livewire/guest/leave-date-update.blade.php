@@ -90,7 +90,6 @@ class extends Component
             return ['We could not verify your details for this request.', null];
         }
 
-        // TO DO(SIR-DOMMY): Uncomment the following logic after testing to enforce that only pending alternative dates can be actioned.
         $alternative = LeaveAlternativeDate::where('leave_id', $leaveId)
             ->where('status', 'pending')
             ->latest()->first();
