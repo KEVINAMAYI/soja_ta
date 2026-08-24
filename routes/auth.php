@@ -37,3 +37,7 @@ Route::post('logout', App\Livewire\Actions\Logout::class)
 
 Route::get('leave-approver/guest-login', \App\Http\Controllers\Auth\GuestApproverLoginRedirectController::class)
     ->name('leave.approver.guest.login');
+
+
+Volt::route('leave-update/guest-login', 'guest.leave-date-update')
+    ->name('leave.update.guest.login');
