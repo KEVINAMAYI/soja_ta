@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Employee;
 use App\Models\Leave;
+use App\Models\LeaveAlternativeDate;
 use App\Models\LeaveApprovalLog;
 use App\Models\LeaveBalance;
 use App\Models\LeaveType;
@@ -129,6 +130,15 @@ class LeaveApprovalService
      */
     public function approve(Leave $leave, User $actor, ?string $notes = null): Leave
     {
+
+        $alternative = LeaveAlternativeDate::where('leave_id', $leave->id)
+            ->where('status', 'pending')
+            ->latest()->first();
+
+        if ($alternative) {
+            throw new \RuntimeException("There's a pending leave dates changes");
+        }
+
         $activeLog = $leave->activeApprovalLog()->first();
 
         if (!$activeLog) {
@@ -175,6 +185,13 @@ class LeaveApprovalService
      */
     public function reject(Leave $leave, ?User $actor, ?string $notes = null): Leave
     {
+        $alternative = LeaveAlternativeDate::where('leave_id', $leave->id)
+            ->where('status', 'pending')
+            ->latest()->first();
+
+        if ($alternative) {
+            throw new \RuntimeException("There's a pending leave dates changes");
+        }
         $activeLog = $leave->activeApprovalLog()->first();
 
         if (!$activeLog) {
@@ -235,6 +252,34 @@ class LeaveApprovalService
             ]);
             throw $e;
         }
+    }
+
+    /**
+     * Handle an applicant's response to a leave alternative date request.
+     * If the applicant rejects the alternative dates, the leave is rejected.
+     */
+    public function actionOnLeaveDatesChange(string $action, int $leaveId, LeaveAlternativeDate $alternativeDates)
+    {
+        $leave = Leave::find($leaveId);
+        if (!$leave) {
+            return ['Leave request not found.', null];
+        }
+
+        // save action to the alternative date record for auditing purposes
+        $alternativeDates->update(['status' => $action]);
+
+        // save the new leave dates to the leave record if the alternative dates are approved or rejected
+        $leave->update([
+            'start_date' => $alternativeDates->new_start_date,
+            'end_date' => $alternativeDates->new_end_date,
+            'num_of_days' => $alternativeDates->new_num_of_days,
+        ]);
+
+        if ($action === 'reject') {
+            // reject the leave request if the alternative dates are rejected
+            $this->reject($leave, null, 'Leave alternative dates rejected by applicant');
+        }
+
     }
 
     private function authorizeActor(User $actor, LeaveApprovalLog $log): void
