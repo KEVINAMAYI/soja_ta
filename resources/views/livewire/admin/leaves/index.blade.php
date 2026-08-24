@@ -99,6 +99,13 @@ new class extends Component {
 
     public function approveFromDetails()
     {
+        if ($this->saveNewLeaveDatesWhenApproving()) {
+            $org = auth()->user()->employee->organization;
+            $this->getData($org);
+            $this->viewingRecord = null;
+            $this->dispatch('hide-details-modal');
+            return; // exit if new leave dates were proposed and notification sent
+        }
         $this->actionFromDetails('approve');
     }
 
@@ -337,8 +344,7 @@ new class extends Component {
         $this->dispatch('show-leave-modal');
     }
 
-    public function saveLeave()
-    {
+    public function saveNewLeaveDates(): bool {
         // check if leave start and end dates have changed for the existing leave record and if so, delete any attendance records in that range
         if ($this->editId && !str_starts_with($this->editId, 'emp_')) {
             $leave1 = Leave::findOrFail($this->editId);
@@ -375,6 +381,22 @@ new class extends Component {
                 $recipients[] = $leave1->employee->email;
                 $recipients[] = 'dominickyengo@identigate.co.ke';
 
+                // make accept url
+                $acceptUrl = \App\Services\GuestRoute::makeAnyUrlGuestLoginRedirect(
+                    'leave.update.guest.login',
+                    null,
+                    ['leave_id' => $leave1->id, 'action' => 'accept'],
+                    $leave1->employee->email
+                );
+
+                // make reject url
+                $rejectUrl = \App\Services\GuestRoute::makeAnyUrlGuestLoginRedirect(
+                    'leave.update.guest.login',
+                    null,
+                    ['leave_id' => $leave1->id, 'action' => 'reject'],
+                    $leave1->employee->email
+                );
+
                 $leave_email_date = [
                     'employeeName' => $leave1->employee->name,
                     'leaveTypeName' => $leave1->leaveType->name,
@@ -384,8 +406,8 @@ new class extends Component {
                     'newEndDate' => Carbon::parse($leaveAlternativeDate->new_end_date)->format('d M Y'),
                     'newNumberOfDays' => $leaveAlternativeDate->new_num_of_days,
                     'companyName' => $leave1->employee->organization->name ?? config('app.name'),
-                    'acceptUrl' => 'google.com', // Placeholder for accept URL
-                    'rejectUrl' => 'google.com', // Placeholder for reject URL
+                    'acceptUrl' => $acceptUrl,
+                    'rejectUrl' => $rejectUrl,
                 ];
                 if (!empty($recipients)) {
                     // use for each since I want to send customized email to each approver with their email in the review link --> SIR-DOMMY
@@ -406,9 +428,113 @@ new class extends Component {
                     ->position('top-end')
                     ->show();
 
-                return; // no need for more execution when this is send to user to agree or reject
+                return true; // no need for more execution when this is send to user to agree or reject
             }
         }
+
+        return false;
+    }
+
+
+    public function saveNewLeaveDatesWhenApproving(): bool {
+        Log::info("Checking if new leave dates need to be proposed when approving leave ID {$this->editId}.");
+        // check if leave start and end dates have changed for the existing leave record and if so, delete any attendance records in that range
+        $leave = $this->viewingRecord;
+        if ($leave && $this->proposeNewDates && $this->proposed_start_date && $this->proposed_end_date) {
+            
+            $startDateDiff = $leave->start_date->diffInDays($this->proposed_start_date);
+            $endDateDiff = $leave->end_date->diffInDays($this->proposed_end_date);
+
+            if ($startDateDiff != 0 || $endDateDiff != 0) {
+                Log::info(
+                    "Leave dates changed for leave ID {$leave->id}. " .
+                    "Start date difference: {$startDateDiff} days. " .
+                    "End date difference: {$endDateDiff} days."
+                );
+
+
+                $new_num_of_days = $leave->leaveType()?->first()?->calculateNumberOfDaysFromLeaveStartAndEndDates(Carbon::parse($this->proposed_start_date), Carbon::parse($this->proposed_end_date))['effective_leave_days'];
+                // save change request to db
+                $leaveAlternativeDate = LeaveAlternativeDate::updateOrCreate(
+                    [
+                        'leave_id' => $leave->id,
+                    ],
+                    [
+                        'new_start_date' => $this->proposed_start_date,
+                        'new_end_date' => $this->proposed_end_date,
+                        'new_num_of_days' => $new_num_of_days,
+                        'status' => 'pending',
+                        'created_by' => auth()->user()->id,
+                    ]
+                );
+
+                Log::info("LEAVE NEW DATE RECORD IS: ". json_encode($leaveAlternativeDate));
+                // TODO: Remove my test email and replace with actual employee email when sending notification
+                // recipient is the email of the employee who applied the leave
+                $recipients = [];
+                $recipients[] = $leave->employee->email;
+                $recipients[] = 'dominickyengo@identigate.co.ke';
+
+                // make accept url
+                $acceptUrl = \App\Services\GuestRoute::makeAnyUrlGuestLoginRedirect(
+                    'leave.update.guest.login',
+                    null,
+                    ['leave_id' => $leave->id, 'action' => 'accept'],
+                    $leave->employee->email
+                );
+
+                // make reject url
+                $rejectUrl = \App\Services\GuestRoute::makeAnyUrlGuestLoginRedirect(
+                    'leave.update.guest.login',
+                    null,
+                    ['leave_id' => $leave->id, 'action' => 'reject'],
+                    $leave->employee->email
+                );
+
+                $leave_email_date = [
+                    'employeeName' => $leave->employee->name,
+                    'leaveTypeName' => $leave->leaveType->name,
+                    'originalStartDate' => $leave->start_date->format('d M Y'),
+                    'originalEndDate' => $leave->end_date->format('d M Y'),
+                    'newStartDate' => Carbon::parse($leaveAlternativeDate->new_start_date)->format('d M Y'),
+                    'newEndDate' => Carbon::parse($leaveAlternativeDate->new_end_date)->format('d M Y'),
+                    'newNumberOfDays' => $leaveAlternativeDate->new_num_of_days,
+                    'companyName' => $leave->employee->organization->name ?? config('app.name'),
+                    'acceptUrl' => $acceptUrl,
+                    'rejectUrl' => $rejectUrl,
+                ];
+                if (!empty($recipients)) {
+                    // use for each since I want to send customized email to each approver with their email in the review link --> SIR-DOMMY
+                    foreach ($recipients as $recipientEmail) {
+                        Log::info("SENDING EMAIL TO: ". $recipientEmail);
+                        Notification::route('mail', $recipientEmail)
+                            ->notify(new LeaveRequestAlternative($leave_email_date));
+                    }
+                }
+                $this->clearFilters();
+                $this->resetForm();
+                $this->dispatch('hide-leave-modal');
+
+                LivewireAlert::title('Awesome!')
+                    ->text("User notified of the proposed new leave dates. Awaiting their approval or rejection.")
+                    ->success()
+                    ->toast()
+                    ->position('top-end')
+                    ->show();
+
+                return true; // no need for more execution when this is send to user to agree or reject
+            }
+        }
+
+        return false;
+    }
+
+    public function saveLeave()
+    {
+        if ($this->saveNewLeaveDates()) {
+            return; // exit if new leave dates were proposed and notification sent
+        }
+        
         try {
             DB::beginTransaction();
 
@@ -1628,16 +1754,18 @@ new class extends Component {
                                 </div>
 
                                 @if($proposeNewDates)
-                                    <div class="row g-2 mb-3">
+                                    <div class="row g-2 mb-3" x-data x-init="$nextTick(() => initProposedDatepickers())">
                                         <div class="col-6">
                                             <label class="form-label small">New Start Date</label>
-                                            <input type="date" wire:model="proposed_start_date"
-                                                   class="form-control form-control-sm">
+                                            <input type="text" wire:model.live="proposed_start_date" id="proposedStartDate"
+                                                   class="form-control form-control-sm leave-date-input" autocomplete="off"
+                                                   placeholder="YYYY-MM-DD" readonly>
                                         </div>
                                         <div class="col-6">
                                             <label class="form-label small">New End Date</label>
-                                            <input type="date" wire:model="proposed_end_date"
-                                                   class="form-control form-control-sm">
+                                            <input type="text" wire:model.live="proposed_end_date" id="proposedEndDate"
+                                                   class="form-control form-control-sm leave-date-input" autocomplete="off"
+                                                   placeholder="YYYY-MM-DD" readonly>
                                         </div>
                                     </div>
                                 @endif
@@ -1731,6 +1859,83 @@ new class extends Component {
                 const selected = e.format('yyyy-mm-dd');
                 syncDateValue($endInput, selected);
                 setLivewireDateValue('end_date', selected);
+            });
+
+            if (startValue) {
+                $startInput.datepicker('update', startValue);
+                $endInput.datepicker('setStartDate', startValue);
+            }
+
+            if (endValue) {
+                $endInput.datepicker('update', endValue);
+            }
+        }
+
+        function initProposedDatepickers() {
+            const $startInput = $('#proposedStartDate');
+            const $endInput = $('#proposedEndDate');
+
+            const setLivewireDateValue = (field, value) => {
+                const modal = document.getElementById('leaveDetailsModal');
+                const componentRoot = modal?.closest('[wire\\:id]');
+                const componentId = componentRoot?.getAttribute('wire:id');
+
+                if (!componentId || !window.Livewire || typeof window.Livewire.find !== 'function') {
+                    return;
+                }
+
+                const component = window.Livewire.find(componentId);
+                if (component && typeof component.set === 'function') {
+                    component.set(field, value);
+                }
+            };
+
+            const syncDateValue = ($input, value) => {
+                $input.val(value);
+                $input.trigger('input');
+                $input.trigger('change');
+            };
+
+            if (!$startInput.length || !$endInput.length || typeof $.fn.datepicker === 'undefined') {
+                return;
+            }
+
+            if ($startInput.data('datepicker')) {
+                $startInput.datepicker('destroy');
+            }
+
+            if ($endInput.data('datepicker')) {
+                $endInput.datepicker('destroy');
+            }
+
+            const startValue = $startInput.val();
+            const endValue = $endInput.val();
+
+            $startInput.datepicker({
+                format: 'yyyy-mm-dd',
+                autoclose: true,
+                todayHighlight: true,
+            }).on('changeDate', function (e) {
+                const selected = e.format('yyyy-mm-dd');
+                syncDateValue($startInput, selected);
+                setLivewireDateValue('proposed_start_date', selected);
+                $endInput.datepicker('setStartDate', selected);
+
+                if ($endInput.val() && $endInput.val() < selected) {
+                    syncDateValue($endInput, selected);
+                    $endInput.datepicker('update', selected);
+                    setLivewireDateValue('proposed_end_date', selected);
+                }
+            });
+
+            $endInput.datepicker({
+                format: 'yyyy-mm-dd',
+                autoclose: true,
+                todayHighlight: true,
+            }).on('changeDate', function (e) {
+                const selected = e.format('yyyy-mm-dd');
+                syncDateValue($endInput, selected);
+                setLivewireDateValue('proposed_end_date', selected);
             });
 
             if (startValue) {
