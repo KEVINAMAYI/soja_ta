@@ -64,7 +64,6 @@ class LeaveApprovalService
             return $this->advanceOrFinalize($leave, $level, $settings);
         }
 
-        // TO DO(SIR-DOMMY): We will use this to move up the the approval chain.....
         $latest_actor = $leave->latestApprovedApprovalLog()->first()?->actioned_by;
 
         $next_approver_title_id = $leave->employee?->reports_to_job_title_id;
