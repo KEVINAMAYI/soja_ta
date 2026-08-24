@@ -672,14 +672,14 @@ new class extends Component {
 
                 <div class="row g-3">
                     @if($durationType === 'dateRange')
-                        <div class="col-md-6">
-                            <label for="startDate" class="form-label">Start Date</label>
-                            <input type="date" id="startDate" wire:model.live="startDate" class="form-control">
+                        <div class="col-md-6" x-data x-init="$nextTick(() => initLeaveDatepickers())">
+                            <label for="leaveStartDate" class="form-label">Start Date</label>
+                            <input type="text" id="leaveStartDate" wire:model.live="startDate" class="form-control" autocomplete="off">
                             @error('startDate') <small class="text-primary">{{ $message }}</small>@enderror
                         </div>
                         <div class="col-md-6">
-                            <label for="endDate" class="form-label">End Date</label>
-                            <input type="date" id="endDate" wire:model.live="endDate" class="form-control">
+                            <label for="leaveEndDate" class="form-label">End Date</label>
+                            <input type="text" id="leaveEndDate" wire:model.live="endDate" class="form-control" autocomplete="off">
                             @error('endDate') <small class="text-primary">{{ $message }}</small>@enderror
                             @if($startDate && $endDate)
                                 <small class="text-muted mt-1 d-block">Total: {{ $this->calculateWorkingDays() }}
@@ -693,9 +693,9 @@ new class extends Component {
                                    class="form-control">
                             @error('numberOfDays') <small class="text-primary">{{ $message }}</small>@enderror
                         </div>
-                        <div class="col-md-6">
-                            <label for="startingFrom" class="form-label">Starting From</label>
-                            <input type="date" id="startingFrom" wire:model.live="startDate" class="form-control">
+                        <div class="col-md-6" x-data x-init="$nextTick(() => initLeaveDatepickers())">
+                            <label for="leaveStartDate" class="form-label">Starting From</label>
+                            <input type="text" id="leaveStartDate" wire:model.live="startDate" class="form-control" autocomplete="off">
                             @error('startDate') <small class="text-primary">{{ $message }}</small>@enderror
                         </div>
                     @endif
@@ -824,7 +824,98 @@ new class extends Component {
 </div>
 
 @push('scripts')
-    <script>
+    <script>function initLeaveDatepickers() {
+            const $startInput = $('#leaveStartDate');
+            const $endInput = $('#leaveEndDate');
+
+            if (typeof $.fn.datepicker === 'undefined') {
+                return;
+            }
+
+            const setLivewireDateValue = (input, field, value) => {
+                const componentRoot = input.closest('[wire\\:id]');
+                const componentId = componentRoot?.getAttribute('wire:id');
+
+                if (!componentId || !window.Livewire || typeof window.Livewire.find !== 'function') {
+                    return;
+                }
+
+                const component = window.Livewire.find(componentId);
+                if (component && typeof component.set === 'function') {
+                    component.set(field, value);
+                }
+            };
+
+            const syncDateValue = ($input, value) => {
+                $input.val(value);
+                $input.trigger('input');
+                $input.trigger('change');
+            };
+
+            // Start and end inputs never coexist for the 'numberOfDays' duration, so each is guarded independently.
+            if ($startInput.length) {
+                if ($startInput.data('datepicker')) {
+                    $startInput.datepicker('destroy');
+                }
+
+                const startValue = $startInput.val();
+
+                $startInput.datepicker({
+                    format: 'yyyy-mm-dd',
+                    autoclose: true,
+                    todayHighlight: true,
+                }).on('changeDate', function (e) {
+                    const selected = e.format('yyyy-mm-dd');
+                    syncDateValue($startInput, selected);
+                    setLivewireDateValue($startInput[0], 'startDate', selected);
+
+                    if ($endInput.length) {
+                        $endInput.datepicker('setStartDate', selected);
+
+                        if ($endInput.val() && $endInput.val() < selected) {
+                            syncDateValue($endInput, selected);
+                            $endInput.datepicker('update', selected);
+                            setLivewireDateValue($endInput[0], 'endDate', selected);
+                        }
+                    }
+                });
+
+                if (startValue) {
+                    $startInput.datepicker('update', startValue);
+                }
+            }
+
+            if ($endInput.length) {
+                if ($endInput.data('datepicker')) {
+                    $endInput.datepicker('destroy');
+                }
+
+                const endValue = $endInput.val();
+
+                $endInput.datepicker({
+                    format: 'yyyy-mm-dd',
+                    autoclose: true,
+                    todayHighlight: true,
+                }).on('changeDate', function (e) {
+                    const selected = e.format('yyyy-mm-dd');
+                    syncDateValue($endInput, selected);
+                    setLivewireDateValue($endInput[0], 'endDate', selected);
+                });
+
+                if ($startInput.length && $startInput.val()) {
+                    $endInput.datepicker('setStartDate', $startInput.val());
+                }
+
+                if (endValue) {
+                    $endInput.datepicker('update', endValue);
+                }
+            }
+        }
+
+        document.addEventListener('livewire:navigated', initLeaveDatepickers);
+        initLeaveDatepickers();
+
+
         window.addEventListener('redirect', event => {
             console.log(event);  // This will show the event object
             const url = event.detail[0].url;  // Access the first element of the detail array
