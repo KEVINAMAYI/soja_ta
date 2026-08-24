@@ -53,7 +53,7 @@ class AppServiceProvider extends ServiceProvider
         Event::listen(MessageSent::class, function (MessageSent $event): void {
             $message = $event->message;
 
-            Log::warn('Mail message sent', [
+            Log::warning('Mail message sent', [
                 'subject' => $message->getSubject(),
                 'to' => array_keys($message->getTo() ?? []),
             ]);
