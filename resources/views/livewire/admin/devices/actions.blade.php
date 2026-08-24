@@ -5,8 +5,24 @@
         </a>
         <ul class="dropdown-menu" aria-labelledby="employee-actions">
             <li>
+                
+                <button
+                    type="button"
+                    class="dropdown-item d-flex align-items-center gap-2"
+                    wire:click="$dispatch('show-device', { id: {{ $device->id }} })"
+                >
+                    <iconify-icon
+                        icon="mdi:eye-outline"
+                        class="text-success w-4 h-4"
+                    ></iconify-icon>
+
+                    <span>View</span>
+                </button>
+            </li>
+
+            <li>
                 <a class="dropdown-item d-flex align-items-center gap-2" href="javascript:void(0)"
-                   wire:click="$dispatch('remove-device',{ id : {{ $device->id }} })">
+                   wire:click="$dispatch('remove-device1',{ id : {{ $device->id }} })">
                     <iconify-icon icon="mdi:trash-can-outline" class="text-danger w-4 h-4"></iconify-icon>
                     <span>Remove</span>
                 </a>

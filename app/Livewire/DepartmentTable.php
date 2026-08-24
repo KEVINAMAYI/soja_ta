@@ -22,7 +22,6 @@ class DepartmentTable extends DataTableComponent
         $orgId = auth()->user()->employee->organization_id ?? null;
 
         $query = Department::query()->select('departments.*')
-            ->with(['manager'])
             ->where('organization_id', $orgId);
 
         if ($this->search !== null && $this->search !== '') {
@@ -44,19 +43,13 @@ class DepartmentTable extends DataTableComponent
                 ->format(fn($value) => "<span class='fw-semibold text-dark'>" . ucwords(str_replace(['-', '_'], ' ', $value)) . "</span>")
                 ->html(),
 
-            // 👤 Manager
-            Column::make("Manager", "manager.name")
+            // Description
+            Column::make("Description", "description")
                 ->label(function ($row) {
-                    if ($row->manager) {
-                        return "<span class='badge bg-primary fw-semibold'>{$row->manager->name}</span>";
-                    }
-                    return "<span class='text-muted'>—</span>";
+                    return "<span class='text-muted'>" . ($row->description ?? '—') . "</span>";
                 })
                 ->html()
-                ->sortable(function ($builder, $direction) {
-                    $builder->join('users as managers', 'departments.manager_id', '=', 'managers.id')
-                        ->orderBy('managers.name', $direction);
-                }),
+                ->sortable(),
 
             // 📅 Created At
             Column::make("Created at", "created_at")

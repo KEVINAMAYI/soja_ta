@@ -21,6 +21,7 @@ Route::middleware(['auth'])->group(function () {
 
 require __DIR__ . '/auth.php';
 require __DIR__ . '/dashboard/admin.php';
+require __DIR__ . '/dashboard/superadmin.php';
 
 // This route will handle the PDF download
 Route::get('/employees/export/daily/pdf', [EmployeeExportController::class, 'exportEmployeePdf'])->name('employees.export.pdf');

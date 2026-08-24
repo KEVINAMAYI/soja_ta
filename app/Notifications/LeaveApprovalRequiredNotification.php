@@ -7,6 +7,7 @@ use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
+use Illuminate\Support\Facades\Log;
 
 class LeaveApprovalRequiredNotification extends Notification implements ShouldQueue
 {
@@ -29,7 +30,27 @@ class LeaveApprovalRequiredNotification extends Notification implements ShouldQu
         $employee = $this->leave->employee;
         $leaveType = $this->leave->leaveType;
         $employeeName = $employee->name ?? 'An employee';
-        $totalDays = $this->leave->start_date->diffInDays($this->leave->end_date) + 1;
+        $totalDays = $this->leave->num_of_days;
+
+
+        // Resolve the recipient email reliably. When notifications are sent
+        // via Notification::route(...) the $notifiable may be an
+        // AnonymousNotifiable and ->email will be null — use
+        // routeNotificationFor('mail') which works for both models and
+        // anonymous routing. It may return an array or a string.
+        $recipientEmail = null;
+        if (method_exists($notifiable, 'routeNotificationFor')) {
+            $route = $notifiable->routeNotificationFor('mail');
+            if (is_array($route)) {
+                $recipientEmail = $route[0] ?? null;
+            } else {
+                $recipientEmail = $route;
+            }
+        }
+
+        if (empty($recipientEmail) && isset($notifiable->email)) {
+            $recipientEmail = $notifiable->email;
+        }
 
         return (new MailMessage)
             ->subject('Leave Approval Required (Level ' . $this->level . '): ' . ($employee->name ?? 'Employee'))
@@ -46,7 +67,13 @@ class LeaveApprovalRequiredNotification extends Notification implements ShouldQu
                 'level' => $this->level,
                 'totalLevels' => $this->leave->total_levels,
                 'approverRoleLabel' => $this->approverRoleLabel,
-                'reviewUrl' => route('leaves.index'),
+                'reviewUrl' => \App\Services\GuestRoute::makeGuestLoginRedirect(
+                    'leaves.index',
+                    $this->leave->start_date,
+                    [],
+                    ['review_modal' => 'leaveDetailsModal', 'leave_id' => $this->leave->id],
+                    $recipientEmail
+                ),
                 'orgName' => $employee->organization->name ?? config('app.name'),
                 'brandColor' => $employee->organization->primary_color ?? '#072639',
             ]);

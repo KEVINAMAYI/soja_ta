@@ -24,6 +24,8 @@ class Employee extends Model
         'email',
         'phone',
         'status',
+        'job_title_id',
+        'reports_to_job_title_id',
         'face_id',
         'shift_id',
         'qr_code',
@@ -33,7 +35,8 @@ class Employee extends Model
         'end_off_shift_date',
         'zkbio_pin',
         'grade',
-        'is_student'
+        'is_student',
+        'is_user'
     ];
 
 
@@ -115,6 +118,16 @@ class Employee extends Model
     public function currentAssignment()
     {
         return $this->hasMany(EmployeeAssignment::class)->where('is_current', true);
+    }
+
+    public function jobTitle()
+    {
+        return $this->belongsTo(JobTitle::class, 'job_title_id');
+    }
+
+    public function reportsToJobTitle()
+    {
+        return $this->belongsTo(JobTitle::class, 'reports_to_job_title_id');
     }
 
     public function weeklyWorkedHours($employeeId)

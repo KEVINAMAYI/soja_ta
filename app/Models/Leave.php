@@ -20,6 +20,7 @@ class Leave extends Model
         'total_levels',
         'start_date',
         'end_date',
+        'num_of_days',
         'reason',
         'contact_during_leave',
         'emergency_contact',
@@ -69,6 +70,28 @@ class Leave extends Model
         // break under eager loading (->with('activeApprovalLog')), since the
         // constraint gets built once against an unhydrated model instance.
         return $this->hasOne(LeaveApprovalLog::class)->where('status', 'pending');
+    }
+
+    public function latestApprovedApprovalLog()
+    {
+        // Deliberately NOT filtered by current_level here: only one approval
+        // log is ever 'pending' per leave at a time (the previous level's log
+        // is already closed out before the next one opens), so this alone is
+        // sufficient. Referencing $this->current_level in this closure would
+        // break under eager loading (->with('activeApprovalLog')), since the
+        // constraint gets built once against an unhydrated model instance.
+        return $this->hasOne(LeaveApprovalLog::class)->where('status', 'approved')->orderByDesc('level_number');
+    }
+
+    public function latestApprovalLog()
+    {
+        // Deliberately NOT filtered by current_level here: only one approval
+        // log is ever 'pending' per leave at a time (the previous level's log
+        // is already closed out before the next one opens), so this alone is
+        // sufficient. Referencing $this->current_level in this closure would
+        // break under eager loading (->with('activeApprovalLog')), since the
+        // constraint gets built once against an unhydrated model instance.
+        return $this->hasOne(LeaveApprovalLog::class)->orderByDesc('created_at');
     }
 
     public function isPending(): bool

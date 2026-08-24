@@ -4,11 +4,18 @@ namespace App\Services;
 
 use App\Models\Employee;
 use App\Models\Leave;
+use App\Models\LeaveAlternativeDate;
 use App\Models\LeaveApprovalLog;
 use App\Models\LeaveBalance;
 use App\Models\LeaveType;
+use App\Models\LevelApprover;
 use App\Models\User;
 use App\Notifications\LeaveApprovalRequiredNotification;
+use App\Notifications\LeaveApprovedNotification;
+use App\Notifications\LeaveRejectedNotification;
+use App\Notifications\ApprovalProcessCCNotification;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Notification;
 
 class LeaveApprovalService
@@ -24,12 +31,15 @@ class LeaveApprovalService
     {
         $settings = LeaveApprovalSettings::get($leave->organization_id, $leave->department_id);
 
-        if (!$settings['enabled']) {
-            return null;
-        }
+        // TODO(SIR-DOMMY): This value will be controlled by superadmin and will require new field db... for now we disable this check
+        // if (!$settings['enabled']) {
+        //     return null;
+        // }
 
         $start = LeaveApprovalSettings::firstEnabledLevel($settings);
         if ($start === null) {
+            // reject the leave if there are no enabled levels in the approval chain
+            $this->reject($leave, null, 'Leave approval chain has no enabled levels');
             return null;
         }
 
@@ -37,6 +47,7 @@ class LeaveApprovalService
         $leave->current_level = $start;
         $leave->save();
 
+        
         return $this->openLevel($leave, $start, $settings);
     }
 
@@ -53,27 +64,54 @@ class LeaveApprovalService
             return $this->advanceOrFinalize($leave, $level, $settings);
         }
 
+        $latest_actor = $leave->latestApprovedApprovalLog()->first()?->actioned_by;
+
+        $next_approver_title_id = $leave->employee?->reports_to_job_title_id;
+        if ($latest_actor && $config['approver_type'] == 'role' && $level > 1) {
+            $next_approver_title_id = Employee::where('user_id', $latest_actor)->value('reports_to_job_title_id');
+        }
+
         $log = LeaveApprovalLog::create([
             'leave_id' => $leave->id,
             'level_number' => $level,
             'approver_type' => $config['approver_type'],
-            'approver_role' => $config['approver_type'] === 'role' ? $config['approver_role'] : null,
-            'approver_user_id' => $config['approver_type'] === 'user' ? $config['approver_user_id'] : null,
+            'approver_role' => $config['approver_type'] === 'role' ? $next_approver_title_id : null,
+            'approver_user_ids' => $config['approver_type'] === 'user'
+                ? array_values(array_unique(array_filter(array_map(
+                    fn ($id) => is_numeric($id) ? (int) $id : null,
+                    $config['approver_user_ids'] ?? []
+                ))))
+                : [],
+            'approver_user_id' => $config['approver_type'] === 'user'
+                ? ($config['approver_user_ids'][0] ?? $config['approver_user_id'] ?? null)
+                : null,
             'status' => 'pending',
             'opened_at' => now(),
         ]);
 
         $leave->current_level = $level;
         $leave->save();
+        $leave->refresh();
 
-        $this->sendNotifications($leave, $config, $level);
+        $count_leave_logs = $leave->approvalLogs()->count();
+        if ($count_leave_logs == 1 && $log->approver_type === 'role' && !$next_approver_title_id) {
+            Log::warning('Leave approval notification skipped: applicant has no reports_to_job_title_id', [
+                'leave_id' => $leave->id,
+                'employee_id' => $leave->employee_id,
+            ]);
+
+            $this->reject($leave, null, "Leave approval failed: applicant has no reporting level above them for first level approval");
+            return $log;
+        }
+
+        $this->sendNotifications($leave, $config, $level, $next_approver_title_id);
 
         return $log;
     }
 
     private function advanceOrFinalize(Leave $leave, int $fromLevel, array $settings, ?string $notes = null): ?LeaveApprovalLog
     {
-        $next = LeaveApprovalSettings::nextEnabledLevel($settings, $fromLevel);
+        $next = LeaveApprovalSettings::nextEnabledLevel($settings, $fromLevel, $leave);
 
         if ($next !== null) {
             return $this->openLevel($leave, $next, $settings);
@@ -83,6 +121,7 @@ class LeaveApprovalService
 
         return null;
     }
+    
 
     /**
      * Approve the currently active level for this leave, advancing to the
@@ -90,6 +129,15 @@ class LeaveApprovalService
      */
     public function approve(Leave $leave, User $actor, ?string $notes = null): Leave
     {
+
+        $alternative = LeaveAlternativeDate::where('leave_id', $leave->id)
+            ->where('status', 'pending')
+            ->latest()->first();
+
+        if ($alternative) {
+            throw new \RuntimeException("There's a pending leave dates changes");
+        }
+
         $activeLog = $leave->activeApprovalLog()->first();
 
         if (!$activeLog) {
@@ -97,6 +145,23 @@ class LeaveApprovalService
         }
 
         $this->authorizeActor($actor, $activeLog);
+
+
+        $settings = LeaveApprovalSettings::get($leave->organization_id, $leave->department_id);
+
+
+        // now save these details to list of approvers if rule applies
+        if ($activeLog->approver_type === 'user' && $settings['levels'][$activeLog->level_number - 1]['approver_rule'] == 'all_approve') {
+            LevelApprover::firstOrCreate([
+                'leave_approval_log_id' => $activeLog->id,
+                'level_approver_id' => $actor->id,
+                'action' => 'approved',
+            ]);
+
+            if(LevelApprover::getActionedApproversCountForLog($activeLog->id) < count($activeLog->approver_user_ids)) {
+                return $leave->fresh();
+            }
+        }
 
         $activeLog->update([
             'status' => 'approved',
@@ -105,8 +170,10 @@ class LeaveApprovalService
             'notes' => $notes,
         ]);
 
-        $settings = LeaveApprovalSettings::get($leave->organization_id, $leave->department_id);
         $this->advanceOrFinalize($leave, $activeLog->level_number, $settings, $notes);
+
+        // TODO(SIR-DOMMY): Send mails to those who are to be CCed at this level
+        $this->sendCCNotification($leave);
 
         return $leave->fresh();
     }
@@ -115,27 +182,98 @@ class LeaveApprovalService
      * Reject the currently active level. A rejection at any level
      * immediately finalizes the leave as rejected — no further levels open.
      */
-    public function reject(Leave $leave, User $actor, ?string $notes = null): Leave
+    public function reject(Leave $leave, ?User $actor, ?string $notes = null): Leave
     {
+        // TO DO(SIR-DOMMY): Will an active leave date change request prevent a leave from being rejected? For now, we allow rejection even if there's a pending alternative date request.
+
         $activeLog = $leave->activeApprovalLog()->first();
 
         if (!$activeLog) {
             throw new \RuntimeException('No pending approval level found for this leave.');
         }
 
-        $this->authorizeActor($actor, $activeLog);
+        try {
+            DB::beginTransaction();
 
-        $activeLog->update([
-            'status' => 'rejected',
-            'closed_at' => now(),
-            'actioned_by' => $actor->id,
-            'notes' => $notes,
+            if ($actor) {
+                $this->authorizeActor($actor, $activeLog);
+            }
+
+            $activeLog->update([
+                'status' => 'rejected',
+                'closed_at' => now(),
+                'actioned_by' => $actor?->id,
+                'notes' => $notes,
+            ]);
+
+            $leave->status = 'rejected';
+            $leave->save();
+
+            // now save these details to list of approvers if rule applies
+            if ($activeLog->approver_type === 'user' && $actor) {
+                $existingApprover = LevelApprover::where('leave_approval_log_id', $activeLog->id)
+                    ->where('level_approver_id', $actor?->id)
+                    ->first();
+                
+                if(!$existingApprover) {
+                    LevelApprover::create([
+                        'leave_approval_log_id' => $activeLog->id,
+                        'level_approver_id' => $actor?->id,
+                        'action' => 'rejected',
+                    ]);
+                } else {
+                    $existingApprover->update([
+                        'action' => 'rejected',
+                    ]);
+                }
+            }
+
+            // commit db changes
+            DB::commit();
+
+            // Send notifications only after commit so queued mail jobs do not
+            // race against uncommitted approval-log updates.
+            $this->sendRejectionNotification($leave);
+
+            return $leave->fresh();
+
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            Log::error('Error while rejecting leave approval', [
+                'leave_id' => $leave->id,
+                'actor_id' => $actor?->id,
+                'error' => $e->getMessage(),
+            ]);
+            throw $e;
+        }
+    }
+
+    /**
+     * Handle an applicant's response to a leave alternative date request.
+     * If the applicant rejects the alternative dates, the leave is rejected.
+     */
+    public function actionOnLeaveDatesChange(string $action, int $leaveId, LeaveAlternativeDate $alternativeDates)
+    {
+        $leave = Leave::find($leaveId);
+        if (!$leave) {
+            return ['Leave request not found.', null];
+        }
+
+        // save action to the alternative date record for auditing purposes
+        $alternativeDates->update(['status' => $action]);
+
+        // save the new leave dates to the leave record if the alternative dates are approved or rejected
+        $leave->update([
+            'start_date' => $alternativeDates->new_start_date,
+            'end_date' => $alternativeDates->new_end_date,
+            'num_of_days' => $alternativeDates->new_num_of_days,
         ]);
 
-        $leave->status = 'rejected';
-        $leave->save();
+        if ($action === 'reject') {
+            // reject the leave request if the alternative dates are rejected
+            $this->reject($leave, null, 'Leave alternative dates rejected by applicant');
+        }
 
-        return $leave->fresh();
     }
 
     private function authorizeActor(User $actor, LeaveApprovalLog $log): void
@@ -147,9 +285,25 @@ class LeaveApprovalService
 
     private function matchesApprover(User $actor, LeaveApprovalLog $log): bool
     {
-        return $log->approver_type === 'user'
-            ? $actor->id === $log->approver_user_id
-            : ($log->approver_role && $actor->hasRole($log->approver_role));
+        
+        if ($log->approver_type == 'role') {
+            $employee = Employee::where('user_id', $actor->id)->first();
+            
+            return $employee?->job_title_id == $log->approver_role;
+        }
+
+        // retain this for backward compatibility with legacy single approver ID, but prefer the new array of IDs if present
+        else if ($log->approver_type !== 'user') {
+            $employee = Employee::where('user_id', $actor->id)->first();
+            return $employee?->job_title_id === $log->approver_role;
+        }
+
+        $approverIds = array_filter(array_unique(array_merge(
+            $log->approver_user_ids ?? [],
+            $log->approver_user_id ? [$log->approver_user_id] : []
+        )));
+
+        return in_array($actor->id, $approverIds, true);
     }
 
     /**
@@ -184,8 +338,17 @@ class LeaveApprovalService
         return LeaveApprovalLog::where('status', 'pending')
             ->whereHas('leave', fn ($q) => $q->where('organization_id', $organizationId))
             ->where(function ($q) use ($actor, $roleNames) {
-                $q->where(fn ($q2) => $q2->where('approver_type', 'user')->where('approver_user_id', $actor->id))
-                    ->orWhere(fn ($q2) => $q2->where('approver_type', 'role')->whereIn('approver_role', $roleNames));
+                $q->where(function ($q2) use ($actor) {
+                        $q2->where('approver_type', 'user')
+                            ->where(function ($q3) use ($actor) {
+                                $q3->whereJsonContains('approver_user_ids', $actor->id)
+                                    ->orWhere('approver_user_id', $actor->id);
+                            });
+                    })
+                    ->orWhere(function ($q2) use ($roleNames) {
+                        $q2->where('approver_type', 'role')
+                            ->whereIn('approver_role', $roleNames);
+                    });
             })
             ->exists();
     }
@@ -196,6 +359,90 @@ class LeaveApprovalService
         $leave->save();
 
         $this->incrementBalance($leave);
+
+        $this->sendApprovedNotification($leave);
+    }
+
+    private function sendApprovedNotification(Leave $leave): void
+    {
+        $leave->loadMissing(['employee.organization', 'leaveType']);
+
+        $employee = $leave->employee;
+        if (!$employee) {
+            return;
+        }
+
+        $email = $employee->email ?? $employee->user?->email;
+        if (empty($email)) {
+            Log::warning('No email found for leave applicant', [
+                'leave_id' => $leave->id,
+                'employee_id' => $employee->id,
+            ]);
+
+            return;
+        }
+
+        Notification::route('mail', $email)
+            ->notify(new LeaveApprovedNotification($leave));
+    }
+
+    private function sendRejectionNotification(Leave $leave): void
+    {
+        $leave->loadMissing(['employee.organization', 'leaveType']);
+
+        $employee = $leave->employee;
+        if (!$employee) {
+            return;
+        }
+
+        $email = $employee->email ?? $employee->user?->email;
+        if (empty($email)) {
+            Log::warning('No email found for leave applicant while rejecting', [
+                'leave_id' => $leave->id,
+                'employee_id' => $employee->id,
+            ]);
+
+            return;
+        }
+
+        Notification::route('mail', $email)
+            ->notify(new LeaveRejectedNotification($leave));
+
+        // Send CC notification to the relevant parties
+        $this->sendCCNotification($leave);
+    }
+
+    private function sendCCNotification(Leave $leave): void
+    {
+        $activeLog = $leave->latestApprovalLog()->first();
+
+        $settings = LeaveApprovalSettings::get($leave->organization_id, $leave->department_id);
+
+        if (!$activeLog) {
+            Log::error('No active approval log found for leave ID: ' . $leave->id);
+            return;
+        }
+
+        $conf = $settings['levels'][$activeLog->level_number - 1] ?? null;
+
+        if (!$conf || !$conf['enabled']) {
+            Log::error('No enabled configuration found for active approval log of leave ID: ' . $leave->id);
+            return;
+        }
+
+        $emails = $conf['notify_email_addresses'] ?? [];
+
+        foreach ($emails as $email) {
+            if (empty($email)) {
+                Log::warning('Empty email found in CC list for leave notification', [
+                    'leave_id' => $leave->id,
+                ]);
+                continue;
+            }
+
+            Notification::route('mail', $email)
+                ->notify(new ApprovalProcessCCNotification($leave));
+        }
     }
 
     private function incrementBalance(Leave $leave): void
@@ -209,7 +456,7 @@ class LeaveApprovalService
             return;
         }
 
-        $days = $leave->start_date->diffInDays($leave->end_date) + 1;
+        $days = $leave->num_of_days;
         $year = $leave->start_date->year;
 
         $balance = LeaveBalance::firstOrCreate(
@@ -253,7 +500,7 @@ class LeaveApprovalService
             ->where('status', 'pending')
             ->whereYear('start_date', $year)
             ->get()
-            ->sum(fn ($l) => $l->start_date->diffInDays($l->end_date) + 1);
+            ->sum('num_of_days');
 
         $remaining = $entitled - (float) $used - $pending;
 
@@ -367,7 +614,7 @@ class LeaveApprovalService
             ->whereYear('start_date', $year)
             ->get()
             ->groupBy('employee_id')
-            ->map(fn ($group) => $group->sum(fn ($l) => $l->start_date->diffInDays($l->end_date) + 1));
+            ->map(fn ($group) => (float) $group->sum('num_of_days'));
 
         return $employees->map(function (Employee $employee) use ($type, $balancesByEmployee, $pendingByEmployee, $year) {
             $balance = $balancesByEmployee->get($employee->id);
@@ -412,34 +659,72 @@ class LeaveApprovalService
         return $rows;
     }
 
-    private function sendNotifications(Leave $leave, array $config, int $level): void
+    private function sendNotifications(Leave $leave, array $config, int $level, ?int $next_approver_title_id): void
     {
+
         $recipients = [];
 
-        if ($config['approver_type'] === 'user' && $config['approver_user_id']) {
-            $user = User::find($config['approver_user_id']);
-            if ($user?->email) {
-                $recipients[] = $user->email;
+        if ($config['approver_type'] === 'user') {
+            $approverIds = array_values(array_unique(array_filter(array_map(
+                fn ($id) => is_numeric($id) ? (int) $id : null,
+                array_merge(
+                    $config['approver_user_ids'] ?? [],
+                    // this check is added to allow legacy single approver ID to be used in the config,
+                    //but it will be ignored if approver_user_ids is present and non-empty
+                    (isset($config['approver_user_id']) && count($config['approver_user_ids']) > 0) ? [$config['approver_user_id']] : []
+                )
+            ))));
+
+            if (!empty($approverIds)) {
+                $recipients = User::whereIn('id', $approverIds)
+                    ->whereNotNull('email')
+                    ->pluck('email')
+                    ->filter()
+                    ->all();
             }
-        } elseif ($config['approver_type'] === 'role' && $config['approver_role']) {
-            $recipients = User::role($config['approver_role'])
-                ->whereHas('employee', fn ($q) => $q->where('organization_id', $leave->organization_id))
-                ->pluck('email')
-                ->filter()
-                ->all();
+        }
+        else if ($config['approver_type'] === 'role') {
+
+
+            if (!$next_approver_title_id) {
+                Log::warning('Leave approval notification skipped: applicant has no reports_to_job_title_id', [
+                    'leave_id' => $leave->id,
+                    'employee_id' => $leave->employee_id,
+                ]);
+            }
+                        
+            if ($next_approver_title_id) {
+                $recipients = Employee::where('organization_id', $leave->organization_id)
+                    ->where('job_title_id', $next_approver_title_id)
+                    ->pluck('email')
+                    ->filter()
+                    ->all();
+            }
+        // avoid using role but report to job title if approver type is role
+        // elseif ($config['approver_type'] === 'role' && $config['approver_role']) {
+        //     $recipients = User::role($config['approver_role'])
+        //         ->whereHas('employee', fn ($q) => $q->where('organization_id', $leave->organization_id))
+        //         ->pluck('email')
+        //         ->filter()
+        //         ->all();
+
         }
 
-        if (!empty($config['notify_email'])) {
-            $recipients = array_merge($recipients, array_filter($config['notify_email_addresses'] ?? []));
-        }
+        // if (!empty($config['notify_email'])) {
+        //     $recipients = array_merge($recipients, array_filter($config['notify_email_addresses'] ?? []));
+        // }
 
         $recipients = array_values(array_unique($recipients));
 
         if (!empty($recipients)) {
             $approverRoleLabel = $config['approver_type'] === 'role' ? ($config['approver_role'] ?? null) : null;
 
-            Notification::route('mail', $recipients)
-                ->notify(new LeaveApprovalRequiredNotification($leave, $level, $approverRoleLabel));
+            // use for each since I want to send customized email to each approver with their email in the review link --> SIR-DOMMY
+            foreach ($recipients as $recipientEmail) {
+                Notification::route('mail', $recipientEmail)
+                    ->notify(new LeaveApprovalRequiredNotification($leave, $level, $approverRoleLabel));
+            }
         }
     }
+    
 }

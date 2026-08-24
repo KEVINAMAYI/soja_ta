@@ -60,7 +60,7 @@ class DevicesTable extends DataTableComponent
                 ->html()
                 ->sortable(),
 
-            Column::make("PIN", "pin")
+            Column::make("Kiosk Mode PIN", "pin")
                 ->format(fn($value) => $value ? '<span class="text-muted">' . e($value) . '</span>' : '<em class="text-muted">Auto</em>')
                 ->html(),
 
@@ -71,8 +71,8 @@ class DevicesTable extends DataTableComponent
 
             Column::make("Status", "active")
                 ->format(fn($value) => $value
-                    ? '<span class="badge bg-success">Active</span>'
-                    : '<span class="badge bg-danger">Inactive</span>'
+                    ? '<span class="badge text-success">Online</span>'
+                    : '<span class="badge text-danger">Offline</span>'
                 )
                 ->html(),
 

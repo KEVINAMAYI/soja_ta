@@ -2,6 +2,7 @@
 
 use Illuminate\Auth\Events\Lockout;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Session;
@@ -60,8 +61,27 @@ class extends Component {
         }
 
 
+        if (!$user->is_active) {
+            Auth::logout();
+
+            throw ValidationException::withMessages([
+                'account' => 'Your account inactive. Contact your administrator.',
+            ]);
+        }
+
+        // save last login timestamp and IP address
+        $user->last_login_at = now();
+        $user->last_login_ip = request()->ip();
+        $user->save();
+
         RateLimiter::clear($this->throttleKey());
         Session::regenerate();
+
+        if (Auth::user()->hasRole('super-admin')) {
+            Log::warning('Redirecting super-admin to platform-admin dashboard');
+            $this->redirect(route('platform-admin.index', absolute: false));
+            return;
+        }
 
         $this->redirectIntended(default: route('dashboard', absolute: false));
     }
