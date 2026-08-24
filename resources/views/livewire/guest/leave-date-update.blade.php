@@ -48,11 +48,6 @@ class extends Component
                     $alternative->update(['status' => 'rejected']);
                 }
 
-                Log::info('Guest leave date update actioned', [
-                    'leave_alternative_date_id' => $alternative->id,
-                    'action' => $data['action'],
-                ]);
-
                 $data['alternative'] = $alternative->fresh();
             }
 
