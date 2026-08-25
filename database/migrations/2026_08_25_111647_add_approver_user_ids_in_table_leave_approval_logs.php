@@ -13,9 +13,6 @@ return new class extends Migration
     {
         
         Schema::table('leave_approval_logs', function (Blueprint $table) {
-            if (Schema::hasColumn('leave_approval_logs', 'approver_user_ids')) {
-                $table->dropColumn('approver_user_ids');
-            }
             $table->text('approver_user_ids')->nullable()->after('approver_user_id');
             //
         });
