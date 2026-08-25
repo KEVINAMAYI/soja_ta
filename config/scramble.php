@@ -145,6 +145,16 @@ return [
         RestrictedDocsAccess::class,
     ],
 
+    /*
+     * Controls access to the docs UI/spec outside the `local` environment (see
+     * `viewApiDocs` gate in AppServiceProvider). Requires `SCRAMBLE_DOCS_ENABLED=true`
+     * plus a matching `?docs_key=` query param or `X-Docs-Key` header.
+     */
+    'access' => [
+        'enabled' => env('SCRAMBLE_DOCS_ENABLED', false),
+        'secret' => env('SCRAMBLE_DOCS_SECRET'),
+    ],
+
     'extensions' => [],
 
     /*
@@ -173,7 +183,7 @@ return [
         \Dedoc\Scramble\SecurityDocumentation\MiddlewareAuthSecurityStrategy::class,
         [
             'middleware' => ['auth:sanctum'],
-            'scheme' => \Dedoc\Scramble\Support\Generator\SecurityScheme::http('bearer'),
+            // 'scheme' omitted: instantiating SecurityScheme here breaks config:cache; class defaults to bearer.
         ],
     ],
 ];
