@@ -6,6 +6,7 @@ use Illuminate\Mail\Events\MessageSent;
 use Illuminate\Notifications\Events\NotificationFailed;
 use Illuminate\Notifications\Events\NotificationSent;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Facades\Schema;
@@ -28,6 +29,18 @@ class AppServiceProvider extends ServiceProvider
     {
         Schema::defaultStringLength(191);
         Paginator::useBootstrap();
+
+        Gate::define('viewApiDocs', function ($user = null) {
+            $secret = config('scramble.access.secret');
+
+            if (! config('scramble.access.enabled') || ! $secret) {
+                return false;
+            }
+
+            $provided = request()->query('docs_key') ?? request()->header('X-Docs-Key');
+
+            return $provided !== null && hash_equals((string) $secret, (string) $provided);
+        });
 
         Event::listen(NotificationSent::class, function (NotificationSent $event): void {
             if ($event->channel !== 'mail') {
