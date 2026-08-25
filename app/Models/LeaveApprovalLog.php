@@ -25,9 +25,10 @@ class LeaveApprovalLog extends Model
 
     protected $casts = [
         'level_number' => 'integer',
-        'approver_user_ids' => 'array',
         'opened_at' => 'datetime',
         'closed_at' => 'datetime',
+        // column is a text column; array cast JSON-encodes on write and decodes on read
+        'approver_user_ids' => 'array',
     ];
 
     public function leave()
