@@ -2,7 +2,6 @@
 
 namespace App\Providers;
 
-use Dedoc\Scramble\Scramble;
 use Illuminate\Mail\Events\MessageSent;
 use Illuminate\Notifications\Events\NotificationFailed;
 use Illuminate\Notifications\Events\NotificationSent;
@@ -20,9 +19,6 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        // this to avoid default routes for scramble package
-        Scramble::ignoreDefaultRoutes();
-
     }
 
     /**
