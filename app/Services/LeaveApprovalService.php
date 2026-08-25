@@ -335,15 +335,12 @@ class LeaveApprovalService
     {
         $roleNames = $actor->getRoleNames();
 
-        return LeaveApprovalLog::where('status', 'pending')
+        $matchesDirectly = LeaveApprovalLog::where('status', 'pending')
             ->whereHas('leave', fn ($q) => $q->where('organization_id', $organizationId))
             ->where(function ($q) use ($actor, $roleNames) {
                 $q->where(function ($q2) use ($actor) {
                         $q2->where('approver_type', 'user')
-                            ->where(function ($q3) use ($actor) {
-                                $q3->whereJsonContains('approver_user_ids', $actor->id)
-                                    ->orWhere('approver_user_id', $actor->id);
-                            });
+                            ->where('approver_user_id', $actor->id);
                     })
                     ->orWhere(function ($q2) use ($roleNames) {
                         $q2->where('approver_type', 'role')
@@ -351,6 +348,18 @@ class LeaveApprovalService
                     });
             })
             ->exists();
+
+        if ($matchesDirectly) {
+            return true;
+        }
+
+        // approver_user_ids is stored as JSON-encoded text, so membership can't be
+        // matched in SQL — filter the (small, already scoped) candidate set in PHP.
+        return LeaveApprovalLog::where('status', 'pending')
+            ->where('approver_type', 'user')
+            ->whereHas('leave', fn ($q) => $q->where('organization_id', $organizationId))
+            ->get()
+            ->contains(fn ($log) => in_array($actor->id, $log->approver_user_ids ?? [], true));
     }
 
     private function finalizeApproval(Leave $leave): void
