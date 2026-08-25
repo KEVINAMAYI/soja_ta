@@ -9,6 +9,9 @@ use App\Http\Controllers\APIs\OrganizationController;
 use Illuminate\Support\Facades\Route;
 
 
+
+require __DIR__ . '/superadmin/superadmin-api.php';
+
 // Public authentication routes
 Route::post('/login', [AuthController::class, 'login']);
 Route::post('/send-otp', [AuthController::class, 'sendOtp']);
