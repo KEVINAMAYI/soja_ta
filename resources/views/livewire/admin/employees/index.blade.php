@@ -1268,9 +1268,11 @@ new class extends Component {
     // must be cleared here or it stays bound even when the <select> shows blank.
     public function updatedJobTitleId($value): void
     {
-        if ($this->reportsToJobTitleId != '' && $this->reportsToJobTitleId == $value) {
-            $this->reportsToJobTitleId = '';
-        }
+        // if ($this->reportsToJobTitleId != '' && $this->reportsToJobTitleId == $value) {
+        //     $this->reportsToJobTitleId = '';
+        // }
+        $this->reportsToJobTitleId = '';
+
     }
 
     public function saveOffShiftDates(): void
