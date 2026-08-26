@@ -69,6 +69,17 @@ class LeaveApprovalService
         $next_approver_title_id = $leave->employee?->reports_to_job_title_id;
         if ($latest_actor && $config['approver_type'] == 'role' && $level > 1) {
             $next_approver_title_id = Employee::where('user_id', $latest_actor)->value('reports_to_job_title_id');
+
+            // if next approver is null, it means the applicant has no reporting level above them for next level approval, so we auto approve the leave and return
+            if (!$next_approver_title_id) {
+                Log::warning('Leave approval auto-approved: applicant has no reporting level above them for next level approval', [
+                    'leave_id' => $leave->id,
+                    'employee_id' => $leave->employee_id,
+                ]);
+
+                $this->approve($leave, auth()->user(), "Leave approval auto-approved OPEN-LEVEL: applicant has no reporting level above them for next level approval");
+                return $leave->latestApprovedApprovalLog()->first();
+            }
             
         }
 
@@ -707,10 +718,6 @@ class LeaveApprovalService
                     'employee_id' => $leave->employee_id,
                 ]);
 
-                // auto approve coz we already past first level check so user already has reports_to_job_title_id but next approver is null, so we auto approve the leave and return
-                $this->approve($leave, auth()->user(), "Leave approval auto-approved: applicant has no reporting level above them for next level approval");
-
-                return;
             }
                         
             if ($next_approver_title_id) {
