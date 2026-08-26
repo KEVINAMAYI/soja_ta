@@ -7,6 +7,8 @@ use Illuminate\Notifications\Events\NotificationFailed;
 use Illuminate\Notifications\Events\NotificationSent;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Pagination\Paginator;
@@ -29,6 +31,12 @@ class AppServiceProvider extends ServiceProvider
     {
         Schema::defaultStringLength(191);
         Paginator::useBootstrap();
+
+        // AWS SES closes idle SMTP connections; force a fresh one per queued job
+        // to avoid "451 Timeout waiting for data from client" on a stale, reused connection.
+        Queue::before(function (): void {
+            Mail::purge();
+        });
 
         Event::listen(NotificationSent::class, function (NotificationSent $event): void {
             if ($event->channel !== 'mail') {
