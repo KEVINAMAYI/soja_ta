@@ -2,6 +2,8 @@
 
 namespace App\Helpers;
 
+use App\Models\UserActivityLog;
+use App\Utils\ApiConstants;
 use Illuminate\Auth\Events\Lockout;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Str;
@@ -82,6 +84,12 @@ class ThrottlerHelper
         event(new Lockout(request()));
 
         $seconds = RateLimiter::availableIn($throttleKey);
+
+        // store malicious activity in the database
+        UserActivityLog::storeUserActivityLog(
+            ApiConstants::USER_MALICIOUS_ACTIVITY,
+            'Too many login attempts. Throttle key '.$throttleKey. ' Number of attempts '. $maxAttempts .' has been locked out for '.$seconds.' seconds.'
+        );
 
         throw ValidationException::withMessages([
             $field => __('auth.throttle', [
