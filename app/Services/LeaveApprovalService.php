@@ -77,7 +77,8 @@ class LeaveApprovalService
                     'employee_id' => $leave->employee_id,
                 ]);
 
-                $this->approve($leave, auth()->user(), "Leave approval auto-approved OPEN-LEVEL: applicant has no reporting level above them for next level approval");
+                $this->finalizeApproval($leave);
+                //$this->approve($leave, auth()->user(), "Leave approval auto-approved OPEN-LEVEL: applicant has no reporting level above them for next level approval");
                 return $leave->latestApprovedApprovalLog()->first();
             }
             
