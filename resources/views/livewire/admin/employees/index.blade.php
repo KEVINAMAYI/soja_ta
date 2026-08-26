@@ -1264,6 +1264,15 @@ new class extends Component {
         }
     }
 
+    // Reports-to options exclude the selected job title, so a stale selection
+    // must be cleared here or it stays bound even when the <select> shows blank.
+    public function updatedJobTitleId($value): void
+    {
+        if ($this->reportsToJobTitleId != '' && $this->reportsToJobTitleId == $value) {
+            $this->reportsToJobTitleId = '';
+        }
+    }
+
     public function saveOffShiftDates(): void
     {
         $this->validate([
@@ -2908,7 +2917,7 @@ new class extends Component {
                             <div class="col-md-6 mb-3">
                                 <label class="form-label">Reports to Job Title <span class="text-danger">*</span></label>
                                 <select wire:model.live="reportsToJobTitleId" class="form-control" {{ empty($jobTitleId) ? 'disabled' : '' }}>
-                                    <option value="">Select Job Title this employee reports to</option>
+                                    <option value="" {{ empty($reportsToJobTitleId) ? 'selected' : '' }}>Select Job Title this employee reports to</option>
                                     @foreach ($jobTitles as $id => $jobTitle)
                                         @if($jobTitle->id  != $jobTitleId)  {{-- Exclude the current job title from the options --}}
                                             <option value="{{ $jobTitle->id  }}" {{ $reportsToJobTitleId == $jobTitle->id ? 'selected' : '' }}>{{ ucfirst($jobTitle->name) }}</option>
