@@ -8,6 +8,7 @@ use App\Http\Payload\SuperAdmin\LoginRequestDTO;
 use App\Http\Requests\SuperAdmin\LoginRequest;
 use App\Http\Resources\SuperAdmin\UserResource;
 use App\Models\User;
+use App\Utils\ApiConstants;
 use Illuminate\Support\Facades\Log;
 use App\Http\Responses\ApiResponse;
 use Illuminate\Support\Facades\Auth;
@@ -29,10 +30,12 @@ class SuperAdminAuth extends Controller
         if (!Auth::attempt($credentials)) {
             // Simulate role check for super admin to waste time for unauthorized users
 
-            return response()->json([
-                'code' => 1003,
-                'message' => 'User not Authenticated',
-            ], 401);
+            $made_response = ApiResponse::userFailure(
+                code: ApiConstants::UNAUTHORIZED_CODE,
+                message: 'User not Authenticated',
+                httpStatusCode: Response::HTTP_UNAUTHORIZED,
+            );
+            return $made_response;
         }
 
         $user = User::where('email', $request->email)->first();
@@ -40,11 +43,17 @@ class SuperAdminAuth extends Controller
         // Check if user has super admin role
         if (!$user || !$user->hasRole('super-admin')) {
             // simulate token creation to waste time for unauthorized users
+            $made_response = ApiResponse::userFailure(
+                code: ApiConstants::FORBIDDEN_CODE,
+                message: 'User is not a super admin',
+                httpStatusCode: Response::HTTP_FORBIDDEN,
+            );
 
-            return response()->json([
-                'code' => 1004,
-                'message' => 'User is not a super admin',
-            ], 403);
+            return $made_response;
+            // return response()->json([
+            //     'code' => 1004,
+            //     'message' => 'User is not a super admin',
+            // ], 403);
         }
 
         $tokenResult = $user->createToken('Api Token');
@@ -57,7 +66,7 @@ class SuperAdminAuth extends Controller
         ThrottlerHelper::clear([$request->email, $request->ip()]);
 
         $made_response = ApiResponse::success(
-            code: 1000,
+            code: ApiConstants::SUCCESS_CODE,
             data: $data,
             message: 'Super Admin login successful.',
             httpStatusCode: Response::HTTP_OK,
