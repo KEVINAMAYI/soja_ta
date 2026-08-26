@@ -44,8 +44,6 @@ class LeaveRejectedNotification extends Notification implements ShouldQueue
                 ->line('Your leave request has been rejected.');
         }
 
-        Log::info("TUKO NA ACTIVE LOGS NI: ". json_encode($activeLog));
-
         return (new MailMessage)
             ->subject('Update on Your Leave Request')
             ->view('emails.leaves.leave-rejected', [

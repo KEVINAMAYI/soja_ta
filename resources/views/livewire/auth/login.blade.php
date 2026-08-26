@@ -78,7 +78,7 @@ class extends Component {
         Session::regenerate();
 
         if (Auth::user()->hasRole('super-admin')) {
-            Log::info('Redirecting super-admin to platform-admin dashboard');
+            Log::warning('Redirecting super-admin to platform-admin dashboard');
             $this->redirect(route('platform-admin.index', absolute: false));
             return;
         }

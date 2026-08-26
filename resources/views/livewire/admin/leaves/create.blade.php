@@ -159,6 +159,7 @@ new class extends Component {
         if (($this->selectedLeaveType == null || $this->selectedLeaveType->code !== $this->leaveType) && !empty($this->leaveType)) {
             $this->selectedLeaveType = LeaveType::where('code', $this->leaveType)->first();
         }
+        
         return $this->selectedLeaveType;
     }
 
@@ -189,6 +190,69 @@ new class extends Component {
         return array_unique(array_merge($conflictingLeaveIds, $conflictingOffShiftIds));
     }
 
+    public function getSelectedLeaveTypeRemainingDays() {
+        
+        $num_of_days = $this->calculateWorkingDays();
+
+        $service = app(LeaveApprovalService::class);
+        $employeeId = $this->selectedEmployees[0] ?? null; // Assuming you want to check for the first selected employee
+
+        if (!$employeeId || !$this->selectedLeaveType) {
+            return null; // Return null if no employee is selected or leave type is not set
+        }
+
+        $employee = Employee::find($employeeId);
+
+        $chosenLeaveType = $this->getSelectedLeaveType();
+
+        if (!$chosenLeaveType) {
+            return null; // Return null if the leave type is not found
+        }
+
+        $remaining = $service->checkBalance($employee, $chosenLeaveType, (float)$num_of_days, Carbon::parse($this->startDate)->year)['remaining'] ?? null;
+
+        return $remaining;
+
+    }
+
+    public function getLeaveBalanceProjectionProperty(): ?array
+    {
+        if (count($this->selectedEmployees) !== 1 || empty($this->leaveType) || empty($this->startDate)) {
+            return null;
+        }
+
+        $employee = Employee::find($this->selectedEmployees[0]);
+        $leaveType = $this->getSelectedLeaveType();
+
+        if (!$employee || !$leaveType) {
+            return null;
+        }
+
+        $year = Carbon::parse($this->startDate)->year;
+
+        $balanceRow = collect(app(LeaveApprovalService::class)->balancesForEmployee($employee, $year))
+            ->firstWhere('code', $this->leaveType);
+
+        if (!$balanceRow) {
+            return null;
+        }
+
+        $requestedDays = $this->durationType === 'dateRange'
+            ? (($this->startDate && $this->endDate) ? (float) $this->calculateWorkingDays() : 0.0)
+            : (float) ($this->numberOfDays ?: 0);
+
+        $remainingBefore = $balanceRow['remaining_days'];
+
+        return [
+            'employee_name' => $employee->name,
+            'leave_type_name' => $balanceRow['name'] ?? $leaveType->name,
+            'accrued' => $balanceRow['entitled_days'],
+            'used' => $balanceRow['used_days'],
+            'requested' => $requestedDays,
+            'remaining' => $remainingBefore === null ? null : $remainingBefore - $requestedDays,
+        ];
+    }
+
 
     public function confirmLeave()
     {
@@ -215,6 +279,14 @@ new class extends Component {
 
             // set end date for num of days calculation
             $this->endDate = $endDate;
+
+            // now check leave bala
+            if (count($this->selectedEmployees) > 0 && $this->leaveType !== 'offshift' && $this->leaveType !== 'sick') {
+                $remainingDays = $this->getSelectedLeaveTypeRemainingDays();
+                if ($remainingDays < $this->calculateWorkingDays()) {
+                    throw new \Exception("Insufficient leave balance for the selected leave type. Remaining days: {$remainingDays}, Requested days: {$this->calculateWorkingDays()}");
+                }
+            }
 
             // we add 2 to the end date to account for the resumption date being the day after the leave ends
             $resumptionDate = $this->getSelectedLeaveType()->calculateEndDateWithStartDateAndNumberOfDays(Carbon::parse($this->endDate), 2)['end_date'];
@@ -494,6 +566,81 @@ new class extends Component {
             background-color: #eaf1fb;
             color: #0d6efd;
         }
+
+        .balance-projection-card {
+            border: 1px solid #e6ebf2;
+            border-radius: 0.6rem;
+            padding: 1rem 1.25rem;
+            background-color: #F9FAFC;
+        }
+
+        .balance-projection-kicker {
+            font-size: 0.75rem;
+            letter-spacing: 0.08em;
+            font-weight: 700;
+            color: #6b7280;
+            text-transform: uppercase;
+        }
+
+        .balance-projection-meta {
+            color: #2563eb;
+            font-weight: 600;
+        }
+
+        .balance-projection-grid {
+            display: grid;
+            grid-template-columns: 1fr auto 1fr auto 1fr;
+            gap: 0.75rem;
+            align-items: end;
+            border-top: 1px solid #edf2f7;
+            margin-top: 0.9rem;
+            padding-top: 0.9rem;
+        }
+
+        .balance-projection-label {
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: #64748b;
+            line-height: 1.2;
+        }
+
+        .balance-projection-value {
+            font-size: 2rem;
+            font-weight: 700;
+            line-height: 1;
+            color: #1f2937;
+        }
+
+        .balance-projection-value.requested {
+            color: #ef4444;
+        }
+
+        .balance-projection-value.remaining {
+            color: #10b981;
+        }
+
+        .balance-projection-op {
+            font-size: 1.35rem;
+            font-weight: 700;
+            color: #cbd5e1;
+            line-height: 1;
+            padding-bottom: 0.2rem;
+        }
+
+        @media (max-width: 767.98px) {
+            .balance-projection-grid {
+                grid-template-columns: 1fr;
+                gap: 0.5rem;
+            }
+
+            .balance-projection-op {
+                display: none;
+            }
+
+            .balance-projection-value {
+                font-size: 1.75rem;
+            }
+        }
     </style>
 @endpush
 
@@ -638,14 +785,14 @@ new class extends Component {
 
                 <div class="row g-3">
                     @if($durationType === 'dateRange')
-                        <div class="col-md-6">
-                            <label for="startDate" class="form-label">Start Date</label>
-                            <input type="date" id="startDate" wire:model.live="startDate" class="form-control">
+                        <div class="col-md-6" x-data x-init="$nextTick(() => initLeaveDatepickers())">
+                            <label for="leaveStartDate" class="form-label">Start Date</label>
+                            <input type="text" id="leaveStartDate" wire:model.live="startDate" class="form-control" autocomplete="off">
                             @error('startDate') <small class="text-primary">{{ $message }}</small>@enderror
                         </div>
                         <div class="col-md-6">
-                            <label for="endDate" class="form-label">End Date</label>
-                            <input type="date" id="endDate" wire:model.live="endDate" class="form-control">
+                            <label for="leaveEndDate" class="form-label">End Date</label>
+                            <input type="text" id="leaveEndDate" wire:model.live="endDate" class="form-control" autocomplete="off">
                             @error('endDate') <small class="text-primary">{{ $message }}</small>@enderror
                             @if($startDate && $endDate)
                                 <small class="text-muted mt-1 d-block">Total: {{ $this->calculateWorkingDays() }}
@@ -659,9 +806,9 @@ new class extends Component {
                                    class="form-control">
                             @error('numberOfDays') <small class="text-primary">{{ $message }}</small>@enderror
                         </div>
-                        <div class="col-md-6">
-                            <label for="startingFrom" class="form-label">Starting From</label>
-                            <input type="date" id="startingFrom" wire:model.live="startDate" class="form-control">
+                        <div class="col-md-6" x-data x-init="$nextTick(() => initLeaveDatepickers())">
+                            <label for="leaveStartDate" class="form-label">Starting From</label>
+                            <input type="text" id="leaveStartDate" wire:model.live="startDate" class="form-control" autocomplete="off">
                             @error('startDate') <small class="text-primary">{{ $message }}</small>@enderror
                         </div>
                     @endif
@@ -692,6 +839,59 @@ new class extends Component {
                 </div>
             </div>
 
+            @if(count($selectedEmployees) === 1)
+                @php
+                    $projection = $this->leaveBalanceProjection;
+                @endphp
+
+                @if($projection)
+                    <div class="balance-projection-card mt-4">
+                        <div class="balance-projection-kicker">Balance Projection</div>
+                        <div class="balance-projection-meta">
+                            {{ $projection['employee_name'] }} • {{ $projection['leave_type_name'] }}
+                        </div>
+
+                        <div class="row g-3 row-cols-1 row-cols-sm-2 row-cols-md-4 mt-1">
+                            <div class="col">
+                                <div class="card h-75">
+                                    <div class="card-body p-3">
+                                        <div class="card-title text-center balance-projection-label mb-2">Accrued</div>
+                                        <div class="text-center balance-projection-value">{{ $projection['accrued'] ?? '∞' }}</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="col">
+                                <div class="card h-75">
+                                    <div class="card-body p-3">
+                                        <div class="card-title text-center balance-projection-label mb-2">Used</div>
+                                        <div class="text-center balance-projection-value">{{ $projection['used'] ?? '∞' }}</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="col">
+                                <div class="card h-75">
+                                    <div class="card-body p-3">
+                                        <div class="card-title text-center balance-projection-label mb-2">Requested</div>
+                                        <div class="text-center balance-projection-value requested">{{ $projection['requested'] }}</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="col">
+                                <div class="card h-75">
+                                    <div class="card-body p-3">
+                                        <div class="card-title text-center balance-projection-label mb-2">Remaining</div>
+                                        <div class="text-center balance-projection-value remaining">{{ $projection['remaining'] ?? '∞' }}</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                @endif
+            @endif
+
             <div class="d-flex justify-content-between mt-4">
                 <button wire:click="$set('step',1)" class="btn btn-outline-primary btn-md">
                     <iconify-icon icon="mdi:arrow-left" class="fs-5 align-middle me-1"></iconify-icon>
@@ -709,6 +909,11 @@ new class extends Component {
             <h2 class="h5 font-weight-bold mb-4 text-primary">Review & Confirm</h2>
 
             <div class="card bg-light p-3 mb-4">
+                @php
+                    $this->getSelectedLeaveType(); // Ensure selectedLeaveType is set
+
+                    $this->getSelectedLeaveTypeRemainingDays();
+                @endphp
                 <h3 class="h6 font-weight-bold mb-3">Absence/Leave Assignment Summary</h3>
                 <div class="row g-2">
                     <div class="col-6"><span class="font-weight-bold">Type:</span></div>
@@ -785,7 +990,98 @@ new class extends Component {
 </div>
 
 @push('scripts')
-    <script>
+    <script>function initLeaveDatepickers() {
+            const $startInput = $('#leaveStartDate');
+            const $endInput = $('#leaveEndDate');
+
+            if (typeof $.fn.datepicker === 'undefined') {
+                return;
+            }
+
+            const setLivewireDateValue = (input, field, value) => {
+                const componentRoot = input.closest('[wire\\:id]');
+                const componentId = componentRoot?.getAttribute('wire:id');
+
+                if (!componentId || !window.Livewire || typeof window.Livewire.find !== 'function') {
+                    return;
+                }
+
+                const component = window.Livewire.find(componentId);
+                if (component && typeof component.set === 'function') {
+                    component.set(field, value);
+                }
+            };
+
+            const syncDateValue = ($input, value) => {
+                $input.val(value);
+                $input.trigger('input');
+                $input.trigger('change');
+            };
+
+            // Start and end inputs never coexist for the 'numberOfDays' duration, so each is guarded independently.
+            if ($startInput.length) {
+                if ($startInput.data('datepicker')) {
+                    $startInput.datepicker('destroy');
+                }
+
+                const startValue = $startInput.val();
+
+                $startInput.datepicker({
+                    format: 'yyyy-mm-dd',
+                    autoclose: true,
+                    todayHighlight: true,
+                }).on('changeDate', function (e) {
+                    const selected = e.format('yyyy-mm-dd');
+                    syncDateValue($startInput, selected);
+                    setLivewireDateValue($startInput[0], 'startDate', selected);
+
+                    if ($endInput.length) {
+                        $endInput.datepicker('setStartDate', selected);
+
+                        if ($endInput.val() && $endInput.val() < selected) {
+                            syncDateValue($endInput, selected);
+                            $endInput.datepicker('update', selected);
+                            setLivewireDateValue($endInput[0], 'endDate', selected);
+                        }
+                    }
+                });
+
+                if (startValue) {
+                    $startInput.datepicker('update', startValue);
+                }
+            }
+
+            if ($endInput.length) {
+                if ($endInput.data('datepicker')) {
+                    $endInput.datepicker('destroy');
+                }
+
+                const endValue = $endInput.val();
+
+                $endInput.datepicker({
+                    format: 'yyyy-mm-dd',
+                    autoclose: true,
+                    todayHighlight: true,
+                }).on('changeDate', function (e) {
+                    const selected = e.format('yyyy-mm-dd');
+                    syncDateValue($endInput, selected);
+                    setLivewireDateValue($endInput[0], 'endDate', selected);
+                });
+
+                if ($startInput.length && $startInput.val()) {
+                    $endInput.datepicker('setStartDate', $startInput.val());
+                }
+
+                if (endValue) {
+                    $endInput.datepicker('update', endValue);
+                }
+            }
+        }
+
+        document.addEventListener('livewire:navigated', initLeaveDatepickers);
+        initLeaveDatepickers();
+
+
         window.addEventListener('redirect', event => {
             console.log(event);  // This will show the event object
             const url = event.detail[0].url;  // Access the first element of the detail array

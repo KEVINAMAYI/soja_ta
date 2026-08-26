@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Employee;
 use App\Models\Leave;
+use App\Models\LeaveAlternativeDate;
 use App\Models\LeaveApprovalLog;
 use App\Models\LeaveBalance;
 use App\Models\LeaveType;
@@ -63,7 +64,6 @@ class LeaveApprovalService
             return $this->advanceOrFinalize($leave, $level, $settings);
         }
 
-        // TO DO(SIR-DOMMY): We will use this to move up the the approval chain.....
         $latest_actor = $leave->latestApprovedApprovalLog()->first()?->actioned_by;
 
         $next_approver_title_id = $leave->employee?->reports_to_job_title_id;
@@ -121,6 +121,7 @@ class LeaveApprovalService
 
         return null;
     }
+    
 
     /**
      * Approve the currently active level for this leave, advancing to the
@@ -128,6 +129,15 @@ class LeaveApprovalService
      */
     public function approve(Leave $leave, User $actor, ?string $notes = null): Leave
     {
+
+        $alternative = LeaveAlternativeDate::where('leave_id', $leave->id)
+            ->where('status', 'pending')
+            ->latest()->first();
+
+        if ($alternative) {
+            throw new \RuntimeException("There's a pending leave dates changes");
+        }
+
         $activeLog = $leave->activeApprovalLog()->first();
 
         if (!$activeLog) {
@@ -174,6 +184,8 @@ class LeaveApprovalService
      */
     public function reject(Leave $leave, ?User $actor, ?string $notes = null): Leave
     {
+        // TO DO(SIR-DOMMY): Will an active leave date change request prevent a leave from being rejected? For now, we allow rejection even if there's a pending alternative date request.
+
         $activeLog = $leave->activeApprovalLog()->first();
 
         if (!$activeLog) {
@@ -236,6 +248,34 @@ class LeaveApprovalService
         }
     }
 
+    /**
+     * Handle an applicant's response to a leave alternative date request.
+     * If the applicant rejects the alternative dates, the leave is rejected.
+     */
+    public function actionOnLeaveDatesChange(string $action, int $leaveId, LeaveAlternativeDate $alternativeDates)
+    {
+        $leave = Leave::find($leaveId);
+        if (!$leave) {
+            return ['Leave request not found.', null];
+        }
+
+        // save action to the alternative date record for auditing purposes
+        $alternativeDates->update(['status' => $action]);
+
+        // save the new leave dates to the leave record if the alternative dates are approved or rejected
+        $leave->update([
+            'start_date' => $alternativeDates->new_start_date,
+            'end_date' => $alternativeDates->new_end_date,
+            'num_of_days' => $alternativeDates->new_num_of_days,
+        ]);
+
+        if ($action === 'reject') {
+            // reject the leave request if the alternative dates are rejected
+            $this->reject($leave, null, 'Leave alternative dates rejected by applicant');
+        }
+
+    }
+
     private function authorizeActor(User $actor, LeaveApprovalLog $log): void
     {
         if (!$this->matchesApprover($actor, $log)) {
@@ -295,15 +335,12 @@ class LeaveApprovalService
     {
         $roleNames = $actor->getRoleNames();
 
-        return LeaveApprovalLog::where('status', 'pending')
+        $matchesDirectly = LeaveApprovalLog::where('status', 'pending')
             ->whereHas('leave', fn ($q) => $q->where('organization_id', $organizationId))
             ->where(function ($q) use ($actor, $roleNames) {
                 $q->where(function ($q2) use ($actor) {
                         $q2->where('approver_type', 'user')
-                            ->where(function ($q3) use ($actor) {
-                                $q3->whereJsonContains('approver_user_ids', $actor->id)
-                                    ->orWhere('approver_user_id', $actor->id);
-                            });
+                            ->where('approver_user_id', $actor->id);
                     })
                     ->orWhere(function ($q2) use ($roleNames) {
                         $q2->where('approver_type', 'role')
@@ -311,6 +348,18 @@ class LeaveApprovalService
                     });
             })
             ->exists();
+
+        if ($matchesDirectly) {
+            return true;
+        }
+
+        // approver_user_ids is stored as JSON-encoded text, so membership can't be
+        // matched in SQL — filter the (small, already scoped) candidate set in PHP.
+        return LeaveApprovalLog::where('status', 'pending')
+            ->where('approver_type', 'user')
+            ->whereHas('leave', fn ($q) => $q->where('organization_id', $organizationId))
+            ->get()
+            ->contains(fn ($log) => in_array($actor->id, $log->approver_user_ids ?? [], true));
     }
 
     private function finalizeApproval(Leave $leave): void
@@ -399,7 +448,6 @@ class LeaveApprovalService
                 ]);
                 continue;
             }
-            Log::info("SENDING CC NOTIFICATION TO: " . $email);
 
             Notification::route('mail', $email)
                 ->notify(new ApprovalProcessCCNotification($leave));
@@ -417,7 +465,7 @@ class LeaveApprovalService
             return;
         }
 
-        $days = $leave->start_date->diffInDays($leave->end_date) + 1;
+        $days = $leave->num_of_days;
         $year = $leave->start_date->year;
 
         $balance = LeaveBalance::firstOrCreate(
@@ -461,7 +509,7 @@ class LeaveApprovalService
             ->where('status', 'pending')
             ->whereYear('start_date', $year)
             ->get()
-            ->sum(fn ($l) => $l->start_date->diffInDays($l->end_date) + 1);
+            ->sum('num_of_days');
 
         $remaining = $entitled - (float) $used - $pending;
 
@@ -575,7 +623,7 @@ class LeaveApprovalService
             ->whereYear('start_date', $year)
             ->get()
             ->groupBy('employee_id')
-            ->map(fn ($group) => $group->sum(fn ($l) => $l->start_date->diffInDays($l->end_date) + 1));
+            ->map(fn ($group) => (float) $group->sum('num_of_days'));
 
         return $employees->map(function (Employee $employee) use ($type, $balancesByEmployee, $pendingByEmployee, $year) {
             $balance = $balancesByEmployee->get($employee->id);
@@ -676,15 +724,6 @@ class LeaveApprovalService
         // }
 
         $recipients = array_values(array_unique($recipients));
-
-        Log::info('TUNATUMA LEAVE APPROVAL NOTIFICATIONS WITH DETAILS', [
-            'leave_id' => $leave->id,
-            'level' => $level,
-            'approver_type' => $config['approver_type'],
-            'approver_role' => $config['approver_role'] ?? null,
-            'approver_user_ids' => $config['approver_user_ids'] ?? [],
-            'recipients' => $recipients,
-        ]);
 
         if (!empty($recipients)) {
             $approverRoleLabel = $config['approver_type'] === 'role' ? ($config['approver_role'] ?? null) : null;

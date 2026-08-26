@@ -53,7 +53,7 @@ new class extends Component {
                 'delete-organizations',
             ];
             if (array_intersect($this->selectedPermissions, $super_admin_permissions)) {
-                Log::info('MALICIOUS ATTEMPT ROLE PERMISSIONS CREATION.');
+                Log::error('MALICIOUS ATTEMPT ROLE PERMISSIONS CREATION.');
                 abort(403, 'Unauthorized.');
             }
 
@@ -112,7 +112,7 @@ new class extends Component {
                 'delete-organizations',
             ];
             if (array_intersect($this->selectedPermissions, $super_admin_permissions)) {
-                Log::info('MALICIOUS ATTEMPT ROLE PERMISSIONS UPDATE.');
+                Log::error('MALICIOUS ATTEMPT ROLE PERMISSIONS UPDATE.');
                 abort(403, 'Unauthorized.');
             }
 

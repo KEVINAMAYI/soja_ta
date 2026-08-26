@@ -47,12 +47,6 @@ class AppServiceProvider extends ServiceProvider
                 return;
             }
 
-            Log::info('Mail notification sent', [
-                'notification' => get_class($event->notification),
-                'notifiable_type' => get_class($event->notifiable),
-                'notifiable_id' => $event->notifiable->id ?? null,
-                'response' => $event->response,
-            ]);
         });
 
         Event::listen(NotificationFailed::class, function (NotificationFailed $event): void {
@@ -71,7 +65,7 @@ class AppServiceProvider extends ServiceProvider
         Event::listen(MessageSent::class, function (MessageSent $event): void {
             $message = $event->message;
 
-            Log::info('Mail message sent', [
+            Log::warning('Mail message sent', [
                 'subject' => $message->getSubject(),
                 'to' => array_keys($message->getTo() ?? []),
             ]);

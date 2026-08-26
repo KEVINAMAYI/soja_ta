@@ -68,7 +68,6 @@ class GuestApproverLoginRedirectController extends Controller
             }
 
             if (Carbon::now()->startOfDay()->gt($leaveStart)) {
-                Log::info('Guest approver login redirect request received - link expired', ['leave_start_date' => $leaveStartDate, 'today' => now()->toDateString()]);
                 return redirect()->route('login')
                     ->withErrors(['redirect_token' => 'The login link has expired.']);
             }
@@ -78,7 +77,6 @@ class GuestApproverLoginRedirectController extends Controller
 
 
         if (!$user || !$user->employee) {
-            Log::info('Guest approver login redirect request received - user not found or has no employee record', ['receiver_email' => $receiverEmail]);
             return redirect()->route('login')
                 ->withErrors(['redirect_token' => 'The account for the provided email could not be found.']);
         }
