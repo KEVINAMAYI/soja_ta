@@ -29,6 +29,7 @@ class SuperAdminAuth extends Controller
 
         if (!Auth::attempt($credentials)) {
             // Simulate role check for super admin to waste time for unauthorized users
+            Auth::logout();
 
             $made_response = ApiResponse::userFailure(
                 code: ApiConstants::UNAUTHORIZED_CODE,
@@ -43,6 +44,8 @@ class SuperAdminAuth extends Controller
         // Check if user has super admin role
         if (!$user || !$user->hasRole('super-admin')) {
             // simulate token creation to waste time for unauthorized users
+            Auth::logout();
+
             $made_response = ApiResponse::userFailure(
                 code: ApiConstants::FORBIDDEN_CODE,
                 message: 'User is not a super admin',
@@ -50,10 +53,6 @@ class SuperAdminAuth extends Controller
             );
 
             return $made_response;
-            // return response()->json([
-            //     'code' => 1004,
-            //     'message' => 'User is not a super admin',
-            // ], 403);
         }
 
         $tokenResult = $user->createToken('Api Token');
