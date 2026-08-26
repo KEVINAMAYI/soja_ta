@@ -69,6 +69,7 @@ class LeaveApprovalService
         $next_approver_title_id = $leave->employee?->reports_to_job_title_id;
         if ($latest_actor && $config['approver_type'] == 'role' && $level > 1) {
             $next_approver_title_id = Employee::where('user_id', $latest_actor)->value('reports_to_job_title_id');
+            
         }
 
         $log = LeaveApprovalLog::create([
@@ -102,6 +103,11 @@ class LeaveApprovalService
 
             $this->reject($leave, null, "Leave approval failed: applicant has no reporting level above them for first level approval");
             return $log;
+        }
+
+        // if the next approver is the same as the previous approver, skip to the next level
+        if ($next_approver_title_id === $leave->latestApprovedApprovalLog()->first()?->approver_role) {
+            return $this->advanceOrFinalize($leave, $level, $settings);
         }
 
         $this->sendNotifications($leave, $config, $level, $next_approver_title_id);
@@ -700,9 +706,15 @@ class LeaveApprovalService
                     'leave_id' => $leave->id,
                     'employee_id' => $leave->employee_id,
                 ]);
+
+                // auto approve coz we already past first level check so user already has reports_to_job_title_id but next approver is null, so we auto approve the leave and return
+                $this->approve($leave, auth()->user(), "Leave approval auto-approved: applicant has no reporting level above them for next level approval");
+
+                return;
             }
                         
             if ($next_approver_title_id) {
+
                 $recipients = Employee::where('organization_id', $leave->organization_id)
                     ->where('job_title_id', $next_approver_title_id)
                     ->pluck('email')
