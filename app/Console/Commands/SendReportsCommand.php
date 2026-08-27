@@ -57,6 +57,19 @@ class SendReportsCommand extends Command
             return false;
         }
 
+        // Once a schedule has run at least once, prefer next_run_at: it's a
+        // ">=" comparison rather than an exact-minute match, so a missed or
+        // delayed schedule:run tick (deploy, server restart, an overlapping
+        // command holding the lock) doesn't silently cost the report a whole
+        // day/week/month — it fires on the very next tick instead. This is the
+        // most likely explanation for "reports not sending in production":
+        // the old exact H:i match had no way to catch up after any gap.
+        if ($setting->next_run_at) {
+            return $tzNow->gte($setting->next_run_at->copy()->setTimezone($setting->timezone ?? config('app.timezone')));
+        }
+
+        // First run for this schedule (next_run_at not set yet) — fall back to
+        // exact time-window matching.
         // interpret "report time" in the user's timezone
         $reportTime = Carbon::parse($setting->time, $setting->timezone);
 
