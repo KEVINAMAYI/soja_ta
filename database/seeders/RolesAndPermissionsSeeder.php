@@ -84,6 +84,7 @@ class RolesAndPermissionsSeeder extends Seeder
 
             // Settings
             ['name' => 'view-settings', 'category' => 'Settings'],
+            ['name' => 'manage-api-keys', 'category' => 'Settings'],
 
             // School-specific
             ['name' => 'view-students', 'category' => 'School'],
