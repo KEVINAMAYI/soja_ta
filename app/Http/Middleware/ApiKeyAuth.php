@@ -9,12 +9,13 @@ use Symfony\Component\HttpFoundation\Response;
 
 class ApiKeyAuth
 {
+    private const API_KEY_HEADER_NAME = 'X-Api-Key';
     /**
      * Authenticate requests using an X-API-KEY header against api_keys stored in the database.
      */
     public function handle(Request $request, Closure $next): Response
     {
-        $plainTextKey = $request->header('X-API-KEY') ?? $request->bearerToken();
+        $plainTextKey = $request->header(self::API_KEY_HEADER_NAME) ?? $request->bearerToken();
 
         if (!$plainTextKey) {
             return response()->json([
@@ -38,5 +39,10 @@ class ApiKeyAuth
         $request->attributes->set('api_key_organization', $apiKey->organization);
 
         return $next($request);
+    }
+
+    public static function getApiKeyFromRequestHeader(Request $request): ?string
+    {
+        return $request->header(self::API_KEY_HEADER_NAME) ?? $request->bearerToken();
     }
 }
