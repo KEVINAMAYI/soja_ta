@@ -361,29 +361,13 @@ class SendReportJob implements ShouldQueue
 
     private function calculateNextRun(ReportSetting $setting, Carbon $from): ?Carbon
     {
-        $tzNow = $from->copy()->setTimezone($setting->timezone ?? config('app.timezone'));
-
-        switch ($setting->frequency) {
-            case 'daily':
-                return $tzNow->addDay()->setTimeFromTimeString($setting->time);
-
-            case 'weekly':
-                $dayOfWeek = $setting->day_of_week ?? 'Monday';
-                return $tzNow->copy()->next($dayOfWeek)->setTimeFromTimeString($setting->time);
-
-            case 'monthly':
-                if ($setting->day_of_week) {
-                    $endOfMonth = $tzNow->copy()->endOfMonth();
-                    $nextOccurrence = $endOfMonth->next($setting->day_of_week)->setTimeFromTimeString($setting->time);
-                    if ($nextOccurrence->month !== $tzNow->month) {
-                        $nextOccurrence = $endOfMonth->copy()->addMonth()->endOfMonth()->setTimeFromTimeString($setting->time);
-                    }
-                    return $nextOccurrence;
-                }
-                return $tzNow->copy()->addMonth()->endOfMonth()->setTimeFromTimeString($setting->time);
-
-            default:
-                return null;
-        }
+        // Delegates to ReportSetting::calculateNextRunFrom() — was previously
+        // duplicated here with a bug: setTimeFromTimeString($setting->time) was
+        // passed the cast Carbon *object*, not a "H:i" string, so PHP's implicit
+        // __toString() coercion fed it something like "2025-01-01 09:00:00"
+        // instead of "09:00", producing a garbage next_run_at. Harmless while
+        // next_run_at was purely informational, but SendReportsCommand now relies
+        // on it to survive a missed/delayed cron tick — see shouldRun().
+        return $setting->calculateNextRunFrom($from);
     }
 }
