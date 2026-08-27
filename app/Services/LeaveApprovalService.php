@@ -119,7 +119,14 @@ class LeaveApprovalService
 
         // if the next approver is the same as the previous approver, skip to the next level
         if ($next_approver_title_id === $leave->latestApprovedApprovalLog()->first()?->approver_role) {
-            return $this->advanceOrFinalize($leave, $level, $settings);
+            $this->approve($leave, auth()->user(), "Leave approval auto-approved: next approver is the same as the previous approver");
+
+            Log::info('Leave approval auto-approved: next approver is the same as the previous approver', [
+                'leave_id' => $leave->id,
+                'employee_id' => $leave->employee_id,
+            ]);
+
+            return $log;
         }
 
         $this->sendNotifications($leave, $config, $level, $next_approver_title_id);
@@ -714,7 +721,7 @@ class LeaveApprovalService
 
 
             if (!$next_approver_title_id) {
-                Log::warning('Leave approval notification skipped: applicant has no reports_to_job_title_id', [
+                Log::info('Leave approval notification skipped: applicant has no reports_to_job_title_id', [
                     'leave_id' => $leave->id,
                     'employee_id' => $leave->employee_id,
                 ]);
@@ -728,6 +735,13 @@ class LeaveApprovalService
                     ->pluck('email')
                     ->filter()
                     ->all();
+
+                Log::info('Leave approval notification sent to approvers with job title ID: ' . $next_approver_title_id, [
+                    'leave_id' => $leave->id,
+                    'employee_id' => $leave->employee_id,
+                    'recipients' => $recipients,
+                    'Organization id' => $leave->organization_id,
+                ]);
             }
         // avoid using role but report to job title if approver type is role
         // elseif ($config['approver_type'] === 'role' && $config['approver_role']) {
