@@ -25,7 +25,7 @@ new class extends Component {
     // dynamic dropdown data
     public $availableEmails = [];
     public $availableFrequencies = ['daily', 'weekly', 'monthly'];
-    public $reportTypes = ['attendance', 'timesheets', 'department']; // ✅ This is correct
+    public $reportTypes = ['attendance', 'timesheets', 'department', 'full_ta'];
     public $availableDays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
     public $availableTimezones = [];
     public $startDate;
@@ -42,7 +42,7 @@ new class extends Component {
     {
         return [
             'emails' => 'required|string',
-            'export_report_type' => 'required|in:attendance,timesheets,department', // FIX: Added validation
+            'export_report_type' => 'required|in:attendance,timesheets,department,full_ta',
             'format' => 'required|in:pdf,excel',
             'frequency' => 'required|in:daily,weekly,monthly',
             'time' => 'required',
@@ -72,6 +72,15 @@ new class extends Component {
         }
 
         $this->loadReportSettings();
+    }
+
+    #[On('report-type-changed')]
+    public function onReportTypeChanged(): void
+    {
+        // Full T&A is a multi-sheet workbook — PDF isn't a valid output for it.
+        if ($this->export_report_type === 'full_ta') {
+            $this->format = 'excel';
+        }
     }
 
     public function loadReportSettings()
@@ -592,7 +601,7 @@ new class extends Component {
                         <tr>
                             <!-- Report -->
                             <td>
-                                <strong>{{ ucfirst(str_replace('_', ' ', $setting['report_type'])) }}</strong>
+                                <strong>{{ $setting['report_type'] === 'full_ta' ? 'Full T&A Report' : ucfirst(str_replace('_', ' ', $setting['report_type'])) }}</strong>
                             </td>
 
                             <!-- Frequency -->
@@ -801,10 +810,12 @@ new class extends Component {
 
                             <div class="mb-3 col-md-6">
                                 <label class="form-label fw-semibold">Report Type</label>
-                                <select wire:model="export_report_type" class="form-select">
+                                <select wire:model="export_report_type" wire:change="$dispatch('report-type-changed')" class="form-select">
                                     <option value="">-- None --</option>
                                     @foreach($reportTypes as $type)
-                                        <option value="{{ $type }}">{{ ucfirst($type) }}</option>
+                                        <option value="{{ $type }}">
+                                            {{ $type === 'full_ta' ? 'Full T&A Report' : ucfirst($type) }}
+                                        </option>
                                     @endforeach
                                 </select>
                                 @error('export_report_type')<small class="text-danger">{{ $message }}</small>@enderror
@@ -812,10 +823,13 @@ new class extends Component {
 
                             <div class="mb-3 col-md-6">
                                 <label class="form-label fw-semibold">Report Format</label>
-                                <select wire:model="format" class="form-select">
+                                <select wire:model="format" class="form-select" @disabled($export_report_type === 'full_ta')>
                                     <option value="pdf">PDF</option>
                                     <option value="excel">Excel</option>
                                 </select>
+                                @if($export_report_type === 'full_ta')
+                                    <small class="text-muted">Full T&amp;A is a multi-sheet workbook — Excel only.</small>
+                                @endif
                                 @error('format')<small class="text-danger">{{ $message }}</small>@enderror
                             </div>
 

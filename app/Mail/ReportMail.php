@@ -21,7 +21,10 @@ class ReportMail extends Mailable
     }
     public function build()
     {
-        $formattedReportType = ucwords(str_replace('_', ' ', $this->setting->report_type));
+        $formattedReportType = match ($this->setting->report_type) {
+            'full_ta' => 'Full T&A',
+            default => ucwords(str_replace('_', ' ', $this->setting->report_type)),
+        };
         $organizationName = $this->setting->organization->name ?? config('app.name');
 
         \Log::info('ReportMail build data', [
@@ -37,6 +40,9 @@ class ReportMail extends Mailable
                 'reportType'   => $formattedReportType,
                 'frequency'    => $this->setting->frequency,
                 'organization' => $organizationName,
+                'generatedAt'  => now()->format('d M Y, g:i A'),
+                'fileName'     => basename($this->filePath),
+                'fileExt'      => strtoupper(pathinfo($this->filePath, PATHINFO_EXTENSION)),
             ])
             ->attach($this->filePath);
     }
