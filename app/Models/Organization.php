@@ -74,5 +74,10 @@ class Organization extends Model
         return $this->hasMany(Shift::class);
     }
 
+    public function apiKeys()
+    {
+        return $this->hasMany(ApiKey::class);
+    }
+
 }
 
