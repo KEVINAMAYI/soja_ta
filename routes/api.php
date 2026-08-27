@@ -3,9 +3,9 @@
 use App\Http\Controllers\APIs\AttendanceController;
 use App\Http\Controllers\APIs\AuthController;
 use App\Http\Controllers\APIs\DeviceController;
+use App\Http\Controllers\APIs\ElevateHRApiController;
 use App\Http\Controllers\APIs\LeaveController;
 use App\Http\Controllers\APIs\OrganizationController;
-use App\Http\Controllers\APIs\PublicApiController;
 use Illuminate\Support\Facades\Route;
 
 
@@ -56,7 +56,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
 
 // Routes authenticated via a database-stored API key (X-API-KEY header) instead of user sessions/tokens.
 Route::middleware(['api.key'])->prefix('v1')->group(function () {
-    Route::get('/ping', [PublicApiController::class, 'ping']);
+    Route::get('/ping', [ElevateHRApiController::class, 'ping']);
 });
 
 Route::fallback(function () {
