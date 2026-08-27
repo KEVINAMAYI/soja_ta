@@ -574,6 +574,17 @@
                         @endcan
 
 
+
+                        @can('view-all-reports')
+                            <li class="sidebar-section}">                                
+                                <a class="sidebar-section-header"
+                                    href="{{ route('api-keys.index') }}">
+                                    <span class="hide-menu">Manage Api Keys</span>
+                                </a>
+                            </li>
+                        @endcan
+
+
                     </ul>
 
                 @endif
@@ -592,6 +603,8 @@
                     </a>
                 </div>
             @endif
+
+            
 
         </div>
     </div>
