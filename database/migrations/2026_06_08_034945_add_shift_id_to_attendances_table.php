@@ -8,13 +8,13 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::table('attendances', function (Blueprint $table) {
-            $table->foreignId('shift_id')
-                ->nullable()
-                ->after('employee_id')
-                ->constrained('shifts')
-                ->nullOnDelete();
-        });
+        // Schema::table('attendances', function (Blueprint $table) {
+        //     $table->foreignId('shift_id')
+        //         ->nullable()
+        //         ->after('employee_id')
+        //         ->constrained('shifts')
+        //         ->nullOnDelete();
+        // });
     }
 
     public function down(): void
