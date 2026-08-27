@@ -61,6 +61,9 @@ Route::middleware(['auth'])->prefix('admin')->group(function () {
     Volt::route('boarding', 'admin.school.boarding.index')->name('boarding.index');
     Volt::route('special-activities', 'admin.special-activities.index')->name('special-activities.index');
 
+    // API Keys Management
+    Volt::route('api-keys', 'admin.api-keys.manager')->name('api-keys.index');
+
 
 });
 
