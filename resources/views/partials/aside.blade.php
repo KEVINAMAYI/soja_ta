@@ -575,7 +575,7 @@
 
 
 
-                        @can('view-all-reports')
+                        @can('manage-api-keys')
                             <li class="sidebar-section}">                                
                                 <a class="sidebar-section-header"
                                     href="{{ route('api-keys.index') }}">
