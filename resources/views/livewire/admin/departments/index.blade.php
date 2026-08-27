@@ -13,6 +13,7 @@ new class extends Component {
     public $editId;
     public $description;
     public $manager_id;
+    public $default_shift_id;
 
     // Superseded by the Unit>Department>Section>Subsection hierarchy filter — commented
     // out, not deleted, pending end-to-end testing of the new hierarchy.
@@ -44,6 +45,7 @@ new class extends Component {
             'name' => 'required|string|max:255|unique:departments,name,' . $this->editId,
             'description' => 'nullable|string|max:1000',
             'manager_id' => 'nullable|exists:users,id',
+            'default_shift_id' => 'nullable|exists:shifts,id',
             // 'department_derived' => 'nullable|string|max:255',
         ];
     }
@@ -62,6 +64,7 @@ new class extends Component {
                 'name' => $this->name,
                 'description' => $this->description,
                 'manager_id' => $this->manager_id,
+                'default_shift_id' => $this->default_shift_id ?: null,
                 'organization_id' => $org->id,
                 // 'department_derived' => $this->department_derived ?: $this->name,
             ]);
@@ -111,6 +114,7 @@ new class extends Component {
         $this->name = $dept->name;
         $this->description = $dept->description;
         $this->manager_id = $dept->manager_id;
+        $this->default_shift_id = $dept->default_shift_id;
         // $this->department_derived = $dept->department_derived;
 
         $this->dispatch('show-department-modal');
@@ -128,6 +132,7 @@ new class extends Component {
                     'name' => $this->name,
                     'description' => $this->description,
                     'manager_id' => $this->manager_id,
+                    'default_shift_id' => $this->default_shift_id ?: null,
                     // 'department_derived' => $this->department_derived ?: $this->name,
 
                 ]);
@@ -307,6 +312,27 @@ new class extends Component {
                             <textarea wire:model="description" id="description" class="form-control" rows="3"
                                       placeholder="Write a short description..."></textarea>
                             @error('description') <small class="text-danger">{{ $message }}</small> @enderror
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="default_shift_id" class="form-label">
+                                Default shift <span class="badge bg-light text-muted border">optional</span>
+                            </label>
+                            <select wire:model="default_shift_id" id="default_shift_id" class="form-control">
+                                <option value="">No default shift</option>
+                                @foreach(auth()->user()->employee->organization->shifts as $shift)
+                                    <option value="{{ $shift->id }}">
+                                        {{ $shift->name }}
+                                        ({{ \Carbon\Carbon::parse($shift->start_time)->format('g:i A') }}
+                                        &ndash; {{ \Carbon\Carbon::parse($shift->end_time)->format('g:i A') }})
+                                    </option>
+                                @endforeach
+                            </select>
+                            <small class="text-muted">
+                                New employees added to this department will be assigned this shift automatically.
+                                Each employee's shift can still be changed individually at any time.
+                            </small>
+                            @error('default_shift_id') <small class="text-danger d-block">{{ $message }}</small> @enderror
                         </div>
 
                         <div class="mb-3">

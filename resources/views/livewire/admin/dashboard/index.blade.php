@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\WorkLocation;
+use Livewire\Attributes\On;
 use Livewire\Volt\Component;
 use App\Models\Attendance;
 use App\Models\Employee;
@@ -41,6 +42,8 @@ new class extends Component {
     public int $deptPage = 1;
     public int $deptPerPage = 5;
 
+    public string $selectedDate = '';
+
     public function mount(): void
     {
         $this->entityLabel = auth()->user()->employee?->organization?->is_student_record ? 'Student' : 'Employee';
@@ -52,7 +55,8 @@ new class extends Component {
 
         $this->googleMapsApiKey = env('GOOGLE_MAPS_API_KEY');
 
-        $today = Carbon::today();
+        $this->selectedDate = Carbon::today()->toDateString();
+        $today = Carbon::parse($this->selectedDate);
         $orgId = Employee::withSystemUsers()->where('user_id', auth()->id())->value('organization_id');
 
         // Only load the active view's data — no need to load both
@@ -61,6 +65,32 @@ new class extends Component {
         } else {
             $this->loadStaffStats($orgId, $today);
         }
+    }
+
+    /* ─────────────────────────────────────────────
+       DATE SELECTOR — reload the active view's stats
+       for whichever date is picked
+    ───────────────────────────────────────────── */
+    #[On('dashboard-date-changed')]
+    public function viewForSelectedDate(): void
+    {
+        $orgId = Employee::withSystemUsers()->where('user_id', auth()->id())->value('organization_id');
+        $date = Carbon::parse($this->selectedDate)->startOfDay();
+
+        if ($this->showStudentView) {
+            $this->loadSchoolStats($orgId, $date);
+        } else {
+            $this->loadStaffStats($orgId, $date);
+        }
+    }
+
+    /* ─────────────────────────────────────────────
+       RESET — clear the date filter back to today
+    ───────────────────────────────────────────── */
+    public function resetToToday(): void
+    {
+        $this->selectedDate = Carbon::today()->toDateString();
+        $this->viewForSelectedDate();
     }
 
     /* ─────────────────────────────────────────────
@@ -556,6 +586,14 @@ new class extends Component {
             }
         }
 
+        .date-filter-bar {
+            background: #fff;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            padding: .5rem .75rem;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, .04);
+        }
+
         /* ── Stat cards ── */
         .stat-card {
             cursor: pointer;
@@ -654,6 +692,9 @@ new class extends Component {
             margin: 0;
             font-size: .875rem;
             color: #6b7280;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
 
         /* ── Grade overview panel ── */
@@ -1051,8 +1092,26 @@ new class extends Component {
         {{-- ══════════════════════════════════════════
              STAFF VIEW
         ══════════════════════════════════════════ --}}
+        @php($isSelectedToday = $selectedDate === now()->toDateString())
 
-        <div style="padding-right:0px;" class="row g-3">
+        <div class="col-12">
+            <div class="d-flex align-items-center gap-2 flex-wrap date-filter-bar mb-2">
+                <iconify-icon icon="mdi:calendar-month-outline" style="font-size:20px; color:#64748b;"></iconify-icon>
+                <input type="date" class="form-control form-control-sm" style="max-width:170px; background:#fff; color:#1f2937;"
+                       wire:model="selectedDate" wire:change="$dispatch('dashboard-date-changed')" max="{{ now()->toDateString() }}">
+                @unless($isSelectedToday)
+                    <button type="button" class="btn btn-sm btn-primary" wire:click="resetToToday">
+                        <iconify-icon icon="mdi:backup-restore"></iconify-icon>
+                        Today
+                    </button>
+                @endunless
+                <span class="text-muted small">
+                    Showing data for {{ \Carbon\Carbon::parse($selectedDate)->format('d M Y') }}
+                </span>
+            </div>
+        </div>
+
+        <div style="padding-right:0px; margin-top:0;" class="row g-3">
 
             <div class="col-lg-6 col-md-6 col-12">
                 <a href="{{ route('attendance.index', ['filterStatus' => 'present']) }}" class="stat-card-link">
@@ -1087,7 +1146,7 @@ new class extends Component {
                 </a>
             </div>
 
-            <div class="col-lg-3 col-md-6 col-12">
+            <div class="col-lg-{{ $isSelectedToday ? 3 : 4 }} col-md-6 col-12">
                 <a href="{{ route('attendance.index', ['filterStatus' => 'sick_off']) }}" class="stat-card-link">
                     <div class="stat-card">
                         <div class="stat-card-icon icon-info">
@@ -1103,7 +1162,7 @@ new class extends Component {
                 </a>
             </div>
 
-            <div class="col-lg-3 col-md-6 col-12">
+            <div class="col-lg-{{ $isSelectedToday ? 3 : 4 }} col-md-6 col-12">
                 <a href="{{ route('attendance.index', ['filterStatus' => 'on_leave']) }}" class="stat-card-link">
                     <div class="stat-card">
                         <div class="stat-card-icon icon-warning">
@@ -1119,7 +1178,7 @@ new class extends Component {
                 </a>
             </div>
 
-            <div class="col-lg-3 col-md-6 col-12">
+            <div class="col-lg-{{ $isSelectedToday ? 3 : 4 }} col-md-6 col-12">
                 <a href="{{ route('attendance.index', ['filterStatus' => 'off_shift']) }}" class="stat-card-link">
                     <div class="stat-card">
                         <div class="stat-card-icon icon-cyan">
@@ -1135,21 +1194,22 @@ new class extends Component {
                 </a>
             </div>
 
-            <div class="col-lg-3 col-md-6 col-12">
-                <a href="{{ route('employees.index', ['active' => '0']) }}" class="stat-card-link">
-                    <div class="stat-card">
-                        <div class="stat-card-icon icon-secondary">
-                            <iconify-icon icon="mdi:account-off"></iconify-icon>
+            @if($isSelectedToday)
+                <div class="col-lg-3 col-md-6 col-12">
+                    <a href="{{ route('employees.index', ['active' => '0']) }}" class="stat-card-link">
+                        <div class="stat-card">
+                            <div class="stat-card-icon icon-secondary">
+                                <iconify-icon icon="mdi:account-off"></iconify-icon>
+                            </div>
+                            <h6 class="stat-card-title">Inactive {{ $entityLabel }}s</h6>
+                            <div class="stat-card-value">
+                                {{ $inactiveEmployees }}
+                            </div>
+                            <p class="stat-card-subtitle">Excluded from headcount</p>
                         </div>
-                        <h6 class="stat-card-title">Inactive {{ $entityLabel }}s</h6>
-                        <div class="stat-card-value">
-                            {{ $inactiveEmployees }}
-                            <span class="stat-card-total">/ {{ $totalEmployees }}</span>
-                        </div>
-                        <p class="stat-card-subtitle">Out of {{ $totalEmployees }} Total</p>
-                    </div>
-                </a>
-            </div>
+                    </a>
+                </div>
+            @endif
 
         </div>
 

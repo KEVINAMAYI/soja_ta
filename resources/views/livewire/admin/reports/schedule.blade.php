@@ -20,6 +20,7 @@ new class extends Component {
     public $timezone = 'Africa/Nairobi';
     public $report_type = 'attendance'; // FIX: Changed from 'daily_attendance'
     public $export_report_type = 'attendance'; // FIX: Changed from 'daily_attendance'
+    public $format = 'pdf';
 
     // dynamic dropdown data
     public $availableEmails = [];
@@ -42,6 +43,7 @@ new class extends Component {
         return [
             'emails' => 'required|string',
             'export_report_type' => 'required|in:attendance,timesheets,department', // FIX: Added validation
+            'format' => 'required|in:pdf,excel',
             'frequency' => 'required|in:daily,weekly,monthly',
             'time' => 'required',
             'day_of_week' => 'nullable|in:Monday,Tuesday,Wednesday,Thursday,Friday,Saturday,Sunday',
@@ -92,6 +94,7 @@ new class extends Component {
                 $first = $group->first();
                 return [
                     'report_type' => $first->report_type,
+                    'format' => $first->format,
                     'frequency' => $first->frequency,
                     'time' => $first->time,
                     'day_of_week' => $first->day_of_week,
@@ -167,6 +170,7 @@ new class extends Component {
                         'report_type' => $this->export_report_type, // ✅ This should now be 'attendance', 'timesheets', or 'department'
                     ],
                     [
+                        'format' => $this->format,
                         'frequency' => $this->frequency,
                         'time' => $this->time,
                         'day_of_week' => $this->day_of_week,
@@ -411,6 +415,7 @@ new class extends Component {
         $this->reset(['emails', 'frequency', 'time', 'day_of_week']);
         $this->timezone = 'Africa/Nairobi';
         $this->export_report_type = 'attendance'; // FIX: Reset to valid value
+        $this->format = 'pdf';
     }
 
     public function closeModal()
@@ -654,7 +659,12 @@ new class extends Component {
 
 
                             <!-- Format -->
-                            <td><span class="badge bg-light text-dark"><i class="ti ti-file-type-pdf"></i>PDF</span>
+                            <td>
+                                @if(($setting['format'] ?? 'pdf') === 'excel')
+                                    <span class="badge bg-light text-dark"><i class="ti ti-file-type-xls"></i>Excel</span>
+                                @else
+                                    <span class="badge bg-light text-dark"><i class="ti ti-file-type-pdf"></i>PDF</span>
+                                @endif
                             </td>
 
                             <!-- Last Run -->
@@ -789,7 +799,7 @@ new class extends Component {
                                 @error('emails')<small class="text-danger d-block">{{ $message }}</small>@enderror
                             </div>
 
-                            <div class="mb-3 col-md-12">
+                            <div class="mb-3 col-md-6">
                                 <label class="form-label fw-semibold">Report Type</label>
                                 <select wire:model="export_report_type" class="form-select">
                                     <option value="">-- None --</option>
@@ -798,6 +808,15 @@ new class extends Component {
                                     @endforeach
                                 </select>
                                 @error('export_report_type')<small class="text-danger">{{ $message }}</small>@enderror
+                            </div>
+
+                            <div class="mb-3 col-md-6">
+                                <label class="form-label fw-semibold">Report Format</label>
+                                <select wire:model="format" class="form-select">
+                                    <option value="pdf">PDF</option>
+                                    <option value="excel">Excel</option>
+                                </select>
+                                @error('format')<small class="text-danger">{{ $message }}</small>@enderror
                             </div>
 
                             <!-- Frequency -->

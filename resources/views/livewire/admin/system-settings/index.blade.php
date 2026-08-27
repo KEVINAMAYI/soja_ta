@@ -10,7 +10,7 @@ use Livewire\Volt\Component;
 new class extends Component {
 
     public $settings;
-    public string $activeTab = 'qr_code'; // default
+    public string $activeTab = 'employee_lifecycle'; // default
     public string $tabTitle = ''; // ✅ initialize
     public string $tabIcon = '';  // ✅ initialize
     public array $breadcrumbItems = [];
@@ -30,12 +30,26 @@ new class extends Component {
             ? (bool)$this->settings['generate_employee_qr_on_create']
             : false;
 
+        // Auto-deactivation policy — off by default; admin must opt in and set a duration.
+        $this->settings['auto_deactivate_enabled'] = isset($this->settings['auto_deactivate_enabled'])
+            ? (bool)$this->settings['auto_deactivate_enabled']
+            : false;
+        $this->settings['auto_deactivate_after_value'] = isset($this->settings['auto_deactivate_after_value'])
+            ? (int)$this->settings['auto_deactivate_after_value']
+            : null;
+        $this->settings['auto_deactivate_after_unit'] = $this->settings['auto_deactivate_after_unit'] ?? 'months';
+
         // Help & Support settings
         $this->settings['show_help_icon'] = isset($this->settings['show_help_icon'])
             ? (bool)$this->settings['show_help_icon']
             : false;
         $this->settings['help_page_url'] = $this->settings['help_page_url'] ?? '';
         $this->settings['help_icon_tooltip_label'] = $this->settings['help_icon_tooltip_label'] ?? 'Help';
+
+        // Employee Defaults settings
+        $this->settings['deleted_record_retention_days'] = isset($this->settings['deleted_record_retention_days'])
+            ? (int)$this->settings['deleted_record_retention_days']
+            : 90;
 
         // ✅ Initialize breadcrumb/title/icon
         $this->changeSystemSettingsBreadcrumb();
@@ -52,6 +66,16 @@ new class extends Component {
 
     public function storeSettings()
     {
+        if (!empty($this->settings['auto_deactivate_enabled']) && empty($this->settings['auto_deactivate_after_value'])) {
+            LivewireAlert::title('Missing duration')
+                ->text('Set how many days/months before employees are auto-deactivated, or turn the policy off.')
+                ->error()
+                ->toast()
+                ->position('top-end')
+                ->show();
+            return;
+        }
+
         DB::beginTransaction();
 
         try {
@@ -64,9 +88,11 @@ new class extends Component {
                 ]);
 
                 // We want to treat the new setting as boolean type
-                $setting->type = in_array($key, ['generate_employee_qr_on_create', 'show_help_icon'])
-                    ? 'boolean'
-                    : $setting->type ?? 'string';
+                $setting->type = match (true) {
+                    in_array($key, ['generate_employee_qr_on_create', 'show_help_icon', 'auto_deactivate_enabled']) => 'boolean',
+                    in_array($key, ['deleted_record_retention_days', 'auto_deactivate_after_value']) => 'integer',
+                    default => $setting->type ?? 'string',
+                };
 
                 $setting->value = $value;
                 $setting->save();
@@ -99,9 +125,9 @@ new class extends Component {
     {
 
         switch ($this->activeTab) {
-            case 'qr_code':
-                $this->tabTitle = 'QR Code Settings';
-                $this->tabIcon = '<iconify-icon icon="mdi:qrcode-scan" class="fs-5"></iconify-icon>';
+            case 'employee_lifecycle':
+                $this->tabTitle = 'Employee Lifecycle';
+                $this->tabIcon = '<iconify-icon icon="mdi:account-clock-outline" class="fs-5"></iconify-icon>';
                 break;
 
             case 'shift_management': // Add this
@@ -111,6 +137,11 @@ new class extends Component {
             case 'help_support':
                 $this->tabTitle = 'Help & Support';
                 $this->tabIcon = '<iconify-icon icon="mdi:help-circle-outline" class="fs-5"></iconify-icon>';
+                break;
+
+            case 'employee_defaults':
+                $this->tabTitle = 'Employee Defaults';
+                $this->tabIcon = '<iconify-icon icon="mdi:account-cog-outline" class="fs-5"></iconify-icon>';
                 break;
             default:
                 $this->tabTitle = 'Settings';
@@ -151,16 +182,16 @@ new class extends Component {
 
             <li class="nav-item" role="presentation">
                 <button
-                    class="nav-link position-relative rounded-0 {{ $activeTab === 'qr_code' ? 'active' : '' }} d-flex align-items-center justify-content-center bg-transparent fs-3 py-3"
-                    id="tab-qr-code-tab"
+                    class="nav-link position-relative rounded-0 {{ $activeTab === 'employee_lifecycle' ? 'active' : '' }} d-flex align-items-center justify-content-center bg-transparent fs-3 py-3"
+                    id="tab-employee-lifecycle-tab"
                     data-bs-toggle="pill"
-                    data-bs-target="#tab-qr-code"
+                    data-bs-target="#tab-employee-lifecycle"
                     type="button"
                     role="tab"
-                    aria-controls="tab-qr-code"
+                    aria-controls="tab-employee-lifecycle"
                     aria-selected="false">
-                    <i class="ti ti-qrcode me-2 fs-6"></i>
-                    <span class="d-none d-md-block">QR Code</span>
+                    <i class="ti ti-user-check me-2 fs-6"></i>
+                    <span class="d-none d-md-block">Employee Lifecycle</span>
                 </button>
             </li>
 
@@ -194,20 +225,34 @@ new class extends Component {
                 </button>
             </li>
 
+            <li class="nav-item" role="presentation">
+                <button
+                    class="nav-link position-relative rounded-0 {{ $activeTab === 'employee_defaults' ? 'active' : '' }} d-flex align-items-center justify-content-center bg-transparent fs-3 py-3"
+                    id="tab-employee-defaults-tab"
+                    data-bs-toggle="pill"
+                    data-bs-target="#tab-employee-defaults"
+                    type="button"
+                    role="tab"
+                    aria-controls="tab-employee-defaults"
+                    aria-selected="false">
+                    <i class="ti ti-user-cog me-2 fs-6"></i>
+                    <span class="d-none d-md-block">Employee Defaults</span>
+                </button>
+            </li>
 
         </ul>
 
         <div class="card-body">
             <div class="tab-content" id="pills-tabContent">
 
-                <!-- QR Code Settings Tab -->
-                <div class="tab-pane fade {{ $activeTab === 'qr_code' ? 'show active' : '' }}" id="tab-qr-code">
+                <!-- Employee Lifecycle Settings Tab -->
+                <div class="tab-pane fade {{ $activeTab === 'employee_lifecycle' ? 'show active' : '' }}" id="tab-employee-lifecycle">
 
                     <div class="row justify-content-center">
                         <div class="col-lg-12">
                             <div class="card border shadow-none">
                                 <div class="card-body p-4">
-                                    <h4 class="card-title mb-4">QR Code Settings</h4>
+                                    <h4 class="card-title mb-4">QR Code</h4>
 
                                     <div class="form-check form-switch">
                                         <input class="form-check-input" type="checkbox" role="switch"
@@ -216,6 +261,45 @@ new class extends Component {
                                         <label class="form-check-label" for="generateQrOnCreate">
                                             Generate QR code when adding a new employee
                                         </label>
+                                    </div>
+
+                                </div>
+                            </div>
+
+                            <div class="card border shadow-none mt-3">
+                                <div class="card-body p-4">
+                                    <h4 class="card-title mb-1">Auto-Deactivation Policy</h4>
+                                    <p class="text-muted small mb-4">
+                                        Automatically deactivate employees a set amount of time after they were
+                                        created. Runs once a day. Off by default — nothing changes until you turn
+                                        this on and set a duration.
+                                    </p>
+
+                                    <div class="form-check form-switch mb-4">
+                                        <input class="form-check-input" type="checkbox" role="switch"
+                                               id="autoDeactivateEnabled"
+                                               wire:model.defer="settings.auto_deactivate_enabled">
+                                        <label class="form-check-label" for="autoDeactivateEnabled">
+                                            Auto-deactivate employees after a set time
+                                        </label>
+                                    </div>
+
+                                    <div class="mb-4">
+                                        <label class="form-label fw-semibold">Deactivate after</label>
+                                        <div class="input-group" style="max-width:320px;">
+                                            <input type="number" min="1" class="form-control"
+                                                   placeholder="e.g. 6"
+                                                   wire:model.defer="settings.auto_deactivate_after_value">
+                                            <select class="form-control" style="max-width:140px;"
+                                                    wire:model.defer="settings.auto_deactivate_after_unit">
+                                                <option value="days">Days</option>
+                                                <option value="months">Months</option>
+                                            </select>
+                                        </div>
+                                        <small class="text-muted">
+                                            Measured from the employee's creation date. Applies to every active
+                                            employee in the organization.
+                                        </small>
                                     </div>
 
                                     <!-- Save/Cancel Buttons -->
@@ -289,6 +373,42 @@ new class extends Component {
                     </div>
                 </div>
 
+                <!-- Employee Defaults Settings Tab -->
+                <div class="tab-pane fade {{ $activeTab === 'employee_defaults' ? 'show active' : '' }}"
+                     id="tab-employee-defaults">
+                    <div class="row justify-content-center">
+                        <div class="col-lg-12">
+                            <div class="card border shadow-none">
+                                <div class="card-body p-4">
+                                    <h4 class="card-title mb-4">Employee Defaults</h4>
+
+                                    <div class="mb-4">
+                                        <label for="retentionDays" class="form-label fw-semibold">
+                                            Deleted record retention policy
+                                        </label>
+                                        <div class="input-group" style="max-width:220px;">
+                                            <input type="number" min="0" class="form-control" id="retentionDays"
+                                                   wire:model.defer="settings.deleted_record_retention_days">
+                                            <span class="input-group-text">Days</span>
+                                        </div>
+                                        <small class="text-muted">
+                                            Defines how long a deactivated employee record remains visible in the
+                                            app (e.g. under Inactive filters) before it's automatically filtered out
+                                            of default views. Setting 0 keeps deactivated staff visible
+                                            indefinitely.
+                                        </small>
+                                    </div>
+
+                                    <div class="d-flex align-items-center justify-content-end gap-6 mt-4">
+                                        <button wire:click="storeSettings" class="btn btn-primary">Save</button>
+                                    </div>
+
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
             </div>
         </div>
     </div>
@@ -307,8 +427,8 @@ new class extends Component {
 
                     let mappedTab;
                     switch (tabId) {
-                        case 'tab-qr-code-tab':
-                            mappedTab = 'qr_code';
+                        case 'tab-employee-lifecycle-tab':
+                            mappedTab = 'employee_lifecycle';
                             break;
                         case 'tab-shift-management-tab':
                             mappedTab = 'shift_management';
@@ -316,8 +436,11 @@ new class extends Component {
                         case 'tab-help-support-tab':
                             mappedTab = 'help_support';
                             break;
+                        case 'tab-employee-defaults-tab':
+                            mappedTab = 'employee_defaults';
+                            break;
                         default:
-                            mappedTab = 'qr_code';
+                            mappedTab = 'employee_lifecycle';
                     }
 
                     Livewire.dispatch('systemSettingsTabChanged', {tabId: mappedTab});

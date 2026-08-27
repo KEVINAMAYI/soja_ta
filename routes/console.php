@@ -11,3 +11,7 @@ Schedule::command('zkbio:sync')
     ->withoutOverlapping(5)    // lock expires after 5 min if command hangs
     ->runInBackground()
     ->appendOutputTo(storage_path('logs/zkbio-sync.log'));
+
+Schedule::command('employees:auto-deactivate')
+    ->daily()
+    ->appendOutputTo(storage_path('logs/employees-auto-deactivate.log'));

@@ -278,6 +278,7 @@ class SendReportJob implements ShouldQueue
             ]);
 
             $reportTitle = ucfirst($reportName) . ' Report - ' . ucfirst($frequency);
+            $format = $setting->format ?? 'pdf';
 
             $result = $reportGenerator->generate(
                 $view,
@@ -286,11 +287,12 @@ class SendReportJob implements ShouldQueue
                     'date' => now()->format('d M Y, H:i'),
                     'startDate' => $startDate,
                     'endDate' => $endDate,
-                    'isExcel' => false,
+                    'isExcel' => $format === 'excel',
                     'attendances' => $attendances,
                 ],
                 "{$reportName}-{$frequency}-report-" . now()->format('Y-m-d'),
-                saveToDisk: true
+                saveToDisk: true,
+                format: $format
             );
 
             Log::info('Report generator returned', [

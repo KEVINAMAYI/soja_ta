@@ -130,6 +130,7 @@ class AttendanceDailyTable extends DataTableComponent
                 ->whereHas('employee', function ($q) use ($orgId, $grade, $isSchool) {
                     $q->where('organization_id', $orgId)->where('active', 0)->where('is_student', $isSchool ? 1 : 0);
                     if ($grade) $q->where('grade', $grade);
+                    if ($this->employeeType && $this->employeeType !== 'all') $q->where('employee_type', $this->employeeType);
                     $this->applyHierarchyFilter($q);
                 });
             if ($search) $query->where(fn($q) => $q->where('status', 'like', "%$search%")->orWhereHas('employee', fn($q) => $q->where('name', 'like', "%$search%")));
@@ -142,6 +143,7 @@ class AttendanceDailyTable extends DataTableComponent
             ->whereHas('employee', function ($q) use ($orgId, $grade, $isSchool) {
                 $q->where('organization_id', $orgId)->where('active', 1)->where('is_student', $isSchool ? 1 : 0);
                 if ($grade) $q->where('grade', $grade);
+                if ($this->employeeType && $this->employeeType !== 'all') $q->where('employee_type', $this->employeeType);
                 $this->applyHierarchyFilter($q);
             });
 
