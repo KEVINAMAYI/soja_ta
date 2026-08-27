@@ -54,6 +54,25 @@ class Employee extends Model
     {
         static::addGlobalScope(new ExcludeSystemUsersScope);
 
+        static::saving(function ($employee) {
+            // Auto-adopt the department's default shift when an employee is newly
+            // created or moved into a department, but never override a shift the
+            // caller explicitly set — this is a convenience default, not enforced.
+            if (empty($employee->shift_id) && $employee->department_id && $employee->isDirty('department_id')) {
+                $defaultShiftId = Department::find($employee->department_id)?->default_shift_id;
+                if ($defaultShiftId) {
+                    $employee->shift_id = $defaultShiftId;
+                }
+            }
+
+            // Track when an employee was deactivated so the retention policy
+            // (System Settings > Employee Defaults) can age them out of the
+            // default Inactive view after the configured number of days.
+            if ($employee->isDirty('active')) {
+                $employee->deactivated_at = $employee->active ? null : now();
+            }
+        });
+
         static::creating(function ($employee) {
             $orgId = $employee->organization_id;
 

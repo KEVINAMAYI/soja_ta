@@ -24,6 +24,15 @@ new class extends Component {
     public $startDate;
     public $endDate;
 
+    // Employee Type + Org hierarchy filters (Filter by Organization panel)
+    public $filterEmployeeType = 'all';
+    public $employeeTypes = [];
+    public $unit_id = null;
+    public $department_id = null;
+    public $section_id = null;
+    public $subsection_id = null;
+    public $includeOutsourced = false;
+
     // Summary stats
     public $totalEmployees = 0;
     public $presentCount = 0;
@@ -54,6 +63,13 @@ new class extends Component {
         $this->isSchoolOrg = (bool)($org->is_student_record ?? false);
         $this->zkbioEnabled = $org->zkbio_enabled ?? false;
 
+        $this->employeeTypes = Employee::where('organization_id', $org->id)
+            ->whereNotNull('employee_type')
+            ->distinct()
+            ->orderBy('employee_type')
+            ->pluck('employee_type')
+            ->toArray();
+
         $this->loadSummaryStats();
 
         if ($this->isSchoolOrg) {
@@ -63,6 +79,30 @@ new class extends Component {
         }
     }
 
+    public function units()
+    {
+        return \App\Models\Unit::where('organization_id', auth()->user()->employee->organization_id)
+            ->orderBy('name')->get();
+    }
+
+    public function departmentsForUnit()
+    {
+        if (!$this->unit_id) return collect();
+        return \App\Models\Department::where('unit_id', $this->unit_id)->orderBy('name')->get();
+    }
+
+    public function sectionsForDepartment()
+    {
+        if (!$this->department_id) return collect();
+        return \App\Models\Section::where('department_id', $this->department_id)->orderBy('name')->get();
+    }
+
+    public function subsectionsForSection()
+    {
+        if (!$this->section_id) return collect();
+        return \App\Models\Subsection::where('section_id', $this->section_id)->orderBy('name')->get();
+    }
+
     public function prevDay(): void
     {
         $this->startDate = \Carbon\Carbon::parse($this->startDate)->subDay()->toDateString();
@@ -70,7 +110,9 @@ new class extends Component {
         $this->loadSummaryStats();
         $this->loadGradeStats();
         $this->loadRecentActivity();
-        $this->dispatch('date-range-updated', startDate: $this->startDate, endDate: $this->endDate, status: $this->filterStatus, grade: $this->filterGrade);
+        $this->dispatch('date-range-updated', startDate: $this->startDate, endDate: $this->endDate, status: $this->filterStatus, grade: $this->filterGrade,
+            employee_type: $this->filterEmployeeType, unit_id: $this->unit_id, department_id: $this->department_id,
+            section_id: $this->section_id, subsection_id: $this->subsection_id, include_outsourced: $this->includeOutsourced);
     }
 
     public function nextDay(): void
@@ -80,7 +122,9 @@ new class extends Component {
         $this->loadSummaryStats();
         $this->loadGradeStats();
         $this->loadRecentActivity();
-        $this->dispatch('date-range-updated', startDate: $this->startDate, endDate: $this->endDate, status: $this->filterStatus, grade: $this->filterGrade);
+        $this->dispatch('date-range-updated', startDate: $this->startDate, endDate: $this->endDate, status: $this->filterStatus, grade: $this->filterGrade,
+            employee_type: $this->filterEmployeeType, unit_id: $this->unit_id, department_id: $this->department_id,
+            section_id: $this->section_id, subsection_id: $this->subsection_id, include_outsourced: $this->includeOutsourced);
     }
 
     public function refresh(): void
@@ -95,6 +139,12 @@ new class extends Component {
             endDate: $this->endDate,
             status: $this->filterStatus,
             grade: $this->filterGrade,
+            employee_type: $this->filterEmployeeType,
+            unit_id: $this->unit_id,
+            department_id: $this->department_id,
+            section_id: $this->section_id,
+            subsection_id: $this->subsection_id,
+            include_outsourced: $this->includeOutsourced,
         );
     }
 
@@ -345,6 +395,12 @@ new class extends Component {
                 endDate: $this->endDate,
                 status: $this->filterStatus,
                 grade: $this->filterGrade,
+                employee_type: $this->filterEmployeeType,
+                unit_id: $this->unit_id,
+                department_id: $this->department_id,
+                section_id: $this->section_id,
+                subsection_id: $this->subsection_id,
+                include_outsourced: $this->includeOutsourced,
             );
 
             LivewireAlert::title('Synced!')
@@ -392,6 +448,12 @@ new class extends Component {
                 endDate: $this->endDate,
                 status: $this->filterStatus,
                 grade: $this->filterGrade,
+                employee_type: $this->filterEmployeeType,
+                unit_id: $this->unit_id,
+                department_id: $this->department_id,
+                section_id: $this->section_id,
+                subsection_id: $this->subsection_id,
+                include_outsourced: $this->includeOutsourced,
             );
 
             LivewireAlert::title('Synced!')
@@ -594,8 +656,14 @@ new class extends Component {
     }
 
     #[On('filter-updated')]
-    public function dateChanged(): void
+    public function dateChanged($unit_id = null, $department_id = null, $section_id = null, $subsection_id = null, $includeOutsourced = null): void
     {
+        if ($unit_id !== null) $this->unit_id = $unit_id;
+        if ($department_id !== null) $this->department_id = $department_id;
+        if ($section_id !== null) $this->section_id = $section_id;
+        if ($subsection_id !== null) $this->subsection_id = $subsection_id;
+        if ($includeOutsourced !== null) $this->includeOutsourced = $includeOutsourced;
+
         $this->loadSummaryStats();
         if ($this->isSchoolOrg) {
             $this->loadGradeStats();
@@ -606,6 +674,12 @@ new class extends Component {
             endDate: $this->endDate,
             status: $this->filterStatus,
             grade: $this->filterGrade,
+            employee_type: $this->filterEmployeeType,
+            unit_id: $this->unit_id,
+            department_id: $this->department_id,
+            section_id: $this->section_id,
+            subsection_id: $this->subsection_id,
+            include_outsourced: $this->includeOutsourced,
         );
     }
 
@@ -1239,10 +1313,8 @@ new class extends Component {
                                 <iconify-icon icon="mdi:account-off"></iconify-icon>
                             </div>
                             <p class="summary-card-title">Inactive</p>
-                            <div class="summary-card-value">{{ $inactiveCount }} <span
-                                    class="of-total">/ {{ $totalEmployees }}</span></div>
-                            <p class="summary-card-subtitle">{{ $totalEmployees > 0 ? number_format(($inactiveCount/$totalEmployees)*100,1) : 0 }}
-                                %</p>
+                            <div class="summary-card-value">{{ $inactiveCount }}</div>
+                            <p class="summary-card-subtitle">Deactivated accounts excluded from headcount</p>
                         </a>
                     </div>
                 </div>
@@ -1283,17 +1355,17 @@ new class extends Component {
                 </div>
 
                 <div class="row align-items-end mb-4">
-                    <div class="col-md-4">
+                    <div class="col-md-3">
                         <label class="form-label">Start Date</label>
                         <input type="date" class="form-control" wire:model="startDate"
                                wire:change="$dispatch('filter-updated')"/>
                     </div>
-                    <div class="col-md-4">
+                    <div class="col-md-3">
                         <label class="form-label">End Date</label>
                         <input type="date" class="form-control" wire:model="endDate"
                                wire:change="$dispatch('filter-updated')"/>
                     </div>
-                    <div class="col-md-4">
+                    <div class="col-md-3">
                         <label class="form-label">Attendance Status</label>
                         <select class="form-control" wire:model="filterStatus"
                                 wire:change="$dispatch('filter-updated')">
@@ -1307,6 +1379,69 @@ new class extends Component {
                             <option value="sick_off">Sick Off</option>
                             <option value="on_break">On Break</option>
                         </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Employee Type</label>
+                        <select class="form-control" wire:model="filterEmployeeType"
+                                wire:change="$dispatch('filter-updated')">
+                            <option value="all">All Types</option>
+                            @foreach($employeeTypes as $type)
+                                <option value="{{ $type }}">{{ ucfirst($type) }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+                </div>
+
+                <div class="border rounded-3 bg-light-subtle p-3 mb-4">
+                    <div class="fw-bold text-uppercase small text-muted mb-3" style="letter-spacing:.04em;">
+                        <i class="ti ti-sitemap me-1"></i>Filter by Organization
+                    </div>
+
+                    <div class="row g-3">
+                        <div class="col-6 col-md-3">
+                            <label class="form-label small fw-semibold text-uppercase text-muted mb-1">Unit</label>
+                            <select class="form-control" wire:model="unit_id" wire:change="$dispatch('filter-updated')">
+                                <option value="">All Units</option>
+                                @foreach ($this->units() as $u)
+                                    <option value="{{ $u->id }}">{{ $u->name }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+                        <div class="col-6 col-md-3">
+                            <label class="form-label small fw-semibold text-uppercase text-muted mb-1">Department</label>
+                            <select class="form-control" wire:model="department_id" wire:change="$dispatch('filter-updated')" @disabled(!$unit_id)>
+                                <option value="">{{ $unit_id ? 'All Departments' : 'Select a Unit first' }}</option>
+                                @foreach ($this->departmentsForUnit() as $d)
+                                    <option value="{{ $d->id }}">{{ $d->name }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+                        <div class="col-6 col-md-3">
+                            <label class="form-label small fw-semibold text-uppercase text-muted mb-1">Section</label>
+                            <select class="form-control" wire:model="section_id" wire:change="$dispatch('filter-updated')" @disabled(!$department_id)>
+                                <option value="">{{ $department_id ? 'All Sections' : '—' }}</option>
+                                @foreach ($this->sectionsForDepartment() as $s)
+                                    <option value="{{ $s->id }}">{{ $s->name }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+                        <div class="col-6 col-md-3">
+                            <label class="form-label small fw-semibold text-uppercase text-muted mb-1">Subsection</label>
+                            <select class="form-control" wire:model="subsection_id" wire:change="$dispatch('filter-updated')" @disabled(!$section_id)>
+                                <option value="">{{ $section_id ? 'All Subsections' : '—' }}</option>
+                                @foreach ($this->subsectionsForSection() as $sub)
+                                    <option value="{{ $sub->id }}">{{ $sub->name }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="d-flex align-items-center gap-2 border border-dashed rounded-2 px-3 py-2 mt-3" style="background:rgba(0,0,0,.015);">
+                        <input type="checkbox" class="form-check-input mt-0 flex-shrink-0" id="attendanceInclOut" wire:model="includeOutsourced" wire:change="$dispatch('filter-updated')">
+                        <label class="form-check-label small mb-0" for="attendanceInclOut">
+                            <span class="fw-semibold">Include Outsourced staff</span>
+                            <span class="text-muted d-block d-md-inline"> — excluded by default since they don't sit under Unit/Department/Section.</span>
+                        </label>
                     </div>
                 </div>
 

@@ -2,6 +2,7 @@
 
 use App\Models\Role;
 use App\Models\User;
+use App\Models\Department;
 use App\Models\Employee;
 use App\Models\ZkbioArea;
 use App\Models\WorkLocation;
@@ -120,6 +121,14 @@ new class extends Component {
             $this->department_id = $this->form_section_id = $this->form_subsection_id = '';
         } elseif ($level === 'department') {
             $this->form_section_id = $this->form_subsection_id = '';
+
+            // Selecting a department pre-fills its default shift, if one is set.
+            if ($this->department_id) {
+                $defaultShiftId = Department::find($this->department_id)?->default_shift_id;
+                if ($defaultShiftId) {
+                    $this->shift_id = $defaultShiftId;
+                }
+            }
         } elseif ($level === 'section') {
             $this->form_subsection_id = '';
         }

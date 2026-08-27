@@ -15,6 +15,7 @@ class ReportSetting extends Model
         'organization_id',
         'email',
         'report_type',
+        'format',
         'frequency',
         'time',
         'day_of_week',

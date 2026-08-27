@@ -4,6 +4,7 @@ use App\Models\Attendance;
 use App\Models\Unit;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Auth;
+use Livewire\Attributes\On;
 use Livewire\Volt\Component;
 
 new class extends Component {
@@ -14,7 +15,7 @@ new class extends Component {
     public $statusData;
     public $topOvertimeEmployees;
     public $entityLabel = 'Employee';
-
+    public string $selectedDate = '';
 
     public function mount()
     {
@@ -23,9 +24,17 @@ new class extends Component {
         $this->isStudentRecord = Auth::user()->employee?->organization?->is_student_record ?? false;
         $this->entityLabel = $this->isStudentRecord ? 'Student' : 'Employee';
 
+        // ?date= drives every chart below — defaults to today, capped at today.
+        $requestedDate = request()->query('date');
+        $referenceDate = $requestedDate ? Carbon::parse($requestedDate) : Carbon::today();
+        if ($referenceDate->gt(Carbon::today())) {
+            $referenceDate = Carbon::today();
+        }
+        $this->selectedDate = $referenceDate->toDateString();
+
         // --- 1. Monthly Attendance Data ---
-        $start = Carbon::now()->startOfMonth();
-        $end = Carbon::now()->endOfMonth();
+        $start = $referenceDate->copy()->startOfMonth();
+        $end = $referenceDate->copy()->endOfMonth();
         $days = $start->diffInDays($end);
 
         for ($i = 0; $i <= $days; $i++) {
@@ -60,8 +69,8 @@ new class extends Component {
         // exactly what made this chart unreadable once an org had "many departments."
         // Unit is the clean, deduplicated grouping level from the org hierarchy
         // (Company > Unit > Department > Section > Subsection).
-        $startOfWeek = Carbon::now()->startOfWeek(); // Monday
-        $endOfWeek = Carbon::now()->endOfWeek();     // Sunday
+        $startOfWeek = $referenceDate->copy()->startOfWeek(); // Monday
+        $endOfWeek = $referenceDate->copy()->endOfWeek();     // Sunday
 
         $units = Unit::where('organization_id', $orgId)->get();
 
@@ -133,7 +142,7 @@ new class extends Component {
 
 
         // --- 3. Daily Attendance Status (Pie Chart Data) ---
-        $today = Carbon::today();
+        $today = $referenceDate->copy();
 
         // Get the attendance for today
         $attendancesToday = Attendance::whereHas('employee', fn($q) => $q->where('organization_id', $orgId))
@@ -172,6 +181,24 @@ new class extends Component {
             ->get();
     }
 
+    /* ─────────────────────────────────────────────
+       DATE SELECTOR — full-page redirect with ?date=
+       so ApexCharts (rendered on DOMContentLoaded) get
+       fresh data instead of stale JS from a partial update.
+       Uses the named route (not request()->url()) because inside
+       a Livewire action, request() is bound to the AJAX POST to
+       livewire/update, not the page the user is viewing.
+    ───────────────────────────────────────────── */
+    #[On('analytics-date-changed')]
+    public function viewForSelectedDate(): void
+    {
+        $this->redirect(route('analytics') . '?date=' . $this->selectedDate);
+    }
+
+    public function resetToToday(): void
+    {
+        $this->redirect(route('analytics'));
+    }
 
 }; ?>
 
@@ -197,6 +224,23 @@ new class extends Component {
        ]"
         />
 
+
+        @php($isSelectedToday = $selectedDate === now()->toDateString())
+        <div class="d-flex align-items-center gap-2 flex-wrap mb-2"
+             style="background:#fff; border:1px solid #e5e7eb; border-radius:8px; padding:.5rem .75rem; box-shadow:0 1px 2px rgba(0,0,0,.04);">
+            <iconify-icon icon="mdi:calendar-month-outline" style="font-size:20px; color:#64748b;"></iconify-icon>
+            <input type="date" class="form-control form-control-sm" style="max-width:170px; background:#fff; color:#1f2937;"
+                   wire:model="selectedDate" wire:change="$dispatch('analytics-date-changed')" max="{{ now()->toDateString() }}">
+            @unless($isSelectedToday)
+                <button type="button" class="btn btn-sm btn-primary" wire:click="resetToToday">
+                    <iconify-icon icon="mdi:backup-restore"></iconify-icon>
+                    Today
+                </button>
+            @endunless
+            <span class="text-muted small">
+                Showing data for {{ \Carbon\Carbon::parse($selectedDate)->format('d M Y') }}
+            </span>
+        </div>
 
         <livewire:admin.summaries.employee-statuses/>
     </div>

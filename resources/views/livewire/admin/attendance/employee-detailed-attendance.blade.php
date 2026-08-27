@@ -18,11 +18,15 @@ new class extends Component {
     public $lateArrivals = 0;
     public $averageLateMinutes = 0;
     public $attendanceHistory = [];
-    public $dateFilter = '7'; // 7, 30, or 90 days
+    public $dateFilter = '7'; // 7, 30, 90, or custom
+    public $customStartDate = '';
+    public $customEndDate = '';
 
     public function mount($employeeId)
     {
         $this->employeeId = $employeeId;
+        $this->customEndDate = Carbon::now()->toDateString();
+        $this->customStartDate = Carbon::now()->subDays(7)->toDateString();
         $this->loadEmployeeData();
         $this->loadAttendanceData();
     }
@@ -33,11 +37,27 @@ new class extends Component {
             ->findOrFail($this->employeeId);
     }
 
+    /**
+     * Resolves the active reporting window — either one of the 7/30/90-day
+     * presets, or the custom start/end dates picked by the user.
+     */
+    private function getDateRange(): array
+    {
+        if ($this->dateFilter === 'custom') {
+            $startDate = Carbon::parse($this->customStartDate)->startOfDay();
+            $endDate = Carbon::parse($this->customEndDate)->endOfDay();
+        } else {
+            $days = (int)$this->dateFilter;
+            $startDate = Carbon::now()->subDays($days);
+            $endDate = Carbon::now();
+        }
+
+        return [$startDate, $endDate];
+    }
+
     public function loadAttendanceData()
     {
-        $days = (int)$this->dateFilter;
-        $startDate = Carbon::now()->subDays($days);
-        $endDate = Carbon::now();
+        [$startDate, $endDate] = $this->getDateRange();
 
         // Get attendance records
         $attendances = Attendance::where('employee_id', $this->employeeId)
@@ -45,7 +65,7 @@ new class extends Component {
             ->orderByDesc('date')
             ->get();
 
-        $this->totalDays = $days;
+        $this->totalDays = $startDate->diffInDays($endDate) + 1;
         $this->presentDays = $attendances->whereIn('status', ['clocked_in', 'clocked_out'])->count();
         $this->daysAbsent = $attendances->whereIn('status', ['absent', 'unchecked_in'])->count();
 
@@ -87,7 +107,14 @@ new class extends Component {
         return $hours . 'h ';
     }
 
-    public function updatedDateFilter()
+    public function setDateFilter(string $value): void
+    {
+        $this->dateFilter = $value;
+        $this->loadAttendanceData();
+    }
+
+    #[On('custom-date-range-changed')]
+    public function applyCustomDateRange(): void
     {
         $this->loadAttendanceData();
     }
@@ -124,9 +151,7 @@ new class extends Component {
 
     private function getAttendanceIds()
     {
-        $days = (int)$this->dateFilter;
-        $startDate = Carbon::now()->subDays($days);
-        $endDate = Carbon::now();
+        [$startDate, $endDate] = $this->getDateRange();
 
         return Attendance::where('employee_id', $this->employeeId)  // Find by employee
         ->whereBetween('date', [$startDate, $endDate])
@@ -141,9 +166,7 @@ new class extends Component {
     #[On('export-employee-excel')]
     public function exportExcel()
     {
-        $days = (int)$this->dateFilter;
-        $startDate = Carbon::now()->subDays($days);
-        $endDate = Carbon::now();
+        [$startDate, $endDate] = $this->getDateRange();
 
         $attendanceIds = $this->getAttendanceIds();
 
@@ -163,9 +186,7 @@ new class extends Component {
     public function exportPdf()
     {
         try {
-            $days = (int)$this->dateFilter;
-            $startDate = Carbon::now()->subDays($days);
-            $endDate = Carbon::now();
+            [$startDate, $endDate] = $this->getDateRange();
 
             // Get attendance IDs
             $attendanceIds = $this->getAttendanceIds(); // ✅ Gets attendance IDs
@@ -714,21 +735,38 @@ new class extends Component {
 
             <div class="date-filter">
                 <button
-                    wire:click="$set('dateFilter', '7')"
+                    wire:click="setDateFilter('7')"
                     class="filter-btn {{ $dateFilter === '7' ? 'active' : '' }}">
                     7 Days
                 </button>
                 <button
-                    wire:click="$set('dateFilter', '30')"
+                    wire:click="setDateFilter('30')"
                     class="filter-btn {{ $dateFilter === '30' ? 'active' : '' }}">
                     30 Days
                 </button>
                 <button
-                    wire:click="$set('dateFilter', '90')"
+                    wire:click="setDateFilter('90')"
                     class="filter-btn {{ $dateFilter === '90' ? 'active' : '' }}">
                     90 Days
                 </button>
+                <button
+                    wire:click="setDateFilter('custom')"
+                    class="filter-btn {{ $dateFilter === 'custom' ? 'active' : '' }}">
+                    Custom
+                </button>
             </div>
+
+            @if($dateFilter === 'custom')
+                <div class="d-flex align-items-center gap-2 flex-wrap mt-2">
+                    <input type="date" class="form-control form-control-sm" style="max-width:160px;"
+                           wire:model="customStartDate" wire:change="$dispatch('custom-date-range-changed')"
+                           max="{{ now()->toDateString() }}">
+                    <span class="text-muted small">to</span>
+                    <input type="date" class="form-control form-control-sm" style="max-width:160px;"
+                           wire:model="customEndDate" wire:change="$dispatch('custom-date-range-changed')"
+                           max="{{ now()->toDateString() }}">
+                </div>
+            @endif
         </div>
 
         @if(count($attendanceHistory) > 0)

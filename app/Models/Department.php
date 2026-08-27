@@ -17,6 +17,7 @@ class Department extends Model
         'unit_id',
         'description',
         'manager_id',
+        'default_shift_id',
     ];
 
     protected static function booted()
@@ -39,6 +40,11 @@ class Department extends Model
     public function unit()
     {
         return $this->belongsTo(Unit::class);
+    }
+
+    public function defaultShift()
+    {
+        return $this->belongsTo(Shift::class, 'default_shift_id');
     }
 
     /**

@@ -98,6 +98,19 @@ class EmployeeTable extends DataTableComponent
 
         if ($this->activeFilter !== '') {
             $query->where('active', (int)$this->activeFilter);
+
+            if ((int)$this->activeFilter === 0) {
+                $retentionDays = (int) (\App\Models\OrganizationSetting::where('organization_id', $orgId)
+                    ->where('key', 'deleted_record_retention_days')
+                    ->value('value') ?? 90);
+
+                if ($retentionDays > 0) {
+                    $query->where(function ($q) use ($retentionDays) {
+                        $q->whereNull('deactivated_at')
+                            ->orWhere('deactivated_at', '>=', now()->subDays($retentionDays));
+                    });
+                }
+            }
         }
 
         $hierarchyActive = $this->unitFilter !== '' || $this->departmentFilter !== ''
