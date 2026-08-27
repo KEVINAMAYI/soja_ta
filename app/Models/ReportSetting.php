@@ -29,6 +29,8 @@ class ReportSetting extends Model
     protected $casts = [
         'active' => 'boolean',
         'time' => 'datetime:H:i', // if stored as TIME in DB, Laravel will format
+        'last_run_at' => 'datetime',
+        'next_run_at' => 'datetime',
     ];
 
     /*
