@@ -9,6 +9,7 @@ use Livewire\Volt\Component;
 new class extends Component {
 
     public $apiKeys = [];
+    public $revokedApiKeys = [];
     public string $name = '';
     public string $environment = 'sandbox';
     public ?string $revealedKey = null;
@@ -28,7 +29,11 @@ new class extends Component {
         $organization = $this->organization();
 
         $this->apiKeys = $organization
-            ? $organization->apiKeys()->latest()->get()
+            ? $organization->apiKeys()->whereNull('revoked_at')->latest()->get()
+            : collect();
+
+        $this->revokedApiKeys = $organization
+            ? $organization->apiKeys()->whereNotNull('revoked_at')->latest()->get()
             : collect();
     }
 
@@ -138,23 +143,46 @@ new class extends Component {
                                 <td><code>{{ $apiKey->masked_key }}</code></td>
                                 <td>{{ $apiKey->last_used_at?->diffForHumans() ?? 'Never' }}</td>
                                 <td>
-                                    @if($apiKey->isRevoked())
-                                        <span class="badge bg-secondary">Revoked</span>
-                                    @else
-                                        <span class="badge bg-success">Active</span>
-                                    @endif
+                                    <span class="badge bg-success">Active</span>
                                 </td>
                                 @can('manage-api-keys')
                                     <td class="text-end">
-                                        @if(!$apiKey->isRevoked())
-                                            <button type="button" class="btn btn-sm btn-outline-danger"
-                                                    wire:click="revoke({{ $apiKey->id }})"
-                                                    wire:confirm="Revoke API key '{{ $apiKey->name }}'? Requests using it will stop working immediately.">
-                                                Revoke
-                                            </button>
-                                        @endif
+                                        <button type="button" class="btn btn-sm btn-outline-danger"
+                                                wire:click="revoke({{ $apiKey->id }})"
+                                                wire:confirm="Revoke API key '{{ $apiKey->name }}'? Requests using it will stop working immediately.">
+                                            Revoke
+                                        </button>
                                     </td>
                                 @endcan
+                            </tr>
+                        @endforeach
+                    </tbody>
+                </table>
+            </div>
+        @endif
+
+        @if(!empty($revokedApiKeys) && (is_countable($revokedApiKeys) && count($revokedApiKeys) > 0))
+            <!-- <hr> -->
+            <h6 class="text-muted mt-4">Revoked Keys</h6>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Environment</th>
+                            <th>Key</th>
+                            <th>Revoked</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach($revokedApiKeys as $apiKey)
+                            <tr class="text-muted">
+                                <td>{{ $apiKey->name }}</td>
+                                <td>
+                                    <span class="badge bg-light text-dark">{{ ucfirst($apiKey->environment) }}</span>
+                                </td>
+                                <td><code>{{ $apiKey->masked_key }}</code></td>
+                                <td>{{ $apiKey->revoked_at?->diffForHumans() }}</td>
                             </tr>
                         @endforeach
                     </tbody>
