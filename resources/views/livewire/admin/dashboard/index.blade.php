@@ -843,6 +843,12 @@ new class extends Component {
 
 <div class="row g-3">
 
+    @can('manage-api-keys')
+        <div class="col-12">
+            <livewire:admin.api-keys.manager />
+        </div>
+    @endcan
+
     {{-- ══════════════════════════════════════════
          VIEW TOGGLE  (only shown for school orgs)
     ══════════════════════════════════════════ --}}
