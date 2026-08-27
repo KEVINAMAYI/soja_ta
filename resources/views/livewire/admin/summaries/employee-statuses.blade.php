@@ -167,6 +167,9 @@ new class extends Component {
             font-size: 0.875rem;
             color: #6b7280;
             font-weight: 400;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
     </style>
 @endpush
@@ -271,12 +274,9 @@ new class extends Component {
                     <div class="stat-card-icon icon-secondary">
                         <iconify-icon icon="mdi:account-off"></iconify-icon>
                     </div>
-                    <h6 class="stat-card-title">Inactive {{ $entityLabel  }}</h6>
-                    <div class="stat-card-value">{{ $inactiveEmployees }} <span
-                            class="stat-card-total">/ {{ $totalEmployees }}</span></div>
-                    <p class="stat-card-subtitle">
-                        Out of {{ $totalEmployees }} Total
-                    </p>
+                    <h6 class="stat-card-title">Inactive {{ $entityLabel  }}s</h6>
+                    <div class="stat-card-value">{{ $inactiveEmployees }}</div>
+                    <p class="stat-card-subtitle">Excluded from headcount</p>
                 </a>
             </div>
         </div>
