@@ -56,7 +56,8 @@ Route::middleware(['auth:sanctum'])->group(function () {
 
 // Routes authenticated via a database-stored API key (X-API-KEY header) instead of user sessions/tokens.
 Route::middleware(['api.key'])->prefix('v1')->group(function () {
-    Route::get('/ping', [ElevateHRApiController::class, 'ping']);
+    Route::get('/health', [ElevateHRApiController::class, 'ping']);
+    Route::get('/attendance-report', [ElevateHRApiController::class, 'getAttendanceReport']);
 });
 
 Route::fallback(function () {
