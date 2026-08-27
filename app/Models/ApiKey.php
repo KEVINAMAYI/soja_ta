@@ -62,8 +62,18 @@ class ApiKey extends Model
      */
     public static function generateFor(Organization $organization, string $environment, string $name, ?int $createdBy = null): array
     {
+        // set environment to 'sd' or 'pd' for the prefix
+        $environment = strtolower($environment);
+        if ($environment !== 'production') {
+            $environment = 'sd';
+        } else {
+            $environment = 'pd';
+        }
+
+
         $orgPrefix = strtoupper(Str::substr(preg_replace('/[^A-Za-z]/', '', $organization->name) ?: 'XX', 0, 2));
         $keyPrefix = "{$orgPrefix}_{$environment}";
+
         $secret = Str::random(40);
         $plainTextKey = "{$keyPrefix}_{$secret}";
 
@@ -84,6 +94,13 @@ class ApiKey extends Model
     {
         return static::whereNull('revoked_at')
             ->where('key_hash', hash('sha256', $plainTextKey))
+            ->first();
+    }
+
+
+    public static function keyOrgDetails(string $plainTextKey): ?self
+    {
+        return self::where('key_hash', hash('sha256', $plainTextKey))
             ->first();
     }
 }
