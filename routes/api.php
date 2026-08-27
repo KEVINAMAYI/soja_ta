@@ -5,6 +5,7 @@ use App\Http\Controllers\APIs\AuthController;
 use App\Http\Controllers\APIs\DeviceController;
 use App\Http\Controllers\APIs\LeaveController;
 use App\Http\Controllers\APIs\OrganizationController;
+use App\Http\Controllers\APIs\PublicApiController;
 use Illuminate\Support\Facades\Route;
 
 
@@ -51,6 +52,11 @@ Route::middleware(['auth:sanctum'])->group(function () {
 
     Route::post('/devices/verify', [DeviceController::class, 'verify']);
 
+});
+
+// Routes authenticated via a database-stored API key (X-API-KEY header) instead of user sessions/tokens.
+Route::middleware(['api.key'])->prefix('v1')->group(function () {
+    Route::get('/ping', [PublicApiController::class, 'ping']);
 });
 
 Route::fallback(function () {
