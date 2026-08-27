@@ -45,8 +45,10 @@ new class extends Component {
     public $roles = [];
     public $jobTitles = [];
     public $reportsToEmployees = [];
+    public $reportsToEmployeesOptions = [];
     public $jobTitleId = '';
     public $reportsToJobTitleId = '';
+    public $reportsToWho = '';
     public $employee_title;
     public $editEmployee = null;
     public $employeeName;
@@ -990,6 +992,11 @@ new class extends Component {
             'roleName' => 'nullable|string|required_if:is_user,1',
             'employee_title' => 'nullable|string|max:255',
             'is_user' => 'nullable|boolean',
+            'reportsToWho' => [
+                \Illuminate\Validation\Rule::requiredIf(fn () => filled($this->reportsToJobTitleId) && count($this->reportsToEmployeesOptions) > 0),
+                'nullable',
+                'exists:employees,id',
+            ],
         ];
     }
 
@@ -1001,6 +1008,9 @@ new class extends Component {
         }
         if ($this->reportsToJobTitleId == '') {
             $this->reportsToJobTitleId = null;
+        }
+        if ($this->reportsToWho == '') {
+            $this->reportsToWho = null;
         }
 
         $this->validate();
@@ -1037,6 +1047,7 @@ new class extends Component {
                 'department_id' => $deptId,
                 'job_title_id' => $this->jobTitleId,
                 'reports_to_job_title_id' => $this->reportsToJobTitleId,
+                'reports_to_employee_id' => $this->reportsToWho,
                 'grade' => $isStudent ? $this->grade : null,
                 'employee_title' => $this->employee_title,
                 'is_student' => $isStudent ? 1 : 0,
@@ -1098,6 +1109,16 @@ new class extends Component {
         $this->employee_title = $employee->employee_title;
         $this->grade = $employee->grade;
         $this->personType = $employee->is_student ? 'student' : 'staff';
+
+        if (!empty($this->reportsToJobTitleId)) {
+            $this->reportsToEmployeesOptions = Employee::where('job_title_id', $this->reportsToJobTitleId)
+                ->where('id', '!=', $employee->id)
+                ->get(['id', 'name']);
+        } else {
+            $this->reportsToEmployeesOptions = [];
+        }
+        $this->reportsToWho = $employee->reports_to_employee_id;
+
         $this->dispatch('refresh-status', employee: $employee);
         $this->dispatch('show-employee-modal');
     }
@@ -1110,6 +1131,9 @@ new class extends Component {
         }
         if ($this->reportsToJobTitleId == '') {
             $this->reportsToJobTitleId = null;
+        }
+        if ($this->reportsToWho == '') {
+            $this->reportsToWho = null;
         }
         
         $this->validate();
@@ -1144,6 +1168,7 @@ new class extends Component {
                 'is_user' => $is_user_updating ? 1 : 0,
                 'job_title_id' => $this->jobTitleId,
                 'reports_to_job_title_id' => $this->reportsToJobTitleId,
+                'reports_to_employee_id' => $this->reportsToWho,
             ]);
 
             if (!$employee->user && $is_user_updating) {
@@ -1237,7 +1262,7 @@ new class extends Component {
     public function resetForm(): void
     {
         $this->reset(['name', 'email', 'phone', 'employee_type_id', 'department_id',
-            'id_number', 'editId', 'shift_id', 'employee_title', 'roleName', 'grade', 'jobTitleId', 'reportsToJobTitleId', 'is_user']);
+            'id_number', 'editId', 'shift_id', 'employee_title', 'roleName', 'grade', 'jobTitleId', 'reportsToJobTitleId', 'reportsToWho', 'reportsToEmployeesOptions', 'is_user']);
         $this->active = true;
         $this->is_user = false;
         $this->roleName = 'employee';
@@ -1272,7 +1297,31 @@ new class extends Component {
         //     $this->reportsToJobTitleId = '';
         // }
         $this->reportsToJobTitleId = '';
+        $this->reportsToWho = '';
+        $this->reportsToEmployeesOptions = [];
 
+    }
+
+    public function updatedReportsToJobTitleId($value): void
+    {
+        $this->loadReportsToEmployeesOptions($value);
+    }
+
+    protected function loadReportsToEmployeesOptions($jobTitleId): void
+    {
+        if (empty($jobTitleId)) {
+            $this->reportsToEmployeesOptions = [];
+            $this->reportsToWho = '';
+            return;
+        }
+
+        $this->reportsToEmployeesOptions = Employee::where('job_title_id', $jobTitleId)
+            ->when($this->editId, fn ($query) => $query->where('id', '!=', $this->editId))
+            ->get(['id', 'name']);
+
+        $this->reportsToWho = $this->reportsToEmployeesOptions->count() === 1
+            ? (string) $this->reportsToEmployeesOptions->first()->id
+            : '';
     }
 
     public function saveOffShiftDates(): void
@@ -2927,6 +2976,23 @@ new class extends Component {
                                     @endforeach
                                 </select>
                                 @error('reportsToJobTitleId') <small class="text-danger">{{ $message }}</small> @enderror
+                            </div>
+
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Reports To Who @if(!empty($reportsToJobTitleId) && count($reportsToEmployeesOptions) > 0)<span class="text-danger">*</span>@endif</label>
+                                {{-- wire:key forces a fresh <select> so morphdom re-applies the selected option instead of leaving stale DOM state --}}
+                                <select wire:model.live="reportsToWho" class="form-control"
+                                        wire:key="reports-to-who-{{ $reportsToJobTitleId }}-{{ $reportsToWho }}"
+                                        {{ empty($reportsToJobTitleId) || count($reportsToEmployeesOptions) <= 1 ? 'disabled' : '' }}>
+                                    <option value="">Select Employee</option>
+                                    @foreach ($reportsToEmployeesOptions as $emp)
+                                        <option value="{{ $emp->id }}" wire:key="reports-to-who-option-{{ $emp->id }}" {{ (string) $reportsToWho === (string) $emp->id ? 'selected' : '' }}>{{ $emp->name }}</option>
+                                    @endforeach
+                                </select>
+                                @error('reportsToWho') <small class="text-danger">{{ $message }}</small> @enderror
+                                @if(!empty($reportsToJobTitleId) && count($reportsToEmployeesOptions) === 0)
+                                    <small class="text-muted">No employees currently hold this job title. You can leave this blank.</small>
+                                @endif
                             </div>
 
 
