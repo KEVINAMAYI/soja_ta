@@ -15,7 +15,7 @@ return new class extends Migration
             $table->id();
             $table->foreignId('organization_id')->constrained()->cascadeOnDelete();
             $table->string('name');
-            $table->enum('environment', ['sandbox', 'production'])->default('sandbox');
+            $table->string('environment')->default('sd');
             // Non-secret display prefix, e.g. "ID_sandbox" - used to identify the key in the UI.
             $table->string('key_prefix');
             // Last 4 characters of the generated secret, for display purposes only (e.g. "•••• ab12").
