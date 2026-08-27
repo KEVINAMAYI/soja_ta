@@ -361,16 +361,33 @@ class AttendanceDailyTable extends DataTableComponent
         ];
     }
 
+    /**
+     * Row IDs to export. The table's "select all" checkbox only selects rows on
+     * the current page, so relying on getSelected() alone silently truncated
+     * exports to whatever page the user happened to be on (sometimes just one
+     * row). If nothing is manually selected, export every row matching the
+     * current filters (date range, status, search, org hierarchy) instead.
+     */
+    private function resolveExportIds(): array
+    {
+        $selected = $this->getSelected();
+        if (!empty($selected)) {
+            return $selected;
+        }
+
+        return $this->builder()->pluck('attendances.id')->toArray();
+    }
+
     #[On('export-daily-excel')]
     public function exportExcel()
     {
-        return Excel::download(new AttendanceDailyExcelExport(selectedIds: $this->getSelected(), startDate: $this->startDate, endDate: $this->endDate, status: $this->status), 'attendance.xlsx');
+        return Excel::download(new AttendanceDailyExcelExport(selectedIds: $this->resolveExportIds(), startDate: $this->startDate, endDate: $this->endDate, status: $this->status), 'attendance.xlsx');
     }
 
     #[On('export-pivot-daily-excel')]
     public function exportPivotExcel()
     {
-        return Excel::download(new AttendancePivotDailyExcelExport(selectedIds: $this->getSelected(), startDate: $this->startDate, endDate: $this->endDate, status: $this->status), 'attendance.xlsx');
+        return Excel::download(new AttendancePivotDailyExcelExport(selectedIds: $this->resolveExportIds(), startDate: $this->startDate, endDate: $this->endDate, status: $this->status), 'attendance.xlsx');
     }
 
     #[On('export-full-excel')]
@@ -384,7 +401,7 @@ class AttendanceDailyTable extends DataTableComponent
         return Excel::download(
             new AttendanceFullExport(
                 orgId: $orgId,
-                ids: $this->getSelected(),
+                ids: $this->resolveExportIds(),
                 startDate: $this->startDate,
                 endDate: $this->endDate,
                 // AttendanceReportService::getMaster() still takes departmentIds as an
@@ -403,7 +420,7 @@ class AttendanceDailyTable extends DataTableComponent
     #[On('export-daily-pdf')]
     public function exportPdf()
     {
-        $url = route('attendance-daily.export.pdf', ['ids' => $this->getSelected(), 'start_date' => $this->startDate, 'end_date' => $this->endDate, 'status' => $this->status]);
+        $url = route('attendance-daily.export.pdf', ['ids' => $this->resolveExportIds(), 'start_date' => $this->startDate, 'end_date' => $this->endDate, 'status' => $this->status]);
         return redirect()->to($url);
     }
 }
