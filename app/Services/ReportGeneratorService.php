@@ -39,6 +39,21 @@ class ReportGeneratorService
     protected function generateExcel(string $view, array $data, string $fileName, bool $saveToDisk)
     {
         $export = new GenericViewExport($view, array_merge($data, ['isExcel' => true]));
+        return $this->storeOrDownloadExport($export, $fileName, $saveToDisk);
+    }
+
+    /**
+     * Store/download a ready-made Excel export object (e.g. a WithMultipleSheets
+     * export like AttendanceFullExport) that isn't rendered from a single Blade
+     * view, so it can't go through generate()/generateExcel() above.
+     */
+    public function generateFromExport($export, string $fileName, bool $saveToDisk = true)
+    {
+        return $this->storeOrDownloadExport($export, $fileName, $saveToDisk);
+    }
+
+    private function storeOrDownloadExport($export, string $fileName, bool $saveToDisk)
+    {
         $path = "reports/{$fileName}-" . now()->timestamp . ".xlsx";
 
         if ($saveToDisk) {

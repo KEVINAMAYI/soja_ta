@@ -14,6 +14,7 @@ use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Mail;
 use App\Services\AttendanceReportService;
+use App\Exports\AttendanceFullExport;
 
 class SendReportJob implements ShouldQueue
 {
@@ -189,6 +190,13 @@ class SendReportJob implements ShouldQueue
                 'end_date' => $endDate,
             ]);
 
+            // Full T&A is a multi-sheet workbook (Master/Present/Late/Absent), not a
+            // single Blade view rendered over a flat $attendances collection like the
+            // other types below, so it's generated via its own export class.
+            if ($type === 'full_ta') {
+                return $this->generateFullTaReport($reportService, $reportGenerator, $startDate, $endDate, $frequency);
+            }
+
             // Generate report based on type - FIX THE SWITCH STATEMENT
             $attendances = null;
             $view = null;
@@ -236,7 +244,7 @@ class SendReportJob implements ShouldQueue
                 default:
                     Log::warning('Unknown report type', [
                         'type' => $type,
-                        'available_types' => ['attendance', 'timesheets', 'department']
+                        'available_types' => ['attendance', 'timesheets', 'department', 'full_ta']
                     ]);
                     return null;
             }
@@ -314,6 +322,41 @@ class SendReportJob implements ShouldQueue
             ]);
             return null;
         }
+    }
+
+    private function generateFullTaReport(
+        AttendanceReportService $reportService,
+        ReportGeneratorService $reportGenerator,
+        string $startDate,
+        string $endDate,
+        string $frequency
+    ): ?array {
+        $master = $reportService->getMaster($this->organizationId, [], $startDate, $endDate);
+
+        if (empty($master)) {
+            Log::info('Full T&A report skipped - no records found', [
+                'organization_id' => $this->organizationId,
+                'start_date' => $startDate,
+                'end_date' => $endDate,
+            ]);
+            return null;
+        }
+
+        Log::info('Generating Full T&A report', [
+            'organization_id' => $this->organizationId,
+            'record_count' => count($master),
+        ]);
+
+        $export = new AttendanceFullExport(
+            orgId: $this->organizationId,
+            startDate: $startDate,
+            endDate: $endDate,
+        );
+
+        return $reportGenerator->generateFromExport(
+            $export,
+            "full-ta-{$frequency}-report-" . now()->format('Y-m-d')
+        );
     }
 
     private function calculateNextRun(ReportSetting $setting, Carbon $from): ?Carbon
