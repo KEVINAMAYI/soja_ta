@@ -1093,6 +1093,7 @@ new class extends Component {
              STAFF VIEW
         ══════════════════════════════════════════ --}}
         @php($isSelectedToday = $selectedDate === now()->toDateString())
+        @php($dayLabel = $isSelectedToday ? 'Today' : \Carbon\Carbon::parse($selectedDate)->format('d M'))
 
         <div class="col-12">
             <div class="d-flex align-items-center gap-2 flex-wrap date-filter-bar mb-2">
@@ -1119,7 +1120,7 @@ new class extends Component {
                         <div class="stat-card-icon icon-success">
                             <iconify-icon icon="mdi:account-check"></iconify-icon>
                         </div>
-                        <h6 class="stat-card-title">Present Today</h6>
+                        <h6 class="stat-card-title">Present {{ $dayLabel }}</h6>
                         <div class="stat-card-value">
                             {{ $presentToday }}
                             <span class="stat-card-total">/ {{ $totalEmployees }}</span>
@@ -1136,7 +1137,7 @@ new class extends Component {
                         <div class="stat-card-icon icon-danger">
                             <iconify-icon icon="mdi:account-remove"></iconify-icon>
                         </div>
-                        <h6 class="stat-card-title">Absent Today</h6>
+                        <h6 class="stat-card-title">Absent {{ $dayLabel }}</h6>
                         <div class="stat-card-value">
                             {{ $absentToday }}
                             <span class="stat-card-total">/ {{ $totalEmployees }}</span>
@@ -1152,7 +1153,7 @@ new class extends Component {
                         <div class="stat-card-icon icon-info">
                             <iconify-icon icon="mdi:medical-bag"></iconify-icon>
                         </div>
-                        <h6 class="stat-card-title">Sick Off Today</h6>
+                        <h6 class="stat-card-title">Sick Off {{ $dayLabel }}</h6>
                         <div class="stat-card-value">
                             {{ $sickOffToday }}
                             <span class="stat-card-total">/ {{ $totalEmployees }}</span>
@@ -1168,7 +1169,7 @@ new class extends Component {
                         <div class="stat-card-icon icon-warning">
                             <iconify-icon icon="mdi:airplane-takeoff"></iconify-icon>
                         </div>
-                        <h6 class="stat-card-title">On Leave Today</h6>
+                        <h6 class="stat-card-title">On Leave {{ $dayLabel }}</h6>
                         <div class="stat-card-value">
                             {{ $leaveToday }}
                             <span class="stat-card-total">/ {{ $totalEmployees }}</span>
@@ -1184,7 +1185,7 @@ new class extends Component {
                         <div class="stat-card-icon icon-cyan">
                             <iconify-icon icon="mdi:clock-remove-outline"></iconify-icon>
                         </div>
-                        <h6 class="stat-card-title">Off Shift Today</h6>
+                        <h6 class="stat-card-title">Off Shift {{ $dayLabel }}</h6>
                         <div class="stat-card-value">
                             {{ $OffShiftToday }}
                             <span class="stat-card-total">/ {{ $totalEmployees }}</span>
