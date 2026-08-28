@@ -74,12 +74,15 @@ class LeaveApprovalService
         $next_approver_user_id = null;
         $next_approver_title_id = null;
 
+        Log::info("SOURCE EMPLOYEE: " . ($sourceEmployee?->id ?? 'null') . " for leave ID: " . $leave->id. " REPORTS TO JOB TITLE ID: " . ($sourceEmployee?->reports_to_job_title_id ?? 'null') . " REPORTS TO EMPLOYEE ID: " . ($sourceEmployee?->reports_to_employee_id ?? 'null'));
+
         if ($config['approver_type'] === 'role') {
             // Prefer the exact person the source employee reports to; only a
             // supervisor with a user account can actually action the approval.
             $supervisor = $sourceEmployee?->reportsTo;
             if ($supervisor && $supervisor->user_id) {
                 $next_approver_user_id = $supervisor->user_id;
+                $next_approver_title_id = $supervisor->job_title_id;
             } else {
                 $next_approver_title_id = $sourceEmployee?->reports_to_job_title_id;
             }
