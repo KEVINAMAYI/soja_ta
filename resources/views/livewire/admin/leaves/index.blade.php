@@ -1304,9 +1304,12 @@ new class extends Component {
                                                 {{ $activeLog->approverUser->name ?? 'Unknown user' }}
                                             @else
                                                 @php
-                                                    $activeJobTitle = App\Models\JobTitle::find($activeLog->approver_role);
+                                                    $nameToShow = $activeLog?->approverUser?->name;
+                                                    if (!$nameToShow) {                                                         
+                                                        $nameToShow = App\Models\JobTitle::find($activeLog->approver_role)->name;
+                                                    };
                                                 @endphp
-                                                {{ $activeJobTitle->name ?? 'Unknown job title' }}
+                                                {{ $nameToShow ?? 'Unknown job title' }}
                                             @endif
                                         </small>
                                     </div>
@@ -1657,8 +1660,13 @@ new class extends Component {
                                                                 ? implode(', ', array_column($approverUsers, 'name'))
                                                                 : ($approverUsers[0]['name'] ?? ucfirst($log->approver_role ?? 'Approver'));
                                                         } else {
+                                                            $approverLabel = "Approver";
+                                                            if ($log->approverUser && $log->approverUser->name) {
+                                                                $approverLabel = $log->approverUser->name;
+                                                            } else {
+                                                                $approverLabel = \App\Models\JobTitle::find($log->approver_role)?->name ?? ucfirst($log->approver_role ?? 'Approver');
+                                                            }
                                                             // get job title name from job title model where id = $log->approver_role
-                                                            $approverLabel = \App\Models\JobTitle::find($log->approver_role)?->name ?? ucfirst($log->approver_role ?? 'Approver');
                                                             //$approverLabel = ucfirst($log->approver_role ?? 'Approver');
                                                         }
                                                     @endphp
