@@ -27,8 +27,14 @@ class AttendanceMonthlyTable extends DataTableComponent
     public $includeOutsourced = false;
     public $employeeIds = [];
 
-    public function mount()
+    public function mount(bool $hideSearch = false)
     {
+        // The reports/export page already has its own employee search+picker
+        // above this table — its native search box would just be a redundant
+        // second way to do the same thing there.
+        if ($hideSearch) {
+            $this->setSearchDisabled();
+        }
         $this->startDate = now()->toDateString();
         $this->endDate = now()->toDateString();
     }
