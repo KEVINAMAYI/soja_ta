@@ -699,8 +699,17 @@ new class extends Component {
             display: none !important;
         }
 
-        .emp-filter-menu label:hover {
+        .emp-filter-row {
+            cursor: pointer;
+            border-radius: 6px;
+        }
+
+        .emp-filter-row:hover {
             background-color: #f8fafc;
+        }
+
+        .emp-filter-row .text-truncate {
+            max-width: 260px;
         }
 
         .emp-filter-menu input[type="checkbox"]:checked {
@@ -999,7 +1008,7 @@ new class extends Component {
                                                     <span class="ms-2" style="background:var(--primary-color, #635bff); color:#fff; font-size:.72rem; font-weight:700; padding:2px 8px; border-radius:99px;">{{ count($employeeIds) }}</span>
                                                 @endif
                                             </button>
-                                            <div class="emp-filter-menu p-3" style="width:320px;" x-show="empFilterOpen" x-cloak aria-labelledby="dailyEmployeeFilterDropdown">
+                                            <div class="emp-filter-menu p-3" style="width:380px;" x-show="empFilterOpen" x-cloak aria-labelledby="dailyEmployeeFilterDropdown">
                                                 <div class="d-flex justify-content-between align-items-center mb-2">
                                                     <span class="fw-semibold small text-muted text-uppercase" style="letter-spacing:.04em;">Select Employees</span>
                                                     @if(count($employeeIds) > 0)
@@ -1016,12 +1025,14 @@ new class extends Component {
                                                 <div style="max-height:220px; overflow-y:auto; padding-top:2px;">
                                                     @forelse($this->filteredEmployeeOptions($employeeSearchTerm) as $emp)
                                                         <label wire:key="daily-emp-{{ $emp['id'] }}"
-                                                               class="d-flex align-items-center gap-2 px-2 py-1 mb-0 small" style="cursor:pointer;">
-                                                            <input type="checkbox" class="form-check-input mt-0 flex-shrink-0"
+                                                               class="emp-filter-row d-flex align-items-start gap-2 px-2 py-2 mb-0 small">
+                                                            <input type="checkbox" class="form-check-input mt-1 flex-shrink-0"
                                                                    wire:model.live="employeeIds" value="{{ $emp['id'] }}"
                                                                    wire:change="$dispatch('filter-updated')">
-                                                            <span class="flex-grow-1">{{ $emp['name'] }}</span>
-                                                            <span class="text-muted">{{ $emp['department'] ?? '—' }}</span>
+                                                            <span class="d-flex flex-column" style="min-width:0;">
+                                                                <span class="text-truncate" title="{{ $emp['name'] }}">{{ $emp['name'] }}</span>
+                                                                <small class="text-muted text-truncate" title="{{ $emp['department'] ?? '' }}">{{ $emp['department'] ?? '—' }}</small>
+                                                            </span>
                                                         </label>
                                                     @empty
                                                         <div class="text-muted small px-2 py-2">No employees match "{{ $employeeSearchTerm }}"</div>
@@ -1170,7 +1181,7 @@ new class extends Component {
                                                     <span class="ms-2" style="background:var(--primary-color, #635bff); color:#fff; font-size:.72rem; font-weight:700; padding:2px 8px; border-radius:99px;">{{ count($ts_employeeIds) }}</span>
                                                 @endif
                                             </button>
-                                            <div class="emp-filter-menu p-3" style="width:320px;" x-show="empFilterOpen" x-cloak aria-labelledby="tsEmployeeFilterDropdown">
+                                            <div class="emp-filter-menu p-3" style="width:380px;" x-show="empFilterOpen" x-cloak aria-labelledby="tsEmployeeFilterDropdown">
                                                 <div class="d-flex justify-content-between align-items-center mb-2">
                                                     <span class="fw-semibold small text-muted text-uppercase" style="letter-spacing:.04em;">Select Employees</span>
                                                     @if(count($ts_employeeIds) > 0)
@@ -1187,12 +1198,14 @@ new class extends Component {
                                                 <div style="max-height:220px; overflow-y:auto; padding-top:2px;">
                                                     @forelse($this->filteredEmployeeOptions($ts_employeeSearchTerm) as $emp)
                                                         <label wire:key="ts-emp-{{ $emp['id'] }}"
-                                                               class="d-flex align-items-center gap-2 px-2 py-1 mb-0 small" style="cursor:pointer;">
-                                                            <input type="checkbox" class="form-check-input mt-0 flex-shrink-0"
+                                                               class="emp-filter-row d-flex align-items-start gap-2 px-2 py-2 mb-0 small">
+                                                            <input type="checkbox" class="form-check-input mt-1 flex-shrink-0"
                                                                    wire:model.live="ts_employeeIds" value="{{ $emp['id'] }}"
                                                                    wire:change="$dispatch('timesheets-filter-updated')">
-                                                            <span class="flex-grow-1">{{ $emp['name'] }}</span>
-                                                            <span class="text-muted">{{ $emp['department'] ?? '—' }}</span>
+                                                            <span class="d-flex flex-column" style="min-width:0;">
+                                                                <span class="text-truncate" title="{{ $emp['name'] }}">{{ $emp['name'] }}</span>
+                                                                <small class="text-muted text-truncate" title="{{ $emp['department'] ?? '' }}">{{ $emp['department'] ?? '—' }}</small>
+                                                            </span>
                                                         </label>
                                                     @empty
                                                         <div class="text-muted small px-2 py-2">No employees match "{{ $ts_employeeSearchTerm }}"</div>
