@@ -25,6 +25,7 @@ class AttendanceMonthlyTable extends DataTableComponent
     public $sectionId = null;
     public $subsectionId = null;
     public $includeOutsourced = false;
+    public $employeeIds = [];
 
     public function mount()
     {
@@ -42,7 +43,8 @@ class AttendanceMonthlyTable extends DataTableComponent
     #[On('timesheet-range-updated')]
     public function filterByDateRange(
         $startDate, $endDate, $unit_id = null, $department_id = null,
-        $section_id = null, $subsection_id = null, $include_outsourced = null
+        $section_id = null, $subsection_id = null, $include_outsourced = null,
+        $employee_ids = null
     ) {
         $this->startDate = $startDate;
         $this->endDate = $endDate;
@@ -51,6 +53,7 @@ class AttendanceMonthlyTable extends DataTableComponent
         $this->sectionId = $section_id;
         $this->subsectionId = $subsection_id;
         $this->includeOutsourced = (bool) $include_outsourced;
+        $this->employeeIds = $employee_ids ?? [];
 
         $this->dispatch('refreshDatatable');
 
@@ -81,6 +84,11 @@ class AttendanceMonthlyTable extends DataTableComponent
                     $q->orWhere('employees.employee_type', 'Outsourced');
                 }
             });
+        }
+
+        // Specific, named employees picked from the report's employee search
+        if (!empty($this->employeeIds)) {
+            $query->whereIn('attendances.employee_id', $this->employeeIds);
         }
 
         // Date filtering
@@ -223,7 +231,8 @@ class AttendanceMonthlyTable extends DataTableComponent
                 subsectionId: $this->subsectionId,
                 includeOutsourced: $this->includeOutsourced,
                 startDate: $this->startDate,
-                endDate: $this->endDate
+                endDate: $this->endDate,
+                employeeIds: $this->employeeIds
             ),
             'attendance.xlsx'
         );

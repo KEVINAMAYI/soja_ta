@@ -160,9 +160,19 @@ class AttendanceSeeder
 
         // Not yet checked in
         if (!$attendance->check_in_time) {
-            if ($now->greaterThan($shiftEnd)) {
+            // Multi-shift employees (e.g. Day + Night): judge absence against
+            // whichever assigned shift's window is actually relevant right now,
+            // not just the default shift — otherwise someone rostered for Night
+            // gets marked absent the moment Day's end time passes.
+            $window = $this->resolveActiveOrNextShiftWindow($employee, $shift, $today, $now);
+            if (!$window) {
+                return;
+            }
+            [$windowStart, $windowEnd] = $window;
+
+            if ($now->greaterThan($windowEnd)) {
                 $status = 'absent';
-            } elseif ($now->between($shiftStart, $shiftEnd)) {
+            } elseif ($now->between($windowStart, $windowEnd)) {
                 $status = 'unchecked_in';
             } else {
                 return;
@@ -170,6 +180,46 @@ class AttendanceSeeder
 
             $attendance->fill(['status' => $status, 'check_in_time' => null, 'check_out_time' => null, 'worked_hours' => 0, 'overtime_hours' => 0])->save();
         }
+    }
+
+    /**
+     * For a not-yet-checked-in employee, pick which assigned shift's window
+     * to judge attendance against today. Prefers whichever window $now is
+     * currently inside; if $now is past every scheduled window's end, uses
+     * the latest-ending one (so absence waits for the last possible shift);
+     * returns null if $now is before every scheduled window's start (too
+     * early to judge either way — matches the existing "not yet" behavior
+     * for single-shift employees).
+     */
+    private function resolveActiveOrNextShiftWindow(Employee $employee, $defaultShift, string $today, Carbon $now): ?array
+    {
+        $shifts = ($employee->shifts && $employee->shifts->isNotEmpty())
+            ? $employee->shifts
+            : collect([$defaultShift]);
+
+        $windows = [];
+        foreach ($shifts as $s) {
+            if (!$this->isEmployeeScheduledToday($s, $now)) continue;
+
+            $start = $this->parseShiftTime($s->start_time, $today);
+            $end   = $this->parseShiftTime($s->end_time, $today);
+            if ($end->lessThanOrEqualTo($start)) $end->addDay();
+
+            $windows[] = [$start, $end];
+        }
+
+        if (empty($windows)) return null;
+
+        foreach ($windows as $window) {
+            if ($now->between($window[0], $window[1])) return $window;
+        }
+
+        $allEnded = collect($windows)->every(fn ($w) => $now->greaterThan($w[1]));
+        if ($allEnded) {
+            return collect($windows)->sortByDesc(fn ($w) => $w[1])->first();
+        }
+
+        return null;
     }
 
     // ── HELPERS ──────────────────────────────────────────────────────────────
