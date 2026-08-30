@@ -1042,7 +1042,7 @@ new class extends Component {
                                         </div>
 
                                         <!-- Livewire Component -->
-                                        <livewire:attendance-daily-table theme="bootstrap-4"/>
+                                        <livewire:attendance-daily-table :hide-search="true" theme="bootstrap-4"/>
                                     </div>
                                 </div>
                             </div>
@@ -1215,7 +1215,7 @@ new class extends Component {
                                         </div>
 
 
-                                        <livewire:attendance-monthly-table theme="bootstrap-4"/>
+                                        <livewire:attendance-monthly-table :hide-search="true" theme="bootstrap-4"/>
                                     </div>
                                 </div>
                             </div>

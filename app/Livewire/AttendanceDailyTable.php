@@ -33,9 +33,15 @@ class AttendanceDailyTable extends DataTableComponent
 
 
 
-    public function mount($status = null): void
+    public function mount($status = null, bool $hideSearch = false): void
     {
         $this->status = $status;
+        // The reports/export page already has its own employee search+picker
+        // above this table — its native search box would just be a redundant
+        // second way to do the same thing there.
+        if ($hideSearch) {
+            $this->setSearchDisabled();
+        }
         $this->startDate = now()->toDateString();
         $this->endDate = now()->toDateString();
         $this->maybeSeed();
