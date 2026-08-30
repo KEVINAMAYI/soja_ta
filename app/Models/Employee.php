@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class Employee extends Model
 {
@@ -142,6 +143,31 @@ class Employee extends Model
             ->where('employee_id', $this->id)
             ->where('shift_id', '!=', $this->shift_id)
             ->update(['is_primary' => false, 'updated_at' => now()]);
+    }
+
+    /**
+     * For employees assigned more than one shift (e.g. Day + Night): if a
+     * check-in punch resolves to a different shift than their stored
+     * default, make that the new default. Without this, an employee who
+     * actually checked into Night keeps being judged against Day's end
+     * time for absence purposes until someone manually edits their record.
+     * Only ever switches between shifts already assigned to the employee —
+     * never assigns a new one.
+     */
+    public function maybeSwitchToShift(Shift $resolvedShift): void
+    {
+        if ($resolvedShift->id === $this->shift_id) return;
+        if (!$this->shifts->contains('id', $resolvedShift->id)) return;
+
+        $previousShiftId = $this->shift_id;
+        $this->shift_id = $resolvedShift->id;
+        $this->save();
+
+        Log::info('Employee default shift auto-switched from check-in punch', [
+            'employee_id' => $this->id,
+            'from_shift_id' => $previousShiftId,
+            'to_shift_id' => $resolvedShift->id,
+        ]);
     }
 
 

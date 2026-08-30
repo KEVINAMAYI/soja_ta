@@ -98,19 +98,21 @@ class EmployeeTable extends DataTableComponent
 
         if ($this->activeFilter !== '') {
             $query->where('active', (int)$this->activeFilter);
+        }
 
-            if ((int)$this->activeFilter === 0) {
-                $retentionDays = (int) (\App\Models\OrganizationSetting::where('organization_id', $orgId)
-                    ->where('key', 'deleted_record_retention_days')
-                    ->value('value') ?? 90);
+        // Once an inactive employee has been deactivated longer than the org's
+        // retention window, it's fully hidden from the list — regardless of which
+        // active/inactive tab is selected. See System Settings > Employee Defaults.
+        $retentionDays = (int) (\App\Models\OrganizationSetting::where('organization_id', $orgId)
+            ->where('key', 'deleted_record_retention_days')
+            ->value('value') ?? 90);
 
-                if ($retentionDays > 0) {
-                    $query->where(function ($q) use ($retentionDays) {
-                        $q->whereNull('deactivated_at')
-                            ->orWhere('deactivated_at', '>=', now()->subDays($retentionDays));
-                    });
-                }
-            }
+        if ($retentionDays > 0) {
+            $query->where(function ($q) use ($retentionDays) {
+                $q->where('active', 1)
+                    ->orWhereNull('deactivated_at')
+                    ->orWhere('deactivated_at', '>=', now()->subDays($retentionDays));
+            });
         }
 
         $hierarchyActive = $this->unitFilter !== '' || $this->departmentFilter !== ''

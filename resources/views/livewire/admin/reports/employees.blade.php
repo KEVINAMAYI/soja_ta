@@ -53,6 +53,44 @@ new class extends Component {
     public $ts_subsection_id = null;
     public $ts_includeOutsourced = false;
 
+    // ── NAMED EMPLOYEE FILTER: search + checkbox list ───────────────────────
+    // Preloaded once per org so the search is instant client-round-trip
+    // (filter in memory), same pattern as the leave-creation employee picker.
+    public $employeesList = [];
+
+    public $employeeSearchTerm = '';
+    public $employeeIds = [];
+
+    public $ts_employeeSearchTerm = '';
+    public $ts_employeeIds = [];
+
+    public function filteredEmployeeOptions(string $term)
+    {
+        $term = strtolower(trim($term));
+        $list = collect($this->employeesList);
+
+        if ($term === '') {
+            return $list;
+        }
+
+        return $list->filter(function ($e) use ($term) {
+            return str_contains(strtolower($e['name']), $term)
+                || str_contains(strtolower($e['department'] ?? ''), $term);
+        })->values();
+    }
+
+    public function clearEmployeeIds(): void
+    {
+        $this->employeeIds = [];
+        $this->dispatch('filter-updated');
+    }
+
+    public function clearTsEmployeeIds(): void
+    {
+        $this->ts_employeeIds = [];
+        $this->dispatch('timesheets-filter-updated');
+    }
+
     public function units()
     {
         return \App\Models\Unit::where('organization_id', auth()->user()->employee->organization_id)
@@ -130,6 +168,18 @@ new class extends Component {
                 ->orderBy('employee_type')
                 ->pluck('employee_type')
                 ->toArray();
+
+            $this->employeesList = Employee::where('organization_id', $orgId)
+                ->where('active', 1)
+                ->with('department:id,name')
+                ->orderBy('name')
+                ->get(['id', 'name', 'department_id'])
+                ->map(fn ($e) => [
+                    'id' => $e->id,
+                    'name' => $e->name,
+                    'department' => $e->department?->name,
+                ])
+                ->toArray();
         }
 
         $this->loadReportSettings();
@@ -190,6 +240,7 @@ new class extends Component {
             unit_id: $this->unit_id, department_id: $this->department_id,
             section_id: $this->section_id, subsection_id: $this->subsection_id,
             include_outsourced: $this->includeOutsourced,
+            employee_ids: $this->employeeIds,
         );
     }
 
@@ -207,6 +258,7 @@ new class extends Component {
             unit_id: $this->ts_unit_id, department_id: $this->ts_department_id,
             section_id: $this->ts_section_id, subsection_id: $this->ts_subsection_id,
             include_outsourced: $this->ts_includeOutsourced,
+            employee_ids: $this->ts_employeeIds,
         );
     }
 
@@ -611,6 +663,50 @@ new class extends Component {
             margin-bottom: 8px;
         }
 
+        /* Employee filter dropdown (daily + timesheet panels) — scoped so it
+           doesn't inherit the page's red .btn-outline-secondary override above. */
+        .emp-filter-toggle {
+            background-color: #fff !important;
+            border: 1px solid #d1d5db !important;
+            color: #334155 !important;
+            border-radius: 8px !important;
+            padding: 6px 14px !important;
+            font-size: 0.875rem !important;
+        }
+
+        .emp-filter-toggle:hover,
+        .emp-filter-toggle:focus {
+            border-color: var(--primary-color, #635bff) !important;
+            color: var(--primary-color, #635bff) !important;
+            background-color: #fff !important;
+        }
+
+        /* Alpine-driven, not Bootstrap's .dropdown-menu — Bootstrap's JS-managed
+           .show class gets wiped by Livewire's re-render on every keystroke/click,
+           closing the menu mid-search. Alpine's own x-show state survives that. */
+        .emp-filter-menu {
+            position: absolute;
+            top: calc(100% + 6px);
+            left: 0;
+            z-index: 1050;
+            background: #fff;
+            border-radius: 10px;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, .08);
+            border: 1px solid #e2e8f0;
+        }
+
+        [x-cloak] {
+            display: none !important;
+        }
+
+        .emp-filter-menu label:hover {
+            background-color: #f8fafc;
+        }
+
+        .emp-filter-menu input[type="checkbox"]:checked {
+            background-color: var(--primary-color, #635bff) !important;
+            border-color: var(--primary-color, #635bff) !important;
+        }
 
     </style>
 
@@ -893,6 +989,47 @@ new class extends Component {
                                             </div>
                                         </div>
 
+                                        <div class="dropdown mb-3" x-data="{ empFilterOpen: false }" @click.outside="empFilterOpen = false">
+                                            <button class="btn emp-filter-toggle dropdown-toggle d-flex align-items-center justify-content-between"
+                                                    type="button" id="dailyEmployeeFilterDropdown"
+                                                    @click="empFilterOpen = !empFilterOpen"
+                                                    style="min-width:260px;">
+                                                <span><i class="ti ti-users me-1"></i>Filter by Employee</span>
+                                                @if(count($employeeIds) > 0)
+                                                    <span class="ms-2" style="background:var(--primary-color, #635bff); color:#fff; font-size:.72rem; font-weight:700; padding:2px 8px; border-radius:99px;">{{ count($employeeIds) }}</span>
+                                                @endif
+                                            </button>
+                                            <div class="emp-filter-menu p-3" style="width:320px;" x-show="empFilterOpen" x-cloak aria-labelledby="dailyEmployeeFilterDropdown">
+                                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                                    <span class="fw-semibold small text-muted text-uppercase" style="letter-spacing:.04em;">Select Employees</span>
+                                                    @if(count($employeeIds) > 0)
+                                                        <button type="button" class="btn btn-sm btn-link text-danger p-0" wire:click="clearEmployeeIds">
+                                                            Clear
+                                                        </button>
+                                                    @endif
+                                                </div>
+
+                                                <input type="text" class="form-control form-control-sm mb-3"
+                                                       placeholder="Search by name or department..."
+                                                       wire:model.live.debounce.300ms="employeeSearchTerm">
+
+                                                <div style="max-height:220px; overflow-y:auto; padding-top:2px;">
+                                                    @forelse($this->filteredEmployeeOptions($employeeSearchTerm) as $emp)
+                                                        <label wire:key="daily-emp-{{ $emp['id'] }}"
+                                                               class="d-flex align-items-center gap-2 px-2 py-1 mb-0 small" style="cursor:pointer;">
+                                                            <input type="checkbox" class="form-check-input mt-0 flex-shrink-0"
+                                                                   wire:model.live="employeeIds" value="{{ $emp['id'] }}"
+                                                                   wire:change="$dispatch('filter-updated')">
+                                                            <span class="flex-grow-1">{{ $emp['name'] }}</span>
+                                                            <span class="text-muted">{{ $emp['department'] ?? '—' }}</span>
+                                                        </label>
+                                                    @empty
+                                                        <div class="text-muted small px-2 py-2">No employees match "{{ $employeeSearchTerm }}"</div>
+                                                    @endforelse
+                                                </div>
+                                            </div>
+                                        </div>
+
                                         <!-- Livewire Component -->
                                         <livewire:attendance-daily-table theme="bootstrap-4"/>
                                     </div>
@@ -1020,6 +1157,47 @@ new class extends Component {
                                                     <span class="fw-semibold">Include Outsourced staff</span>
                                                     <span class="text-muted d-block d-md-inline"> — excluded by default since they don't sit under Unit/Department/Section.</span>
                                                 </label>
+                                            </div>
+                                        </div>
+
+                                        <div class="dropdown mb-3" x-data="{ empFilterOpen: false }" @click.outside="empFilterOpen = false">
+                                            <button class="btn emp-filter-toggle dropdown-toggle d-flex align-items-center justify-content-between"
+                                                    type="button" id="tsEmployeeFilterDropdown"
+                                                    @click="empFilterOpen = !empFilterOpen"
+                                                    style="min-width:260px;">
+                                                <span><i class="ti ti-users me-1"></i>Filter by Employee</span>
+                                                @if(count($ts_employeeIds) > 0)
+                                                    <span class="ms-2" style="background:var(--primary-color, #635bff); color:#fff; font-size:.72rem; font-weight:700; padding:2px 8px; border-radius:99px;">{{ count($ts_employeeIds) }}</span>
+                                                @endif
+                                            </button>
+                                            <div class="emp-filter-menu p-3" style="width:320px;" x-show="empFilterOpen" x-cloak aria-labelledby="tsEmployeeFilterDropdown">
+                                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                                    <span class="fw-semibold small text-muted text-uppercase" style="letter-spacing:.04em;">Select Employees</span>
+                                                    @if(count($ts_employeeIds) > 0)
+                                                        <button type="button" class="btn btn-sm btn-link text-danger p-0" wire:click="clearTsEmployeeIds">
+                                                            Clear
+                                                        </button>
+                                                    @endif
+                                                </div>
+
+                                                <input type="text" class="form-control form-control-sm mb-3"
+                                                       placeholder="Search by name or department..."
+                                                       wire:model.live.debounce.300ms="ts_employeeSearchTerm">
+
+                                                <div style="max-height:220px; overflow-y:auto; padding-top:2px;">
+                                                    @forelse($this->filteredEmployeeOptions($ts_employeeSearchTerm) as $emp)
+                                                        <label wire:key="ts-emp-{{ $emp['id'] }}"
+                                                               class="d-flex align-items-center gap-2 px-2 py-1 mb-0 small" style="cursor:pointer;">
+                                                            <input type="checkbox" class="form-check-input mt-0 flex-shrink-0"
+                                                                   wire:model.live="ts_employeeIds" value="{{ $emp['id'] }}"
+                                                                   wire:change="$dispatch('timesheets-filter-updated')">
+                                                            <span class="flex-grow-1">{{ $emp['name'] }}</span>
+                                                            <span class="text-muted">{{ $emp['department'] ?? '—' }}</span>
+                                                        </label>
+                                                    @empty
+                                                        <div class="text-muted small px-2 py-2">No employees match "{{ $ts_employeeSearchTerm }}"</div>
+                                                    @endforelse
+                                                </div>
                                             </div>
                                         </div>
 

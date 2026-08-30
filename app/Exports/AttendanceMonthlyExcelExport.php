@@ -25,10 +25,12 @@ class AttendanceMonthlyExcelExport implements FromView, ShouldAutoSize, WithTitl
     protected bool $includeOutsourced;
     protected $startDate;
     protected $endDate;
+    protected array $employeeIds;
 
     public function __construct(
         $selected = [], $unitId = null, $departmentId = null, $sectionId = null,
-        $subsectionId = null, $includeOutsourced = false, $startDate = null, $endDate = null
+        $subsectionId = null, $includeOutsourced = false, $startDate = null, $endDate = null,
+        $employeeIds = []
     ) {
         $this->selected = $selected;
         $this->unitId = $unitId;
@@ -38,6 +40,7 @@ class AttendanceMonthlyExcelExport implements FromView, ShouldAutoSize, WithTitl
         $this->includeOutsourced = (bool) $includeOutsourced;
         $this->startDate = $startDate;
         $this->endDate = $endDate;
+        $this->employeeIds = $employeeIds;
     }
 
     public function baseQuery()
@@ -64,6 +67,11 @@ class AttendanceMonthlyExcelExport implements FromView, ShouldAutoSize, WithTitl
                     $q->orWhere('employees.employee_type', 'Outsourced');
                 }
             });
+        }
+
+        // Specific, named employees picked from the report's employee search
+        if (!empty($this->employeeIds)) {
+            $query->whereIn('attendances.employee_id', $this->employeeIds);
         }
 
         // Date filtering

@@ -303,6 +303,12 @@ class SyncZKBioAttendance extends Command
             $attendance->shift_id = $shift?->id;
 
             if ($shift) {
+                // Multi-shift employees (e.g. Day + Night): a check-in that resolves
+                // to a different shift than their stored default becomes the new
+                // default, so tomorrow's absence check judges them against the
+                // shift they're actually on. No-op for single-shift employees.
+                $employee->maybeSwitchToShift($shift);
+
                 $shiftStart = $shift->getEffectiveStartTime($date);
                 $shiftEnd = $shift->getEffectiveEndTime($date);
 

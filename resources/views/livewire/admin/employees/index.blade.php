@@ -122,11 +122,14 @@ new class extends Component {
         } elseif ($level === 'department') {
             $this->form_section_id = $this->form_subsection_id = '';
 
-            // Selecting a department pre-fills its default shift, if one is set.
+            // Selecting a department pre-fills its default shift, if one is set —
+            // but only when shift_id is still empty or holds our own last auto-fill,
+            // so we never silently overwrite a shift the user picked themselves.
             if ($this->department_id) {
                 $defaultShiftId = Department::find($this->department_id)?->default_shift_id;
-                if ($defaultShiftId) {
+                if ($defaultShiftId && (empty($this->shift_id) || $this->shift_id == $this->autoFilledShiftId)) {
                     $this->shift_id = $defaultShiftId;
+                    $this->autoFilledShiftId = $defaultShiftId;
                 }
             }
         } elseif ($level === 'section') {
@@ -135,6 +138,7 @@ new class extends Component {
     }
     public $shifts;
     public $shift_id;
+    public $autoFilledShiftId = null; // tracks our own auto-filled shift_id, so a manual pick is never overwritten
     public $role;
     public $employeeId;
     public $search = '';
@@ -275,6 +279,7 @@ new class extends Component {
             ?? $this->shifts->firstWhere('name', 'Day')?->id
             ?? $this->shifts->first()?->id
             ?? null;
+        $this->autoFilledShiftId = $this->shift_id;
 
     }
 
@@ -1426,6 +1431,7 @@ new class extends Component {
         $this->email = $employee->email;
         $this->phone = $employee->phone;
         $this->shift_id = $employee->shift_id;
+        $this->autoFilledShiftId = null; // editing an existing shift assignment — don't let a department re-pick override it
         $this->department_id = $employee->department_id;
         $this->form_unit_id = $employee->unit_id ?? '';
         $this->form_section_id = $employee->section_id ?? '';
@@ -1621,6 +1627,7 @@ new class extends Component {
             ?? $this->shifts->firstWhere('name', 'Day')?->id
             ?? $this->shifts->first()?->id
             ?? null;
+        $this->autoFilledShiftId = $this->shift_id;
     }
 
 
@@ -3882,47 +3889,6 @@ new class extends Component {
                                 </div>
                             @endif
 
-                            <div class="col-md-6 mb-3">
-                                <label class="form-label">Full Name <span class="text-danger">*</span></label>
-                                <input type="text" wire:model="name" class="form-control"
-                                       placeholder="{{ $isStudent ? 'e.g. Jane Kamau' : 'e.g. Mr. James Odhiambo' }}"/>
-                                @error('name') <small class="text-danger">{{ $message }}</small> @enderror
-                            </div>
-
-                            <div class="col-md-6 mb-3">
-                                <label class="form-label">{{ $isStudent ? 'Student ID / Admission No.' : 'ID Number' }}
-                                    <span class="text-danger">*</span></label>
-                                <input type="text" wire:model="id_number" class="form-control"
-                                       placeholder="{{ $isStudent ? 'e.g. STU-0041' : 'e.g. 12345678' }}"/>
-                                @error('id_number') <small class="text-danger">{{ $message }}</small> @enderror
-                            </div>
-
-                            @if(!$isStudentOrg || $personType === 'staff')
-                                <div class="col-md-6 mb-3">
-                                    <label class="form-label">Email Address</label>
-                                    <input type="email" wire:model="email" class="form-control"
-                                           placeholder="e.g. james.o@school.ac.ke"/>
-                                    @error('email') <small class="text-danger">{{ $message }}</small> @enderror
-                                </div>
-                                <div class="col-md-6 mb-3">
-                                    <label class="form-label">Phone Number <span class="text-danger">*</span></label>
-                                    <input type="text" wire:model="phone" class="form-control"
-                                           placeholder="e.g. 254712345678"/>
-                                    @error('phone') <small class="text-danger">{{ $message }}</small> @enderror
-                                </div>
-                            @endif
-
-                            <div class="col-md-6 mb-3">
-                                <label class="form-label">{{ $isStudentOrg ? 'Session / Timetable' : 'Shift' }} <span class="text-danger">*</span></label>
-                                <select wire:model="shift_id" class="form-control">
-                                    <option value="">Select {{ $isStudentOrg ? 'Session' : 'Shift' }}</option>
-                                    @foreach ($shifts as $shift)
-                                        <option value="{{ $shift->id }}">{{ $shift->name }}</option>
-                                    @endforeach
-                                </select>
-                                @error('shift_id') <small class="text-danger">{{ $message }}</small> @enderror
-                            </div>
-
                             @if($isStudent)
                                 <div class="col-md-6 mb-3">
                                     <label class="form-label">Year Group<span class="text-danger">*</span></label>
@@ -3973,6 +3939,47 @@ new class extends Component {
                                     </select>
                                 </div>
                             @endif
+
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Full Name <span class="text-danger">*</span></label>
+                                <input type="text" wire:model="name" class="form-control"
+                                       placeholder="{{ $isStudent ? 'e.g. Jane Kamau' : 'e.g. Mr. James Odhiambo' }}"/>
+                                @error('name') <small class="text-danger">{{ $message }}</small> @enderror
+                            </div>
+
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">{{ $isStudent ? 'Student ID / Admission No.' : 'ID Number' }}
+                                    <span class="text-danger">*</span></label>
+                                <input type="text" wire:model="id_number" class="form-control"
+                                       placeholder="{{ $isStudent ? 'e.g. STU-0041' : 'e.g. 12345678' }}"/>
+                                @error('id_number') <small class="text-danger">{{ $message }}</small> @enderror
+                            </div>
+
+                            @if(!$isStudentOrg || $personType === 'staff')
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label">Email Address</label>
+                                    <input type="email" wire:model="email" class="form-control"
+                                           placeholder="e.g. james.o@school.ac.ke"/>
+                                    @error('email') <small class="text-danger">{{ $message }}</small> @enderror
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label">Phone Number <span class="text-danger">*</span></label>
+                                    <input type="text" wire:model="phone" class="form-control"
+                                           placeholder="e.g. 254712345678"/>
+                                    @error('phone') <small class="text-danger">{{ $message }}</small> @enderror
+                                </div>
+                            @endif
+
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">{{ $isStudentOrg ? 'Session / Timetable' : 'Shift' }} <span class="text-danger">*</span></label>
+                                <select wire:model="shift_id" class="form-control">
+                                    <option value="">Select {{ $isStudentOrg ? 'Session' : 'Shift' }}</option>
+                                    @foreach ($shifts as $shift)
+                                        <option value="{{ $shift->id }}">{{ $shift->name }}</option>
+                                    @endforeach
+                                </select>
+                                @error('shift_id') <small class="text-danger">{{ $message }}</small> @enderror
+                            </div>
 
                             <div class="col-md-6 mb-3">
                                 <label

@@ -27,6 +27,7 @@ class AttendanceDailyTable extends DataTableComponent
     public $sectionId = null;
     public $subsectionId = null;
     public $includeOutsourced = false;
+    public $employeeIds = [];
 
     public $employeeType = 'all';
 
@@ -43,7 +44,8 @@ class AttendanceDailyTable extends DataTableComponent
     #[On('date-range-updated')]
     public function filterByDateRange(
         $startDate, $endDate, $status, $grade = null, $employee_type = null,
-        $unit_id = null, $department_id = null, $section_id = null, $subsection_id = null, $include_outsourced = null
+        $unit_id = null, $department_id = null, $section_id = null, $subsection_id = null, $include_outsourced = null,
+        $employee_ids = null
     ): void {
         $this->startDate = $startDate;
         $this->endDate = $endDate;
@@ -55,6 +57,7 @@ class AttendanceDailyTable extends DataTableComponent
         $this->sectionId = $section_id;
         $this->subsectionId = $subsection_id;
         $this->includeOutsourced = (bool) $include_outsourced;
+        $this->employeeIds = $employee_ids ?? [];
         $this->maybeSeed();
         $this->dispatch('refreshDatatable');
     }
@@ -80,6 +83,14 @@ class AttendanceDailyTable extends DataTableComponent
                 $h->orWhere('employee_type', 'Outsourced');
             }
         });
+    }
+
+    /** Narrows to specific, named employees when picked from the report's employee search. */
+    private function applyEmployeeIdsFilter($q): void
+    {
+        if (!empty($this->employeeIds)) {
+            $q->whereIn('id', $this->employeeIds);
+        }
     }
 
     private function maybeSeed(): void
@@ -132,6 +143,7 @@ class AttendanceDailyTable extends DataTableComponent
                     if ($grade) $q->where('grade', $grade);
                     if ($this->employeeType && $this->employeeType !== 'all') $q->where('employee_type', $this->employeeType);
                     $this->applyHierarchyFilter($q);
+                    $this->applyEmployeeIdsFilter($q);
                 });
             if ($search) $query->where(fn($q) => $q->where('status', 'like', "%$search%")->orWhereHas('employee', fn($q) => $q->where('name', 'like', "%$search%")));
             return $query->orderByDesc('date')->orderByRaw('check_in_time IS NULL')->orderByDesc(DB::raw('COALESCE(check_in_time, updated_at)'));
@@ -145,6 +157,7 @@ class AttendanceDailyTable extends DataTableComponent
                 if ($grade) $q->where('grade', $grade);
                 if ($this->employeeType && $this->employeeType !== 'all') $q->where('employee_type', $this->employeeType);
                 $this->applyHierarchyFilter($q);
+                $this->applyEmployeeIdsFilter($q);
             });
 
         if ($isSchool) {
