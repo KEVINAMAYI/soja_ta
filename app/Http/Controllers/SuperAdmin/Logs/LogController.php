@@ -8,7 +8,9 @@ use Illuminate\Http\Request;
 use App\Utils\ApiConstants;
 use App\Http\Responses\ApiResponse;
 use App\Models\AuditLog;
+use Dedoc\Scramble\Attributes\Group;
 
+#[Group('Superadmin/Logs')]
 class LogController extends Controller
 {
     //method to filter user activity logs
