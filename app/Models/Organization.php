@@ -21,6 +21,7 @@ class Organization extends Model
         'logo_path',
         'break_tracking_enabled',
         'primary_color',
+        'accent_color',
         'logo_height',
         'logo_width',
         'sidebar_bg_color',
@@ -30,6 +31,8 @@ class Organization extends Model
         'zkbio_access_token',
         'zkbio_pin_start',
         'subscription_plan_id',
+        'max_locations',
+        'max_devices',
     ];
 
     protected $casts = [
