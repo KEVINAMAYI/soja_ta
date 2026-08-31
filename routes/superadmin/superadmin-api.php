@@ -9,6 +9,7 @@ use App\Http\Controllers\SuperAdmin\Subscriptions\FeatureCategoryController;
 use App\Http\Controllers\SuperAdmin\Subscriptions\FeatureController;
 use App\Http\Controllers\SuperAdmin\Subscriptions\SubFeatureController;
 use App\Http\Controllers\SuperAdmin\Subscriptions\SubscriptionPlanController;
+use App\Http\Controllers\SuperAdmin\Users\UserController;
 use App\Http\Controllers\SuperAdmin\WorkLocations\WorkLocationController;
 use Illuminate\Support\Facades\Route;
 use Spatie\Permission\Middleware\RoleMiddleware;
@@ -53,6 +54,11 @@ Route::prefix('super-man')->middleware([
         Route::get('/', [DeviceController::class, 'index']);
         Route::post('/', [DeviceController::class, 'store']);
         Route::put('/{device}', [DeviceController::class, 'update']);
+    });
+
+    Route::prefix('users')->group(function () {
+        Route::get('/', [UserController::class, 'index']);
+        Route::put('/{user}/toggle-status', [UserController::class, 'toggleStatus']);
     });
 
     Route::prefix('subscriptions')->group(function () {
