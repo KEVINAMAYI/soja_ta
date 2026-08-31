@@ -27,7 +27,7 @@ class AttendanceDailyTable extends DataTableComponent
 
     public function mount($status = null): void
     {
-        $this->status    = $status;
+        $this->status    = $status; 
         $this->startDate = now()->toDateString();
         $this->endDate   = now()->toDateString();
         $this->departmentId = 'all';

@@ -64,11 +64,43 @@ class LeaveApprovalService
             return $this->advanceOrFinalize($leave, $level, $settings);
         }
 
+        // Moving up the chain: level 1 starts from the applicant, every later
+        // level starts from whoever just approved (their supervisor is next).
         $latest_actor = $leave->latestApprovedApprovalLog()->first()?->actioned_by;
+        $sourceEmployee = ($level > 1 && $latest_actor)
+            ? Employee::where('user_id', $latest_actor)->first()
+            : $leave->employee;
 
-        $next_approver_title_id = $leave->employee?->reports_to_job_title_id;
-        if ($latest_actor && $config['approver_type'] == 'role' && $level > 1) {
-            $next_approver_title_id = Employee::where('user_id', $latest_actor)->value('reports_to_job_title_id');
+        $next_approver_user_id = null;
+        $next_approver_title_id = null;
+
+        Log::info("SOURCE EMPLOYEE: " . ($sourceEmployee?->id ?? 'null') . " for leave ID: " . $leave->id. " REPORTS TO JOB TITLE ID: " . ($sourceEmployee?->reports_to_job_title_id ?? 'null') . " REPORTS TO EMPLOYEE ID: " . ($sourceEmployee?->reports_to_employee_id ?? 'null'));
+
+        if ($config['approver_type'] === 'role') {
+            // Prefer the exact person the source employee reports to; only a
+            // supervisor with a user account can actually action the approval.
+            $supervisor = $sourceEmployee?->reportsTo;
+            if ($supervisor && $supervisor->user_id) {
+                $next_approver_user_id = $supervisor->user_id;
+                $next_approver_title_id = $supervisor->job_title_id;
+            } else {
+                $next_approver_title_id = $sourceEmployee?->reports_to_job_title_id;
+            }
+
+            if (!$next_approver_user_id && !$next_approver_title_id) {
+                if ($level > 1) {
+                    // no one left above them in the chain — auto approve
+                    Log::warning('Leave approval auto-approved: applicant has no reporting level above them for next level approval', [
+                        'leave_id' => $leave->id,
+                        'employee_id' => $leave->employee_id,
+                    ]);
+
+                    $this->finalizeApproval($leave);
+                    return $leave->latestApprovedApprovalLog()->first();
+                }
+
+                // first level with nobody above them — handled as a rejection below
+            }
         }
 
         $log = LeaveApprovalLog::create([
@@ -84,7 +116,7 @@ class LeaveApprovalService
                 : [],
             'approver_user_id' => $config['approver_type'] === 'user'
                 ? ($config['approver_user_ids'][0] ?? $config['approver_user_id'] ?? null)
-                : null,
+                : ($config['approver_type'] === 'role' ? $next_approver_user_id : null),
             'status' => 'pending',
             'opened_at' => now(),
         ]);
@@ -94,7 +126,7 @@ class LeaveApprovalService
         $leave->refresh();
 
         $count_leave_logs = $leave->approvalLogs()->count();
-        if ($count_leave_logs == 1 && $log->approver_type === 'role' && !$next_approver_title_id) {
+        if ($count_leave_logs == 1 && $log->approver_type === 'role' && !$next_approver_user_id && !$next_approver_title_id) {
             Log::warning('Leave approval notification skipped: applicant has no reports_to_job_title_id', [
                 'leave_id' => $leave->id,
                 'employee_id' => $leave->employee_id,
@@ -104,7 +136,25 @@ class LeaveApprovalService
             return $log;
         }
 
-        $this->sendNotifications($leave, $config, $level, $next_approver_title_id);
+        // if the next approver is the same as the previous approver, skip to the next level
+        $prevLog = $leave->latestApprovedApprovalLog()->first();
+        $isSameApprover = $log->approver_type === 'role' && $prevLog && (
+            ($next_approver_user_id && $next_approver_user_id === $prevLog->approver_user_id)
+            || (!$next_approver_user_id && $next_approver_title_id && !$prevLog->approver_user_id && $next_approver_title_id === $prevLog->approver_role)
+        );
+
+        if ($isSameApprover) {
+            $this->approve($leave, auth()->user(), "Leave approval auto-approved: next approver is the same as the previous approver");
+
+            Log::info('Leave approval auto-approved: next approver is the same as the previous approver', [
+                'leave_id' => $leave->id,
+                'employee_id' => $leave->employee_id,
+            ]);
+
+            return $log;
+        }
+
+        $this->sendNotifications($leave, $log, $config, $level);
 
         return $log;
     }
@@ -287,6 +337,11 @@ class LeaveApprovalService
     {
         
         if ($log->approver_type == 'role') {
+            // an exact supervisor (via reports_to_employee_id) takes precedence over the job-title match
+            if ($log->approver_user_id) {
+                return $actor->id === $log->approver_user_id;
+            }
+
             $employee = Employee::where('user_id', $actor->id)->first();
             
             return $employee?->job_title_id == $log->approver_role;
@@ -668,7 +723,7 @@ class LeaveApprovalService
         return $rows;
     }
 
-    private function sendNotifications(Leave $leave, array $config, int $level, ?int $next_approver_title_id): void
+    private function sendNotifications(Leave $leave, LeaveApprovalLog $log, array $config, int $level): void
     {
 
         $recipients = [];
@@ -694,29 +749,40 @@ class LeaveApprovalService
         }
         else if ($config['approver_type'] === 'role') {
 
+            if ($log->approver_user_id) {
+                // exact supervisor identified via the reports-to chain — notify only them
+                $recipients = Employee::where('user_id', $log->approver_user_id)
+                    ->pluck('email')
+                    ->filter()
+                    ->all();
 
-            if (!$next_approver_title_id) {
-                Log::warning('Leave approval notification skipped: applicant has no reports_to_job_title_id', [
+                Log::info('Leave approval notification sent to exact supervisor with user ID: ' . $log->approver_user_id, [
+                    'leave_id' => $leave->id,
+                    'employee_id' => $leave->employee_id,
+                    'recipients' => $recipients,
+                ]);
+            }
+            elseif ($log->approver_role) {
+
+                $recipients = Employee::where('organization_id', $leave->organization_id)
+                    ->where('job_title_id', $log->approver_role)
+                    ->pluck('email')
+                    ->filter()
+                    ->all();
+
+                Log::info('Leave approval notification sent to approvers with job title ID: ' . $log->approver_role, [
+                    'leave_id' => $leave->id,
+                    'employee_id' => $leave->employee_id,
+                    'recipients' => $recipients,
+                    'Organization id' => $leave->organization_id,
+                ]);
+            }
+            else {
+                Log::info('Leave approval notification skipped: applicant has no reports_to_job_title_id', [
                     'leave_id' => $leave->id,
                     'employee_id' => $leave->employee_id,
                 ]);
             }
-                        
-            if ($next_approver_title_id) {
-                $recipients = Employee::where('organization_id', $leave->organization_id)
-                    ->where('job_title_id', $next_approver_title_id)
-                    ->pluck('email')
-                    ->filter()
-                    ->all();
-            }
-        // avoid using role but report to job title if approver type is role
-        // elseif ($config['approver_type'] === 'role' && $config['approver_role']) {
-        //     $recipients = User::role($config['approver_role'])
-        //         ->whereHas('employee', fn ($q) => $q->where('organization_id', $leave->organization_id))
-        //         ->pluck('email')
-        //         ->filter()
-        //         ->all();
-
         }
 
         // if (!empty($config['notify_email'])) {
@@ -726,7 +792,7 @@ class LeaveApprovalService
         $recipients = array_values(array_unique($recipients));
 
         if (!empty($recipients)) {
-            $approverRoleLabel = $config['approver_type'] === 'role' ? ($config['approver_role'] ?? null) : null;
+            $approverRoleLabel = $config['approver_type'] === 'role' ? ($log->approver_role ?? null) : null;
 
             // use for each since I want to send customized email to each approver with their email in the review link --> SIR-DOMMY
             foreach ($recipients as $recipientEmail) {

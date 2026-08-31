@@ -26,6 +26,7 @@ class Employee extends Model
         'status',
         'job_title_id',
         'reports_to_job_title_id',
+        'reports_to_employee_id',
         'face_id',
         'shift_id',
         'qr_code',
@@ -128,6 +129,16 @@ class Employee extends Model
     public function reportsToJobTitle()
     {
         return $this->belongsTo(JobTitle::class, 'reports_to_job_title_id');
+    }
+
+    public function reportsTo()
+    {
+        return $this->belongsTo(Employee::class, 'reports_to_employee_id');
+    }
+
+    public function directReports()
+    {
+        return $this->hasMany(Employee::class, 'reports_to_employee_id');
     }
 
     public function weeklyWorkedHours($employeeId)

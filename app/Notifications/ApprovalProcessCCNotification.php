@@ -34,7 +34,8 @@ class ApprovalProcessCCNotification extends Notification implements ShouldQueue
         $totalDays = $this->leave->num_of_days;
 
         $activeLog = LeaveApprovalLog::where('leave_id', $this->leave->id)
-            ->where('status', 'rejected')
+            // where status is not pending
+            ->where('status', '!=', 'pending')
             ->latest('closed_at')
             ->first();
 
