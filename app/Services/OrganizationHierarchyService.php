@@ -6,6 +6,7 @@ use App\Models\Department;
 use App\Models\Employee;
 use App\Models\JobTitle;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Str;
 
 class OrganizationHierarchyService
 {
@@ -823,5 +824,98 @@ class OrganizationHierarchyService
             'children_ids' =>
                 array_values($node['children']),
         ];
+    }
+
+
+    public function flattenHierarchyRows(array $hierarchy): array
+    {
+        $rows = [];
+
+        foreach ($hierarchy['trees'] ?? [] as $rootNode) {
+            $rootLevel = $this->calculateMaxDepthFromNode($rootNode);
+            $this->appendHierarchyRow($rows, $rootNode, null, true, $rootLevel);
+        }
+
+        foreach ($hierarchy['dangling'] ?? [] as $danglingNode) {
+            $this->appendHierarchyRow($rows, $danglingNode, 'dangling', false, 0);
+        }
+
+        $search = '';
+
+        if ($search === '') {
+            return $rows;
+        }
+
+        $search = Str::lower($search);
+
+        return array_values(array_filter($rows, function (array $row) use ($search) {
+            return Str::contains(Str::lower((string) ($row['name'] ?? '')), $search)
+                || Str::contains(Str::lower((string) ($row['description'] ?? '')), $search)
+                || Str::contains(Str::lower((string) ($row['reports_to'] ?? '')), $search)
+                || Str::contains(Str::lower((string) ($row['parent_title_name'] ?? '')), $search);
+        }));
+    }
+
+    protected function appendHierarchyRow(array &$rows, array $node, ?string $parentTitleName, bool $isParent, int $level): void
+    {
+        $titleName = (string) ($node['name'] ?? 'N/A');
+        $holders = (int) ($node['employee_count'] ?? count($node['employees'] ?? []));
+        $effectiveLevel = max(0, (int) $level);
+
+        $holder_name = $holders .'- Holders';
+        if ($holders == 1) {
+            $holder_name = isset($node['employees'][0]['employee_name']) ? $node['employees'][0]['employee_name'] : $holders .'- Holders';
+        }
+
+        $rows[] = [
+            'id' => $node['id'] ?? null,
+            'name' => $titleName,
+            'description' => $node['description'] ?? null,
+            'level' => $effectiveLevel,
+            'reports_to' => $parentTitleName ?? '--top of chain --',
+            'parent_title_name' => $parentTitleName,
+            'employee_name' => $holder_name,
+            'department_name' => $node['department_name'] ?? 'N/A',
+            'holders' => $holders,
+            'is_active' => (bool) ($node['is_active'] ?? false),
+        ];
+
+        $parentId = $node['parent_id'] ?? null;
+
+        if ($parentId !== null && $parentId !== '') {
+            foreach ($rows as $index => $row) {
+                if (($row['id'] ?? null) == $parentId) {
+                    if (isset($rows[$index]['direct_reporters_count'])) {
+                        $rows[$index]['direct_reporters_count'] += $holders;
+                        $rows[$index]['direct_reporters_title'] = 'employees';
+                    } else {
+                        $rows[$index]['direct_reporters_count'] = $holders;
+                        $rows[$index]['direct_reporters_title'] = $titleName;
+                    }
+                    // $rows[$index]['direct_reporters_count'] = $holders;
+                    // $rows[$index]['direct_reporters_title'] = $titleName;
+                    // break;
+                }
+            }
+        }
+
+        foreach ($node['children'] ?? [] as $childNode) {
+            $this->appendHierarchyRow($rows, $childNode, $titleName, false, $effectiveLevel - 1);
+        }
+    }
+
+    private function calculateMaxDepthFromNode(array $node): int
+    {
+        $childDepths = [];
+
+        foreach ($node['children'] ?? [] as $childNode) {
+            $childDepths[] = $this->calculateMaxDepthFromNode($childNode);
+        }
+
+        if ($childDepths === []) {
+            return 0;
+        }
+
+        return 1 + max($childDepths);
     }
 }
