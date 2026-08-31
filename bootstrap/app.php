@@ -1,10 +1,12 @@
 <?php
 
+use App\Http\Responses\ApiResponse;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Validation\ValidationException;
+use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -36,6 +38,17 @@ return Application::configure(basePath: dirname(__DIR__))
                     'message' => 'Validation failed. Please check the provided data.',
                     'errors' => $e->errors(),
                 ], 422);
+            }
+            return null;
+        });
+
+        $exceptions->renderable(function (NotFoundHttpException $e, $request) {
+            if ($request->expectsJson()) {
+                return ApiResponse::userFailure(
+                    code: 1004,
+                    message: 'The requested resource was not found.',
+                    httpStatusCode: 404,
+                );
             }
             return null;
         });
