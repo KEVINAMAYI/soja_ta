@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Department;
 use App\Models\Employee;
+use App\Models\JobTitle;
 use App\Models\Organization;
 use App\Models\Role;
 use App\Models\Shift;
@@ -143,6 +144,103 @@ class ClientService
         return $organization->fresh(['subscriptionPlan']);
     }
 
+    public function setOrganizationEmployeeDefaults(Organization $organization, array $data): void
+    {
+        // create or update the organization's default employee settings in organization settings table
+        // is isset "generate_employee_qr_on_create" then save it
+        if (isset($data['generate_employee_qr_on_create'])) {
+            $organization->settings()->updateOrCreate(
+                ['key' => 'generate_employee_qr_on_create'],
+                ['value' => $data['generate_employee_qr_on_create']]
+            );
+        }
+
+        if (isset($data['require_employee_photo'])) {
+            $organization->settings()->updateOrCreate(
+                ['key' => 'require_employee_photo'],
+                ['value' => $data['require_employee_photo']]
+            );
+        }
+
+        if (isset($data['auto_assign_employee_id'])) {
+            $organization->settings()->updateOrCreate(
+                ['key' => 'auto_assign_employee_id'],
+                ['value' => $data['auto_assign_employee_id']]
+            );
+        }
+        
+        
+    }
+
+    public function getOrganizationDepartments(Organization $organization)
+    {
+        return $organization->departments()->get();
+    }
+
+    public function createOrganizationDepartment(Organization $organization, array $data): Department
+    {
+        return Department::create([
+            'organization_id' => $organization->id,
+            'name' => $data['name'],
+            'description' => $data['description'] ?? null,
+            'manager_id' => $data['manager_id'] ?? null,
+        ]);
+    }
+
+    public function updateOrganizationDepartment(Department $department, array $data): Department
+    {
+        $department->update([
+            'name' => $data['name'] ?? $department->name,
+            'description' => $data['description'] ?? $department->description,
+            'manager_id' => $data['manager_id'] ?? $department->manager_id,
+        ]);
+
+        return $department;
+    }
+
+    public function getOrganizationHierarchy(Organization $organization, ?string $search = null): array
+    {
+        $hierarchyService = app(OrganizationHierarchyService::class);
+        $hierarchy = $hierarchyService->build($organization->id);
+
+        $flattenedHierarchy = $hierarchyService->flattenHierarchyRows($hierarchy);
+
+        return $flattenedHierarchy;
+    }
+
+    public function saveJobTitle(Organization $organization, array $data): JobTitle
+    {
+        DB::transaction(function () use ($organization, $data) {
+            
+
+            JobTitle::create([
+                'name' => $data['name'],
+                'description' => $data['description'],
+                'department_id' => $data['departmentId'],
+                'is_active' => (bool) $data['isActive'],
+                'organization_id' => $organization->id,
+                // 'created_by' => Auth::id(),
+            ]);
+        });
+
+        return JobTitle::where('organization_id', $organization->id)
+            ->where('name', $data['name'])
+            ->first();
+    }
+
+    public function updateJobTitle(JobTitle $jobTitle, array $data): JobTitle
+    {
+
+        $jobTitle->update([
+            'name' => $data['name'] ?? $jobTitle->name,
+            'description' => $data['description'] ?? $jobTitle->description,
+            'department_id' => $data['departmentId'] ?? $jobTitle->department_id,
+            'is_active' => isset($data['isActive']) ? (bool) $data['isActive'] : $jobTitle->is_active,
+        ]);
+
+        return $jobTitle;
+    }
+
     private function setupDefaultRoles(Organization $organization, User $admin): void
     {
         $defaultRoles = ['admin', 'supervisor', 'employee', 'department-manager'];
@@ -173,4 +271,6 @@ class ClientService
             $admin->assignRole($adminRole);
         }
     }
+
+    
 }
