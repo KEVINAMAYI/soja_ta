@@ -27,7 +27,6 @@ class StoreClientRequest extends FormRequest
             'send_setup_link' => ['nullable', 'boolean'],
 
             // Branding & system colors
-            'logo' => ['nullable', 'image', 'mimes:jpg,jpeg,png,gif', 'max:2048'],
             'primary_color' => ['nullable', 'string', 'max:7'],
             'accent_color' => ['nullable', 'string', 'max:7'],
         ];
