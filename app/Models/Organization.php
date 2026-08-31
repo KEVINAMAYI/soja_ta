@@ -11,6 +11,7 @@ class Organization extends Model
 
     protected $fillable = [
         'name',
+        'active',
         'address',
         'location',
         'email',
@@ -29,6 +30,16 @@ class Organization extends Model
         'zkbio_access_token',
         'zkbio_pin_start'
     ];
+
+    protected $casts = [
+        'active' => 'boolean',
+    ];
+
+    // Alias used by existing views (e.g. platform-admin/tenants.blade.php)
+    public function getIsActiveAttribute(): bool
+    {
+        return (bool) $this->active;
+    }
 
     public function employees()
     {
