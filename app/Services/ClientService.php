@@ -11,6 +11,7 @@ use App\Models\User;
 use Database\Seeders\LeaveTypesSeeder;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Password;
 use Illuminate\Support\Str;
@@ -38,11 +39,9 @@ class ClientService
      * Create a client organization along with its default workspace
      * (shift, department, leave types, roles) and tenant admin account.
      */
-    public function createClient(array $data, ?UploadedFile $logo = null): Organization
+    public function createClient(array $data): Organization
     {
-        return DB::transaction(function () use ($data, $logo) {
-            $logoPath = $logo?->store('logos', 'public');
-
+        return DB::transaction(function () use ($data) {
             $organization = Organization::create([
                 'name' => $data['name'],
                 'email' => $data['email'],
@@ -52,7 +51,6 @@ class ClientService
                 'subscription_plan_id' => $data['subscription_plan_id'],
                 'max_locations' => $data['max_locations'] ?? null,
                 'max_devices' => $data['max_devices'] ?? null,
-                'logo_path' => $logoPath,
                 'primary_color' => $data['primary_color'] ?? '#072639',
                 'accent_color' => $data['accent_color'] ?? null,
                 'active' => true,
@@ -110,6 +108,39 @@ class ClientService
 
             return $organization->fresh(['subscriptionPlan']);
         });
+    }
+
+    public function updateClient(Organization $organization, array $data): Organization
+    {
+        return DB::transaction(function () use ($organization, $data) {
+            $organization->update(
+                Arr::where([
+                    'name' => $data['name'] ?? null,
+                    'email' => $data['email'] ?? null,
+                    'phone_number' => $data['phone_number'] ?? null,
+                    'address' => $data['address'] ?? null,
+                    'website' => $data['website'] ?? null,
+                    'subscription_plan_id' => $data['subscription_plan_id'] ?? null,
+                    'max_locations' => $data['max_locations'] ?? null,
+                    'max_devices' => $data['max_devices'] ?? null,
+                    'primary_color' => $data['primary_color'] ?? '#072639',
+                    'accent_color' => $data['accent_color'] ?? null,
+                    'active' => true,
+                ], fn ($value) => $value !== null)
+            );
+
+            return $organization->fresh(['subscriptionPlan']);
+        });
+    }
+
+    /**
+     * Store a newly uploaded logo and replace the organization's current one.
+     */
+    public function updateLogo(Organization $organization, UploadedFile $logo): Organization
+    {
+        $organization->update(['logo_path' => $logo->store('logos', 'public')]);
+
+        return $organization->fresh(['subscriptionPlan']);
     }
 
     private function setupDefaultRoles(Organization $organization, User $admin): void
