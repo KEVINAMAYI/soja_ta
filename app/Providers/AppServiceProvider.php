@@ -32,6 +32,12 @@ class AppServiceProvider extends ServiceProvider
         Schema::defaultStringLength(191);
         Paginator::useBootstrap();
 
+        // AWS SES closes idle SMTP connections; force a fresh one per queued job
+        // to avoid "451 Timeout waiting for data from client" on a stale, reused connection.
+        Queue::before(function (): void {
+            Mail::purge();
+        });
+
         Gate::define('viewApiDocs', function ($user = null) {
             $secret = config('scramble.access.secret');
 
