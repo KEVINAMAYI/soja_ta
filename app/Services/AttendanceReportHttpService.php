@@ -106,6 +106,7 @@ class AttendanceReportHttpService
 
         $records = $query->get()->map(fn($record) => (object)[
             'employee_id' => $record->employee_id,
+            'id_number' => $record->employee->id_number ?? null,
             'present_days' => $record->present_days,
             'absent_days' => $record->absent_days,
             'leave_days' => $record->leave_days,
