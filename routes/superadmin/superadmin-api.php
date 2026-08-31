@@ -4,6 +4,7 @@ use App\Http\Controllers\SuperAdmin\Auth\SuperAdminAuth;
 use App\Http\Controllers\SuperAdmin\Clients\ClientController;
 use App\Http\Controllers\SuperAdmin\Dashboard\DashboardController;
 use App\Http\Controllers\SuperAdmin\Devices\DeviceController;
+use App\Http\Controllers\SuperAdmin\Integrations\IntegrationController;
 use App\Http\Controllers\SuperAdmin\Logs\LogController;
 use App\Http\Controllers\SuperAdmin\QrTokens\QrTokenController;
 use App\Http\Controllers\SuperAdmin\Subscriptions\FeatureCategoryController;
@@ -43,6 +44,14 @@ Route::prefix('super-man')->middleware([
         Route::get('/{organization}/hierarchy', [ClientController::class, 'getOrganizationHierarchy']);
         Route::post('/{organization}/job-title', [ClientController::class, 'storeJobTitle']);
         Route::put('/{organization}/job-title/{jobTitleId}', [ClientController::class, 'updateJobTitle']);
+
+        // client portal integration settings: API keys, ZKBio hardware sync, Active Directory sync
+        Route::get('/{organization}/integrations', [IntegrationController::class, 'show']);
+        Route::put('/{organization}/integrations/zkbio', [IntegrationController::class, 'updateZkbio']);
+        Route::put('/{organization}/integrations/active-directory', [IntegrationController::class, 'updateActiveDirectory']);
+        Route::put('/{organization}/integrations/api-docs', [IntegrationController::class, 'updateApiDocs']);
+        Route::post('/{organization}/integrations/api-keys/{environment}/generate', [IntegrationController::class, 'generateApiKey']);
+        Route::put('/{organization}/integrations/api-keys/{environment}/toggle', [IntegrationController::class, 'toggleApiKey']);
     });
 
     Route::prefix('work-locations')->group(function () {
