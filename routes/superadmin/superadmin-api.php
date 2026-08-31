@@ -5,6 +5,7 @@ use App\Http\Controllers\SuperAdmin\Clients\ClientController;
 use App\Http\Controllers\SuperAdmin\Dashboard\DashboardController;
 use App\Http\Controllers\SuperAdmin\Devices\DeviceController;
 use App\Http\Controllers\SuperAdmin\Logs\LogController;
+use App\Http\Controllers\SuperAdmin\QrTokens\QrTokenController;
 use App\Http\Controllers\SuperAdmin\Subscriptions\FeatureCategoryController;
 use App\Http\Controllers\SuperAdmin\Subscriptions\FeatureController;
 use App\Http\Controllers\SuperAdmin\Subscriptions\SubFeatureController;
@@ -59,6 +60,12 @@ Route::prefix('super-man')->middleware([
     Route::prefix('users')->group(function () {
         Route::get('/', [UserController::class, 'index']);
         Route::put('/{user}/toggle-status', [UserController::class, 'toggleStatus']);
+    });
+
+    Route::prefix('qr-tokens')->group(function () {
+        Route::get('/', [QrTokenController::class, 'index']);
+        Route::put('/{employee}/revoke', [QrTokenController::class, 'revoke']);
+        Route::put('/{employee}/activate', [QrTokenController::class, 'activate']);
     });
 
     Route::prefix('subscriptions')->group(function () {
