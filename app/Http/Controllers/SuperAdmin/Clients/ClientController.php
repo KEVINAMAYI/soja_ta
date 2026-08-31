@@ -5,7 +5,10 @@ namespace App\Http\Controllers\SuperAdmin\Clients;
 use App\Helpers\PaginationHelper;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\SuperAdmin\Clients\StoreClientRequest;
+use App\Http\Requests\SuperAdmin\Clients\UpdateClientRequest;
+use App\Http\Requests\SuperAdmin\Clients\UploadClientLogoRequest;
 use App\Http\Responses\ApiResponse;
+use App\Models\Organization;
 use App\Services\ClientService;
 use App\Utils\ApiConstants;
 use Dedoc\Scramble\Attributes\Group;
@@ -63,8 +66,27 @@ class ClientController extends Controller
      */
     public function store(StoreClientRequest $request)
     {
-        $organization = $this->service->createClient($request->validated(), $request->file('logo'));
+        $organization = $this->service->createClient($request->validated());
 
         return ApiResponse::success($organization, message: 'Client created', httpStatusCode: 201);
+    }
+
+    public function update(UpdateClientRequest $request, Organization $organization)
+    {
+        $organization = $this->service->updateClient($organization, $request->validated());
+
+        return ApiResponse::success($organization, message: 'Client updated');
+    }
+
+    /**
+     * POST /super-man/clients/{organization}/logo
+     *
+     * Dedicated multipart endpoint for uploading/replacing the client logo.
+     */
+    public function uploadLogo(UploadClientLogoRequest $request, Organization $organization)
+    {
+        $organization = $this->service->updateLogo($organization, $request->file('logo'));
+
+        return ApiResponse::success($organization, message: 'Client logo updated');
     }
 }
