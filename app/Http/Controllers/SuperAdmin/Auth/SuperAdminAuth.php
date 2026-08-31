@@ -12,8 +12,10 @@ use App\Utils\ApiConstants;
 use Illuminate\Support\Facades\Log;
 use App\Http\Responses\ApiResponse;
 use Illuminate\Support\Facades\Auth;
+use Dedoc\Scramble\Attributes\Group;
 use Symfony\Component\HttpFoundation\Response;
 
+#[Group('Superadmin/Auth')]
 class SuperAdminAuth extends Controller
 {
     public function login(LoginRequest $request)
