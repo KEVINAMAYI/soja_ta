@@ -15,6 +15,10 @@ class Employee extends Model
 
     protected $appends = ['current_status_badge'];
 
+    protected $casts = [
+        'qr_code_revoked_at' => 'datetime',
+    ];
+
     protected $fillable = [
         'organization_id',
         'department_id',
@@ -30,6 +34,7 @@ class Employee extends Model
         'face_id',
         'shift_id',
         'qr_code',
+        'qr_code_revoked_at',
         'employee_title',
         'shift_status',
         'start_off_shift_date',
