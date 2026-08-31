@@ -28,7 +28,8 @@ class Organization extends Model
         'zkbio_sync_enabled',
         'zkbio_base_url',
         'zkbio_access_token',
-        'zkbio_pin_start'
+        'zkbio_pin_start',
+        'subscription_plan_id',
     ];
 
     protected $casts = [
@@ -87,6 +88,11 @@ class Organization extends Model
     public function shifts()
     {
         return $this->hasMany(Shift::class);
+    }
+
+    public function subscriptionPlan()
+    {
+        return $this->belongsTo(SubscriptionPlan::class);
     }
 
 }
