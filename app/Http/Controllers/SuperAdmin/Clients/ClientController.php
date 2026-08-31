@@ -71,6 +71,11 @@ class ClientController extends Controller
         return ApiResponse::success($organization, message: 'Client created', httpStatusCode: 201);
     }
 
+    /**
+     * PUT /super-man/clients/{organization}
+     *
+     * Update a client organization, its default workspace and tenant admin account.
+     */
     public function update(UpdateClientRequest $request, Organization $organization)
     {
         $organization = $this->service->updateClient($organization, $request->validated());
