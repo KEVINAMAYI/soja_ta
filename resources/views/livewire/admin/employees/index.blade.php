@@ -2953,8 +2953,8 @@ new class extends Component {
                             @endif
 
                             <div class="col-md-6 mb-3">
-                                <label class="form-label">Job Title <span class="text-danger">*</span></label>
-                                <select wire:model.live="jobTitleId" class="form-control" required {{ empty($department_id) ? 'disabled' : '' }}>
+                                <label class="form-label">Job Title <span class="text-danger"></span></label>
+                                <select wire:model.live="jobTitleId" class="form-control" {{ empty($department_id) ? 'disabled' : '' }}>
                                     <option value="">Select Job Title</option>
                                     @foreach ($jobTitles as $id => $jobTitle)
                                         @if (!empty($department_id) && $jobTitle->department_id == $department_id)
