@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\SuperAdmin\Auth\SuperAdminAuth;
+use App\Http\Controllers\SuperAdmin\Dashboard\DashboardController;
 use App\Http\Controllers\SuperAdmin\Logs\LogController;
 use Illuminate\Support\Facades\Route;
 use Spatie\Permission\Middleware\RoleMiddleware;
@@ -15,5 +16,6 @@ Route::prefix('super-man')->middleware([
 ])->group(function () {
     Route::get('/user-activity-logs/filter', [LogController::class, 'filterUserActivityLogs']);
     Route::get('/audit-logs/filter', [LogController::class, 'filterAuditLogs']);
+    Route::get('/dashboard/analytics', [DashboardController::class, 'analytics']);
 });
 
