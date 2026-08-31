@@ -4,11 +4,13 @@ namespace App\Http\Controllers\SuperAdmin\Dashboard;
 
 use App\Http\Controllers\Controller;
 use App\Services\DashboardAnalyticsService;
+use Dedoc\Scramble\Attributes\Group;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use InvalidArgumentException;
 
+#[Group('Superadmin/Dashboard')]
 class DashboardController extends Controller
 {
     public function __construct(private readonly DashboardAnalyticsService $analyticsService)
