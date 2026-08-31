@@ -33,10 +33,19 @@ class Organization extends Model
         'subscription_plan_id',
         'max_locations',
         'max_devices',
+        'ad_sync_enabled',
+        'ad_tenant_id',
+        'ad_client_id',
+        'ad_client_secret',
+        'api_docs_enabled',
+        'api_docs_url',
     ];
 
     protected $casts = [
         'active' => 'boolean',
+        'ad_sync_enabled' => 'boolean',
+        'ad_client_secret' => 'encrypted',
+        'api_docs_enabled' => 'boolean',
     ];
 
     // Alias used by existing views (e.g. platform-admin/tenants.blade.php)
@@ -96,6 +105,11 @@ class Organization extends Model
     public function subscriptionPlan()
     {
         return $this->belongsTo(SubscriptionPlan::class);
+    }
+
+    public function apiKeys()
+    {
+        return $this->hasMany(OrganizationApiKey::class);
     }
 
 }
