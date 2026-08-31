@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\SuperAdmin\Auth\SuperAdminAuth;
+use App\Http\Controllers\SuperAdmin\Clients\ClientController;
 use App\Http\Controllers\SuperAdmin\Dashboard\DashboardController;
 use App\Http\Controllers\SuperAdmin\Logs\LogController;
 use App\Http\Controllers\SuperAdmin\Subscriptions\FeatureCategoryController;
@@ -21,6 +22,11 @@ Route::prefix('super-man')->middleware([
     Route::get('/user-activity-logs/filter', [LogController::class, 'filterUserActivityLogs']);
     Route::get('/audit-logs/filter', [LogController::class, 'filterAuditLogs']);
     Route::get('/dashboard/analytics', [DashboardController::class, 'analytics']);
+
+    Route::prefix('clients')->group(function () {
+        Route::get('/', [ClientController::class, 'index']);
+        Route::post('/', [ClientController::class, 'store']);
+    });
 
     Route::prefix('subscriptions')->group(function () {
         Route::get('/feature-categories', [FeatureCategoryController::class, 'index']);
