@@ -3,6 +3,7 @@
 use App\Http\Controllers\SuperAdmin\Auth\SuperAdminAuth;
 use App\Http\Controllers\SuperAdmin\Clients\ClientController;
 use App\Http\Controllers\SuperAdmin\Dashboard\DashboardController;
+use App\Http\Controllers\SuperAdmin\Devices\DeviceController;
 use App\Http\Controllers\SuperAdmin\Logs\LogController;
 use App\Http\Controllers\SuperAdmin\Subscriptions\FeatureCategoryController;
 use App\Http\Controllers\SuperAdmin\Subscriptions\FeatureController;
@@ -46,6 +47,12 @@ Route::prefix('super-man')->middleware([
         Route::get('/', [WorkLocationController::class, 'index']);
         Route::post('/', [WorkLocationController::class, 'store']);
         Route::put('/{workLocation}', [WorkLocationController::class, 'update']);
+    });
+
+    Route::prefix('devices')->group(function () {
+        Route::get('/', [DeviceController::class, 'index']);
+        Route::post('/', [DeviceController::class, 'store']);
+        Route::put('/{device}', [DeviceController::class, 'update']);
     });
 
     Route::prefix('subscriptions')->group(function () {
