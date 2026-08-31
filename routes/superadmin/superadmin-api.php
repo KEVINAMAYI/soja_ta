@@ -8,6 +8,7 @@ use App\Http\Controllers\SuperAdmin\Subscriptions\FeatureCategoryController;
 use App\Http\Controllers\SuperAdmin\Subscriptions\FeatureController;
 use App\Http\Controllers\SuperAdmin\Subscriptions\SubFeatureController;
 use App\Http\Controllers\SuperAdmin\Subscriptions\SubscriptionPlanController;
+use App\Http\Controllers\SuperAdmin\WorkLocations\WorkLocationController;
 use Illuminate\Support\Facades\Route;
 use Spatie\Permission\Middleware\RoleMiddleware;
 
@@ -39,6 +40,12 @@ Route::prefix('super-man')->middleware([
         Route::get('/{organization}/hierarchy', [ClientController::class, 'getOrganizationHierarchy']);
         Route::post('/{organization}/job-title', [ClientController::class, 'storeJobTitle']);
         Route::put('/{organization}/job-title/{jobTitleId}', [ClientController::class, 'updateJobTitle']);
+    });
+
+    Route::prefix('work-locations')->group(function () {
+        Route::get('/', [WorkLocationController::class, 'index']);
+        Route::post('/', [WorkLocationController::class, 'store']);
+        Route::put('/{workLocation}', [WorkLocationController::class, 'update']);
     });
 
     Route::prefix('subscriptions')->group(function () {
