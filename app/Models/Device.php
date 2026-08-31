@@ -21,4 +21,9 @@ class Device extends Model
     {
         return $this->belongsTo(DeviceLocation::class);
     }
+
+    public function organization()
+    {
+        return $this->belongsTo(Organization::class);
+    }
 }
