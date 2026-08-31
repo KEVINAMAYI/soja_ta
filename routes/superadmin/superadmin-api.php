@@ -28,6 +28,17 @@ Route::prefix('super-man')->middleware([
         Route::post('/', [ClientController::class, 'store']);
         Route::put('/{organization}', [ClientController::class, 'update']);
         Route::post('/{organization}/logo', [ClientController::class, 'uploadLogo']);
+
+        // route to update client employee defaults
+        Route::put('/{organization}/employee-defaults', [ClientController::class, 'setClientEmployeeDefaults']);
+        Route::get('/{organization}/departments', [ClientController::class, 'getOrganizationDepartments']);
+        Route::post('/{organization}/departments', [ClientController::class, 'createOrganizationDepartment']);
+        Route::put('/{organization}/departments/{departmentId}', [ClientController::class, 'updateOrganizationDepartment']);
+
+        // job title management routesgetOrganizationHierarchy
+        Route::get('/{organization}/hierarchy', [ClientController::class, 'getOrganizationHierarchy']);
+        Route::post('/{organization}/job-title', [ClientController::class, 'storeJobTitle']);
+        Route::put('/{organization}/job-title/{jobTitleId}', [ClientController::class, 'updateJobTitle']);
     });
 
     Route::prefix('subscriptions')->group(function () {
