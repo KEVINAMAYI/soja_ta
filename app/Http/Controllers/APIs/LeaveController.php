@@ -52,28 +52,9 @@ class LeaveController extends Controller
             $startDate = $request->start_date;
             $durationType = $request->duration_type;
 
-            // Calculate end date
-            if ($durationType === 'numberOfDays') {
-                $start = Carbon::parse($startDate);
-                $end = $start->copy()->addDays($request->number_of_days - 1);
-                $endDate = $end->format('Y-m-d');
-            } else {
-                $endDate = $request->end_date;
-            }
-
-            // Check for conflicts
-            $conflicts = $this->getConflictingEmployees([$employeeId], $startDate, $endDate);
-
-            if (!empty($conflicts)) {
-                DB::rollBack();
-                return response()->json([
-                    'code' => 1003,
-                    'message' => 'You have conflicting leave or off-shift status for the requested dates.',
-                ], 409);
-            }
 
             // Get employee details
-            $employee = Employee::with('department')->findOrFail($employeeId);
+            $employee = Employee::with('department', 'shift')->findOrFail($employeeId);
             $orgId = $employee->organization_id;
             $departmentId = $employee->department_id;
 
@@ -90,6 +71,39 @@ class LeaveController extends Controller
                     'message' => 'Invalid or unrecognized leave type for this organization.',
                 ], 422);
             }
+
+            $numberOfDays = 0;
+            // Calculate end date
+            if ($durationType === 'numberOfDays') {
+                $start = Carbon::parse($startDate);
+                $end = $leaveType->calculateEndDateWithStartDateAndNumberOfDays($start, intVal($request->number_of_days));
+                $numberOfDays = intVal($request->number_of_days);
+                $endDate = $end['end_date']->format('Y-m-d');
+            } else {
+                $endDate = $request->end_date;
+
+                $numberOfDays = $leaveType->calculateNumberOfDaysFromLeaveStartAndEndDates(Carbon::parse($startDate), Carbon::parse($endDate))['effective_leave_days'];
+            }
+
+            // use this as default behavior for employees without shifts
+            $returnDate =  Carbon::parse($endDate)->copy()->addDay();
+            if ($employee->shift) {
+                $returnDate = $leaveType->calculateReturnWithEndDate(Carbon::parse($endDate), $employee->shift);
+            }
+            
+            // Check for conflicts
+            $conflicts = $this->getConflictingEmployees([$employeeId], $startDate, $endDate);
+
+            if (!empty($conflicts)) {
+                DB::rollBack();
+                return response()->json([
+                    'code' => 1003,
+                    'message' => 'You have conflicting leave or off-shift status for the requested dates.',
+                ], 409);
+            }
+
+
+            
 
             // Handle different leave types
             if ($leaveType->code === 'offshift') {
@@ -167,11 +181,12 @@ class LeaveController extends Controller
                     'leave_type_id' => $leaveType->id,
                     'start_date' => $startDate,
                     'end_date' => $endDate,
+                    'number_of_days' => $numberOfDays,
                     'reason' => $request->reason,
                     'contact_during_leave' => $request->contact_during_leave,
                     'emergency_contact' => $request->emergency_contact,
                     'handover_to' => $request->handover_to,
-                    'expected_resumption' => Carbon::parse($endDate)->addDay()->format('Y-m-d'),
+                    'expected_resumption' => $returnDate->format('Y-m-d'),
                     'status' => 'pending',
                 ]);
 
