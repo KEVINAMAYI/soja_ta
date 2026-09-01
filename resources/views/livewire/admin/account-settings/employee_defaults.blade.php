@@ -9,6 +9,7 @@ new class extends Component {
     public int $generateQrOnCreate = 1;
     public int $requireEmployeePhoto;
     public int $autoAssignEmployeeId;
+    public int $requireEmployeeJobTitle;
 
     public function mount(): void
     {
@@ -16,9 +17,11 @@ new class extends Component {
         $saved = $org->settings()->where('key', 'generate_employee_qr_on_create')->value('value');
         $requireEmployeePhoto = $org->settings()->where('key', 'require_employee_photo')->value('value');
         $autoAssignEmployeeId = $org->settings()->where('key', 'auto_assign_employee_id')->value('value');
+        $requireEmployeeJobTitle = $org->settings()->where('key', 'require_employee_job_title')->value('value');
         $this->generateQrOnCreate = (int)($saved ?? 1);
         $this->requireEmployeePhoto = (int)($requireEmployeePhoto ?? 1);
         $this->autoAssignEmployeeId = (int)($autoAssignEmployeeId ?? 1);
+        $this->requireEmployeeJobTitle = (int)($requireEmployeeJobTitle ?? 0);
     }
 
     public function saveQrCodeSetting($value)
@@ -86,6 +89,28 @@ new class extends Component {
             ->position('top-end')
             ->show();
     }
+
+    public function saveRequireEmployeeJobTitleSetting($value)
+    {
+        $org = auth()->user()->employee->organization;
+        $value = (int)$value;
+
+        $key = 'require_employee_job_title';
+        $org->settings()->updateOrCreate(
+            ['key' => $key],
+            ['value' => $value],
+            ['type' => 'boolean']
+        );
+
+        $this->requireEmployeeJobTitle = $value;
+
+        LivewireAlert::title('Success!')
+            ->text('Require employee job title setting updated.')
+            ->success()
+            ->toast()
+            ->position('top-end')
+            ->show();
+    }
 };
 
 ?>
@@ -145,6 +170,20 @@ new class extends Component {
                 <!-- <button type="button" class="dept-toggle is-off" aria-label="Require employee photo"></button> -->
             </div>
 
+
+            <div class="dept-setting-row">
+                <div>
+                    <p class="dept-setting-label fs-3 fw-3">Require Job Title</p>
+                    <p class="fs-2 mt-2">Blocks saving a new employee until a job title is specified.</p>
+                </div>
+
+                <button type="button"
+                        class="dept-toggle {{ $requireEmployeeJobTitle ? 'is-on' : 'is-off' }}"
+                        wire:click="saveRequireEmployeeJobTitleSetting({{ $requireEmployeeJobTitle ? 0 : 1 }})"
+                        aria-label="Require job title"></button>
+                <!-- <button type="button" class="dept-toggle is-on" aria-label="Require job title"></button> -->
+            </div>
+
             <div class="dept-setting-row">
                 <div>
                     <p class="dept-setting-label fs-3 fw-3">Auto-assign employee ID</p>
@@ -157,6 +196,7 @@ new class extends Component {
                         aria-label="Auto-assign employee ID"></button>
                 <!-- <button type="button" class="dept-toggle is-on" aria-label="Auto-assign employee ID"></button> -->
             </div>
+
         </div>
     </div>
 
