@@ -3,6 +3,7 @@
 use Livewire\Volt\Component;
 use App\Models\Employee;
 use App\Models\Attendance;
+use App\Services\AttendanceSeeder;
 use Illuminate\Support\Facades\Auth;
 use Carbon\Carbon;
 
@@ -26,6 +27,10 @@ new class extends Component {
 
         $orgId = Auth::user()->employee->organization_id ?? null;
         $today = Carbon::today();
+
+        // Refresh today's night-shift-aware statuses before counting — same
+        // fix as the Dashboard's loadStaffStats().
+        app(AttendanceSeeder::class)->seedIfDue($orgId, $this->isStudentRecord);
 
         // Same scope as the Dashboard's staff stats (loadStaffStats() in
         // dashboard/index.blade.php), so the two pages can't disagree over who's

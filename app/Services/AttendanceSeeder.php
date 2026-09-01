@@ -10,15 +10,37 @@ use Illuminate\Support\Facades\Log;
 
 class AttendanceSeeder
 {
-    public function seedMissingAttendanceRecords(?int $orgId = null, ?Carbon $targetDate = null): void
+    /**
+     * Re-evaluate/refresh today's attendance rows for a staff org before any
+     * page reads present/absent counts, so dashboards and summary widgets see
+     * the same night-shift-aware status the report/export path already gets
+     * via seedMissingAttendanceRecords() (which corrects existing rows too,
+     * not just missing ones — see seedStaffRecord()'s firstOrNew()->fill()->save()).
+     * No-op for school orgs, which don't have shift-window logic to correct.
+     */
+    public function seedIfDue(?int $orgId, bool $isSchool): void
     {
-        $now   = $targetDate ?? now();
-        $today = $now->toDateString();
+        if (!$orgId || $isSchool) return;
+        $this->seedMissingAttendanceRecords($orgId);
+    }
+
+    /**
+     * $targetDate: which date's attendance row to evaluate (defaults to today).
+     * $referenceNow: the clock to judge shift windows against (defaults to $targetDate,
+     * i.e. live "as of right now" behavior). Pass today's real now() alongside a past
+     * $targetDate to backfill an already-elapsed day — a night shift starting on that
+     * date has fully closed by the time the real clock reaches today, so the window
+     * resolves to its final absent/present verdict instead of looking "still open".
+     */
+    public function seedMissingAttendanceRecords(?int $orgId = null, ?Carbon $targetDate = null, ?Carbon $referenceNow = null): void
+    {
+        $today = ($targetDate ?? $referenceNow ?? now())->toDateString();
+        $now   = $referenceNow ?? $targetDate ?? now();
 
         // ── NEVER seed absent on weekends ─────────────────────────────────────
         // Saturday and Sunday are voluntary OT days.
         // Employees who don't come in simply have no attendance record.
-        $dow = $now->dayOfWeek;
+        $dow = Carbon::parse($today)->dayOfWeek;
         if ($dow === Carbon::SATURDAY || $dow === Carbon::SUNDAY) {
             return;
         }
