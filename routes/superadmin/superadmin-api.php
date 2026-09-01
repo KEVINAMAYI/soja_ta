@@ -4,6 +4,7 @@ use App\Http\Controllers\SuperAdmin\Auth\SuperAdminAuth;
 use App\Http\Controllers\SuperAdmin\Clients\ClientController;
 use App\Http\Controllers\SuperAdmin\Dashboard\DashboardController;
 use App\Http\Controllers\SuperAdmin\Devices\DeviceController;
+use App\Http\Controllers\SuperAdmin\Impersonation\ImpersonationController;
 use App\Http\Controllers\SuperAdmin\Integrations\IntegrationController;
 use App\Http\Controllers\SuperAdmin\Logs\LogController;
 use App\Http\Controllers\SuperAdmin\QrTokens\QrTokenController;
@@ -28,11 +29,17 @@ Route::prefix('super-man')->middleware([
     Route::get('/audit-logs/filter', [LogController::class, 'filterAuditLogs']);
     Route::get('/dashboard/analytics', [DashboardController::class, 'analytics']);
 
+    // terminate a running impersonation session from the super admin console
+    Route::delete('/impersonations/{impersonationSession}', [ImpersonationController::class, 'destroy']);
+
     Route::prefix('clients')->group(function () {
         Route::get('/', [ClientController::class, 'index']);
         Route::post('/', [ClientController::class, 'store']);
         Route::put('/{organization}', [ClientController::class, 'update']);
         Route::post('/{organization}/logo', [ClientController::class, 'uploadLogo']);
+
+        // log in to the client portal as the organization's first admin
+        Route::post('/{organization}/impersonate', [ImpersonationController::class, 'store']);
 
         // route to update client employee defaults
         Route::put('/{organization}/employee-defaults', [ClientController::class, 'setClientEmployeeDefaults']);
