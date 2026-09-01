@@ -103,6 +103,8 @@
 
 <body class="link-sidebar">
 
+@include('partials.impersonation-banner')
+
 <div id="main-wrapper" {{ $sidebarBg ? "style=background-color:{$sidebarBg};" : '' }}>
     @include('partials.aside')
     <div class="page-wrapper">
