@@ -9,7 +9,7 @@ new class extends Component {
     public int $generateQrOnCreate = 1;
     public int $requireEmployeePhoto;
     public int $autoAssignEmployeeId;
-    public int $requireEmployeeJobTitle = 0;
+    public int $requireEmployeeJobTitle;
 
     public function mount(): void
     {
@@ -21,7 +21,7 @@ new class extends Component {
         $this->generateQrOnCreate = (int)($saved ?? 1);
         $this->requireEmployeePhoto = (int)($requireEmployeePhoto ?? 1);
         $this->autoAssignEmployeeId = (int)($autoAssignEmployeeId ?? 1);
-        $this->requireEmployeeJobTitle = (int)($requireEmployeeJobTitle ?? 1);
+        $this->requireEmployeeJobTitle = (int)($requireEmployeeJobTitle ?? 0);
     }
 
     public function saveQrCodeSetting($value)
