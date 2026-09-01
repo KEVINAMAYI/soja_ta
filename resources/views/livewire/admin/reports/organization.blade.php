@@ -2,6 +2,7 @@
 
 use App\Models\Attendance;
 use App\Models\Unit;
+use App\Services\AttendanceSeeder;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Livewire\Attributes\On;
@@ -23,6 +24,10 @@ new class extends Component {
         $orgId = Auth::user()->employee->organization_id ?? null;
         $this->isStudentRecord = Auth::user()->employee?->organization?->is_student_record ?? false;
         $this->entityLabel = $this->isStudentRecord ? 'Student' : 'Employee';
+
+        // Refresh today's night-shift-aware statuses before charting — same
+        // fix as the Dashboard's loadStaffStats().
+        app(AttendanceSeeder::class)->seedIfDue($orgId, $this->isStudentRecord);
 
         // ?date= drives every chart below — defaults to today, capped at today.
         $requestedDate = request()->query('date');

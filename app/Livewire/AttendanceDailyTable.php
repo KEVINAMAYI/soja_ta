@@ -103,9 +103,8 @@ class AttendanceDailyTable extends DataTableComponent
     {
         $isSchool = (bool)(auth()->user()->employee?->organization?->is_student_record ?? false);
         $orgId = auth()->user()->employee->organization_id ?? null;
-        if (!$orgId || $isSchool) return;
         if (in_array($this->status, ['unchecked_in', 'absent', 'on_leave', 'off_shift', 'sick_off'])) {
-            app(AttendanceSeeder::class)->seedMissingAttendanceRecords($orgId);
+            app(AttendanceSeeder::class)->seedIfDue($orgId, $isSchool);
         }
     }
 

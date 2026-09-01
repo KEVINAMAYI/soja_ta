@@ -5,6 +5,7 @@ use Livewire\Volt\Component;
 use Livewire\WithPagination;
 use App\Models\Attendance;
 use App\Models\Employee;
+use App\Services\AttendanceSeeder;
 
 new class extends Component {
     use WithPagination;
@@ -42,6 +43,11 @@ new class extends Component {
     {
         $date  = Carbon::parse($this->reportDate);
         $orgId = auth()->user()->employee->organization_id ?? null;
+        $isSchool = (bool) (auth()->user()->employee?->organization?->is_student_record ?? false);
+
+        // Refresh today's night-shift-aware statuses before counting — same
+        // fix as the Dashboard's loadStaffStats(). No-op for past report dates.
+        app(AttendanceSeeder::class)->seedIfDue($orgId, $isSchool);
 
         $employees = Employee::where('active', 1)
             ->when($orgId, fn($q) => $q->where('organization_id', $orgId))

@@ -2,6 +2,7 @@
 
 use App\Models\Attendance;
 use App\Models\Employee;
+use App\Services\AttendanceSeeder;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Route;
 use Livewire\Attributes\On;
@@ -514,6 +515,10 @@ new class extends Component {
 
     private function loadStaffSummary(int $orgId): void
     {
+        // Refresh today's night-shift-aware statuses before counting — same
+        // fix as the Dashboard's loadStaffStats().
+        app(AttendanceSeeder::class)->seedIfDue($orgId, false);
+
         // All active NON-student employees
         $employees = Employee::where('organization_id', $orgId)
             ->where('active', 1)

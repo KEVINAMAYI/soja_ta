@@ -6,6 +6,7 @@ use Livewire\WithPagination;
 use App\Models\Attendance;
 use App\Models\Employee;
 use App\Models\Leave;
+use App\Services\AttendanceSeeder;
 
 new class extends Component {
     use WithPagination;
@@ -60,6 +61,11 @@ new class extends Component {
         $startOfMonth = $date->copy()->startOfMonth();
         $endOfMonth = $date->copy()->endOfMonth();
         $orgId = auth()->user()->employee->organization_id ?? null;
+        $isSchool = (bool) (auth()->user()->employee?->organization?->is_student_record ?? false);
+
+        // Refresh today's night-shift-aware statuses before averaging — same
+        // fix as the Dashboard's loadStaffStats(). No-op for past days already in range.
+        app(AttendanceSeeder::class)->seedIfDue($orgId, $isSchool);
 
         // Get total employees
         $this->totalEmployees = Employee::where('active', 1)

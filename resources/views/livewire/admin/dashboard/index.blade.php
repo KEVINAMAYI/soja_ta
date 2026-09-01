@@ -5,6 +5,7 @@ use Livewire\Attributes\On;
 use Livewire\Volt\Component;
 use App\Models\Attendance;
 use App\Models\Employee;
+use App\Services\AttendanceSeeder;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 
@@ -229,6 +230,11 @@ new class extends Component {
     ───────────────────────────────────────────── */
     private function loadStaffStats(int $orgId, Carbon $today): void
     {
+        // Refresh today's night-shift-aware statuses before counting, same as
+        // the report/export page — otherwise present/absent here can lag
+        // behind what AttendanceSeeder would resolve for shift-crossing-midnight staff.
+        app(AttendanceSeeder::class)->seedIfDue($orgId, false);
+
         // Only non-student active employees
         $employees = Employee::where('organization_id', $orgId)
             ->where('active', 1)
