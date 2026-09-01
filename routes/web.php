@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Impersonation\ImpersonationSessionController;
 use App\Http\Controllers\PDFExports\AttendanceExportController;
 use App\Http\Controllers\PDFExports\ClientsExportController;
 use App\Http\Controllers\PDFExports\EmployeeExportController;
@@ -22,6 +23,14 @@ Route::middleware(['auth'])->group(function () {
 require __DIR__ . '/auth.php';
 require __DIR__ . '/dashboard/admin.php';
 require __DIR__ . '/dashboard/superadmin.php';
+
+// Super-admin impersonation handoff: the token is single-use and short-lived.
+Route::get('impersonate/{token}', [ImpersonationSessionController::class, 'enter'])
+    ->middleware('throttle:10,1')
+    ->name('impersonation.enter');
+Route::post('impersonate/stop', [ImpersonationSessionController::class, 'leave'])
+    ->middleware('auth')
+    ->name('impersonation.stop');
 
 // This route will handle the PDF download
 Route::get('/employees/export/daily/pdf', [EmployeeExportController::class, 'exportEmployeePdf'])->name('employees.export.pdf');
