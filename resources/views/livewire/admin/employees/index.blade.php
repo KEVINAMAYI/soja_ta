@@ -103,6 +103,7 @@ new class extends Component {
     public bool $adSyncing = false;
     public ?string $adLastSynced = null;
     public array $selectedAdUsers = [];
+    public bool $requireEmployeeTitleSetting = false;
 
     public function mount($roleId = null): void
     {
@@ -126,6 +127,9 @@ new class extends Component {
         $this->shifts = $org->shifts;
 
         $orgId = $org->id;
+
+        // get organization settings for employee defaults
+        $this->requireEmployeeTitleSetting = (bool)$org->settings()->where('key', 'require_employee_job_title')->value('value');
 
         if ($this->isStudentOrg) {
             $this->roles = SpatieRole::where('organization_id', $orgId)
@@ -2953,8 +2957,8 @@ new class extends Component {
                             @endif
 
                             <div class="col-md-6 mb-3">
-                                <label class="form-label">Job Title <span class="text-danger"></span></label>
-                                <select wire:model.live="jobTitleId" class="form-control" {{ empty($department_id) ? 'disabled' : '' }}>
+                                <label class="form-label">Job Title <span class="text-danger">{{ $requireEmployeeTitleSetting ? '*' : '' }}</span></label>
+                                <select wire:model.live="jobTitleId" class="form-control" {{ empty($department_id) ? 'disabled' : '' }} {{ $requireEmployeeTitleSetting ? 'required' : '' }}>
                                     <option value="">Select Job Title</option>
                                     @foreach ($jobTitles as $id => $jobTitle)
                                         @if (!empty($department_id) && $jobTitle->department_id == $department_id)
@@ -2966,7 +2970,7 @@ new class extends Component {
                             </div>
 
                             <div class="col-md-6 mb-3">
-                                <label class="form-label">Reports to Job Title <span class="text-danger">*</span></label>
+                                <label class="form-label">Reports to Job Title <span class="text-danger"></span></label>
                                 <select wire:model.live="reportsToJobTitleId" class="form-control" {{ empty($jobTitleId) ? 'disabled' : '' }}>
                                     <option value="" {{ empty($reportsToJobTitleId) ? 'selected' : '' }}>Select Job Title this employee reports to</option>
                                     @foreach ($jobTitles as $id => $jobTitle)
