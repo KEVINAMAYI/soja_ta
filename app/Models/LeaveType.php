@@ -46,7 +46,7 @@ class LeaveType extends Model
         $organization = $this->organization;
 
         // Calculate the total number of days between the start and end dates
-        $totalDays = $startDate->diffInDays($endDate) + 1; // +1 to include the start date
+        $totalDays = (int) floor($startDate->startOfDay()->diffInDays($endDate->copy()->startOfDay())) + 1; // +1 to include the start date
 
         // Initialize the count of weekends and holidays
         $weekendsCount = 0;
