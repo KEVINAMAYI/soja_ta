@@ -188,7 +188,7 @@ class LeaveController extends Controller
                     'contact_during_leave' => $request->contact_during_leave,
                     'emergency_contact' => $request->emergency_contact,
                     'handover_to' => $request->handover_to,
-                    'expected_resumption' => $returnDate->format('Y-m-d'),
+                    'expected_resumption' => Carbon::parse($returnDate)->format('Y-m-d'),
                     'status' => 'pending',
                 ]);
 
