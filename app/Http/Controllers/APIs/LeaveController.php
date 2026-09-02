@@ -206,6 +206,7 @@ class LeaveController extends Controller
                         'leave_type' => $leaveType->name,
                         'start_date' => $startDate,
                         'end_date' => $endDate,
+                        'num_of_days' => $leave->number_of_days,
                         'status' => 'pending',
                         'expected_resumption' => $leave->expected_resumption,
                     ]
