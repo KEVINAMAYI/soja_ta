@@ -183,7 +183,7 @@ class LeaveController extends Controller
                     'leave_type_id' => $leaveType->id,
                     'start_date' => $startDate,
                     'end_date' => $endDate,
-                    'number_of_days' => $numberOfDays,
+                    'num_of_days' => $numberOfDays,
                     'reason' => $request->reason,
                     'contact_during_leave' => $request->contact_during_leave,
                     'emergency_contact' => $request->emergency_contact,
@@ -206,9 +206,9 @@ class LeaveController extends Controller
                         'leave_type' => $leaveType->name,
                         'start_date' => $startDate,
                         'end_date' => $endDate,
-                        'num_of_days' => $leave->number_of_days,
+                        'number_of_days' => $numberOfDays,
                         'status' => 'pending',
-                        'expected_resumption' => $leave->expected_resumption,
+                        'expected_resumption' => $returnDate
                     ]
                 ], 201);
             }
