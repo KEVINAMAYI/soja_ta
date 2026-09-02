@@ -30,6 +30,10 @@ Route::middleware(['auth:sanctum'])->group(function () {
         Route::get('/history', [AttendanceController::class, 'attendanceHistory']);
     });
 
+    Route::prefix('v2/attendance')->group(function () {
+        Route::get('/history', [AttendanceController::class, 'attendanceHistoryV2']);
+    });
+
     Route::prefix('organization')->group(function () {
         Route::get('/departments', [OrganizationController::class, 'departments']);
         Route::get('/employees', [OrganizationController::class, 'employees']);
