@@ -75,7 +75,7 @@ class LeaveController extends Controller
             $numberOfDays = 0;
             // Calculate end date
             if ($durationType === 'numberOfDays') {
-                $start = Carbon::parse($startDate);
+                $start = Carbon::parse($startDate)->format('Y-m-d');
                 $end = $leaveType->calculateEndDateWithStartDateAndNumberOfDays($start, intVal($request->number_of_days));
                 $numberOfDays = intVal($request->number_of_days);
                 $endDate = $end['end_date']->format('Y-m-d');
@@ -92,6 +92,7 @@ class LeaveController extends Controller
             }
             $returnDate = Carbon::parse($returnDate)->format('Y-m-d');
             $endDate = Carbon::parse($endDate)->format('Y-m-d');
+            $startDate = Carbon::parse($startDate)->format('Y-m-d');
             
             // Check for conflicts
             $conflicts = $this->getConflictingEmployees([$employeeId], $startDate, $endDate);
@@ -197,6 +198,8 @@ class LeaveController extends Controller
                 // Kick off the dynamic multi-level approval chain (no-op if not configured)
                 app(LeaveApprovalService::class)->createApprovalChain($leave);
 
+                $leave = $leave->fresh();
+
                 return response()->json([
                     'code' => 1000,
                     'message' => 'Leave request submitted successfully. Pending review.',
@@ -205,10 +208,10 @@ class LeaveController extends Controller
                         'employee_id' => $employeeId,
                         'leave_type' => $leaveType->name,
                         'start_date' => $startDate,
-                        'end_date' => $endDate,
-                        'number_of_days' => $numberOfDays,
+                        'end_date' => $leave->end_date->format('Y-m-d'),
+                        'number_of_days' => $leave->num_of_days,
                         'status' => 'pending',
-                        'expected_resumption' => $returnDate
+                        'expected_resumption' => $leave->expected_resumption->format('Y-m-d')
                     ]
                 ], 201);
             }
