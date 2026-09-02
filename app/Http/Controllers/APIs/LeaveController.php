@@ -82,7 +82,7 @@ class LeaveController extends Controller
             } else {
                 $endDate = $request->end_date;
 
-                $numberOfDays = $leaveType->calculateNumberOfDaysFromLeaveStartAndEndDates(Carbon::parse($startDate), Carbon::parse($endDate))['effective_leave_days'];
+                $numberOfDays = $leaveType->calculateNumberOfDaysFromLeaveStartAndEndDates(Carbon::parse($startDate)->format('Y-m-d'), Carbon::parse($endDate)->format('Y-m-d'))['effective_leave_days'];
             }
 
             // use this as default behavior for employees without shifts
