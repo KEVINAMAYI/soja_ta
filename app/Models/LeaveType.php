@@ -126,5 +126,25 @@ class LeaveType extends Model
             'end_date' => $currentDate->subDay(), // Subtract one day to get the last effective leave day
         ];
     }
+
+    public function calculateReturnWithEndDate(Carbon $endDate, Shift $shift)
+    {
+        // shift pattern days format ["Mon","Tue","Wed","Thu","Fri"]
+        $shiftPatternDays = $shift->pattern_days; // Example: ["Mon","Tue","Wed","Thu","Fri"]
+
+        // if no pattern days return the next day after end date
+        if (empty($shiftPatternDays)) {
+            return $endDate->copy()->addDay();
+        }
+
+        // else check the shift pattern to calculate the return date if next day after end date is among pattern days
+        // then return that date as the return date else get the next available date according to the shift pattern
+        $nextDay = $endDate->copy()->addDay();
+        while (!in_array($nextDay->format('D'), $shiftPatternDays)) {
+            $nextDay->addDay();
+        }
+        return $nextDay;
+        
+    }
     
 }

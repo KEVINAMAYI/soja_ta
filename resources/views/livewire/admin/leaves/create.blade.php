@@ -4,6 +4,7 @@ use App\Models\Leave;
 use App\Models\Employee;
 use App\Models\Department;
 use App\Models\LeaveType;
+use App\Models\Shift;
 use App\Services\AttendanceSeeder;
 use App\Services\LeaveApprovalService;
 use Illuminate\Support\Facades\DB;
@@ -376,6 +377,12 @@ new class extends Component {
                 foreach ($employeesToProcess as $employee) {
                     $departmentId = $employee['department_id'] ?? null;
 
+                    $shift = Shift::find($employee['shift_id']);
+
+                    if ($shift) {
+                        $resumptionDate = $this->getSelectedLeaveType()->calculateReturnWithEndDate(Carbon::parse($endDate), $shift);
+                    }
+                    
                     $data = [
                         'organization_id' => $orgId,
                         'employee_id' => $employee['id'],
