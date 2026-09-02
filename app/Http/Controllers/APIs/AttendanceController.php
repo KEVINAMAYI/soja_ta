@@ -793,7 +793,11 @@ class AttendanceController extends Controller
             $endDate = $request->query('end_date');
             $departmentId = $request->query('department_id'); // optional department filter
             $all = $request->query('all', false); // optional flag to get all employees
-            $perPage = min(100, max(1, (int) $request->query('per_page', 15)));
+            $page = $request->input('page', 1);
+            $perPage = $request->query('per_page', 15);
+
+            $page = max(1, (int) $page);
+            $perPage = min(100, max(1, (int) $perPage));
 
             $loggedInEmployee = auth()->user()->employee;
             if (!$loggedInEmployee) {
@@ -855,7 +859,7 @@ class AttendanceController extends Controller
                 $query->whereBetween('date', [$startDate, $endDate]);
             }
 
-            $history = $query->orderBy('date', 'desc')->paginate($perPage);
+            $history = $query->orderBy('date', 'desc')->paginate($perPage, ['*'], 'page', $page);
 
             return response()->json([
                 'code' => 1000,
