@@ -36,6 +36,14 @@ class Leave extends Model
         'total_levels' => 'integer',
     ];
 
+    // Prevent Carbon's default UTC conversion from shifting date-only fields
+    // (e.g. end_date, expected_resumption) to the previous day when the app
+    // timezone has a positive UTC offset.
+    protected function serializeDate(\DateTimeInterface $date)
+    {
+        return $date->format('Y-m-d');
+    }
+
     public function employee()
     {
         return $this->belongsTo(Employee::class)->withTrashed();
