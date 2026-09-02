@@ -783,6 +783,102 @@ class AttendanceController extends Controller
 
 
     /**
+     * V2: same filters/authorization as attendanceHistory() but paginated,
+     * capped at 100 records per page.
+     */
+    public function attendanceHistoryV2(Request $request, $employeeId = null)
+    {
+        try {
+            $startDate = $request->query('start_date');
+            $endDate = $request->query('end_date');
+            $departmentId = $request->query('department_id'); // optional department filter
+            $all = $request->query('all', false); // optional flag to get all employees
+            $perPage = min(100, max(1, (int) $request->query('per_page', 15)));
+
+            $loggedInEmployee = auth()->user()->employee;
+            if (!$loggedInEmployee) {
+                return response()->json([
+                    'code' => 1003,
+                    'message' => 'No employee profile found for the logged-in user.'
+                ], 404);
+            }
+
+            $query = Attendance::with(['employee.user'])
+                ->whereHas('employee', function ($q) use ($loggedInEmployee, $departmentId) {
+                    $q->where('organization_id', $loggedInEmployee->organization_id);
+
+                    if ($departmentId) {
+                        $q->where('department_id', $departmentId);
+                    }
+                });
+
+            // Self-request (default)
+            if (!$all && !$employeeId) {
+                $query->where('employee_id', $loggedInEmployee->id);
+            }
+
+            // Specific employee request
+            if ($employeeId) {
+                $targetEmployee = Employee::findOrFail($employeeId);
+
+                if ($targetEmployee->organization_id !== $loggedInEmployee->organization_id) {
+                    return response()->json([
+                        'code' => 1003,
+                        'message' => 'You cannot view employees from another organization.'
+                    ], 403);
+                }
+
+                // Only users with permission can view others
+                if ($targetEmployee->id !== $loggedInEmployee->id &&
+                    !auth()->user()->can('view-all-attendance')) {
+                    return response()->json([
+                        'code' => 1003,
+                        'message' => 'You do not have permission to view other employees attendance.'
+                    ], 403);
+                }
+
+                $query->where('employee_id', $employeeId);
+            }
+
+            // All employees request (for supervisors/managers)
+            if ($all) {
+                if (!auth()->user()->can('view-all-attendance')) {
+                    return response()->json([
+                        'code' => 1003,
+                        'message' => 'You do not have permission to view all employees attendance.'
+                    ], 403);
+                }
+            }
+
+            // Filter by date range
+            if ($startDate && $endDate) {
+                $query->whereBetween('date', [$startDate, $endDate]);
+            }
+
+            $history = $query->orderBy('date', 'desc')->paginate($perPage);
+
+            return response()->json([
+                'code' => 1000,
+                'message' => 'Attendance history retrieved successfully',
+                'data' => AttendanceResource::collection($history->items()),
+                'pagination' => [
+                    'total' => $history->total(),
+                    'per_page' => $history->perPage(),
+                    'current_page' => $history->currentPage(),
+                    'last_page' => $history->lastPage(),
+                    'from' => $history->firstItem(),
+                    'to' => $history->lastItem(),
+                ],
+            ], 200);
+
+        } catch (\Exception $e) {
+            \Log::error('Error fetching attendance history: ' . $e->getMessage());
+            return $this->errorResponse('Error fetching attendance history', $e);
+        }
+    }
+
+
+    /**
      * Standard error response
      */
     private function errorResponse(string $message, \Throwable $e): \Illuminate\Http\JsonResponse
