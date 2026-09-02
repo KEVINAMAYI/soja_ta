@@ -90,6 +90,8 @@ class LeaveController extends Controller
             if ($employee->shift) {
                 $returnDate = $leaveType->calculateReturnWithEndDate(Carbon::parse($endDate), $employee->shift);
             }
+            $returnDate = $returnDate->format('Y-m-d');
+            $endDate = Carbon::parse($endDate)->format('Y-m-d');
             
             // Check for conflicts
             $conflicts = $this->getConflictingEmployees([$employeeId], $startDate, $endDate);
