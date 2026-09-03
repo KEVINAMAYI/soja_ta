@@ -70,18 +70,19 @@ new class extends Component {
         // Fetch Sick Off count
         $this->sickOff = $attendances->where('status', 'sick_off')->count();
 
-        // Absent = active employees with no accounted-for status at all today — matches
-        // the Dashboard's derivation exactly, instead of counting explicit status='absent'
-        // rows. The literal-count approach silently under-counted whenever the
-        // attendance-seeding cron (attendance:seed, runs every minute) hadn't yet
-        // written an 'absent'/'unchecked_in' row for someone — Present wasn't affected
-        // since it only ever depends on real clock-in punches, but Absent needs a
-        // "no record at all" case to be treated as absent, not invisible.
-        $accountedForIds = $attendances
-            ->whereIn('status', ['clocked_in', 'clocked_out', 'on_leave', 'sick_off', 'off_shift', 'on_break', 'not_scheduled'])
+        // Absent = literal 'absent'/'unchecked_in' rows, same definition the
+        // report/list pages already use. seedIfDue() above has just refreshed
+        // today's rows, so this is current. Deliberately NOT "total minus
+        // accounted-for": that derivation also counted employees with no row
+        // at all as absent — including night-shift staff whose shift hasn't
+        // started yet, which the seeder correctly leaves unwritten because
+        // it's too early to judge them. That mismatch (dashboard showing more
+        // absent than the list/export for the same day) was the actual bug.
+        $this->absent = $attendances
+            ->whereIn('status', ['absent', 'unchecked_in'])
             ->pluck('employee_id')
-            ->unique();
-        $this->absent = max(0, $this->totalEmployees - $accountedForIds->count());
+            ->unique()
+            ->count();
 
         // Fetch Inactive Employees count
         $this->inactiveEmployees = Employee::where('organization_id', $orgId)

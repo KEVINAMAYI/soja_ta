@@ -264,15 +264,17 @@ new class extends Component {
         $this->sickOffToday = $attendancesToday->where('status', 'sick_off')->pluck('employee_id')->unique()->count();
         $this->OffShiftToday = $attendancesToday->where('status', 'off_shift')->pluck('employee_id')->unique()->count();
 
-        // Accounted for = present OR has some other status record
-        $accountedForIds = $attendancesToday
-            ->whereIn('status', ['clocked_in', 'clocked_out', 'on_leave', 'sick_off', 'off_shift', 'on_break','not_scheduled'])
+        // Absent = literal 'absent'/'unchecked_in' rows, same definition the
+        // report/list pages use. NOT "total minus accounted-for" — that also
+        // counted employees with no row at all (e.g. night-shift staff whose
+        // shift hasn't started yet, which the seeder correctly leaves
+        // unwritten) as absent, causing the dashboard to over-count absences
+        // vs. the list/export for the same day.
+        $this->absentToday = $attendancesToday
+            ->whereIn('status', ['absent', 'unchecked_in'])
             ->pluck('employee_id')
-            ->unique();
-
-        // Absent = active staff with NO attendance record at all today
-        // (not present, not on leave, not sick, not off shift)
-        $this->absentToday = max(0, $this->totalEmployees - $accountedForIds->count());
+            ->unique()
+            ->count();
 
         // Overtime — week scope
         $this->overtimeHours = Attendance::whereIn('employee_id', $employeeIds)

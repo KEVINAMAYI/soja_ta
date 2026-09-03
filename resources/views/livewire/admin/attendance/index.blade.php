@@ -547,12 +547,13 @@ new class extends Component {
             ->where('is_student', 0)
             ->count();
 
-        // Absent = not present AND no other status record
-        $accountedForIds = $attendances
-            ->whereIn('status', ['clocked_in', 'clocked_out', 'on_leave', 'sick_off', 'off_shift', 'on_break', 'not_scheduled'])
-            ->pluck('employee_id')->unique();
-
-        $this->absentCount = max(0, $this->totalEmployees - $accountedForIds->count());
+        // Absent = literal 'absent'/'unchecked_in' rows, same definition the
+        // report/list pages use. NOT "total minus accounted-for" — that also
+        // counted employees with no row at all (e.g. night-shift staff whose
+        // shift hasn't started yet) as absent, mismatching the list/export.
+        $this->absentCount = $attendances
+            ->whereIn('status', ['absent', 'unchecked_in'])
+            ->pluck('employee_id')->unique()->count();
     }
 
 
