@@ -17,7 +17,12 @@ new class extends Component {
     public $inactiveEmployees;
     public $entityLabel = 'Employee';
 
-    public function mount()
+    // Date filter for the highlight cards
+    public string $selectedDate = '';
+    public bool $isToday = true;
+    public string $selectedDateLabel = '';
+
+    public function mount($selectedDate = null)
     {
 
         $this->isStudentRecord = Auth::user()->employee?->organization?->is_student_record ?? false;
@@ -28,9 +33,12 @@ new class extends Component {
         // Total employees in the organization
         $this->totalEmployees = Employee::where('organization_id', $orgId)->where('active',1)->count();
 
-        $today = Carbon::today();
+        $today = $selectedDate ? Carbon::parse($selectedDate)->startOfDay() : Carbon::today();
+        $this->selectedDate = $today->toDateString();
+        $this->isToday = $today->isToday();
+        $this->selectedDateLabel = $today->format('d M');
 
-        // Fetch all today's attendances for this org
+        // Fetch all attendances for this org on the selected date
         $attendances = Attendance::whereHas('employee', fn($q) => $q->where('organization_id', $orgId))
             ->whereDate('date', $today)->get();
 
@@ -166,7 +174,7 @@ new class extends Component {
                     <div class="stat-card-icon icon-success">
                         <iconify-icon icon="mdi:account-check"></iconify-icon>
                     </div>
-                    <h6 class="stat-card-title">Present Today</h6>
+                    <h6 class="stat-card-title">{{ $isToday ? 'Present Today' : 'Present on ' . $selectedDateLabel }}</h6>
                     <div class="stat-card-value">{{ $present }} <span
                             class="stat-card-total">/ {{ $totalEmployees }}</span>
                     </div>
@@ -184,7 +192,7 @@ new class extends Component {
                     <div class="stat-card-icon icon-danger">
                         <iconify-icon icon="mdi:account-remove"></iconify-icon>
                     </div>
-                    <h6 class="stat-card-title">Absent Today</h6>
+                    <h6 class="stat-card-title">{{ $isToday ? 'Absent Today' : 'Absent on ' . $selectedDateLabel }}</h6>
                     <div class="stat-card-value">{{ $absent }} <span
                             class="stat-card-total">/ {{ $totalEmployees }}</span>
                     </div>
@@ -202,7 +210,7 @@ new class extends Component {
                     <div class="stat-card-icon icon-info">
                         <iconify-icon icon="mdi:medical-bag"></iconify-icon>
                     </div>
-                    <h6 class="stat-card-title">Sick Off Today</h6>
+                    <h6 class="stat-card-title">{{ $isToday ? 'Sick Off Today' : 'Sick Off on ' . $selectedDateLabel }}</h6>
                     <div class="stat-card-value">{{ $sickOff }} <span
                             class="stat-card-total">/ {{ $totalEmployees }}</span>
                     </div>
@@ -220,7 +228,7 @@ new class extends Component {
                     <div class="stat-card-icon icon-warning">
                         <iconify-icon icon="mdi:airplane-takeoff"></iconify-icon>
                     </div>
-                    <h6 class="stat-card-title">On Leave Today</h6>
+                    <h6 class="stat-card-title">{{ $isToday ? 'On Leave Today' : 'On Leave on ' . $selectedDateLabel }}</h6>
                     <div class="stat-card-value">{{ $onLeave }} <span
                             class="stat-card-total">/ {{ $totalEmployees }}</span>
                     </div>
@@ -238,7 +246,7 @@ new class extends Component {
                     <div class="stat-card-icon icon-cyan">
                         <iconify-icon icon="mdi:clock-remove-outline"></iconify-icon>
                     </div>
-                    <h6 class="stat-card-title">Off Shift Today</h6>
+                    <h6 class="stat-card-title">{{ $isToday ? 'Off Shift Today' : 'Off Shift on ' . $selectedDateLabel }}</h6>
                     <div class="stat-card-value">{{ $offShift }} <span
                             class="stat-card-total">/ {{ $totalEmployees }}</span></div>
                     <p class="stat-card-subtitle">
