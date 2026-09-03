@@ -27,6 +27,7 @@ new class extends Component {
     public $recordType = 'all'; // all, leave, sick_off, off_shift
     public $editingHasActiveApprovalChain = false;
     public $editingCurrentLevel = null;
+    public $loadedEmployee = null;
 
     public $isReporting = null;
 
@@ -354,6 +355,24 @@ new class extends Component {
             if ($startDateDiff != 0 || $endDateDiff != 0) {
                 
                 $new_num_of_days = $leave1->leaveType()?->first()?->calculateNumberOfDaysFromLeaveStartAndEndDates(Carbon::parse($this->start_date), Carbon::parse($this->end_date))['effective_leave_days'];
+                
+                $remaining = $this->getLeaveTypeRemainingDays($new_num_of_days, $leave1, $this->start_date);
+
+                if ($remaining !== null && ($remaining < $new_num_of_days)) { 
+
+                    $this->clearFilters();
+                    $this->resetForm();
+                    $this->dispatch('hide-leave-modal');
+
+                    LivewireAlert::title('Oh no!')
+                    ->text("The proposed new leave dates exceed the remaining leave balance.")
+                    ->error()
+                    ->toast()
+                    ->position('top-end')
+                    ->show();
+
+                    return true; // avoid saving leave update
+                }
                 // save change request to db
                 $leaveAlternativeDate = LeaveAlternativeDate::updateOrCreate(
                     [
@@ -431,6 +450,24 @@ new class extends Component {
             if ($startDateDiff != 0 || $endDateDiff != 0) {
 
                 $new_num_of_days = $leave->leaveType()?->first()?->calculateNumberOfDaysFromLeaveStartAndEndDates(Carbon::parse($this->proposed_start_date), Carbon::parse($this->proposed_end_date))['effective_leave_days'];
+
+                $remaining = $this->getLeaveTypeRemainingDays($new_num_of_days, $leave, $this->proposed_start_date);
+
+                if ($remaining !== null && ($remaining < $new_num_of_days)) { 
+
+                    $this->clearFilters();
+                    $this->resetForm();
+                    $this->dispatch('hide-leave-modal');
+
+                    LivewireAlert::title('Oh no!')
+                    ->text("The proposed new leave dates exceed the remaining leave balance.")
+                    ->error()
+                    ->toast()
+                    ->position('top-end')
+                    ->show();
+
+                    return true; // avoid saving leave update
+                }
                 // save change request to db
                 $leaveAlternativeDate = LeaveAlternativeDate::updateOrCreate(
                     [
@@ -494,6 +531,47 @@ new class extends Component {
         }
 
         return false;
+    }
+
+
+    public function getLeaveTypeRemainingDays(int $new_number_of_days, Leave $leave2, $startDate) {
+
+        Log::info("Calculating remaining leave days for employee ID, leave type: " . ($chosenLeaveType->name ?? 'N/A') . ", new number of days: $new_number_of_days, start date: $startDate");
+        $service = app(LeaveApprovalService::class);
+        $employeeId = $this->employee_id;
+
+        if (!$employeeId) {
+            return null; // Return null if no employee is selected or leave type is not set
+        }
+
+        $employee = $this->loadedEmployee;
+
+        if (!$employee) {
+            $employee = Employee::find($employeeId);
+            $this->loadedEmployee = $employee;
+        }
+
+        Log::info("LEAVE DETAILS ARE: " . json_encode($leave2));
+
+        $chosenLeaveType = LeaveType::find($leave2->leave_type_id);
+
+        if (!$chosenLeaveType) {
+            Log::warning("Leave type not found for employee ID: $employeeId");
+            return null; // Return null if the leave type is not found
+        }
+
+
+
+        $remaining = $service->checkBalance($employee, $chosenLeaveType, (float)$new_number_of_days, Carbon::parse($startDate)->year)['remaining'] ?? null;
+
+        if ($remaining === null) {
+            Log::warning("Remaining leave balance could not be determined for employee ID: $employeeId, leave type: " . ($chosenLeaveType->name ?? 'N/A') . ", new number of days: $new_number_of_days, start date: $startDate");
+            return null; // Return null if the remaining balance could not be determined
+        }
+
+        Log::info("Remaining leave balance for employee ID: $employeeId, leave type: " . ($chosenLeaveType->name ?? 'N/A') . ", new number of days: $new_number_of_days, start date: $startDate, remaining: $remaining");
+        return $remaining;
+
     }
 
     public function saveLeave()
@@ -1808,11 +1886,15 @@ new class extends Component {
 
             const startValue = $startInput.val();
             const endValue = $endInput.val();
+            const tomorrow = new Date();
+            tomorrow.setHours(0, 0, 0, 0);
+            tomorrow.setDate(tomorrow.getDate() + 1);
 
             $startInput.datepicker({
                 format: 'yyyy-mm-dd',
                 autoclose: true,
                 todayHighlight: true,
+                startDate: tomorrow,
             }).on('changeDate', function (e) {
                 const selected = e.format('yyyy-mm-dd');
                 syncDateValue($startInput, selected);
@@ -1830,6 +1912,7 @@ new class extends Component {
                 format: 'yyyy-mm-dd',
                 autoclose: true,
                 todayHighlight: true,
+                startDate: tomorrow,
             }).on('changeDate', function (e) {
                 const selected = e.format('yyyy-mm-dd');
                 syncDateValue($endInput, selected);
