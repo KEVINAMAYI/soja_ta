@@ -86,7 +86,7 @@ new class extends Component {
     public function toggleEmployee($id)
     {
         if (in_array($id, $this->selectedEmployees)) {
-            $this->selectedEmployees = array_diff($this->selectedEmployees, [$id]);
+            $this->selectedEmployees = array_values(array_diff($this->selectedEmployees, [$id]));
         } else {
             $this->selectedEmployees[] = $id;
         }
@@ -196,7 +196,7 @@ new class extends Component {
         $num_of_days = $this->calculateWorkingDays();
 
         $service = app(LeaveApprovalService::class);
-        $employeeId = $this->selectedEmployees[0] ?? null; // Assuming you want to check for the first selected employee
+        $employeeId = collect($this->selectedEmployees)->first();
 
         if (!$employeeId || !$this->selectedLeaveType) {
             return null; // Return null if no employee is selected or leave type is not set
@@ -222,7 +222,8 @@ new class extends Component {
             return null;
         }
 
-        $employee = Employee::find($this->selectedEmployees[0]);
+        Log::info("SELECTED EMPLOYEES NI: " . json_encode($this->selectedEmployees));
+        $employee = Employee::find(collect($this->selectedEmployees)->first());
         $leaveType = $this->getSelectedLeaveType();
 
         if (!$employee || !$leaveType) {
