@@ -20,21 +20,24 @@ class MicrosoftAdService
 
     public function getAccessToken(): string
     {
-        $response = Http::asForm()->post(
-            "https://login.microsoftonline.com/{$this->tenantId}/oauth2/v2.0/token",
-            [
-                'grant_type'    => 'client_credentials',
-                'client_id'     => $this->clientId,
-                'client_secret' => $this->clientSecret,
-                'scope'         => 'https://graph.microsoft.com/.default',
-            ]
-        );
+        //TO DO(UNASSIGNED): Implement actual token retrieval from Microsoft AD relevant to each client
+        // $response = Http::asForm()->post(
+        //     "https://login.microsoftonline.com/{$this->tenantId}/oauth2/v2.0/token",
+        //     [
+        //         'grant_type'    => 'client_credentials',
+        //         'client_id'     => $this->clientId,
+        //         'client_secret' => $this->clientSecret,
+        //         'scope'         => 'https://graph.microsoft.com/.default',
+        //     ]
+        // );
 
-        if ($response->failed()) {
-            throw new \Exception('Failed to get AD token: ' . $response->body());
-        }
+        // if ($response->failed()) {
+        //     throw new \Exception('Failed to get AD token: ' . $response->body());
+        // }
 
-        return $response->json('access_token');
+        // return $response->json('access_token');
+
+        return "";
     }
 
     /**
@@ -44,7 +47,11 @@ class MicrosoftAdService
     {
         $token = $this->getAccessToken();
         $users = [];
-        $url   = 'https://graph.microsoft.com/v1.0/users?$select=id,displayName,givenName,surname,jobTitle,mail,mobilePhone,businessPhones,userPrincipalName';
+
+        // TO DO(UNASSIGNED): Use actual url for every client request to Microsoft Graph API
+        // for now we leave it blank
+        $url = '';
+        // $url   = 'https://graph.microsoft.com/v1.0/users?$select=id,displayName,givenName,surname,jobTitle,mail,mobilePhone,businessPhones,userPrincipalName';
 
         while ($url) {
             $response = Http::withToken($token)->get($url);

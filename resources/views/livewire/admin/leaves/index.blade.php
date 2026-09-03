@@ -27,6 +27,7 @@ new class extends Component {
     public $recordType = 'all'; // all, leave, sick_off, off_shift
     public $editingHasActiveApprovalChain = false;
     public $editingCurrentLevel = null;
+    public $loadedEmployee = null;
 
     public $isReporting = null;
 
@@ -95,6 +96,14 @@ new class extends Component {
         $this->proposed_end_date = null;
 
         $this->dispatch('show-details-modal');
+    }
+
+    public function updatedProposeNewDates($enabled)
+    {
+        if ($enabled && $this->viewingRecord instanceof Leave) {
+            $this->proposed_start_date = $this->viewingRecord->start_date->format('Y-m-d');
+            $this->proposed_end_date = $this->viewingRecord->end_date->format('Y-m-d');
+        }
     }
 
     public function approveFromDetails()
@@ -299,6 +308,8 @@ new class extends Component {
             'contact_during_leave', 'emergency_contact', 'handover_to', 'editId',
             'editingHasActiveApprovalChain', 'editingCurrentLevel',
         ]);
+
+        $this->start_date = now()->format('Y-m-d');
     }
 
     public function clearFilters()
@@ -354,6 +365,24 @@ new class extends Component {
             if ($startDateDiff != 0 || $endDateDiff != 0) {
                 
                 $new_num_of_days = $leave1->leaveType()?->first()?->calculateNumberOfDaysFromLeaveStartAndEndDates(Carbon::parse($this->start_date), Carbon::parse($this->end_date))['effective_leave_days'];
+                
+                $remaining = $this->getLeaveTypeRemainingDays($new_num_of_days, $leave1, $this->start_date);
+
+                if ($remaining !== null && ($remaining < $new_num_of_days)) { 
+
+                    $this->clearFilters();
+                    $this->resetForm();
+                    $this->dispatch('hide-leave-modal');
+
+                    LivewireAlert::title('Oh no!')
+                    ->text("The proposed new leave dates exceed the remaining leave balance.")
+                    ->error()
+                    ->toast()
+                    ->position('top-end')
+                    ->show();
+
+                    return true; // avoid saving leave update
+                }
                 // save change request to db
                 $leaveAlternativeDate = LeaveAlternativeDate::updateOrCreate(
                     [
@@ -431,6 +460,24 @@ new class extends Component {
             if ($startDateDiff != 0 || $endDateDiff != 0) {
 
                 $new_num_of_days = $leave->leaveType()?->first()?->calculateNumberOfDaysFromLeaveStartAndEndDates(Carbon::parse($this->proposed_start_date), Carbon::parse($this->proposed_end_date))['effective_leave_days'];
+
+                $remaining = $this->getLeaveTypeRemainingDays($new_num_of_days, $leave, $this->proposed_start_date);
+
+                if ($remaining !== null && ($remaining < $new_num_of_days)) { 
+
+                    $this->clearFilters();
+                    $this->resetForm();
+                    $this->dispatch('hide-leave-modal');
+
+                    LivewireAlert::title('Oh no!')
+                    ->text("The proposed new leave dates exceed the remaining leave balance.")
+                    ->error()
+                    ->toast()
+                    ->position('top-end')
+                    ->show();
+
+                    return true; // avoid saving leave update
+                }
                 // save change request to db
                 $leaveAlternativeDate = LeaveAlternativeDate::updateOrCreate(
                     [
@@ -441,6 +488,7 @@ new class extends Component {
                         'new_end_date' => $this->proposed_end_date,
                         'new_num_of_days' => $new_num_of_days,
                         'status' => 'pending',
+                        'intended_action' => 'approve',
                         'created_by' => auth()->user()->id,
                     ]
                 );
@@ -494,6 +542,47 @@ new class extends Component {
         }
 
         return false;
+    }
+
+
+    public function getLeaveTypeRemainingDays(int $new_number_of_days, Leave $leave2, $startDate) {
+
+        Log::info("Calculating remaining leave days for employee ID, leave type: " . ($chosenLeaveType->name ?? 'N/A') . ", new number of days: $new_number_of_days, start date: $startDate");
+        $service = app(LeaveApprovalService::class);
+        $employeeId = $this->employee_id;
+
+        if (!$employeeId) {
+            return null; // Return null if no employee is selected or leave type is not set
+        }
+
+        $employee = $this->loadedEmployee;
+
+        if (!$employee) {
+            $employee = Employee::find($employeeId);
+            $this->loadedEmployee = $employee;
+        }
+
+        Log::info("LEAVE DETAILS ARE: " . json_encode($leave2));
+
+        $chosenLeaveType = LeaveType::find($leave2->leave_type_id);
+
+        if (!$chosenLeaveType) {
+            Log::warning("Leave type not found for employee ID: $employeeId");
+            return null; // Return null if the leave type is not found
+        }
+
+
+
+        $remaining = $service->checkBalance($employee, $chosenLeaveType, (float)$new_number_of_days, Carbon::parse($startDate)->year)['remaining'] ?? null;
+
+        if ($remaining === null) {
+            Log::warning("Remaining leave balance could not be determined for employee ID: $employeeId, leave type: " . ($chosenLeaveType->name ?? 'N/A') . ", new number of days: $new_number_of_days, start date: $startDate");
+            return null; // Return null if the remaining balance could not be determined
+        }
+
+        Log::info("Remaining leave balance for employee ID: $employeeId, leave type: " . ($chosenLeaveType->name ?? 'N/A') . ", new number of days: $new_number_of_days, start date: $startDate, remaining: $remaining");
+        return $remaining;
+
     }
 
     public function saveLeave()
@@ -1451,7 +1540,7 @@ new class extends Component {
                                     {{-- For Off Shift and Sick Off: dates side by side --}}
                                     <div class="col-md-6">
                                         <label class="form-label">Start Date</label>
-                                        <input type="text" wire:model.live="start_date" id="leaveStartDate" class="form-control leave-date-input" autocomplete="off" placeholder="YYYY-MM-DD" readonly>
+                                        <input type="text" wire:model.live="start_date" value="{{ $this->start_date }}" id="leaveStartDate" class="form-control leave-date-input" autocomplete="off" placeholder="YYYY-MM-DD" readonly>
                                         @error('start_date') <small class="text-danger">{{ $message }}</small>@enderror
                                     </div>
 
@@ -1464,7 +1553,7 @@ new class extends Component {
                                     {{-- For Leave: dates take full width --}}
                                     <div class="col-md-6">
                                         <label class="form-label">Start Date</label>
-                                        <input type="text" wire:model.live="start_date" id="leaveStartDate" class="form-control leave-date-input" autocomplete="off" placeholder="YYYY-MM-DD" readonly>
+                                        <input type="text" wire:model.live="start_date" value="{{ $this->start_date }}" id="leaveStartDate" class="form-control leave-date-input" autocomplete="off" placeholder="YYYY-MM-DD" readonly>
                                         @error('start_date') <small class="text-danger">{{ $message }}</small>@enderror
                                     </div>
 
@@ -1808,11 +1897,16 @@ new class extends Component {
 
             const startValue = $startInput.val();
             const endValue = $endInput.val();
+            const tomorrow = new Date();
+            tomorrow.setHours(0, 0, 0, 0);
+            tomorrow.setDate(tomorrow.getDate() + 1);
+            const minimumDate = startValue || tomorrow;
 
             $startInput.datepicker({
                 format: 'yyyy-mm-dd',
                 autoclose: true,
                 todayHighlight: true,
+                startDate: minimumDate,
             }).on('changeDate', function (e) {
                 const selected = e.format('yyyy-mm-dd');
                 syncDateValue($startInput, selected);
@@ -1830,6 +1924,7 @@ new class extends Component {
                 format: 'yyyy-mm-dd',
                 autoclose: true,
                 todayHighlight: true,
+                startDate: minimumDate,
             }).on('changeDate', function (e) {
                 const selected = e.format('yyyy-mm-dd');
                 syncDateValue($endInput, selected);
@@ -1885,11 +1980,27 @@ new class extends Component {
 
             const startValue = $startInput.val();
             const endValue = $endInput.val();
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const todayValue = today.toISOString().slice(0, 10);
+            const effectiveStartValue = startValue && startValue >= todayValue ? startValue : todayValue;
+            const effectiveEndValue = endValue && endValue >= effectiveStartValue ? endValue : effectiveStartValue;
+
+            if (effectiveStartValue !== startValue) {
+                syncDateValue($startInput, effectiveStartValue);
+                setLivewireDateValue('proposed_start_date', effectiveStartValue);
+            }
+
+            if (effectiveEndValue !== endValue) {
+                syncDateValue($endInput, effectiveEndValue);
+                setLivewireDateValue('proposed_end_date', effectiveEndValue);
+            }
 
             $startInput.datepicker({
                 format: 'yyyy-mm-dd',
                 autoclose: true,
                 todayHighlight: true,
+                startDate: today,
             }).on('changeDate', function (e) {
                 const selected = e.format('yyyy-mm-dd');
                 syncDateValue($startInput, selected);
@@ -1907,19 +2018,20 @@ new class extends Component {
                 format: 'yyyy-mm-dd',
                 autoclose: true,
                 todayHighlight: true,
+                startDate: effectiveStartValue,
             }).on('changeDate', function (e) {
                 const selected = e.format('yyyy-mm-dd');
                 syncDateValue($endInput, selected);
                 setLivewireDateValue('proposed_end_date', selected);
             });
 
-            if (startValue) {
-                $startInput.datepicker('update', startValue);
-                $endInput.datepicker('setStartDate', startValue);
+            if (effectiveStartValue) {
+                $startInput.datepicker('update', effectiveStartValue);
+                $endInput.datepicker('setStartDate', effectiveStartValue);
             }
 
-            if (endValue) {
-                $endInput.datepicker('update', endValue);
+            if (effectiveEndValue) {
+                $endInput.datepicker('update', effectiveEndValue);
             }
         }
 

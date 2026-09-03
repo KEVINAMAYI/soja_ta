@@ -323,6 +323,26 @@ class LeaveApprovalService
             // reject the leave request if the alternative dates are rejected
             $this->reject($leave, null, 'Leave alternative dates rejected by applicant');
         }
+        Log::info("Leave alternative dates action taken by applicant", [
+            'action' => $action,
+            'leave_id' => $leave->id,
+        ]);
+        if ($action === 'accept') {
+            // get intended action
+            if ($alternativeDates->intended_action == 'approve') {
+                // get who created the alternative date request
+                $creator = $alternativeDates->createdBy;
+                Log::info("APPROVING LEAVE AS INTENDED BY THE ORIGINAL ACTOR", [
+                    'actor_id' => $creator?->id,
+                    'leave_id' => $leave->id,
+                ]);
+
+                if ($creator) {
+                    // approve the leave request if the alternative dates are approved and the intended action was to approve
+                    $this->approve($leave, $creator, 'Leave alternative dates accepted by applicant');
+                }
+            }
+        }
 
     }
 
