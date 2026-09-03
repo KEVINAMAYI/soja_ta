@@ -18,6 +18,7 @@ class LeaveAlternativeDate extends Model
         'created_by',
         'actioned_by',
         'notes',
+        'intended_action',
     ];
 
     public function leave()
