@@ -43,6 +43,12 @@ class Employee extends Model
 
     protected static function booted()
     {
+        static::saving(function ($employee) {
+            if ($employee->isDirty('active')) {
+                $employee->deactivated_at = $employee->active ? null : now();
+            }
+        });
+
         static::creating(function ($employee) {
             $orgId = $employee->organization_id;
 
