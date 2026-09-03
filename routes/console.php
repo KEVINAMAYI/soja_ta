@@ -16,3 +16,7 @@ Schedule::job(FetchZKBioTransactions::class)
 Schedule::job(new ProcessExpiredCheckInApprovals)
     ->everyMinute()
     ->withoutOverlapping();
+
+Schedule::command('employees:auto-deactivate')
+    ->daily()
+    ->appendOutputTo(storage_path('logs/employees-auto-deactivate.log'));
