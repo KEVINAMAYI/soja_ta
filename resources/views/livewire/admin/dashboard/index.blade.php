@@ -38,6 +38,11 @@ new class extends Component {
     public int $totalStudents = 0;
     public array $gradeStats = [];
 
+    // Date filter for the highlight cards
+    public string $selectedDate = '';
+    public bool $isToday = true;
+    public string $selectedDateLabel = '';
+
     public function mount(): void
     {
         $this->entityLabel = auth()->user()->employee?->organization?->is_student_record ? 'Student' : 'Employee';
@@ -48,15 +53,32 @@ new class extends Component {
         $this->showStudentView = $this->isSchoolOrg && ($viewParam === 'student');
 
         $this->googleMapsApiKey = env('GOOGLE_MAPS_API_KEY');
+        $this->selectedDate = Carbon::today()->toDateString();
 
-        $today = Carbon::today();
+        $this->loadDashboardData();
+    }
+
+    /* ─────────────────────────────────────────────
+       Re-run when the date filter changes
+    ───────────────────────────────────────────── */
+    public function updatedSelectedDate(): void
+    {
+        $this->loadDashboardData();
+    }
+
+    private function loadDashboardData(): void
+    {
+        $date = Carbon::parse($this->selectedDate)->startOfDay();
+        $this->isToday = $date->isToday();
+        $this->selectedDateLabel = $date->format('d M');
+
         $orgId = Employee::where('user_id', auth()->id())->value('organization_id');
 
         // Only load the active view's data — no need to load both
         if ($this->showStudentView) {
-            $this->loadSchoolStats($orgId, $today);
+            $this->loadSchoolStats($orgId, $date);
         } else {
-            $this->loadStaffStats($orgId, $today);
+            $this->loadStaffStats($orgId, $date);
         }
     }
 
@@ -278,7 +300,7 @@ new class extends Component {
                 'view_link' => route('attendance.employee-detailed-attendance', ['employeeId' => $att->employee->id]),
             ]);
 
-        $this->dailyAttendancePercentage($employeeIds);
+        $this->dailyAttendancePercentage($employeeIds, $today);
         $this->shiftStats = $this->getShiftStats();
         $this->loadMapData($orgId, $today);
     }
@@ -375,9 +397,10 @@ new class extends Component {
     /* ─────────────────────────────────────────────
        DAILY ATTENDANCE PERCENTAGE
     ───────────────────────────────────────────── */
-    public function dailyAttendancePercentage($employeeIds = null): void
+    public function dailyAttendancePercentage($employeeIds = null, ?Carbon $date = null): void
     {
         $orgId = auth()->user()->employee->organization_id;
+        $date = $date ?? Carbon::today();
 
         // Use passed IDs (already filtered to non-students) or fall back
         if (!$employeeIds) {
@@ -390,7 +413,7 @@ new class extends Component {
         $total = $employeeIds->count();
 
         $present = Attendance::whereIn('employee_id', $employeeIds)
-            ->whereDate('date', now()->toDateString())
+            ->whereDate('date', $date->toDateString())
             ->whereIn('status', ['clocked_in', 'clocked_out'])
             ->distinct('employee_id')
             ->count('employee_id');
@@ -746,6 +769,22 @@ new class extends Component {
 <div class="row g-3">
 
     {{-- ══════════════════════════════════════════
+         DATE FILTER  (drives all highlight cards)
+    ══════════════════════════════════════════ --}}
+    <div class="col-12" x-data x-init="$nextTick(() => initDashboardDatepicker())">
+        <div class="card shadow-sm">
+            <div class="card-body d-flex align-items-center gap-3 flex-wrap py-2">
+                <iconify-icon icon="mdi:calendar-month" style="font-size:20px; color:#64748b;"></iconify-icon>
+                <input type="text" id="dashboardSelectedDate" class="form-control" style="max-width:180px;"
+                       wire:model.live="selectedDate" value="{{ $selectedDate }}" autocomplete="off"/>
+                <span class="text-muted small">
+                    Showing data for {{ \Carbon\Carbon::parse($selectedDate)->format('d M Y') }}
+                </span>
+            </div>
+        </div>
+    </div>
+
+    {{-- ══════════════════════════════════════════
          VIEW TOGGLE  (only shown for school orgs)
     ══════════════════════════════════════════ --}}
     @if($isSchoolOrg)
@@ -814,12 +853,12 @@ new class extends Component {
                     <div class="stat-card-icon icon-indigo">
                         <iconify-icon icon="mdi:login"></iconify-icon>
                     </div>
-                    <h6 class="stat-card-title">Checked In Today</h6>
+                    <h6 class="stat-card-title">{{ $isToday ? 'Checked In Today' : 'Checked In on ' . $selectedDateLabel }}</h6>
                     <div class="stat-card-value">
                         {{ $checkedInTodayCount }}
                         <span class="stat-card-total">/ {{ $totalStudents }}</span>
                     </div>
-                    <p class="stat-card-subtitle">Scanned in today</p>
+                    <p class="stat-card-subtitle">{{ $isToday ? 'Scanned in today' : 'Scanned in on ' . $selectedDateLabel }}</p>
                 </div>
             </a>
         </div>
@@ -830,12 +869,12 @@ new class extends Component {
                     <div class="stat-card-icon icon-warning">
                         <iconify-icon icon="mdi:logout"></iconify-icon>
                     </div>
-                    <h6 class="stat-card-title">Checked Out Today</h6>
+                    <h6 class="stat-card-title">{{ $isToday ? 'Checked Out Today' : 'Checked Out on ' . $selectedDateLabel }}</h6>
                     <div class="stat-card-value">
                         {{ $checkedOutTodayCount }}
                         <span class="stat-card-total">/ {{ $totalStudents }}</span>
                     </div>
-                    <p class="stat-card-subtitle">Scanned out today</p>
+                    <p class="stat-card-subtitle">{{ $isToday ? 'Scanned out today' : 'Scanned out on ' . $selectedDateLabel }}</p>
                 </div>
 
             </a>
@@ -970,7 +1009,7 @@ new class extends Component {
                         <div class="stat-card-icon icon-success">
                             <iconify-icon icon="mdi:account-check"></iconify-icon>
                         </div>
-                        <h6 class="stat-card-title">Present Today</h6>
+                        <h6 class="stat-card-title">{{ $isToday ? 'Present Today' : 'Present on ' . $selectedDateLabel }}</h6>
                         <div class="stat-card-value">
                             {{ $presentToday }}
                             <span class="stat-card-total">/ {{ $totalEmployees }}</span>
@@ -987,7 +1026,7 @@ new class extends Component {
                         <div class="stat-card-icon icon-danger">
                             <iconify-icon icon="mdi:account-remove"></iconify-icon>
                         </div>
-                        <h6 class="stat-card-title">Absent Today</h6>
+                        <h6 class="stat-card-title">{{ $isToday ? 'Absent Today' : 'Absent on ' . $selectedDateLabel }}</h6>
                         <div class="stat-card-value">
                             {{ $absentToday }}
                             <span class="stat-card-total">/ {{ $totalEmployees }}</span>
@@ -1003,7 +1042,7 @@ new class extends Component {
                         <div class="stat-card-icon icon-info">
                             <iconify-icon icon="mdi:medical-bag"></iconify-icon>
                         </div>
-                        <h6 class="stat-card-title">Sick Off Today</h6>
+                        <h6 class="stat-card-title">{{ $isToday ? 'Sick Off Today' : 'Sick Off on ' . $selectedDateLabel }}</h6>
                         <div class="stat-card-value">
                             {{ $sickOffToday }}
                             <span class="stat-card-total">/ {{ $totalEmployees }}</span>
@@ -1019,7 +1058,7 @@ new class extends Component {
                         <div class="stat-card-icon icon-warning">
                             <iconify-icon icon="mdi:airplane-takeoff"></iconify-icon>
                         </div>
-                        <h6 class="stat-card-title">On Leave Today</h6>
+                        <h6 class="stat-card-title">{{ $isToday ? 'On Leave Today' : 'On Leave on ' . $selectedDateLabel }}</h6>
                         <div class="stat-card-value">
                             {{ $leaveToday }}
                             <span class="stat-card-total">/ {{ $totalEmployees }}</span>
@@ -1035,7 +1074,7 @@ new class extends Component {
                         <div class="stat-card-icon icon-cyan">
                             <iconify-icon icon="mdi:clock-remove-outline"></iconify-icon>
                         </div>
-                        <h6 class="stat-card-title">Off Shift Today</h6>
+                        <h6 class="stat-card-title">{{ $isToday ? 'Off Shift Today' : 'Off Shift on ' . $selectedDateLabel }}</h6>
                         <div class="stat-card-value">
                             {{ $OffShiftToday }}
                             <span class="stat-card-total">/ {{ $totalEmployees }}</span>
@@ -1211,6 +1250,52 @@ new class extends Component {
 @push('scripts')
     <script src="https://code.iconify.design/3/3.1.0/iconify.min.js"></script>
     <script>
+        function initDashboardDatepicker() {
+            const $input = $('#dashboardSelectedDate');
+
+            if (typeof $.fn.datepicker === 'undefined' || !$input.length) {
+                return;
+            }
+
+            const setLivewireDateValue = (input, value) => {
+                const componentRoot = input.closest('[wire\\:id]');
+                const componentId = componentRoot?.getAttribute('wire:id');
+
+                if (!componentId || !window.Livewire || typeof window.Livewire.find !== 'function') {
+                    return;
+                }
+
+                const component = window.Livewire.find(componentId);
+                if (component && typeof component.set === 'function') {
+                    component.set('selectedDate', value);
+                }
+            };
+
+            if ($input.data('datepicker')) {
+                $input.datepicker('destroy');
+            }
+
+            const currentValue = $input.val();
+
+            $input.datepicker({
+                format: 'yyyy-mm-dd',
+                autoclose: true,
+                todayHighlight: true,
+                endDate: new Date(),
+            }).on('changeDate', function (e) {
+                const selected = e.format('yyyy-mm-dd');
+                $input.val(selected).trigger('input').trigger('change');
+                setLivewireDateValue($input[0], selected);
+            });
+
+            if (currentValue) {
+                $input.datepicker('update', currentValue);
+            }
+        }
+
+        document.addEventListener('livewire:navigated', initDashboardDatepicker);
+        initDashboardDatepicker();
+
         // ── Blade-rendered PHP data ──────────────────────────────────────
         const workLocations = @json($workLocations);
         const employeeLocations = @json($employeeLocations);
