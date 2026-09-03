@@ -15,116 +15,32 @@ new class extends Component {
     public $topOvertimeEmployees;
     public $entityLabel = 'Employee';
 
+    // Date filter for the daily attendance highlight cards
+    public string $selectedDate = '';
+    public bool $isToday = true;
+    public string $selectedDateLabel = '';
+    public string $monthLabel = '';
+    public string $weekLabel = '';
+    private ?int $orgId = null;
+
 
     public function mount()
     {
 
         $orgId = Auth::user()->employee->organization_id ?? null;
+        $this->orgId = $orgId;
         $this->isStudentRecord = Auth::user()->employee?->organization?->is_student_record ?? false;
         $this->entityLabel = $this->isStudentRecord ? 'Student' : 'Employee';
+        $this->selectedDate = Carbon::today()->toDateString();
 
         // --- 1. Monthly Attendance Data ---
-        $start = Carbon::now()->startOfMonth();
-        $end = Carbon::now()->endOfMonth();
-        $days = $start->diffInDays($end);
-
-        for ($i = 0; $i <= $days; $i++) {
-            $date = $start->copy()->addDays($i)->toDateString();
-
-            // Base query for the day
-            $baseQuery = Attendance::whereHas('employee', function ($q) use ($orgId) {
-                $q->where('organization_id', $orgId);
-            })->whereDate('date', $date);
-
-            // Clone and count for each status
-            $present = (clone $baseQuery)->whereIn('status', ['clocked_in', 'clocked_out'])->count();
-            $absent = (clone $baseQuery)->whereIn('status', ['absent', 'unchecked_in'])->count();
-            $leave = (clone $baseQuery)->where('status', 'on_leave')->count();
-            $offShift = (clone $baseQuery)->where('status', 'off_shift')->count(); // <-- NEW STATUS
-
-            $this->monthlyData[] = [
-                'date' => $date,
-                'present' => $present,
-                'absent' => $absent,
-                'leave' => $leave,
-                'off_shift' => $offShift, // <-- ADDED
-            ];
-        }
-
+        $this->loadMonthlyData();
 
         // --- 2. Department Weekly Data (Chart Data) ---
-        $startOfWeek = Carbon::now()->startOfWeek(); // Monday
-        $endOfWeek = Carbon::now()->endOfWeek();     // Sunday
-
-        $departments = Department::where('organization_id', $orgId)->get();
-
-        $categories = [];
-        $presentData = [];
-        $absentData = [];
-        $leaveData = [];
-        $offShiftData = []; // <-- NEW SERIES
-
-        foreach ($departments as $dept) {
-            $categories[] = $dept->name;
-
-            $attendances = Attendance::whereBetween('date', [$startOfWeek, $endOfWeek])
-                ->whereHas('employee', fn($q) => $q->where('organization_id', $orgId)
-                    ->where('department_id', $dept->id)
-                )->get();
-
-            // Get employees who actually showed up (clocked in or out)
-            $presentEmployeeIds = $attendances
-                ->whereIn('status', ['clocked_in', 'clocked_out'])
-                ->pluck('employee_id')
-                ->unique();
-
-            // Get employees marked absent BUT exclude those who showed up
-            $absentEmployeeIds = $attendances
-                ->whereIn('status', ['absent', 'unchecked_in'])
-                ->pluck('employee_id')
-                ->unique()
-                ->reject(fn($id) => $presentEmployeeIds->contains($id)); // Exclude present employees
-
-            $presentData[] = $presentEmployeeIds->count();
-            $absentData[] = $absentEmployeeIds->count();
-
-            $leaveData[] = $attendances->where('status', 'on_leave')
-                ->pluck('employee_id')
-                ->unique()
-                ->count();
-
-            $offShiftData[] = $attendances->where('status', 'off_shift')
-                ->pluck('employee_id')
-                ->unique()
-                ->count();
-        }
-
-        $this->chartData = [
-            'categories' => $categories,
-            'series' => [
-                ['name' => 'Present', 'data' => $presentData],
-                ['name' => 'Absent', 'data' => $absentData],
-                ['name' => 'Leave', 'data' => $leaveData],
-                ['name' => 'Off Shift', 'data' => $offShiftData], // <-- ADDED SERIES
-            ]
-        ];
-
+        $this->loadWeeklyDepartmentData();
 
         // --- 3. Daily Attendance Status (Pie Chart Data) ---
-        $today = Carbon::today();
-
-        // Get the attendance for today
-        $attendancesToday = Attendance::whereHas('employee', fn($q) => $q->where('organization_id', $orgId))
-            ->whereDate('date', $today)
-            ->get();
-
-        // Aggregate by status and store in the new single array
-        $this->statusData = [
-            'present' => $attendancesToday->whereIn('status', ['clocked_in', 'clocked_out'])->count(),
-            'absent' => $attendancesToday->whereIn('status', ['absent', 'unchecked_in'])->count(),
-            'onLeave' => $attendancesToday->where('status', 'on_leave')->count(),
-            'offShift' => $attendancesToday->where('status', 'off_shift')->count(), // <-- NEW STATUS
-        ];
+        $this->loadDailyStatus();
 
 
         // --- 4. Overtime Data (No change needed) ---
@@ -166,8 +82,152 @@ new class extends Component {
             ->get();
     }
 
+    /* ─────────────────────────────────────────────
+       Monthly attendance timeline — for the month
+       containing the selected date
+    ───────────────────────────────────────────── */
+    private function loadMonthlyData(): void
+    {
+        $selected = Carbon::parse($this->selectedDate);
+        $start = $selected->copy()->startOfMonth();
+        $end = $selected->copy()->endOfMonth();
+        $days = $start->diffInDays($end);
+        $this->monthLabel = $selected->format('F Y');
+
+        $monthlyData = [];
+
+        for ($i = 0; $i <= $days; $i++) {
+            $date = $start->copy()->addDays($i)->toDateString();
+
+            // Base query for the day
+            $baseQuery = Attendance::whereHas('employee', function ($q) {
+                $q->where('organization_id', $this->orgId);
+            })->whereDate('date', $date);
+
+            // Clone and count for each status
+            $present = (clone $baseQuery)->whereIn('status', ['clocked_in', 'clocked_out'])->count();
+            $absent = (clone $baseQuery)->whereIn('status', ['absent', 'unchecked_in'])->count();
+            $leave = (clone $baseQuery)->where('status', 'on_leave')->count();
+            $offShift = (clone $baseQuery)->where('status', 'off_shift')->count();
+
+            $monthlyData[] = [
+                'date' => $date,
+                'present' => $present,
+                'absent' => $absent,
+                'leave' => $leave,
+                'off_shift' => $offShift,
+            ];
+        }
+
+        $this->monthlyData = $monthlyData;
+    }
+
+    /* ─────────────────────────────────────────────
+       Department attendance breakdown — for the week
+       containing the selected date
+    ───────────────────────────────────────────── */
+    private function loadWeeklyDepartmentData(): void
+    {
+        $selected = Carbon::parse($this->selectedDate);
+        $startOfWeek = $selected->copy()->startOfWeek(); // Monday
+        $endOfWeek = $selected->copy()->endOfWeek();     // Sunday
+        $this->weekLabel = $startOfWeek->format('d M') . ' - ' . $endOfWeek->format('d M');
+
+        $departments = Department::where('organization_id', $this->orgId)->get();
+
+        $categories = [];
+        $presentData = [];
+        $absentData = [];
+        $leaveData = [];
+        $offShiftData = [];
+
+        foreach ($departments as $dept) {
+            $categories[] = $dept->name;
+
+            $attendances = Attendance::whereBetween('date', [$startOfWeek, $endOfWeek])
+                ->whereHas('employee', fn($q) => $q->where('organization_id', $this->orgId)
+                    ->where('department_id', $dept->id)
+                )->get();
+
+            // Get employees who actually showed up (clocked in or out)
+            $presentEmployeeIds = $attendances
+                ->whereIn('status', ['clocked_in', 'clocked_out'])
+                ->pluck('employee_id')
+                ->unique();
+
+            // Get employees marked absent BUT exclude those who showed up
+            $absentEmployeeIds = $attendances
+                ->whereIn('status', ['absent', 'unchecked_in'])
+                ->pluck('employee_id')
+                ->unique()
+                ->reject(fn($id) => $presentEmployeeIds->contains($id)); // Exclude present employees
+
+            $presentData[] = $presentEmployeeIds->count();
+            $absentData[] = $absentEmployeeIds->count();
+
+            $leaveData[] = $attendances->where('status', 'on_leave')
+                ->pluck('employee_id')
+                ->unique()
+                ->count();
+
+            $offShiftData[] = $attendances->where('status', 'off_shift')
+                ->pluck('employee_id')
+                ->unique()
+                ->count();
+        }
+
+        $this->chartData = [
+            'categories' => $categories,
+            'series' => [
+                ['name' => 'Present', 'data' => $presentData],
+                ['name' => 'Absent', 'data' => $absentData],
+                ['name' => 'Leave', 'data' => $leaveData],
+                ['name' => 'Off Shift', 'data' => $offShiftData],
+            ]
+        ];
+    }
+
+    /* ─────────────────────────────────────────────
+       Re-run the daily pie chart stats when the
+       date filter changes, then push fresh data to
+       the chart via a browser event (no full reload)
+    ───────────────────────────────────────────── */
+    private function loadDailyStatus(): void
+    {
+        $date = Carbon::parse($this->selectedDate)->startOfDay();
+        $this->isToday = $date->isToday();
+        $this->selectedDateLabel = $date->format('d M');
+
+        $attendancesForDate = Attendance::whereHas('employee', fn($q) => $q->where('organization_id', $this->orgId))
+            ->whereDate('date', $date)
+            ->get();
+
+        $this->statusData = [
+            'present' => $attendancesForDate->whereIn('status', ['clocked_in', 'clocked_out'])->count(),
+            'absent' => $attendancesForDate->whereIn('status', ['absent', 'unchecked_in'])->count(),
+            'onLeave' => $attendancesForDate->where('status', 'on_leave')->count(),
+            'offShift' => $attendancesForDate->where('status', 'off_shift')->count(),
+        ];
+    }
+
+    public function updatedSelectedDate(): void
+    {
+        $this->loadDailyStatus();
+        $this->loadMonthlyData();
+        $this->loadWeeklyDepartmentData();
+
+        $this->dispatch('daily-status-updated', statusData: $this->statusData, title: $this->isToday
+            ? 'Daily Attendance Status'
+            : 'Attendance Status - ' . $this->selectedDateLabel);
+
+        $this->dispatch('monthly-data-updated', monthlyData: $this->monthlyData, monthLabel: $this->monthLabel);
+
+        $this->dispatch('weekly-department-updated', chartData: $this->chartData, weekLabel: $this->weekLabel);
+    }
+
 
 }; ?>
+
 
 <div class="row">
     <div class="col-12">
@@ -191,14 +251,27 @@ new class extends Component {
        ]"
         />
 
+        {{-- ══════════════════════════════════════════
+             DATE FILTER  (drives the highlight cards)
+        ══════════════════════════════════════════ --}}
+        <div class="card shadow-sm mb-3" x-data x-init="$nextTick(() => initOrgReportDatepicker())">
+            <div class="card-body d-flex align-items-center gap-3 flex-wrap py-2">
+                <iconify-icon icon="mdi:calendar-month" style="font-size:20px; color:#64748b;"></iconify-icon>
+                <input type="text" id="orgReportSelectedDate" class="form-control" style="max-width:180px;"
+                       wire:model.live="selectedDate" value="{{ $selectedDate }}" autocomplete="off"/>
+                <span class="text-muted small">
+                    Showing data for {{ \Carbon\Carbon::parse($selectedDate)->format('d M Y') }}
+                </span>
+            </div>
+        </div>
 
-        <livewire:admin.summaries.employee-statuses/>
+        <livewire:admin.summaries.employee-statuses :selected-date="$selectedDate" :key="'org-emp-statuses-'.$selectedDate"/>
     </div>
 
     <div class="col-lg-12 mt-4">
         <div class="card">
             <div class="card-body">
-                <h4 class="card-title">Monthly {{ $entityLabel }} Attendance Timeline</h4>
+                <h4 class="card-title" id="monthly-attendance-title">Monthly {{ $entityLabel }} Attendance Timeline - {{ $monthLabel }}</h4>
                 <div id="monthly-employee-attendance" class="ms-n3"></div>
             </div>
         </div>
@@ -208,7 +281,7 @@ new class extends Component {
         <div class="col-lg-8">
             <div class="card h-100">
                 <div class="card-body">
-                    <h5 class="card-title mb-4">Weekly Departmental Attendance</h5>
+                    <h5 class="card-title mb-4" id="weekly-department-title">Weekly Attendance by Unit ({{ $weekLabel }})</h5>
                     <div id="department-weekly-data"></div>
                 </div>
             </div>
@@ -217,7 +290,7 @@ new class extends Component {
         <div class="col-lg-4">
             <div class="card h-100">
                 <div class="card-body">
-                    <h4 class="card-title">Daily Attendance Status</h4>
+                    <h4 class="card-title" id="daily-attendance-title">{{ $isToday ? 'Daily Attendance Status' : 'Attendance Status - ' . $selectedDateLabel }}</h4>
                     <div id="daily-attendance"></div>
                 </div>
             </div>
@@ -280,6 +353,52 @@ new class extends Component {
 </div>
 @push('scripts')
     <script>
+        function initOrgReportDatepicker() {
+            const $input = $('#orgReportSelectedDate');
+
+            if (typeof $.fn.datepicker === 'undefined' || !$input.length) {
+                return;
+            }
+
+            const setLivewireDateValue = (input, value) => {
+                const componentRoot = input.closest('[wire\\:id]');
+                const componentId = componentRoot?.getAttribute('wire:id');
+
+                if (!componentId || !window.Livewire || typeof window.Livewire.find !== 'function') {
+                    return;
+                }
+
+                const component = window.Livewire.find(componentId);
+                if (component && typeof component.set === 'function') {
+                    component.set('selectedDate', value);
+                }
+            };
+
+            if ($input.data('datepicker')) {
+                $input.datepicker('destroy');
+            }
+
+            const currentValue = $input.val();
+
+            $input.datepicker({
+                format: 'yyyy-mm-dd',
+                autoclose: true,
+                todayHighlight: true,
+                endDate: new Date(),
+            }).on('changeDate', function (e) {
+                const selected = e.format('yyyy-mm-dd');
+                $input.val(selected).trigger('input').trigger('change');
+                setLivewireDateValue($input[0], selected);
+            });
+
+            if (currentValue) {
+                $input.datepicker('update', currentValue);
+            }
+        }
+
+        document.addEventListener('livewire:navigated', initOrgReportDatepicker);
+        initOrgReportDatepicker();
+
         document.addEventListener('DOMContentLoaded', function () {
 
 
@@ -328,6 +447,17 @@ new class extends Component {
                 options_simple
             );
             chart_pie_simple.render();
+
+            // Update the pie chart in place when the date filter changes
+            document.addEventListener('livewire:init', () => {
+                Livewire.on('daily-status-updated', (event) => {
+                    const payload = Array.isArray(event) ? event[0] : event;
+                    chart_pie_simple.updateSeries(Object.values(payload.statusData));
+
+                    const titleEl = document.getElementById('daily-attendance-title');
+                    if (titleEl) titleEl.textContent = payload.title;
+                });
+            });
 
             const data = @json($monthlyData);
 
@@ -447,6 +577,24 @@ new class extends Component {
             );
             chart.render();
 
+            // Update the monthly timeline chart in place when the date filter changes
+            document.addEventListener('livewire:init', () => {
+                Livewire.on('monthly-data-updated', (event) => {
+                    const payload = Array.isArray(event) ? event[0] : event;
+                    const d = payload.monthlyData;
+
+                    chart.updateSeries([
+                        {name: "Present", data: d.map(x => ({x: new Date(x.date).toISOString(), y: x.present}))},
+                        {name: "Absent", data: d.map(x => ({x: new Date(x.date).toISOString(), y: x.absent}))},
+                        {name: "Leave", data: d.map(x => ({x: new Date(x.date).toISOString(), y: x.leave}))},
+                        {name: "Off Shift", data: d.map(x => ({x: new Date(x.date).toISOString(), y: x.off_shift}))},
+                    ]);
+
+                    const titleEl = document.getElementById('monthly-attendance-title');
+                    if (titleEl) titleEl.textContent = 'Monthly {{ $entityLabel }} Attendance Timeline - ' + payload.monthLabel;
+                });
+            });
+
 
             // Department Weekly Data (Stacked Bar Chart)
             const chartData = @json($chartData);
@@ -504,6 +652,19 @@ new class extends Component {
 
             const dchart = new ApexCharts(document.querySelector("#department-weekly-data"), options_stacked);
             dchart.render();
+
+            // Update the weekly departmental chart in place when the date filter changes
+            document.addEventListener('livewire:init', () => {
+                Livewire.on('weekly-department-updated', (event) => {
+                    const payload = Array.isArray(event) ? event[0] : event;
+
+                    dchart.updateOptions({xaxis: {categories: payload.chartData.categories}});
+                    dchart.updateSeries(payload.chartData.series);
+
+                    const titleEl = document.getElementById('weekly-department-title');
+                    if (titleEl) titleEl.textContent = 'Weekly Attendance by Unit (' + payload.weekLabel + ')';
+                });
+            });
 
             // Overtime Chart and Top Employees data remain the same
             const overtimeChartData = @json($overtimeChartData);
