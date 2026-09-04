@@ -3,7 +3,7 @@
 namespace App\Services;
 
 use App\Helpers\PhoneSanitizer;
-use App\Mail\WelcomeEmployeeMail;
+use App\Jobs\SendWelcomeEmployeeEmailJob;
 use App\Models\Department;
 use App\Models\Employee;
 use App\Models\EmployeeAssignment;
@@ -19,7 +19,7 @@ use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Password;
 use Illuminate\Support\Str;
 use Spatie\Permission\Models\Permission;
@@ -258,17 +258,15 @@ class ClientService
             $plainPassword = null;
             $user = null;
 
-            if ($data['is_user'] ?? false) {
-                $plainPassword = Str::random(12);
-                $user = User::create([
-                    'name' => $data['name'],
-                    'email' => $data['email'],
-                    'password' => Hash::make($plainPassword),
-                ]);
+            $plainPassword = Str::random(12);
+            $user = User::create([
+                'name' => $data['name'],
+                'email' => $data['email'],
+                'password' => Hash::make($plainPassword),
+            ]);
 
-                $role = Role::where('name', $data['role_name'])->where('organization_id', $organization->id)->first();
-                $user->assignRole($role ?? $data['role_name']);
-            }
+            $role = Role::where('name', $data['role_name'])->where('organization_id', $organization->id)->first();
+            $user->assignRole($role ?? $data['role_name']);
 
             $employee = Employee::create([
                 'organization_id' => $organization->id,
@@ -354,9 +352,7 @@ class ClientService
 
     private function sendWelcomeEmail(string $name, string $email, string $password, string $orgName): void
     {
-        Mail::to($email)
-            ->cc('dominickyengo@identigate.co.ke')
-            ->send(new WelcomeEmployeeMail($name, $email, $password, $orgName));
+        SendWelcomeEmployeeEmailJob::dispatch($name, $email, $password, $orgName);
     }
 
     private function setupDefaultRoles(Organization $organization, User $admin): void
