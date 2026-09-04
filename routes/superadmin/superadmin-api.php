@@ -52,6 +52,9 @@ Route::prefix('super-man')->middleware([
         Route::post('/{organization}/job-title', [ClientController::class, 'storeJobTitle']);
         Route::put('/{organization}/job-title/{jobTitleId}', [ClientController::class, 'updateJobTitle']);
 
+        Route::post('/{organization}/employees', [ClientController::class, 'storeEmployee']);
+        Route::put('/{organization}/employees/{employeeId}', [ClientController::class, 'updateEmployee']);
+
         // client portal integration settings: API keys, ZKBio hardware sync, Active Directory sync
         Route::get('/{organization}/integrations', [IntegrationController::class, 'show']);
         Route::put('/{organization}/integrations/zkbio', [IntegrationController::class, 'updateZkbio']);
