@@ -104,6 +104,7 @@ new class extends Component {
     public ?string $adLastSynced = null;
     public array $selectedAdUsers = [];
     public bool $requireEmployeeTitleSetting = false;
+    public bool $hasMicrosoftActiveDirectoryFeature = false;
 
     public function mount($roleId = null): void
     {
@@ -117,6 +118,13 @@ new class extends Component {
         }
 
         $org = auth()->user()->employee->organization;
+
+        $features = $org->enabledFeatures;
+        Log::info("ENABLED FEATURES NI: ", ['ENABLED' => $features]);
+        $this->hasMicrosoftActiveDirectoryFeature = $features->contains(
+            'key',
+            'microsoft_active_directory'
+        );
         $this->isStudentOrg = (bool)($org->is_student_record ?? false);
 
         if ($this->isStudentOrg && !in_array($this->personType, ['student', 'staff'])) {
@@ -2059,7 +2067,7 @@ new class extends Component {
                 {{-- Action buttons --}}
                 <div class="d-flex gap-2">
                     {{-- ★ AD SYNC BUTTON ★ --}}
-                    @if(!$isStudentOrg)
+                    @if(!$isStudentOrg && $hasMicrosoftActiveDirectoryFeature)
                         <button
                             wire:click="toggleAdSyncPanel"
                             type="button"
@@ -2439,7 +2447,7 @@ new class extends Component {
             {{-- ══════════════════════════════════════════════════════════════
                   MICROSOFT AD SYNC PANEL
          ══════════════════════════════════════════════════════════════ --}}
-            @if($showAdSyncPanel && !$isStudentOrg)
+            @if($showAdSyncPanel && !$isStudentOrg && $hasMicrosoftActiveDirectoryFeature)
                 <div class="mb-3"
                      style="border-radius:14px; border:1.5px solid #0078d4; background:#f0f6ff; overflow:hidden;">
 
@@ -2455,7 +2463,7 @@ new class extends Component {
                                 <p style="font-size:0.9rem;font-weight:700;color:#1e293b;margin:0;">Microsoft Active
                                     Directory Sync</p>
                                 <p style="pointer:cursor; font-size:0.75rem;color:#64748b;margin:0;">
-                                    Fetch users from Cosmos AD tenant and import as employees with shift & ZKBio sync
+                                    Fetch users from AD tenant and import as employees
                                     @if($adLastSynced)
                                         &nbsp;·&nbsp; Last
                                         synced: {{ \Carbon\Carbon::parse($adLastSynced)->diffForHumans() }}
