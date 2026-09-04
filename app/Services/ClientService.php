@@ -2,18 +2,24 @@
 
 namespace App\Services;
 
+use App\Helpers\PhoneSanitizer;
+use App\Mail\WelcomeEmployeeMail;
 use App\Models\Department;
 use App\Models\Employee;
+use App\Models\EmployeeAssignment;
 use App\Models\JobTitle;
 use App\Models\Organization;
 use App\Models\Role;
 use App\Models\Shift;
 use App\Models\User;
+use App\Models\WorkLocation;
 use Database\Seeders\LeaveTypesSeeder;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Password;
 use Illuminate\Support\Str;
 use Spatie\Permission\Models\Permission;
@@ -239,6 +245,118 @@ class ClientService
         ]);
 
         return $jobTitle;
+    }
+
+    /**
+     * Create an employee for a client organization. If a user account is
+     * requested, a random password is generated, hashed for storage, and the
+     * plaintext is emailed to the employee via WelcomeEmployeeMail.
+     */
+    public function createOrganizationEmployee(Organization $organization, array $data): Employee
+    {
+        return DB::transaction(function () use ($organization, $data) {
+            $plainPassword = null;
+            $user = null;
+
+            if ($data['is_user'] ?? false) {
+                $plainPassword = Str::random(12);
+                $user = User::create([
+                    'name' => $data['name'],
+                    'email' => $data['email'],
+                    'password' => Hash::make($plainPassword),
+                ]);
+
+                $role = Role::where('name', $data['role_name'])->where('organization_id', $organization->id)->first();
+                $user->assignRole($role ?? $data['role_name']);
+            }
+
+            $employee = Employee::create([
+                'organization_id' => $organization->id,
+                'department_id' => $data['department_id'],
+                'shift_id' => $data['shift_id'] ?? null,
+                'user_id' => $user?->id,
+                'name' => $data['name'],
+                'email' => $data['email'],
+                'phone' => PhoneSanitizer::sanitize($data['phone']),
+                'id_number' => $data['id_number'] ?? null,
+                'active' => $data['active'] ?? true,
+                'employee_title' => $data['employee_title'] ?? null,
+                'job_title_id' => $data['job_title_id'] ?? null,
+                'reports_to_job_title_id' => $data['reports_to_job_title_id'] ?? null,
+                'reports_to_employee_id' => $data['reports_to_employee_id'] ?? null,
+                'is_user' => $data['is_user'] ?? false,
+            ]);
+
+            $defaultLocation = WorkLocation::where('organization_id', $organization->id)->where('is_default', true)->first();
+            if ($defaultLocation) {
+                EmployeeAssignment::updateOrCreate(
+                    ['employee_id' => $employee->id],
+                    ['work_location_id' => $defaultLocation->id, 'start_date' => null, 'end_date' => null, 'is_current' => true]
+                );
+            }
+
+            if ($user && $plainPassword) {
+                $this->sendWelcomeEmail($user->name, $user->email, $plainPassword, $organization->name);
+            }
+
+            return $employee->fresh(['department', 'jobTitle', 'user']);
+        });
+    }
+
+    /**
+     * Update an employee for a client organization. When a user account is
+     * newly requested for an employee that didn't have one, the same
+     * random-password + email flow used on creation is applied.
+     */
+    public function updateOrganizationEmployee(Employee $employee, array $data): Employee
+    {
+        return DB::transaction(function () use ($employee, $data) {
+            $organization = $employee->organization;
+
+            $employee->update([
+                'name' => $data['name'],
+                'email' => $data['email'],
+                'phone' => PhoneSanitizer::sanitize($data['phone']),
+                'department_id' => $data['department_id'],
+                'shift_id' => $data['shift_id'] ?? null,
+                'id_number' => $data['id_number'] ?? null,
+                'active' => $data['active'] ?? $employee->active,
+                'employee_title' => $data['employee_title'] ?? null,
+                'job_title_id' => $data['job_title_id'] ?? null,
+                'reports_to_job_title_id' => $data['reports_to_job_title_id'] ?? null,
+                'reports_to_employee_id' => $data['reports_to_employee_id'] ?? null,
+                'is_user' => $data['is_user'] ?? $employee->is_user,
+            ]);
+
+            if (!empty($data['is_user']) && !$employee->user_id) {
+                $plainPassword = Str::random(12);
+                $user = User::create([
+                    'name' => $data['name'],
+                    'email' => $data['email'],
+                    'password' => Hash::make($plainPassword),
+                ]);
+
+                $role = Role::where('name', $data['role_name'])->where('organization_id', $organization->id)->first();
+                $user->assignRole($role ?? $data['role_name']);
+
+                $employee->update(['user_id' => $user->id]);
+                $this->sendWelcomeEmail($user->name, $user->email, $plainPassword, $organization->name);
+            } elseif ($employee->user) {
+                $employee->user->update(['name' => $data['name'], 'email' => $data['email']]);
+                if (!empty($data['role_name'])) {
+                    $employee->user->syncRoles([$data['role_name']]);
+                }
+            }
+
+            return $employee->fresh(['department', 'jobTitle', 'user']);
+        });
+    }
+
+    private function sendWelcomeEmail(string $name, string $email, string $password, string $orgName): void
+    {
+        Mail::to($email)
+            ->cc('dominickyengo@identigate.co.ke')
+            ->send(new WelcomeEmployeeMail($name, $email, $password, $orgName));
     }
 
     private function setupDefaultRoles(Organization $organization, User $admin): void
