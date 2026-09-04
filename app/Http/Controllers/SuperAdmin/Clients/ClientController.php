@@ -6,11 +6,14 @@ use App\Helpers\PaginationHelper;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\SuperAdmin\Clients\ClientEmployeeDefaultsRequest;
 use App\Http\Requests\SuperAdmin\Clients\CreateClientDepartmentRequest;
+use App\Http\Requests\SuperAdmin\Clients\StoreClientEmployeeRequest;
 use App\Http\Requests\SuperAdmin\Clients\StoreClientRequest;
 use App\Http\Requests\SuperAdmin\Clients\StoreJobTitleRequest;
+use App\Http\Requests\SuperAdmin\Clients\UpdateClientEmployeeRequest;
 use App\Http\Requests\SuperAdmin\Clients\UpdateClientRequest;
 use App\Http\Requests\SuperAdmin\Clients\UploadClientLogoRequest;
 use App\Http\Responses\ApiResponse;
+use App\Models\Employee;
 use App\Models\JobTitle;
 use App\Models\Organization;
 use App\Services\ClientService;
@@ -180,5 +183,32 @@ class ClientController extends Controller
         $updatedJobTitle = $this->service->updateJobTitle($jobTitle, $request->validated());
 
         return ApiResponse::success($updatedJobTitle, message: 'Job title updated');
+    }
+
+    /**
+     * POST /super-man/clients/{organization}/employees
+     *
+     * Create an employee for a client organization. When a user account is
+     * requested, a random password is generated and emailed to the employee.
+     */
+    public function storeEmployee(StoreClientEmployeeRequest $request, Organization $organization)
+    {
+        $employee = $this->service->createOrganizationEmployee($organization, $request->validated());
+
+        return ApiResponse::success($employee, message: 'Employee created', httpStatusCode: 201);
+    }
+
+    /**
+     * PUT /super-man/clients/{organization}/employees/{employeeId}
+     *
+     * Update an employee for a client organization.
+     */
+    public function updateEmployee(UpdateClientEmployeeRequest $request, Organization $organization, int $employeeId)
+    {
+        $employee = Employee::where('organization_id', $organization->id)->findOrFail($employeeId);
+
+        $updatedEmployee = $this->service->updateOrganizationEmployee($employee, $request->validated());
+
+        return ApiResponse::success($updatedEmployee, message: 'Employee updated');
     }
 }
