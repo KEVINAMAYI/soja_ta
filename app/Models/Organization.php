@@ -112,5 +112,14 @@ class Organization extends Model
         return $this->hasMany(OrganizationApiKey::class);
     }
 
+
+    public function enabledFeatures()
+    {
+        // return $this->belongsToMany(OrganizationFeature::class, 'organization_features', 'organization_id')
+        //     // ->withPivot('enabled')
+        //     ->withTimestamps();
+        return $this->hasMany(OrganizationFeature::class, 'organization_id');
+    }
+
 }
 
