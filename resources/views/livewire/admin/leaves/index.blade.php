@@ -72,6 +72,7 @@ new class extends Component {
                 'approvalLogs.levelApprovers',
                 'approvalLogs.actionedBy',
                 'activeApprovalLog',
+                'pendingAlternativeDate',
             ])->findOrFail($id);
 
             $this->viewingBalance = null;
@@ -189,7 +190,7 @@ new class extends Component {
 
         // Get regular leaves
         $leaveQuery = Leave::where('organization_id', $org->id)
-            ->with(['employee.department', 'activeApprovalLog.approverUser'])
+            ->with(['employee.department', 'activeApprovalLog.approverUser', 'pendingAlternativeDate'])
             ->latest();
 
         if ($this->department_id) {
@@ -1381,8 +1382,13 @@ new class extends Component {
                         </td>
                         <td>
                             @if($record['type'] === 'leave' && $record['original']->total_levels)
-                                @php $activeLog = $record['original']->activeApprovalLog; @endphp
-                                @if($activeLog)
+                                @php
+                                    $activeLog = $record['original']->activeApprovalLog;
+                                    $hasPendingAlternativeDate = (bool) $record['original']->pendingAlternativeDate;
+                                @endphp
+                                @if($hasPendingAlternativeDate)
+                                    <span class="badge bg-info-subtle text-info fw-semibold">Awaiting user date changes review</span>
+                                @elseif($activeLog)
                                     <div class="d-flex flex-column">
                                         <span class="badge bg-info-subtle text-info fw-semibold mb-1">
                                             Level {{ $record['original']->current_level }} of {{ $record['original']->total_levels }}
@@ -1605,7 +1611,8 @@ new class extends Component {
                     @if($viewingRecord && $viewingRecord instanceof \App\Models\Leave)
                         @php
                             $leave = $viewingRecord;
-                            $canAct = $leave->activeApprovalLog && app(\App\Services\LeaveApprovalService::class)->canAct($leave, auth()->user());
+                            $hasPendingAlternativeDate = (bool) $leave->pendingAlternativeDate;
+                            $canAct = !$hasPendingAlternativeDate && $leave->activeApprovalLog && app(\App\Services\LeaveApprovalService::class)->canAct($leave, auth()->user());
                             $sortedLogs = $leave->approvalLogs->sortBy('level_number');
                             $activeApprovalLog = $leave->activeApprovalLog;
                             $alreadyApprovedByCurrentUser = false;
@@ -1642,7 +1649,9 @@ new class extends Component {
                                         <span><iconify-icon icon="mdi:office-building-outline"></iconify-icon>{{ $leave->employee->department->name ?? '—' }}</span>
                                     </div>
                                 </div>
-                                <span style="margin-top:20px;" class="ld-status-pill {{ $leave->status }}">{{ ucfirst($leave->status) }}</span>
+                                <span style="margin-top:20px;" class="ld-status-pill {{ $leave->status }}">
+                                    {{ $hasPendingAlternativeDate ? 'Awaiting user date changes review' : ucfirst($leave->status) }}
+                                </span>
                             </div>
                             <button type="button" class="btn-close" data-bs-dismiss="modal"
                                     style="position:absolute;top:20px;right:20px;"></button>
@@ -1679,6 +1688,12 @@ new class extends Component {
                             @if($leave->reason)
                                 <div class="ld-section-label">Reason for Leave</div>
                                 <p class="ld-reason-text">{{ $leave->reason }}</p>
+                            @endif
+
+                            @if($hasPendingAlternativeDate)
+                                <div class="ld-reviewing-banner">
+                                    Awaiting user date changes review
+                                </div>
                             @endif
 
                             @if($leave->total_levels)
@@ -1723,6 +1738,8 @@ new class extends Component {
                                                     <span class="ld-step-badge success">Approved</span>
                                                 @elseif($log->status === 'rejected')
                                                     <span class="ld-step-badge danger">Rejected</span>
+                                                @elseif($hasPendingAlternativeDate && $log->level_number == $leave->current_level)
+                                                    <span class="ld-step-badge primary">Awaiting user date changes review</span>
                                                 @elseif($log->level_number == $leave->current_level)
                                                     @php
                                                         if ($log->approver_type === 'user') {
