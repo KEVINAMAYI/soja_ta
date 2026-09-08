@@ -360,16 +360,16 @@ class ClientService
         $defaultRoles = ['admin', 'supervisor', 'employee', 'department-manager'];
 
         foreach ($defaultRoles as $roleName) {
-            Role::firstOrCreate(['name' => $roleName, 'organization_id' => $organization->id]);
+            Role::firstOrCreate(['name' => $roleName, 'organization_id' => $organization->id, 'guard_name' => 'web']);
         }
 
         $allPermissions = Permission::all()->pluck('name')->toArray();
 
         $rolePermissions = [
             'admin' => array_filter($allPermissions, fn ($p) => !str_contains($p, 'organizations')),
-            'supervisor' => array_filter($allPermissions, fn ($p) => !str_contains($p, 'organizations')),
-            'employee' => [],
-            'department-manager' => ['approve-manual-timesheets'],
+            // 'supervisor' => array_filter($allPermissions, fn ($p) => !str_contains($p, 'organizations')),
+            // 'employee' => [],
+            // 'department-manager' => ['approve-manual-timesheets'],
         ];
 
         foreach ($rolePermissions as $role => $perms) {
