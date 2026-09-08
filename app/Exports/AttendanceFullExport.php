@@ -2,6 +2,7 @@
 
 namespace App\Exports;
 
+use App\Exports\Sheets\EmployeeWeeklyAggregateSheet;
 use App\Exports\Sheets\MasterSheet;
 use App\Exports\Sheets\PresentSheet;
 use App\Exports\Sheets\LateSheet;
@@ -12,11 +13,12 @@ use Maatwebsite\Excel\Concerns\WithMultipleSheets;
 /**
  * AttendanceFullExport
  *
- * Produces 4-sheet T&A Excel report:
- *   Sheet 1 — Master        (all records + lost hours + interpretation)
- *   Sheet 2 — Present       (clocked in / out only)
- *   Sheet 3 — Late Report   (is_late_checkin=1, within_grace_period=0)
- *   Sheet 4 — Absent Report (absent / leave / off_shift)
+ * Produces 5-sheet T&A Excel report:
+ *   Sheet 1 — Weekly Summary (employee aggregated by week)
+ *   Sheet 2 — Master        (all records + lost hours + interpretation)
+ *   Sheet 3 — Present       (clocked in / out only)
+ *   Sheet 4 — Late Report   (is_late_checkin=1, within_grace_period=0)
+ *   Sheet 5 — Absent Report (absent / leave / off_shift)
  *
  * Usage:
  *   Excel::download(new AttendanceFullExport(...), 'T_A_Report.xlsx');
@@ -63,6 +65,7 @@ class AttendanceFullExport implements WithMultipleSheets
         $absent  = array_values(array_filter($master, fn($r) => in_array($r->status ?? '', ['absent', 'unchecked_in', 'on_leave', 'sick_leave', 'sick_off'])));
 
         return [
+            new EmployeeWeeklyAggregateSheet($master, $this->startDate, $this->endDate),
             new MasterSheet($master,  $this->startDate, $this->endDate),
             new PresentSheet($present, $this->startDate, $this->endDate),
             new LateSheet($late,      $this->startDate, $this->endDate),
