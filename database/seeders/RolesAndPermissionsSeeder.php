@@ -85,6 +85,7 @@ class RolesAndPermissionsSeeder extends Seeder
 
             // Settings
             ['name' => 'view-settings', 'category' => 'Settings'],
+            ['name' => 'edit-settings', 'category' => 'Settings'],
 
             // School-specific
             ['name' => 'view-students', 'category' => 'School'],
@@ -101,7 +102,7 @@ class RolesAndPermissionsSeeder extends Seeder
 
         foreach ($permissions as $permission) {
             Permission::updateOrCreate(
-                ['name' => $permission['name']],
+                ['name' => $permission['name'], 'guard_name' => 'web'],
                 ['category' => $permission['category']]
             );
         }
