@@ -184,6 +184,7 @@ new class extends Component {
             Role::firstOrCreate([
                 'name' => $roleName,
                 'organization_id' => $organization->id,
+                'guard_name' => 'web',
             ]);
         }
 
@@ -202,6 +203,7 @@ new class extends Component {
             $roleInstance = Role::firstOrCreate([
                 'name' => $role,
                 'organization_id' => $organization->id,
+                'guard_name' => 'web',
             ]);
 
             $roleInstance->syncPermissions($perms);
