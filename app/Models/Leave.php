@@ -80,6 +80,11 @@ class Leave extends Model
         return $this->hasOne(LeaveApprovalLog::class)->where('status', 'pending');
     }
 
+    public function pendingAlternativeDate()
+    {
+        return $this->hasOne(LeaveAlternativeDate::class)->where('status', 'pending')->latestOfMany();
+    }
+
     public function latestApprovedApprovalLog()
     {
         // Deliberately NOT filtered by current_level here: only one approval
