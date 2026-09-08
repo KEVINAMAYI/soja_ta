@@ -573,7 +573,7 @@ new class extends Component {
 
 
 
-        $remaining = $service->checkBalance($employee, $chosenLeaveType, (float)$new_number_of_days, Carbon::parse($startDate)->year)['remaining'] ?? null;
+        $remaining = $service->checkBalanceWithPending($employee, $chosenLeaveType, (float)$new_number_of_days, Carbon::parse($startDate)->year)['remaining'] ?? null;
 
         if ($remaining === null) {
             Log::warning("Remaining leave balance could not be determined for employee ID: $employeeId, leave type: " . ($chosenLeaveType->name ?? 'N/A') . ", new number of days: $new_number_of_days, start date: $startDate");
