@@ -592,6 +592,29 @@ class LeaveApprovalService
     }
 
     /**
+     * Check whether an employee has enough remaining balance include pending days (not yet approved)
+     */
+    public function checkBalanceWithPending(Employee $employee, LeaveType $leaveType, float $requestedDays, int $year): array
+    {
+        $balance = LeaveBalance::where('employee_id', $employee->id)
+            ->where('leave_type_id', $leaveType->id)
+            ->where('year', $year)
+            ->first();
+
+        $entitled = $this->resolveEntitledDays($leaveType, $balance);
+
+        if ($entitled === null) {
+            return ['ok' => true, 'remaining' => null];
+        }
+
+        $used = $balance?->used_days ?? 0;
+
+        $remaining = $entitled - (float) $used;
+
+        return ['ok' => $remaining >= $requestedDays, 'remaining' => $remaining];
+    }
+
+    /**
      * A LeaveBalance row's own entitled_days (once one exists, whether
      * auto-snapshotted on first approval or manually set by an admin
      * override) always takes precedence over the leave type's default —
