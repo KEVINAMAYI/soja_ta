@@ -19,6 +19,10 @@ use Spatie\Permission\Middleware\RoleMiddleware;
 
 Route::prefix('super-man')->group(function () {
     Route::post('/login', [SuperAdminAuth::class, 'login']);
+    Route::post('/forgot-password', [SuperAdminAuth::class, 'forgotPassword']);
+    Route::get('/reset-password', [SuperAdminAuth::class, 'verifyResetToken']);
+    Route::get('/reset-password/{token}', [SuperAdminAuth::class, 'verifyResetToken']);
+    Route::post('/reset-password', [SuperAdminAuth::class, 'resetPassword']);
 });
 
 Route::prefix('super-man')->middleware([
