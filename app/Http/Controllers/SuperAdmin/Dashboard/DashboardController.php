@@ -58,4 +58,47 @@ class DashboardController extends Controller
             'data' => $data,
         ]);
     }
+
+    /**
+     * GET /super-man/dashboard/analytics/trends
+     *
+     * Returns daily-granularity trend data (labels + parallel value arrays)
+     * for clients, workforce, attendance and platform-utilization, suitable
+     * for plotting on a graph, for the selected period (today, this_week,
+     * last_30_days, last_90_days or a custom start_date/end_date range).
+     */
+    public function trends(Request $request): JsonResponse
+    {
+        $validator = Validator::make($request->all(), [
+            'period' => 'required|string|in:' . implode(',', DashboardAnalyticsService::PERIODS),
+            'start_date' => 'required_if:period,custom|nullable|date',
+            'end_date' => 'required_if:period,custom|nullable|date|after_or_equal:start_date',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'code' => 1003,
+                'message' => 'Validation failed',
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+
+        try {
+            $data = $this->analyticsService->getTrends(
+                $request->string('period')->toString(),
+                $request->input('start_date'),
+                $request->input('end_date'),
+            );
+        } catch (InvalidArgumentException $e) {
+            return response()->json([
+                'code' => 1003,
+                'message' => $e->getMessage(),
+            ], 422);
+        }
+
+        return response()->json([
+            'code' => 1000,
+            'data' => $data,
+        ]);
+    }
 }
