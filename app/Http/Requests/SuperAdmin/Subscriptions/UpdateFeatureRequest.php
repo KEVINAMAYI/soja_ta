@@ -9,7 +9,7 @@ class UpdateFeatureRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'feature_category_id' => ['sometimes', 'integer', 'exists:feature_categories,id'],
+            'feature_category_id' => ['nullable', 'sometimes', 'integer', 'exists:feature_categories,id'],
             'name' => ['sometimes', 'required', 'string', 'max:255', 'unique:features,name,' . $this->route('feature')?->id],
             'slug' => ['sometimes', 'required', 'string', 'max:255', 'unique:features,slug,' . $this->route('feature')?->id],
             'description' => ['nullable', 'string'],
