@@ -58,6 +58,8 @@ class ClientController extends Controller
         $clients->getCollection()->transform(fn ($organization) => [
             'id' => $organization->id,
             'company' => $organization->name,
+            'email' => $organization->email,
+            'phone' => $organization->phone_number,
             'status' => $organization->active ? 'Active' : 'Inactive',
             'joined' => $organization->created_at,
             'last_active' => $organization->last_active_at,
