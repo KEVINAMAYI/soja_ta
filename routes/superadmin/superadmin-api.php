@@ -13,6 +13,7 @@ use App\Http\Controllers\SuperAdmin\Subscriptions\FeatureCategoryController;
 use App\Http\Controllers\SuperAdmin\Subscriptions\FeatureController;
 use App\Http\Controllers\SuperAdmin\Subscriptions\SubFeatureController;
 use App\Http\Controllers\SuperAdmin\Subscriptions\SubscriptionPlanController;
+use App\Http\Controllers\SuperAdmin\SuperAdmins\SuperAdminController;
 use App\Http\Controllers\SuperAdmin\Users\UserController;
 use App\Http\Controllers\SuperAdmin\WorkLocations\WorkLocationController;
 use Illuminate\Support\Facades\Route;
@@ -34,6 +35,14 @@ Route::prefix('super-man')->middleware([
     Route::get('/audit-logs/filter', [LogController::class, 'filterAuditLogs']);
     Route::get('/dashboard/analytics', [DashboardController::class, 'analytics']);
     Route::get('/dashboard/analytics/trends', [DashboardController::class, 'trends']);
+
+    // invalidate the token used for the current request
+    Route::post('/logout', [SuperAdminAuth::class, 'logout']);
+    Route::get('/me', [SuperAdminAuth::class, 'me']);
+    Route::put('/profile', [SuperAdminAuth::class, 'updateProfile']);
+
+    // create a new super admin account; a random password is generated and emailed to them
+    Route::post('/super-admins', [SuperAdminController::class, 'store']);
 
     // terminate a running impersonation session from the super admin console
     Route::delete('/impersonations/{impersonationSession}', [ImpersonationController::class, 'destroy']);
