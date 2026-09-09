@@ -33,6 +33,7 @@ Route::prefix('super-man')->middleware([
     Route::get('/user-activity-logs/filter', [LogController::class, 'filterUserActivityLogs']);
     Route::get('/audit-logs/filter', [LogController::class, 'filterAuditLogs']);
     Route::get('/dashboard/analytics', [DashboardController::class, 'analytics']);
+    Route::get('/dashboard/analytics/trends', [DashboardController::class, 'trends']);
 
     // terminate a running impersonation session from the super admin console
     Route::delete('/impersonations/{impersonationSession}', [ImpersonationController::class, 'destroy']);
