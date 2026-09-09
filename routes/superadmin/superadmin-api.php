@@ -105,7 +105,7 @@ Route::prefix('super-man')->middleware([
         Route::put('/feature-categories/{featureCategory}', [FeatureCategoryController::class, 'update']);
         Route::delete('/feature-categories/{featureCategory}', [FeatureCategoryController::class, 'destroy']);
 
-        Route::post('/feature-categories/{featureCategory}/features', [FeatureController::class, 'store']);
+        Route::post('/features', [FeatureController::class, 'store']);
         Route::put('/features/{feature}', [FeatureController::class, 'update']);
         Route::delete('/features/{feature}', [FeatureController::class, 'destroy']);
 
