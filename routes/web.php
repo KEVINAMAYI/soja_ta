@@ -24,6 +24,11 @@ require __DIR__ . '/auth.php';
 require __DIR__ . '/dashboard/admin.php';
 require __DIR__ . '/dashboard/superadmin.php';
 
+// Super admins have their own reset token table, so they get a dedicated page.
+Volt::route('super-man/reset-password', 'auth.superadmin-reset-password')
+    ->middleware('guest')
+    ->name('superadmin.password.reset');
+
 // Super-admin impersonation handoff: the token is single-use and short-lived.
 Route::get('impersonate/{token}', [ImpersonationSessionController::class, 'enter'])
     ->middleware('throttle:10,1')
