@@ -86,9 +86,10 @@ class SubscriptionPlanService
         return $category;
     }
 
-    public function createFeature(FeatureCategory $category, array $data): Feature
+    public function createFeature(array $data): Feature
     {
-        return $category->features()->create([
+        return Feature::create([
+            'feature_category_id' => $data['feature_category_id'] ?? null,
             'name' => $data['name'],
             'slug' => $data['slug'] ?? Str::slug($data['name']),
             'description' => $data['description'] ?? null,
@@ -98,13 +99,16 @@ class SubscriptionPlanService
 
     public function updateFeature(Feature $feature, array $data): Feature
     {
-        $feature->update(array_filter([
-            'feature_category_id' => $data['feature_category_id'] ?? null,
-            'name' => $data['name'] ?? null,
-            'slug' => $data['slug'] ?? null,
-            'description' => $data['description'] ?? null,
-            'sort_order' => $data['sort_order'] ?? null,
-        ], fn ($value) => $value !== null));
+        $update = [];
+
+        // array_key_exists (not isset) so an explicit null clears feature_category_id
+        foreach (['feature_category_id', 'name', 'slug', 'description', 'sort_order'] as $key) {
+            if (array_key_exists($key, $data)) {
+                $update[$key] = $data[$key];
+            }
+        }
+
+        $feature->update($update);
 
         return $feature;
     }
