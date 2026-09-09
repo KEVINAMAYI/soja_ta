@@ -20,6 +20,12 @@ class DeviceLocation extends Model
         return $this->belongsTo(WorkLocation::class);
     }
 
+    // 🔁 One DeviceLocation belongs to one Organization
+    public function organization()
+    {
+        return $this->belongsTo(Organization::class, 'organization_id');
+    }
+
     // 🔁 One DeviceLocation has many Devices
     public function devices()
     {
