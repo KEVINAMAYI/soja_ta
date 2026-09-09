@@ -7,9 +7,11 @@ use App\Helpers\ThrottlerHelper;
 use App\Http\Payload\SuperAdmin\LoginRequestDTO;
 use App\Http\Requests\SuperAdmin\Auth\ForgotPasswordRequest;
 use App\Http\Requests\SuperAdmin\Auth\ResetSuperAdminPasswordRequest;
+use App\Http\Requests\SuperAdmin\Auth\UpdateSuperAdminProfileRequest;
 use App\Http\Requests\SuperAdmin\LoginRequest;
 use App\Http\Resources\SuperAdmin\UserResource;
 use App\Models\User;
+use App\Services\SuperAdminAccountService;
 use App\Services\SuperAdminPasswordResetService;
 use App\Utils\ApiConstants;
 use Illuminate\Support\Facades\Log;
@@ -24,6 +26,7 @@ class SuperAdminAuth extends Controller
 {
     public function __construct(
         private readonly SuperAdminPasswordResetService $passwordResetService,
+        private readonly SuperAdminAccountService $accountService,
     ) {}
 
     public function login(LoginRequest $request)
@@ -81,6 +84,54 @@ class SuperAdminAuth extends Controller
             httpStatusCode: Response::HTTP_OK,
         );
         return $made_response;
+    }
+
+    /**
+     * GET /super-man/me
+     *
+     * Return the currently authenticated super admin's details.
+     */
+    public function me(Request $request)
+    {
+        return ApiResponse::success(
+            code: ApiConstants::SUCCESS_CODE,
+            data: new UserResource($request->user()),
+            httpStatusCode: Response::HTTP_OK,
+        );
+    }
+
+    /**
+     * PUT /super-man/profile
+     *
+     * Update the currently authenticated super admin's own profile. Email cannot be changed here.
+     */
+    public function updateProfile(UpdateSuperAdminProfileRequest $request)
+    {
+        $user = $this->accountService->updateProfile($request->user(), $request->validated());
+
+        return ApiResponse::success(
+            code: ApiConstants::SUCCESS_CODE,
+            data: new UserResource($user),
+            message: 'Profile updated successfully.',
+            httpStatusCode: Response::HTTP_OK,
+        );
+    }
+
+    /**
+     * POST /super-man/logout
+     *
+     * Invalidate the access token used for the current request.
+     */
+    public function logout(Request $request)
+    {
+        $request->user()->currentAccessToken()->delete();
+
+        return ApiResponse::success(
+            code: ApiConstants::SUCCESS_CODE,
+            data: null,
+            message: 'Logged out successfully.',
+            httpStatusCode: Response::HTTP_OK,
+        );
     }
 
     /**
