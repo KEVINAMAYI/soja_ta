@@ -7,7 +7,6 @@ use App\Http\Requests\SuperAdmin\Subscriptions\StoreFeatureRequest;
 use App\Http\Requests\SuperAdmin\Subscriptions\UpdateFeatureRequest;
 use App\Http\Responses\ApiResponse;
 use App\Models\Feature;
-use App\Models\FeatureCategory;
 use App\Services\SubscriptionPlanService;
 use Dedoc\Scramble\Attributes\Group;
 
@@ -18,9 +17,9 @@ class FeatureController extends Controller
     {
     }
 
-    public function store(StoreFeatureRequest $request, FeatureCategory $featureCategory)
+    public function store(StoreFeatureRequest $request)
     {
-        $feature = $this->service->createFeature($featureCategory, $request->validated());
+        $feature = $this->service->createFeature($request->validated());
 
         return ApiResponse::success($feature, message: 'Feature created', httpStatusCode: 201);
     }
