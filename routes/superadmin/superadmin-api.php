@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\SuperAdmin\Auth\SuperAdminAuth;
+use App\Http\Controllers\SuperAdmin\Checkpoints\CheckpointController;
 use App\Http\Controllers\SuperAdmin\Clients\ClientController;
 use App\Http\Controllers\SuperAdmin\Dashboard\DashboardController;
 use App\Http\Controllers\SuperAdmin\Devices\DeviceController;
@@ -78,6 +79,12 @@ Route::prefix('super-man')->middleware([
         Route::get('/', [DeviceController::class, 'index']);
         Route::post('/', [DeviceController::class, 'store']);
         Route::put('/{device}', [DeviceController::class, 'update']);
+    });
+
+    Route::prefix('checkpoints')->group(function () {
+        Route::get('/', [CheckpointController::class, 'index']);
+        Route::post('/', [CheckpointController::class, 'store']);
+        Route::put('/{checkpoint}', [CheckpointController::class, 'update']);
     });
 
     Route::prefix('users')->group(function () {
