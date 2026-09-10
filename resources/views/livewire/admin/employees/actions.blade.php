@@ -22,6 +22,15 @@
                         <span>Edit</span>
                     </a>
                 </li>
+
+                <!-- NULLIFY EMPLOYEE FACE ID -->
+                <li>
+                    <a class="dropdown-item d-flex align-items-center gap-2" href="javascript:void(0)"
+                       wire:click="$dispatch('nullify-employee-face-id',{ id : {{ $employee->id }} })">
+                        <iconify-icon icon="mdi:face-man" class="text-danger w-4 h-4"></iconify-icon>
+                        <span>Nullify Face ID</span>
+                    </a>
+                </li>
             @endcan
 
             @can('assign-locations')
