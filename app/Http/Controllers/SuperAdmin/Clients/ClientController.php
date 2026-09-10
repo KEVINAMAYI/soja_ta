@@ -81,6 +81,17 @@ class ClientController extends Controller
     }
 
     /**
+     * GET /super-man/clients/{organization}/employee-defaults
+     * Get the default employee settings for a client organization.
+     */
+    public function getClientEmployeeDefaults(Organization $organization)
+    {
+        $defaults = $this->service->getOrganizationEmployeeDefaults($organization);
+
+        return ApiResponse::success($defaults, message: 'Organization employee defaults retrieved');
+    }
+
+    /**
      * PUT /super-man/clients/{organization}/employee-defaults
      * Update the default employee settings for a client organization.
      */
