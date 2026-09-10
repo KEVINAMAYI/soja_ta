@@ -1227,6 +1227,24 @@ new class extends Component {
         }
     }
 
+    #[On('nullify-employee-face-id')]
+    public function nullifyEmployeeFaceId($id): void
+    {
+        try {
+            DB::beginTransaction();
+            $employee = Employee::findOrFail($id);
+            $employee->face_id = null;
+            $employee->save();
+            DB::commit();
+            LivewireAlert::title('Success!')->text($employee->personTypeLabel() . ' face nullified successfully.')->success()->toast()->position('top-end')->show();
+            $this->dispatch('refreshDatatable');
+            $this->loadSummaryStats();
+        } catch (\Exception $e) {
+            DB::rollBack();
+            LivewireAlert::title('Error!')->text('Oh no! Something went wrong.')->error()->toast()->position('top-end')->show();
+        }
+    }
+
     #[On('deactivate-employee')]
     public function deactivateEmployee($id): void
     {
