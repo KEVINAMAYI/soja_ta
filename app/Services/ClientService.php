@@ -150,6 +150,18 @@ class ClientService
         return $organization->fresh(['subscriptionPlan']);
     }
 
+    public function getOrganizationEmployeeDefaults(Organization $organization): array
+    {
+        $defaults = [];
+
+        $generateQr = $organization->settings()->where('key', 'generate_employee_qr_on_create')->first();
+
+        // get all organization settings
+        $allSettings = $organization->settings()->get()->keyBy('key');
+
+        return $allSettings->mapWithKeys(fn($setting) => [$setting->key => $setting->value])->toArray();
+    }
+
     public function setOrganizationEmployeeDefaults(Organization $organization, array $data): void
     {
         // create or update the organization's default employee settings in organization settings table
