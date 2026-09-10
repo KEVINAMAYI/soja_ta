@@ -57,6 +57,7 @@ Route::prefix('super-man')->middleware([
         Route::post('/{organization}/impersonate', [ImpersonationController::class, 'store']);
 
         // route to update client employee defaults
+        Route::get('/{organization}/settings', [ClientController::class, 'getClientEmployeeDefaults']);
         Route::put('/{organization}/employee-defaults', [ClientController::class, 'setClientEmployeeDefaults']);
         Route::get('/{organization}/departments', [ClientController::class, 'getOrganizationDepartments']);
         Route::post('/{organization}/departments', [ClientController::class, 'createOrganizationDepartment']);
