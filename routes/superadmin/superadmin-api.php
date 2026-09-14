@@ -60,6 +60,8 @@ Route::prefix('super-man')->middleware([
     Route::prefix('clients')->group(function () {
         Route::get('/', [ClientController::class, 'index']);
         Route::post('/', [ClientController::class, 'store']);
+        Route::get('/health', [ClientController::class, 'health']);
+        Route::get('/{organization}/health', [ClientController::class, 'organizationHealth']);
         Route::put('/{organization}', [ClientController::class, 'update']);
         Route::post('/{organization}/logo', [ClientController::class, 'uploadLogo']);
 
