@@ -1352,10 +1352,10 @@ new class extends Component {
                         <td>
                             <div class="d-flex flex-column">
                                 @if($record['start_date'] && $record['end_date'])
-                                    <span class="fw-semibold text-success mb-1">
+                                    <span class="badge fw-semibold text-success mb-1">
                                             {{ $record['start_date']->format('d M Y') }}
                                         </span>
-                                    <span class="fw-semibold text-danger">
+                                    <span class="badge fw-semibold text-danger">
                                             {{ $record['end_date']->format('d M Y') }}
                                         </span>
                                     <small class="text-muted mt-1">
@@ -1387,7 +1387,10 @@ new class extends Component {
                                     $hasPendingAlternativeDate = (bool) $record['original']->pendingAlternativeDate;
                                 @endphp
                                 @if($hasPendingAlternativeDate)
-                                    <span class="badge bg-info-subtle text-info fw-semibold">Pending Date Review</span>
+                                    <span class="badge bg-info-subtle text-info fw-semibold">Waiting on: {{ $record['employee']->name }}</span>
+                                    <span class="badge bg-info-subtle text-info fw-semibold">(Applicant)</span>
+                                    <span class="badge text-muted">New Start Date: {{ $record['original']->pendingAlternativeDate->new_start_date }}</span>
+                                    <span class="badge text-muted">New End Date: {{ $record['original']->pendingAlternativeDate->new_end_date }}</span>
                                 @elseif($activeLog)
                                     <div class="d-flex flex-column">
                                         <span class="badge bg-info-subtle text-info fw-semibold mb-1">
@@ -1650,7 +1653,7 @@ new class extends Component {
                                     </div>
                                 </div>
                                 <span style="margin-top:20px;" class="ld-status-pill {{ $leave->status }}">
-                                    {{ $hasPendingAlternativeDate ? 'Pending Date Review' : ucfirst($leave->status) }}
+                                    {{ $hasPendingAlternativeDate ? 'Waiting on: ' . $leave->employee->name . ' (Applicant)' : ucfirst($leave->status) }}
                                 </span>
                             </div>
                             <button type="button" class="btn-close" data-bs-dismiss="modal"
@@ -1692,7 +1695,7 @@ new class extends Component {
 
                             @if($hasPendingAlternativeDate)
                                 <div class="ld-reviewing-banner">
-                                    Pending Date Review
+                                    Waiting on: {{ $leave->employee->name }} (Applicant)
                                 </div>
                             @endif
 
@@ -1739,7 +1742,7 @@ new class extends Component {
                                                 @elseif($log->status === 'rejected')
                                                     <span class="ld-step-badge danger">Rejected</span>
                                                 @elseif($hasPendingAlternativeDate && $log->level_number == $leave->current_level)
-                                                    <span class="ld-step-badge primary">Pending Date Review</span>
+                                                    <span class="ld-step-badge primary">Waiting on: {{ $leave->employee->name }} (Applicant)</span>
                                                 @elseif($log->level_number == $leave->current_level)
                                                     @php
                                                         if ($log->approver_type === 'user') {
