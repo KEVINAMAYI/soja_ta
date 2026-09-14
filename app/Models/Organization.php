@@ -29,6 +29,7 @@ class Organization extends Model
         'zkbio_sync_enabled',
         'zkbio_base_url',
         'zkbio_access_token',
+        'client_ta_base_url',
         'zkbio_pin_start',
         'subscription_plan_id',
         'max_locations',
