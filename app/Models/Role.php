@@ -10,6 +10,11 @@ class Role extends SpatieRole
         'name',
         'guard_name',
         'organization_id',
+        'is_internal',
+    ];
+
+    protected $casts = [
+        'is_internal' => 'boolean',
     ];
 }
 
