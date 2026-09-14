@@ -10,6 +10,7 @@ use App\Http\Controllers\SuperAdmin\Impersonation\ImpersonationController;
 use App\Http\Controllers\SuperAdmin\Integrations\IntegrationController;
 use App\Http\Controllers\SuperAdmin\Logs\LogController;
 use App\Http\Controllers\SuperAdmin\QrTokens\QrTokenController;
+use App\Http\Controllers\SuperAdmin\Roles\RoleController;
 use App\Http\Controllers\SuperAdmin\Subscriptions\FeatureCategoryController;
 use App\Http\Controllers\SuperAdmin\Subscriptions\FeatureController;
 use App\Http\Controllers\SuperAdmin\Subscriptions\SubFeatureController;
@@ -45,6 +46,13 @@ Route::prefix('super-man')->middleware([
     // create a new super admin account; a random password is generated and emailed to them
     Route::get('/super-admins', [SuperAdminController::class, 'index']);
     Route::post('/super-admins', [SuperAdminController::class, 'store']);
+
+    Route::prefix('roles')->group(function () {
+        Route::get('/', [RoleController::class, 'index']);
+        Route::post('/', [RoleController::class, 'store']);
+        Route::put('/{role}', [RoleController::class, 'update']);
+        Route::delete('/{role}', [RoleController::class, 'destroy']);
+    });
 
     // terminate a running impersonation session from the super admin console
     Route::delete('/impersonations/{impersonationSession}', [ImpersonationController::class, 'destroy']);
