@@ -43,7 +43,8 @@ class SuperAdminController extends Controller
             $query->where(function ($userQuery) use ($request) {
                 $search = $request->input('search');
 
-                $userQuery->where('name', 'like', '%' . $search . '%')
+                $userQuery->with('employee')
+                    ->where('name', 'like', '%' . $search . '%')
                     ->orWhere('email', 'like', '%' . $search . '%');
             });
         }
