@@ -112,6 +112,11 @@ class Organization extends Model
         return $this->hasMany(OrganizationApiKey::class);
     }
 
+    public function clientIssues()
+    {
+        return $this->hasMany(ClientIssue::class);
+    }
+
 
     public function enabledFeatures()
     {
