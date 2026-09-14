@@ -51,6 +51,7 @@ new class extends Component {
                 'add-organizations',
                 'edit-organizations',
                 'delete-organizations',
+                'impersonate-organizations',
             ];
             if (array_intersect($this->selectedPermissions, $super_admin_permissions)) {
                 Log::error('MALICIOUS ATTEMPT ROLE PERMISSIONS CREATION.');
