@@ -42,6 +42,7 @@ Route::prefix('super-man')->middleware([
     Route::put('/profile', [SuperAdminAuth::class, 'updateProfile']);
 
     // create a new super admin account; a random password is generated and emailed to them
+    Route::get('/super-admins', [SuperAdminController::class, 'index']);
     Route::post('/super-admins', [SuperAdminController::class, 'store']);
 
     // terminate a running impersonation session from the super admin console
