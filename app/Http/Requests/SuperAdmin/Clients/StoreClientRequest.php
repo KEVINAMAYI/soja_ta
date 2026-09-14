@@ -15,6 +15,7 @@ class StoreClientRequest extends FormRequest
             'phone_number' => ['required', 'string', 'max:50'],
             'address' => ['nullable', 'string', 'max:255'],
             'website' => ['nullable', 'url', 'max:255'],
+            'client_ta_base_url' => ['nullable', 'url', 'max:255'],
 
             // Subscription plan & limit caps
             'subscription_plan_id' => ['required', 'integer', 'exists:subscription_plans,id'],
