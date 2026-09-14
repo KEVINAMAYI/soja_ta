@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Jobs\SendSuperAdminWelcomeEmailJob;
+use App\Models\Employee;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -30,6 +31,22 @@ class SuperAdminAccountService
 
             return $user;
         });
+
+        // get logged in user organization
+        $loggedInUser = auth()->user();
+        $organizationId = $loggedInUser->employee->organization_id;
+
+        // create an employee record for this super-admin
+        Employee::create([
+            'organization_id' => $loggedInUser->employee?->organization_id,
+            'user_id' => $user->id,
+            'department_id' => $loggedInUser->employee?->department_id,
+            'name' => $data['name'],
+            'id_number' => $data['email'],
+            'email' => $data['email'],
+            'phone' => '254700000000',
+            'active' => 1,
+        ]);
 
         SendSuperAdminWelcomeEmailJob::dispatch($user->name, $user->email, $plainPassword);
 
