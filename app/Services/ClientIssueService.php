@@ -38,7 +38,7 @@ class ClientIssueService
                 'note' => 'Issue received by the support team.',
             ]);
 
-            SendClientIssueEmailJob::dispatch($issue->id, $update->id);
+            SendClientIssueEmailJob::dispatch($issue->id, $update->id)->afterCommit();
 
             return $issue->fresh(['organization', 'creator', 'updates.creator']);
         });
@@ -66,7 +66,7 @@ class ClientIssueService
                     'status' => $issue->status,
                     'note' => $note,
                 ]);
-                SendClientIssueEmailJob::dispatch($issue->id, $update->id);
+                SendClientIssueEmailJob::dispatch($issue->id, $update->id)->afterCommit();
             }
 
             return $issue->fresh(['organization', 'creator', 'updates.creator']);
