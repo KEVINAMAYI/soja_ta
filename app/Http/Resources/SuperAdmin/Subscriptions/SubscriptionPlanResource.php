@@ -24,6 +24,22 @@ class SubscriptionPlanResource extends JsonResource
             'sort_order' => $this->sort_order,
             'active' => $this->active,
             'clients_count' => $this->clients_count ?? 0,
+            'features' => $this->whenLoaded('features', fn () => $this->features->map(fn ($feature) => [
+                'id' => $feature->id,
+                'name' => $feature->name,
+                'slug' => $feature->slug,
+                'description' => $feature->description,
+                'sort_order' => $feature->sort_order,
+                'sub_features' => $feature->subFeatures->map(fn ($subFeature) => [
+                    'id' => $subFeature->id,
+                    'name' => $subFeature->name,
+                    'slug' => $subFeature->slug,
+                    'description' => $subFeature->description,
+                    'sort_order' => $subFeature->sort_order,
+                ]),
+            ])),
+            'created_at' => $this->created_at,
+            'updated_at' => $this->updated_at,
         ];
     }
 }
