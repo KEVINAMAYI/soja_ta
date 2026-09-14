@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\SuperAdmin\Auth\SuperAdminAuth;
 use App\Http\Controllers\SuperAdmin\Checkpoints\CheckpointController;
+use App\Http\Controllers\SuperAdmin\ClientIssues\ClientIssueController;
 use App\Http\Controllers\SuperAdmin\Clients\ClientController;
 use App\Http\Controllers\SuperAdmin\Dashboard\DashboardController;
 use App\Http\Controllers\SuperAdmin\Devices\DeviceController;
@@ -79,6 +80,13 @@ Route::prefix('super-man')->middleware([
         Route::put('/{organization}/integrations/api-docs', [IntegrationController::class, 'updateApiDocs']);
         Route::post('/{organization}/integrations/api-keys/{environment}/generate', [IntegrationController::class, 'generateApiKey']);
         Route::put('/{organization}/integrations/api-keys/{environment}/toggle', [IntegrationController::class, 'toggleApiKey']);
+    });
+
+    Route::prefix('client-issues')->group(function () {
+        Route::get('/', [ClientIssueController::class, 'index']);
+        Route::post('/', [ClientIssueController::class, 'store']);
+        Route::get('/{clientIssue}', [ClientIssueController::class, 'show']);
+        Route::put('/{clientIssue}', [ClientIssueController::class, 'update']);
     });
 
     Route::prefix('work-locations')->group(function () {
