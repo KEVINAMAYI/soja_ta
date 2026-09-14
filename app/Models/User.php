@@ -4,6 +4,7 @@ namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
 use App\Notifications\CustomResetPassword;
+use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
@@ -15,7 +16,9 @@ use Illuminate\Auth\Notifications\ResetPassword;
 class User extends Authenticatable
 {
     /** @use HasFactory<\Database\Factories\UserFactory> */
-    use HasFactory, Notifiable, HasApiTokens, HasRoles;
+    use HasFactory, Notifiable, HasApiTokens, HasRoles {
+        assignRole as protected assignRoleUsingTrait;
+    }
 
     /**
      * The attributes that are mass assignable.
@@ -70,6 +73,29 @@ class User extends Authenticatable
     public function employee()
     {
         return $this->hasOne(Employee::class)->withTrashed();
+    }
+
+    public function assignRole(...$roles)
+    {
+        $resolvedRoles = collect($roles)->flatten();
+
+        if ($this->employee()->exists()) {
+            foreach ($resolvedRoles as $candidate) {
+                $role = $candidate instanceof Role
+                    ? $candidate
+                    : (is_int($candidate) || ctype_digit((string) $candidate)
+                        ? Role::findOrFail($candidate)
+                        : Role::findByName($candidate, 'web'));
+
+                $isBootstrapSuperAdmin = $role?->name === 'super-admin' && !$this->employee()->exists();
+                $isEstablishedSuperAdmin = $this->exists && $this->hasRole('super-admin');
+                if ($role?->is_internal && !$isBootstrapSuperAdmin && !$isEstablishedSuperAdmin) {
+                    throw new AuthorizationException('Internal roles can only be assigned to superadmins.');
+                }
+            }
+        }
+
+        return $this->assignRoleUsingTrait(...$roles);
     }
 
 
