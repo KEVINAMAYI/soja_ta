@@ -16,6 +16,7 @@ use App\Http\Responses\ApiResponse;
 use App\Models\Employee;
 use App\Models\JobTitle;
 use App\Models\Organization;
+use App\Services\ClientHealthService;
 use App\Services\ClientService;
 use App\Utils\ApiConstants;
 use Dedoc\Scramble\Attributes\Group;
@@ -24,9 +25,55 @@ use Illuminate\Http\Request;
 #[Group('Superadmin/Clients')]
 class ClientController extends Controller
 {
-    public function __construct(private readonly ClientService $service)
+    public function __construct(
+        private readonly ClientService $service,
+        private readonly ClientHealthService $healthService,
+    )
     {
     }
+
+    /**
+     * GET /super-man/clients/health
+     *
+     * Return all organizations immediately and queue missing health checks.
+     */
+    public function health(Request $request)
+    {
+        $organizations = Organization::query()->orderBy('name')->get();
+
+        if ($request->boolean('refresh')) {
+            $this->healthService->invalidateAll();
+        }
+
+        $this->healthService->queueForOrganizations($organizations);
+
+        $data = $organizations->map(function (Organization $organization) {
+            return cache()->get($this->healthService->cacheKey($organization->id), [
+                'organization_id' => $organization->id,
+                'organization_name' => $organization->name,
+                'client_ta_base_url' => $organization->client_ta_base_url,
+                'status' => 'loading',
+                'client_issues' => [],
+                'checked_at' => null,
+            ]);
+        });
+
+        return ApiResponse::success($data, message: 'loading for every organization');
+    }
+
+    /**
+     * GET /super-man/clients/{organization}/health
+     *
+     * Check one organization synchronously and refresh its cache.
+     */
+    public function organizationHealth(Organization $organization)
+    {
+        return ApiResponse::success(
+            $this->healthService->check($organization),
+            message: 'Organization health retrieved'
+        );
+    }
+
 
     /**
      * GET /super-man/clients
@@ -60,6 +107,7 @@ class ClientController extends Controller
             'company' => $organization->name,
             'email' => $organization->email,
             'phone' => $organization->phone_number,
+            'client_ta_base_url' => $organization->client_ta_base_url,
             'status' => $organization->active ? 'Active' : 'Inactive',
             'joined' => $organization->created_at,
             'last_active' => $organization->last_active_at,
