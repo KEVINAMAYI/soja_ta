@@ -62,6 +62,10 @@ class SubscriptionPlanService
     public function listPlans()
     {
         return SubscriptionPlan::withCount('organizations as clients_count')
+            ->with([
+                'features' => fn ($q) => $q->orderBy('sort_order'),
+                'subFeatures' => fn ($q) => $q->orderBy('sort_order'),
+            ])
             ->orderBy('sort_order')
             ->get();
     }
