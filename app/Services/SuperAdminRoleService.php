@@ -25,7 +25,7 @@ class SuperAdminRoleService
                 $query->where('is_internal', true)->orWhereNull('organization_id');
             })
             ->with('permissions')
-            ->withCount('users')
+            // ->withCount('users')
             ->latest();
     }
 
