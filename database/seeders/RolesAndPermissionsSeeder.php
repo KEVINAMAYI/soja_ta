@@ -3,7 +3,7 @@
 namespace Database\Seeders;
 
 use Illuminate\Database\Seeder;
-use Spatie\Permission\Models\Role;
+use App\Models\Role;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\PermissionRegistrar;
 use App\Models\Organization;
@@ -27,6 +27,7 @@ class RolesAndPermissionsSeeder extends Seeder
             ['name' => 'add-organizations', 'category' => 'Organizations'],
             ['name' => 'edit-organizations', 'category' => 'Organizations'],
             ['name' => 'delete-organizations', 'category' => 'Organizations'],
+            ['name' => 'impersonate-organizations', 'category' => 'Organizations'],
 
             // Departments
             ['name' => 'view-departments', 'category' => 'Departments'],
@@ -148,7 +149,7 @@ class RolesAndPermissionsSeeder extends Seeder
                 'name' => $roleName,
                 'organization_id' => 1,
                 'guard_name' => 'web',
-            ]);
+            ], ['is_internal' => $roleName === 'super-admin']);
 
             if ($perms === 'all') {
                 $role->syncPermissions(Permission::all());
@@ -211,7 +212,7 @@ class RolesAndPermissionsSeeder extends Seeder
                 'name' => $roleName,
                 'organization_id' => $organizationId,
                 'guard_name' => 'web',
-            ]);
+            ], ['is_internal' => false]);
             $role->syncPermissions($perms);
         }
     }
