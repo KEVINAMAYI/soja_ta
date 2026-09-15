@@ -90,6 +90,11 @@ class SubscriptionPlanService
         return $category;
     }
 
+    public function featuresQuery()
+    {
+        return Feature::query()->with('category')->orderBy('sort_order');
+    }
+
     public function createFeature(array $data): Feature
     {
         return Feature::create([
