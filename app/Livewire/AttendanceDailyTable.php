@@ -341,7 +341,7 @@ class AttendanceDailyTable extends DataTableComponent
                     if (!$isSchool && $row->status === 'clocked_in' && $row->check_in_time && !$row->check_out_time) {
                         $isToday = Carbon::parse($row->date)->isToday();
                         if ($isToday && !$this->shiftHasEnded($row)) {
-                            return "<span style='background:green;color:#fff;padding:4px 12px;border-radius:4px;font-size:.75rem;'>Still In</span>";
+                            return "<span style='background:green;color:#fff;padding:4px 12px;border-radius:4px;font-size:.75rem;white-space:nowrap;display:inline-block;'>Still In</span>";
                         }
                         // Past date OR shift has ended → fall through
                     }
@@ -357,7 +357,7 @@ class AttendanceDailyTable extends DataTableComponent
 
                     // ── Generic still-in (school / no shift info) ────────────
                     if ($row->status === 'clocked_in' && $row->check_in_time && !$row->check_out_time) {
-                        return "<span style='background:green;color:#fff;padding:4px 12px;border-radius:4px;font-size:.75rem;'>Still In</span>";
+                        return "<span style='background:green;color:#fff;padding:4px 12px;border-radius:4px;font-size:.75rem;white-space:nowrap;display:inline-block;'>Still In</span>";
                     }
 
                     $formatted = $row->check_out_time
