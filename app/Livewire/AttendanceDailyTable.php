@@ -314,9 +314,9 @@ class AttendanceDailyTable extends DataTableComponent
                             . "<br><small class='text-muted' style='white-space:nowrap;'>" . $dt->format('M d, Y') . "</small>";
                         if (!$isSchool) {
                             if ($row->is_late_checkin && !$row->within_grace_period) {
-                                $badge = "<br><span style='background:#dc3545;color:#fff;padding:2px 8px;border-radius:12px;font-size:.7rem;font-weight:500;'>🔴 {$this->formatMinutes($row->minutes_late)} Late</span>";
+                                $badge = "<br><span style='background:#dc3545;color:#fff;padding:2px 8px;border-radius:12px;font-size:.7rem;font-weight:500;white-space:nowrap;display:inline-block;margin-top:2px;'>{$this->formatMinutes($row->minutes_late)} Late</span>";
                             } elseif ($row->is_late_checkin && $row->within_grace_period) {
-                                $badge = "<br><span style='background:#ffc107;color:#000;padding:2px 8px;border-radius:12px;font-size:.7rem;font-weight:500;'>⏰ {$this->formatMinutes($row->minutes_late)} (Grace)</span>";
+                                $badge = "<br><span style='background:#ffc107;color:#000;padding:2px 8px;border-radius:12px;font-size:.7rem;font-weight:500;white-space:nowrap;display:inline-block;margin-top:2px;'>{$this->formatMinutes($row->minutes_late)} Grace</span>";
                             }
                         }
                     }
@@ -372,7 +372,7 @@ class AttendanceDailyTable extends DataTableComponent
                     }
 
                     if (!$isSchool && $row->is_early_checkout && $row->minutes_early > 0) {
-                        $badge = "<br><span style='background:#ff6b6b;color:#fff;padding:2px 8px;border-radius:12px;font-size:.7rem;font-weight:500;'>⚠️ {$this->formatMinutes($row->minutes_early)} Early</span>";
+                        $badge = "<br><span style='background:#ff6b6b;color:#fff;padding:2px 8px;border-radius:12px;font-size:.7rem;font-weight:500;white-space:nowrap;display:inline-block;margin-top:2px;'>{$this->formatMinutes($row->minutes_early)} Early</span>";
                     }
 
                     return "{$formatted}{$badge}{$label}";
