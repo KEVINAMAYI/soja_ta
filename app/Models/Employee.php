@@ -32,6 +32,7 @@ class Employee extends Model
         'shift_id',
         'qr_code',
         'employee_title',
+        'employee_type',
         'shift_status',
         'start_off_shift_date',
         'end_off_shift_date',
