@@ -309,7 +309,9 @@ class AttendanceDailyTable extends DataTableComponent
                     if (empty($value)) {
                         $formatted = "<span class='fw-semibold text-muted'>—</span>";
                     } else {
-                        $formatted = "<span class='fw-semibold text-success'>" . Carbon::parse($value)->format('M d, Y g:i A') . "</span>";
+                        $dt = Carbon::parse($value);
+                        $formatted = "<span class='fw-semibold text-success' style='white-space:nowrap;'>" . $dt->format('g:i A') . "</span>"
+                            . "<br><small class='text-muted' style='white-space:nowrap;'>" . $dt->format('M d, Y') . "</small>";
                         if (!$isSchool) {
                             if ($row->is_late_checkin && !$row->within_grace_period) {
                                 $badge = "<br><span style='background:#dc3545;color:#fff;padding:2px 8px;border-radius:12px;font-size:.7rem;font-weight:500;'>🔴 {$this->formatMinutes($row->minutes_late)} Late</span>";
@@ -341,7 +343,7 @@ class AttendanceDailyTable extends DataTableComponent
                     if (!$isSchool && $row->status === 'clocked_in' && $row->check_in_time && !$row->check_out_time) {
                         $isToday = Carbon::parse($row->date)->isToday();
                         if ($isToday && !$this->shiftHasEnded($row)) {
-                            return "<span style='background:green;color:#fff;padding:4px 12px;border-radius:4px;font-size:.75rem;white-space:nowrap;display:inline-block;'>Still In</span>";
+                            return "<span style='background:green;color:#fff;padding:4px 12px;border-radius:4px;font-size:.75rem;white-space:nowrap;'>Still In</span>";
                         }
                         // Past date OR shift has ended → fall through
                     }
@@ -357,14 +359,17 @@ class AttendanceDailyTable extends DataTableComponent
 
                     // ── Generic still-in (school / no shift info) ────────────
                     if ($row->status === 'clocked_in' && $row->check_in_time && !$row->check_out_time) {
-                        return "<span style='background:green;color:#fff;padding:4px 12px;border-radius:4px;font-size:.75rem;white-space:nowrap;display:inline-block;'>Still In</span>";
+                        return "<span style='background:green;color:#fff;padding:4px 12px;border-radius:4px;font-size:.75rem;white-space:nowrap;'>Still In</span>";
                     }
 
-                    $formatted = $row->check_out_time
-                        ? "<span class='fw-semibold text-success'>" . Carbon::parse($row->check_out_time)->format('M d, Y g:i A') . "</span>"
-                        : (empty($value)
-                            ? "<span class='fw-semibold text-muted'>—</span>"
-                            : "<span class='fw-semibold text-success'>" . Carbon::parse($value)->format('M d, Y g:i A') . "</span>");
+                    $outValue = $row->check_out_time ?: $value;
+                    if (empty($outValue)) {
+                        $formatted = "<span class='fw-semibold text-muted'>—</span>";
+                    } else {
+                        $dt = Carbon::parse($outValue);
+                        $formatted = "<span class='fw-semibold text-success' style='white-space:nowrap;'>" . $dt->format('g:i A') . "</span>"
+                            . "<br><small class='text-muted' style='white-space:nowrap;'>" . $dt->format('M d, Y') . "</small>";
+                    }
 
                     if (!$isSchool && $row->is_early_checkout && $row->minutes_early > 0) {
                         $badge = "<br><span style='background:#ff6b6b;color:#fff;padding:2px 8px;border-radius:12px;font-size:.7rem;font-weight:500;'>⚠️ {$this->formatMinutes($row->minutes_early)} Early</span>";
