@@ -561,6 +561,9 @@ new class extends Component {
                         'ad_upn' => $row['upn'],
                         'ad_synced_at' => now(),
                         'ad_employee_id' => $row['employee_id'],
+                        // Default AD-sourced employees to COSMOS, but never overwrite a
+                        // manually-assigned type (e.g. Outsourced) on re-sync.
+                        'employee_type' => $existing->employee_type ?: 'COSMOS',
                         'section' => $row['section'],
                         'division' => $row['unit'],
                         'department_id' => $departmentId,
@@ -623,6 +626,7 @@ new class extends Component {
                         'ad_synced_at' => now(),
                         'is_student' => false,
                         'employee_title' => $row['job_title'] !== '—' ? $row['job_title'] : null,
+                        'employee_type' => 'COSMOS',
                         'ad_employee_id' => $row['employee_id'],
                         'section' => $row['section'],
                         'division' => $row['unit'],
@@ -2433,7 +2437,8 @@ new class extends Component {
             transition: all 0.2s;
         }
 
-        .type-tab button.active {
+        .type-tab button
+        .active {
             background: var(--primary-color) !important;
             color: white;
         }
