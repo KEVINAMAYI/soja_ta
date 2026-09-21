@@ -604,7 +604,7 @@ class LeaveApprovalService
             ->where('year', $year)
             ->first();
 
-        $entitled = $this->resolveEntitledDays($leaveType, $balance);
+        $entitled = $this->resolveEntitledDays($leaveType);
 
         if ($entitled === null) {
             return ['ok' => true, 'remaining' => null];
@@ -727,7 +727,7 @@ class LeaveApprovalService
 
         return $employees->map(function (Employee $employee) use ($type, $balancesByEmployee, $pendingByEmployee, $year) {
             $balance = $balancesByEmployee->get($employee->id);
-            $entitled = $this->resolveEntitledDays($type, $balance);
+            $entitled = $this->resolveEntitledDays($type);
             $used = (float) ($balance?->used_days ?? 0);
             $pending = (float) ($pendingByEmployee->get($employee->id) ?? 0);
 
