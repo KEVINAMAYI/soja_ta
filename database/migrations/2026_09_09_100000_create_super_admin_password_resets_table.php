@@ -20,7 +20,7 @@ return new class extends Migration {
             $table->timestamp('requested_at');
             $table->string('requested_ip')->nullable();
             $table->string('user_agent')->nullable();
-            $table->timestamp('expires_at');
+            $table->timestamp('expires_at')->nullable();
             $table->timestamp('used_at')->nullable();
             $table->timestamp('invalidated_at')->nullable();
             $table->timestamps();
