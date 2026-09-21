@@ -39,7 +39,7 @@ class AttendanceReportService
         $endDate   = Carbon::parse($endDate)->toDateString();
 
         $query = Attendance::with(['employee.shift'])
-            ->whereHas('employee', fn($q) => $q->where('organization_id', $orgId))
+            ->whereHas('employee', fn($q) => $q->where('organization_id', $orgId)->where('active', 1))
             ->whereBetween('date', [$startDate, $endDate]);
 
         if (!empty($ids)) {
@@ -74,7 +74,8 @@ class AttendanceReportService
     {
         $query = Attendance::query()
             ->join('employees', 'attendances.employee_id', '=', 'employees.id')
-            ->where('employees.organization_id', $orgId);
+            ->where('employees.organization_id', $orgId)
+            ->where('employees.active', 1);
 
         if ($department_id && $department_id !== 'all') {
             $query->where('employees.department_id', $department_id);
@@ -120,13 +121,14 @@ class AttendanceReportService
 
     public function getByDepartment($orgId, $ids, $start_date, $end_date)
     {
-        $orgId = auth()->user()->employee->organization_id ?? $orgId;
+        $orgId = auth()->user()?->employee?->organization_id ?? $orgId;
         $ids   = $ids ?? [];
 
         $query = Attendance::query()
             ->join('employees',   'attendances.employee_id',  '=', 'employees.id')
             ->join('departments', 'employees.department_id',  '=', 'departments.id')
-            ->where('employees.organization_id', $orgId);
+            ->where('employees.organization_id', $orgId)
+            ->where('employees.active', 1);
 
         if ($start_date) $query->where('attendances.date', '>=', $start_date);
         if ($end_date)   $query->where('attendances.date', '<=', $end_date);
@@ -365,6 +367,7 @@ class AttendanceReportService
             ->join('employees',   'attendances.employee_id', '=', 'employees.id')
             ->join('departments', 'employees.department_id', '=', 'departments.id')
             ->where('employees.organization_id', $orgId)
+            ->where('employees.active', 1)
             ->whereBetween('attendances.date', [$startDate->toDateString(), $endDate->toDateString()])
             ->select(
                 'employees.department_id',

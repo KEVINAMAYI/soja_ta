@@ -28,7 +28,13 @@ class SendReportJob implements ShouldQueue
         $this->organizationId = $organizationId;
     }
 
-    public function handle()
+    /**
+     * @return string One of 'sent', 'no_data', 'not_found' — lets a
+     *                 synchronous caller (e.g. "Run Now") report the real
+     *                 outcome instead of just "queued". Ignored by the
+     *                 normal async queue worker.
+     */
+    public function handle(): string
     {
 
         Log::info('🔥 JOB ENTERED HANDLE', [
@@ -43,7 +49,7 @@ class SendReportJob implements ShouldQueue
                 Log::warning('ReportSetting not found', [
                     'setting_id' => $this->settingId,
                 ]);
-                return;
+                return 'not_found';
             }
 
             Log::info('SendReportJob started', [
@@ -84,7 +90,7 @@ class SendReportJob implements ShouldQueue
                     'next_run_at' => $nextRun,
                 ]);
 
-                return; // EXIT EARLY - Don't try to send email
+                return 'no_data'; // EXIT EARLY - Don't try to send email
             }
 
             Log::info('Report generated successfully', [
@@ -112,6 +118,8 @@ class SendReportJob implements ShouldQueue
                 'email' => $setting->email,
                 'next_run_at' => $nextRun,
             ]);
+
+            return 'sent';
 
         } catch (\Throwable $e) {
             Log::info('Report sending failed', [

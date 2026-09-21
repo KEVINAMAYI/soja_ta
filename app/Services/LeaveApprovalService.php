@@ -47,7 +47,7 @@ class LeaveApprovalService
         $leave->current_level = $start;
         $leave->save();
 
-        
+
         return $this->openLevel($leave, $start, $settings);
     }
 
@@ -171,7 +171,7 @@ class LeaveApprovalService
 
         return null;
     }
-    
+
 
     /**
      * Approve the currently active level for this leave, advancing to the
@@ -264,7 +264,7 @@ class LeaveApprovalService
                 $existingApprover = LevelApprover::where('leave_approval_log_id', $activeLog->id)
                     ->where('level_approver_id', $actor?->id)
                     ->first();
-                
+
                 if(!$existingApprover) {
                     LevelApprover::create([
                         'leave_approval_log_id' => $activeLog->id,
@@ -355,7 +355,7 @@ class LeaveApprovalService
 
     private function matchesApprover(User $actor, LeaveApprovalLog $log): bool
     {
-        
+
         if ($log->approver_type == 'role') {
             // an exact supervisor (via reports_to_employee_id) takes precedence over the job-title match
             if ($log->approver_user_id) {
@@ -363,7 +363,7 @@ class LeaveApprovalService
             }
 
             $employee = Employee::where('user_id', $actor->id)->first();
-            
+
             return $employee?->job_title_id == $log->approver_role;
         }
 
@@ -540,7 +540,7 @@ class LeaveApprovalService
             return;
         }
 
-        $days = $leave->num_of_days;
+        $days = $leave->start_date->diffInDays($leave->end_date) + 1;
         $year = $leave->start_date->year;
 
         $balance = LeaveBalance::firstOrCreate(
@@ -556,6 +556,9 @@ class LeaveApprovalService
             ]
         );
 
+        // Keep the snapshot in sync with the leave type's current entitlement —
+        // entitled_days must never drift away from its source of truth.
+        $balance->update(['entitled_days' => $type->annual_entitlement_days]);
         $balance->increment('used_days', $days);
     }
 
@@ -571,7 +574,7 @@ class LeaveApprovalService
             ->where('year', $year)
             ->first();
 
-        $entitled = $this->resolveEntitledDays($leaveType, $balance);
+        $entitled = $this->resolveEntitledDays($leaveType);
 
         if ($entitled === null) {
             return ['ok' => true, 'remaining' => null];
@@ -584,7 +587,7 @@ class LeaveApprovalService
             ->where('status', 'pending')
             ->whereYear('start_date', $year)
             ->get()
-            ->sum('num_of_days');
+            ->sum(fn ($l) => $l->start_date->diffInDays($l->end_date) + 1);
 
         $remaining = $entitled - (float) $used - $pending;
 
@@ -615,33 +618,32 @@ class LeaveApprovalService
     }
 
     /**
-     * A LeaveBalance row's own entitled_days (once one exists, whether
-     * auto-snapshotted on first approval or manually set by an admin
-     * override) always takes precedence over the leave type's default —
-     * that row is the authoritative entitlement for that employee/year.
-     * Falls back to the type's default when no row exists yet.
+     * The leave type's annual entitlement is the single source of truth for
+     * "entitled days" — it is set once on the Leave Types page and never
+     * edited per employee or reduced when leave is taken.
      */
-    private function resolveEntitledDays(LeaveType $type, ?LeaveBalance $balance): ?float
+    private function resolveEntitledDays(LeaveType $type): ?float
     {
-        if ($balance) {
-            return (float) $balance->entitled_days;
-        }
-
         return $type->annual_entitlement_days !== null ? (float) $type->annual_entitlement_days : null;
     }
 
     /**
-     * Create or update an admin override for an employee's leave balance —
-     * lets an admin manually set entitled/used days for a given
-     * employee/leave type/year (e.g. pro-rating a new hire, correcting a
-     * mistake, or granting a specific allowance on an otherwise untracked
-     * leave type).
+     * Manually correct an employee's used-days count for a leave type/year
+     * (e.g. importing historical leave taken before this system, or fixing
+     * a data-entry mistake). Entitled days always stays pinned to the leave
+     * type's current annual entitlement — it is not settable here.
      */
-    public function setBalanceOverride(int $organizationId, int $employeeId, int $leaveTypeId, int $year, float $entitledDays, float $usedDays): LeaveBalance
+    public function setUsedDaysOverride(int $organizationId, int $employeeId, int $leaveTypeId, int $year, float $usedDays): LeaveBalance
     {
+        $type = LeaveType::find($leaveTypeId);
+
         return LeaveBalance::updateOrCreate(
             ['employee_id' => $employeeId, 'leave_type_id' => $leaveTypeId, 'year' => $year],
-            ['organization_id' => $organizationId, 'entitled_days' => $entitledDays, 'used_days' => $usedDays]
+            [
+                'organization_id' => $organizationId,
+                'entitled_days' => $type?->annual_entitlement_days ?? 0,
+                'used_days' => $usedDays,
+            ]
         );
     }
 
@@ -663,7 +665,7 @@ class LeaveApprovalService
                 ->where('year', $year)
                 ->first();
 
-            $entitled = $this->resolveEntitledDays($type, $balance);
+            $entitled = $this->resolveEntitledDays($type);
 
             if ($entitled === null) {
                 return [
@@ -721,7 +723,7 @@ class LeaveApprovalService
             ->whereYear('start_date', $year)
             ->get()
             ->groupBy('employee_id')
-            ->map(fn ($group) => (float) $group->sum('num_of_days'));
+            ->map(fn ($group) => $group->sum(fn ($l) => $l->start_date->diffInDays($l->end_date) + 1));
 
         return $employees->map(function (Employee $employee) use ($type, $balancesByEmployee, $pendingByEmployee, $year) {
             $balance = $balancesByEmployee->get($employee->id);
@@ -766,83 +768,34 @@ class LeaveApprovalService
         return $rows;
     }
 
-    private function sendNotifications(Leave $leave, LeaveApprovalLog $log, array $config, int $level): void
+    private function sendNotifications(Leave $leave, array $config, int $level): void
     {
-
         $recipients = [];
 
-        if ($config['approver_type'] === 'user') {
-            $approverIds = array_values(array_unique(array_filter(array_map(
-                fn ($id) => is_numeric($id) ? (int) $id : null,
-                array_merge(
-                    $config['approver_user_ids'] ?? [],
-                    // this check is added to allow legacy single approver ID to be used in the config,
-                    //but it will be ignored if approver_user_ids is present and non-empty
-                    (isset($config['approver_user_id']) && count($config['approver_user_ids']) > 0) ? [$config['approver_user_id']] : []
-                )
-            ))));
-
-            if (!empty($approverIds)) {
-                $recipients = User::whereIn('id', $approverIds)
-                    ->whereNotNull('email')
-                    ->pluck('email')
-                    ->filter()
-                    ->all();
+        if ($config['approver_type'] === 'user' && $config['approver_user_id']) {
+            $user = User::find($config['approver_user_id']);
+            if ($user?->email) {
+                $recipients[] = $user->email;
             }
-        }
-        else if ($config['approver_type'] === 'role') {
-
-            if ($log->approver_user_id) {
-                // exact supervisor identified via the reports-to chain — notify only them
-                $recipients = Employee::where('user_id', $log->approver_user_id)
-                    ->pluck('email')
-                    ->filter()
-                    ->all();
-
-                Log::info('Leave approval notification sent to exact supervisor with user ID: ' . $log->approver_user_id, [
-                    'leave_id' => $leave->id,
-                    'employee_id' => $leave->employee_id,
-                    'recipients' => $recipients,
-                ]);
-            }
-            elseif ($log->approver_role) {
-
-                $recipients = Employee::where('organization_id', $leave->organization_id)
-                    ->where('job_title_id', $log->approver_role)
-                    ->pluck('email')
-                    ->filter()
-                    ->all();
-
-                Log::info('Leave approval notification sent to approvers with job title ID: ' . $log->approver_role, [
-                    'leave_id' => $leave->id,
-                    'employee_id' => $leave->employee_id,
-                    'recipients' => $recipients,
-                    'Organization id' => $leave->organization_id,
-                ]);
-            }
-            else {
-                Log::info('Leave approval notification skipped: applicant has no reports_to_job_title_id', [
-                    'leave_id' => $leave->id,
-                    'employee_id' => $leave->employee_id,
-                ]);
-            }
+        } elseif ($config['approver_type'] === 'role' && $config['approver_role']) {
+            $recipients = User::role($config['approver_role'])
+                ->whereHas('employee', fn ($q) => $q->where('organization_id', $leave->organization_id))
+                ->pluck('email')
+                ->filter()
+                ->all();
         }
 
-        // if (!empty($config['notify_email'])) {
-        //     $recipients = array_merge($recipients, array_filter($config['notify_email_addresses'] ?? []));
-        // }
+        if (!empty($config['notify_email'])) {
+            $recipients = array_merge($recipients, array_filter($config['notify_email_addresses'] ?? []));
+        }
 
         $recipients = array_values(array_unique($recipients));
 
         if (!empty($recipients)) {
-            $approverRoleLabel = $config['approver_type'] === 'role' ? ($log->approver_role ?? null) : null;
+            $approverRoleLabel = $config['approver_type'] === 'role' ? ($config['approver_role'] ?? null) : null;
 
-            // use for each since I want to send customized email to each approver with their email in the review link --> SIR-DOMMY
-            foreach ($recipients as $recipientEmail) {
-                Notification::route('mail', $recipientEmail)
-                    ->notify(new LeaveApprovalRequiredNotification($leave, $level, $approverRoleLabel));
-            }
+            Notification::route('mail', $recipients)
+                ->notify(new LeaveApprovalRequiredNotification($leave, $level, $approverRoleLabel));
         }
     }
-    
 }

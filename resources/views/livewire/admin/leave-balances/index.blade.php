@@ -107,6 +107,7 @@ new class extends Component {
         $orgId = auth()->user()->employee?->organization_id;
 
         return Employee::where('organization_id', $orgId)
+            ->where('active', 1)
             ->when($this->departmentId, fn($q) => $q->where('department_id', $this->departmentId))
             ->when($this->search, fn($q) => $q->where('name', 'like', '%' . $this->search . '%'))
             ->with('department')
@@ -158,18 +159,16 @@ new class extends Component {
     public function saveBalance(): void
     {
         $this->validate([
-            'lbEntitledDays' => 'required|numeric|min:0',
             'lbUsedDays' => 'required|numeric|min:0',
         ]);
 
         $orgId = auth()->user()->employee?->organization_id;
 
-        app(LeaveApprovalService::class)->setBalanceOverride(
+        app(LeaveApprovalService::class)->setUsedDaysOverride(
             $orgId,
             (int)$this->lbEmployeeId,
             (int)$this->lbLeaveTypeId,
             (int)$this->year,
-            (float)$this->lbEntitledDays,
             (float)$this->lbUsedDays
         );
 
@@ -200,6 +199,7 @@ new class extends Component {
         $orgId = auth()->user()->employee?->organization_id;
 
         $employees = Employee::where('organization_id', $orgId)
+            ->where('active', 1)
             ->when($this->departmentId, fn($q) => $q->where('department_id', $this->departmentId))
             ->when($this->search, fn($q) => $q->where('name', 'like', '%' . $this->search . '%'))
             ->with('department')
@@ -440,16 +440,12 @@ new class extends Component {
                     <div class="modal-body">
                         <p class="text-muted small mb-3">
                             {{ $lbLeaveTypeName }} &middot; {{ $year }}
-                            @if(!$lbHasOverride)
-                                <br>No override set yet — these values are the leave type's default.
-                            @endif
                         </p>
 
                         <div class="mb-3">
-                            <label for="lbEntitledDays" class="form-label">Entitled Days</label>
-                            <input type="number" step="0.5" min="0" wire:model="lbEntitledDays"
-                                   id="lbEntitledDays" class="form-control">
-                            @error('lbEntitledDays') <small class="text-danger">{{ $message }}</small> @enderror
+                            <label class="form-label">Entitled Days</label>
+                            <input type="text" class="form-control" value="{{ $lbEntitledDays }}" disabled readonly>
+                            <small class="text-muted">Fixed by the leave type. Change it on the Leave Types page.</small>
                         </div>
 
                         <div class="mb-3">

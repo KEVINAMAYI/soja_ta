@@ -23,7 +23,8 @@ class EmployeeExportController extends Controller
 
         $query = Employee::query()
             ->with(['organization', 'shift', 'user', 'department'])
-            ->where('organization_id', $orgId);
+            ->where('organization_id', $orgId)
+            ->where('active', 1);
 
         if (!empty($ids)) {
             $query->whereIn('id', $ids);

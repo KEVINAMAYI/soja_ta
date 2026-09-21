@@ -28,6 +28,7 @@ class LeaveBalanceExportController extends Controller
         $search = $request->input('search');
 
         $employees = Employee::where('organization_id', $orgId)
+            ->where('active', 1)
             ->when($departmentId, fn ($q) => $q->where('department_id', $departmentId))
             ->when($search, fn ($q) => $q->where('name', 'like', '%' . $search . '%'))
             ->with('department')

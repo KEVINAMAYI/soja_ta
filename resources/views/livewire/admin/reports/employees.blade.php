@@ -41,6 +41,10 @@ new class extends Component {
     public $employees = [];
     public $exportEmployeeIds = [];
 
+    // When set, saveReportSetting() updates this existing schedule group
+    // instead of creating a new one — populated by editReportSetting().
+    public array $editingIds = [];
+
     protected function rules()
     {
         return [
@@ -140,6 +144,41 @@ new class extends Component {
     }
 
 
+    public function openCreateModal()
+    {
+        $this->resetForm();
+        $this->dispatch('show-report-modal');
+    }
+
+    public function editReportSetting($ids)
+    {
+        $ids = is_string($ids) ? json_decode($ids, true) : $ids;
+
+        $settings = ReportSetting::whereIn('id', $ids)->get();
+
+        if ($settings->isEmpty()) {
+            LivewireAlert::title('Error!')
+                ->text('No report settings found to edit.')
+                ->error()
+                ->toast()
+                ->position('top-end')
+                ->show();
+            return;
+        }
+
+        $first = $settings->first();
+
+        $this->editingIds = $ids;
+        $this->emails = $settings->pluck('email')->filter()->unique()->implode(', ');
+        $this->export_report_type = $first->report_type;
+        $this->frequency = $first->frequency;
+        $this->time = substr($first->time, 0, 5);
+        $this->day_of_week = $first->day_of_week;
+        $this->timezone = $first->timezone;
+
+        $this->dispatch('show-report-modal');
+    }
+
     public function saveReportSetting()
     {
         $this->validate();
@@ -166,22 +205,66 @@ new class extends Component {
                 throw new Exception('Please provide at least one valid email address');
             }
 
-            // Save settings for each email
-            foreach ($emailArray as $email) {
-                ReportSetting::updateOrCreate(
-                    [
-                        'organization_id' => $orgId,
-                        'email' => $email,
-                        'report_type' => $this->export_report_type,
-                    ],
-                    [
-                        'frequency' => $this->frequency,
-                        'time' => $this->time,
-                        'day_of_week' => $this->day_of_week,
-                        'timezone' => $this->timezone,
-                        'active' => true,
-                    ]
-                );
+            $isEditing = !empty($this->editingIds);
+
+            if ($isEditing) {
+                // Update the schedule's own rows for emails that remain,
+                // create rows for newly-added emails, and drop rows for
+                // emails that were removed from the recipients list.
+                $existingSettings = ReportSetting::whereIn('id', $this->editingIds)->get()->keyBy('email');
+
+                foreach ($emailArray as $email) {
+                    $existing = $existingSettings->pull($email);
+
+                    if ($existing) {
+                        $existing->update([
+                            'report_type' => $this->export_report_type,
+                            'frequency' => $this->frequency,
+                            'time' => $this->time,
+                            'day_of_week' => $this->day_of_week,
+                            'timezone' => $this->timezone,
+                        ]);
+                    } else {
+                        ReportSetting::updateOrCreate(
+                            [
+                                'organization_id' => $orgId,
+                                'email' => $email,
+                                'report_type' => $this->export_report_type,
+                            ],
+                            [
+                                'frequency' => $this->frequency,
+                                'time' => $this->time,
+                                'day_of_week' => $this->day_of_week,
+                                'timezone' => $this->timezone,
+                                'active' => true,
+                            ]
+                        );
+                    }
+                }
+
+                // Anything left in $existingSettings had its email removed
+                // from the recipients list — drop those rows.
+                foreach ($existingSettings as $removed) {
+                    $removed->delete();
+                }
+            } else {
+                // Save settings for each email
+                foreach ($emailArray as $email) {
+                    ReportSetting::updateOrCreate(
+                        [
+                            'organization_id' => $orgId,
+                            'email' => $email,
+                            'report_type' => $this->export_report_type,
+                        ],
+                        [
+                            'frequency' => $this->frequency,
+                            'time' => $this->time,
+                            'day_of_week' => $this->day_of_week,
+                            'timezone' => $this->timezone,
+                            'active' => true,
+                        ]
+                    );
+                }
             }
 
             DB::commit();
@@ -189,7 +272,7 @@ new class extends Component {
             $this->dispatch('hide-report-modal');
 
             LivewireAlert::title('Awesome!')
-                ->text('Report settings saved successfully for ' . count($emailArray) . ' recipient(s)')
+                ->text(($isEditing ? 'Report schedule updated successfully.' : 'Report settings saved successfully for ' . count($emailArray) . ' recipient(s)'))
                 ->success()
                 ->toast()
                 ->position('top-end')
@@ -389,17 +472,47 @@ new class extends Component {
                 return;
             }
 
-            // Dispatch jobs immediately (skip schedule rules)
+            // Run immediately and synchronously (skip schedule rules and the
+            // queue) so the admin gets the real outcome right away, instead
+            // of a "queued" toast that's true even when nothing is ever sent.
+            $sent = 0;
+            $noData = 0;
+            $failed = 0;
+
             foreach ($activeSettings as $setting) {
-                dispatch(new SendReportJob($setting->id, $setting->organization_id));
+                try {
+                    $result = SendReportJob::dispatchSync($setting->id, $setting->organization_id);
+                    match ($result) {
+                        'sent' => $sent++,
+                        'no_data' => $noData++,
+                        default => $failed++,
+                    };
+                } catch (\Throwable $e) {
+                    $failed++;
+                    \Log::error('runReport: SendReportJob failed', [
+                        'setting_id' => $setting->id,
+                        'error' => $e->getMessage(),
+                    ]);
+                }
             }
 
-            LivewireAlert::title('Awesome!')
-                ->text('Report queued for ' . count($activeSettings) . ' active recipient(s).')
-                ->success()
-                ->toast()
-                ->position('top-end')
-                ->show();
+            $parts = [];
+            if ($sent)   $parts[] = "sent to {$sent} recipient(s)";
+            if ($noData) $parts[] = "no data available for {$noData}";
+            if ($failed) $parts[] = "failed for {$failed}";
+
+            $message = 'Report run complete: ' . implode(', ', $parts) . '.';
+
+            if ($failed > 0 && $sent === 0) {
+                LivewireAlert::title('Error!')->text($message)->error()->toast()->position('top-end')->show();
+            } else {
+                LivewireAlert::title($failed > 0 ? 'Partially completed' : 'Awesome!')
+                    ->text($message)
+                    ->success()
+                    ->toast()
+                    ->position('top-end')
+                    ->show();
+            }
 
         } catch (\Exception $e) {
 
@@ -420,7 +533,7 @@ new class extends Component {
 
     public function resetForm()
     {
-        $this->reset(['emails', 'frequency', 'time', 'day_of_week']);
+        $this->reset(['emails', 'frequency', 'time', 'day_of_week', 'editingIds']);
         $this->timezone = 'Africa/Nairobi';
     }
 
@@ -428,6 +541,7 @@ new class extends Component {
     public function closeModal()
     {
         $this->dispatch('hide-report-modal');
+        $this->resetForm();
     }
 
 
@@ -1002,7 +1116,7 @@ new class extends Component {
                             <!-- Top-right button inside card -->
                             <div class="d-flex justify-content-end mb-4">
                                 <button class="btn btn-primary" type="button"
-                                        wire:click="$dispatch('show-report-modal')">
+                                        wire:click="openCreateModal">
                                     <i class="ti ti-mail-forward fs-6 me-1"></i>
                                     Schedule Email Report
                                 </button>
@@ -1114,6 +1228,16 @@ new class extends Component {
                                                 </a>
 
                                                 <ul class="dropdown-menu">
+                                                    <!-- Edit -->
+                                                    <li>
+                                                        <a style="cursor:pointer;"
+                                                           class="dropdown-item d-flex align-items-center gap-2"
+                                                           wire:click="editReportSetting({{ json_encode($setting['ids']) }})">
+                                                            <i class="ti ti-edit fs-5 text-primary"></i>
+                                                            <span>Edit</span>
+                                                        </a>
+                                                    </li>
+
                                                     <!-- Toggle All -->
                                                     <li>
                                                         <a style="cursor:pointer;"
@@ -1211,7 +1335,7 @@ new class extends Component {
                     <div class="modal-header">
                         <h5 class="modal-title fw-semibold" id="reportModalLabel">
                             <i class="ti ti-mail-forward me-2 text-primary"></i>
-                            Schedule Email Report
+                            {{ $editingIds ? 'Edit Scheduled Report' : 'Schedule Email Report' }}
                         </h5>
                     </div>
 
@@ -1292,7 +1416,7 @@ new class extends Component {
                         </button>
 
                         <button type="submit" class="btn btn-success">
-                            <span wire:loading.remove wire:target="saveReportSetting">Save Settings</span>
+                            <span wire:loading.remove wire:target="saveReportSetting">{{ $editingIds ? 'Update Schedule' : 'Save Settings' }}</span>
                             <span wire:loading wire:target="saveReportSetting">
                             <span class="spinner-border spinner-border-sm me-1" role="status"></span>
                             Saving...
