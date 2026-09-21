@@ -472,11 +472,11 @@ new class extends Component {
 @push('scripts')
     <script>
         window.addEventListener('show-leave-balance-modal', () => {
-            new bootstrap.Modal(document.getElementById('leaveBalanceModal')).show();
+            bootstrap.Modal.getOrCreateInstance(document.getElementById('leaveBalanceModal')).show();
         });
 
         window.addEventListener('hide-leave-balance-modal', () => {
-            bootstrap.Modal.getInstance(document.getElementById('leaveBalanceModal'))?.hide();
+            bootstrap.Modal.getOrCreateInstance(document.getElementById('leaveBalanceModal')).hide();
         });
     </script>
 @endpush
