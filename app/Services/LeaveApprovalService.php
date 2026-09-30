@@ -154,7 +154,7 @@ class LeaveApprovalService
             return $log;
         }
 
-        $this->sendNotifications($leave, $log, $config, $level);
+        $this->sendNotifications($leave, $config, $level);
 
         return $log;
     }
