@@ -11,6 +11,8 @@ use Illuminate\Support\Facades\DB;
 
 class AttendanceBreakTable extends DataTableComponent
 {
+
+    //std cosmos
     protected $model = AttendanceBreakLog::class;
 
     public $startDate;

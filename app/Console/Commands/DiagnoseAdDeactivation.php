@@ -24,7 +24,9 @@ use App\Services\MicrosoftAdService;
  */
 class DiagnoseAdDeactivation extends Command
 {
-    protected $signature = 'ad:diagnose {identifier : AD object GUID, email, or local employee id}';
+    protected $signature = 'ad:diagnose {identifier : AD object GUID, email, or local employee id}
+                            {--simulate : After the per-employee report, replay the FULL org-scoped selection (still read-only)}
+                            {--org= : Org id to simulate the cleanup for (defaults to the employee\'s org)}';
 
     protected $description = 'Read-only: explain whether/why an employee would be deactivated by AD sync.';
 
@@ -115,7 +117,7 @@ class DiagnoseAdDeactivation extends Command
             $this->line('  • flagged "disabled" (accountEnabled===false in AD): ' . $this->yn($isDisabled));
             $this->line('  • flagged "removed" (ad_object_id absent from live valid set): ' . $this->yn($isRemoved));
 
-            return $this->verdict($isDisabled || $isRemoved, $employee, 'linked');
+            return $this->verdict($isDisabled || $isRemoved, $employee, $disabledAdIds, $liveAdIds, $liveEmails, $liveNames);
         }
 
         // ── 3b. UNLINKED branch: ad_object_id is NULL ──
