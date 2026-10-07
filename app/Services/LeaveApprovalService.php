@@ -772,18 +772,36 @@ class LeaveApprovalService
     {
         $recipients = [];
 
+        // LOG CONFIG DETAILS FOR DEBUGGING
+        Log::info('LEAVE CONFIG DETAILS NI:', json_encode($config));
+
         if ($config['approver_type'] === 'user' && $config['approver_user_id']) {
             $user = User::find($config['approver_user_id']);
             if ($user?->email) {
                 $recipients[] = $user->email;
             }
         } elseif ($config['approver_type'] === 'role' && $config['approver_role']) {
-            $recipients = User::role($config['approver_role'])
-                ->whereHas('employee', fn ($q) => $q->where('organization_id', $leave->organization_id))
-                ->pluck('email')
-                ->filter()
-                ->all();
+            $recipients = Employee::where('organization_id', $leave->organization_id)
+                    ->where('job_title_id', $config['approver_role'])
+                    ->pluck('email')
+                    ->filter()
+                    ->all();
+        } 
+
+        if (empty($recipients)) {
+            Log::error('WUEH!!! NO RECIPIENTS FOUND FOR LEAVE TO APPROVE LEAVE', ['leave_id' => $leave->id, 'config' => $config]);
+
+            //TODO(SIR-DOMMY): THIS IS PROBABLY NEVER GOING TO HAPPEN, BUT WE SHOULD HANDLE IT GRACEFULLY WHEN IT DOES .... THANKS
         }
+        
+        // AVOID USING USER ROLE BECAUSE WE ARE NOW USING JOB POSITIONS INSTEAD
+        // elseif ($config['approver_type'] === 'role' && $config['approver_role']) {
+        //     $recipients = User::role($config['approver_role'])
+        //         ->whereHas('employee', fn ($q) => $q->where('organization_id', $leave->organization_id))
+        //         ->pluck('email')
+        //         ->filter()
+        //         ->all();
+        // }
 
         if (!empty($config['notify_email'])) {
             $recipients = array_merge($recipients, array_filter($config['notify_email_addresses'] ?? []));
