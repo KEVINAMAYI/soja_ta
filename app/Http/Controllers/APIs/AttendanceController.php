@@ -439,8 +439,13 @@ class AttendanceController extends Controller
     private function handleBreakReturnApproval(Employee $employee, Carbon $checkInTimeCarbon, Shift $shift, AttendanceBreakLog $closedLog, $latitude, $longitude, $deviceId, $work_location_id) {
         $actualBreakStartTime = Carbon::parse($closedLog->shiftBreak?->window_start_time);
 
+        // if 'window_start_time' is not set use log start time
+        if (!$closedLog->shiftBreak?->window_start_time) {
+            $actualBreakStartTime = Carbon::parse($closedLog->start_time);
+        }
+
         // These fields are similar to the ones in shift checkin... they will help us if we need break return approvals
-        $expectedCheckInTime = Carbon::parse($closedLog->shiftBreak?->window_end_time); // use break window end time as expected check-in time after break
+        $expectedCheckInTime = Carbon::parse($actualBreakStartTime)->addMinutes($closedLog->shiftBreak?->duration_minutes ?? 0); // use break window end time as expected check-in time after break
         $gracePeriodEndTime = Carbon::parse($actualBreakStartTime)->addMinutes($closedLog->shiftBreak?->max_duration_minutes ?? 0); // use break max duration to calculate grace period end time
         $expectedCheckOutTime = Carbon::parse($shift->end_time);
         $earlyCheckoutThresholdTime = $shift->getEarlyCheckoutThreshold();
