@@ -23,12 +23,19 @@ class CheckInApprovalService
      * Returns the configured settings array if approval should be triggered,
      * or null if the check-in should proceed normally.
      */
-    public function shouldRequireApproval(Employee $employee, int $minutesLate): ?array
+    public function shouldRequireApproval(Employee $employee, int $minutesLate, ?bool $isBreakReturn = false): ?array
     {
         $orgId    = $employee->organization_id;
         $settings = CheckInApprovalSettings::get($orgId);
 
-        if (!$settings['enabled']) {
+        if ($settings['enabled']) {
+            if ($isBreakReturn && !$settings['trigger_break_returns']) {
+                return null;
+            } else if (!$isBreakReturn && !$settings['trigger_shift_clock_ins']) {
+                return null;
+            }
+        } else {
+            // Approval is not enabled at all for this organization
             return null;
         }
 
@@ -39,7 +46,7 @@ class CheckInApprovalService
         $shiftGraceEnabled = $shift?->grace_period_enabled ?? false;
         $shiftGraceMinutes = $shift?->grace_period_minutes ?? 0;
 
-        if ($shiftGraceEnabled && $minutesLate <= $shiftGraceMinutes) {
+        if ($shiftGraceEnabled && $minutesLate <= $shiftGraceMinutes && !$isBreakReturn) {
             return null;
         }
 
@@ -266,6 +273,30 @@ class CheckInApprovalService
     {
         $employee = $request->employee;
         $date     = $request->date->toDateString();
+
+        // SIR-D: LET'S PRIORITIZE BREAKS ... IF EMPLOYEE HAS RETURNED FROM A BREAK, WE NEED TO HANDLE THAT BEFORE FINALIZING CHECK-IN
+        $breakCheckoutAttendance = Attendance::where('employee_id', $employee->id)
+            ->whereNotNull('check_in_time')
+            ->whereNotNull('check_out_time')
+            ->where('is_break_checkout', true)
+            ->whereDate('date', today())
+            ->latest('check_out_time')
+            ->first();
+
+        if ($breakCheckoutAttendance) {
+            // Re-open the attendance record for continued work
+            $breakCheckoutAttendance->update([
+                'check_out_time' => null,         // re-open
+                'is_break_checkout' => false,
+                'status' => 'clocked_in',
+                'break_count' => $breakCheckoutAttendance->break_count + 1,
+            ]);
+
+            // TODO(SIR-D): IS THERE A SITUATION WHERE EMPLOYEE CAN REQUIRE BOTH BREAK RETURN AND FINALIZING CHECK-IN SIMULTANEOUSLY?
+            // for now ... return the re-opened attendance record for continued work
+            
+            return $breakCheckoutAttendance;
+        }
 
         $attendance = Attendance::where('employee_id', $employee->id)
             ->where('date', $date)
