@@ -215,7 +215,7 @@ class AttendanceController extends Controller
 
                 $breakApprovalResult = $this->handleBreakReturnApproval($employee, $checkInTimeCarbon, $shift, $closedLog, $latitude, $longitude, $deviceId, $work_location_id);
 
-                Log::info('BREAK APPROVAL RESULT NI: ', json_encode($breakApprovalResult));
+                // Log::info('BREAK APPROVAL RESULT NI: ', json_encode($breakApprovalResult));
                 Log::info('BREAK APPROVAL RESULT CODE: ', ['code' => $breakApprovalResult['code']]);
                 if ($breakApprovalResult['code'] != 1000) {
                     // commit transaction before returning
