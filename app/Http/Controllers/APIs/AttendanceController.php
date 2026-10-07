@@ -17,9 +17,11 @@ use App\Models\Attendance;
 use App\Models\EmployeeAssignment;
 use App\Models\Overtime;
 use App\Http\Resources\AttendanceResource;
+use App\Models\Shift;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class AttendanceController extends Controller
 {
@@ -87,9 +89,13 @@ class AttendanceController extends Controller
             /* 1. Resolve logged-in employee ------------------------------------ */
             $loggedInEmployee = auth()->user()->employee;
             if (!$loggedInEmployee) {
+                // commit transaction before returning
+                DB::commit();
                 return response()->json(['code' => 1003, 'message' => 'No employee profile found.'], 404);
             }
             if ($loggedInEmployee->active == 0) {
+                // commit transaction before returning
+                DB::commit();
                 return response()->json(['code' => 1003, 'message' => 'Your account is inactive. Kindly contact admin.'], 403);
             }
 
@@ -207,6 +213,18 @@ class AttendanceController extends Controller
                 // Close the open break log
                 $closedLog = BreakDetector::closeBreakLog($breakCheckoutAttendance, $checkInTimeCarbon);
 
+                $breakApprovalResult = $this->handleBreakReturnApproval($employee, $checkInTimeCarbon, $shift, $closedLog, $latitude, $longitude, $deviceId, $work_location_id);
+
+                Log::info('BREAK APPROVAL RESULT NI: ', json_encode($breakApprovalResult));
+                Log::info('BREAK APPROVAL RESULT CODE: ', ['code' => $breakApprovalResult['result_code']]);
+                if ($breakApprovalResult['result_code'] != 1000) {
+                    // commit transaction before returning
+                    DB::commit();
+                    return response()->json([
+                        'code' => $breakApprovalResult[0]->result_code,
+                        'message' => "Oh no! You returned late, await approval.",
+                    ], 403);
+                }
                 // Re-open the attendance record for continued work
                 $breakCheckoutAttendance->update([
                     'check_out_time' => null,         // re-open
@@ -416,6 +434,111 @@ class AttendanceController extends Controller
             DB::rollBack();
             return $this->errorResponse('Check-in failed', $e);
         }
+    }
+
+    private function handleBreakReturnApproval(Employee $employee, Carbon $checkInTimeCarbon, Shift $shift, AttendanceBreakLog $closedLog, $latitude, $longitude, $deviceId, $work_location_id) {
+        $actualBreakStartTime = Carbon::parse($closedLog->shiftBreak?->window_start_time);
+
+        // These fields are similar to the ones in shift checkin... they will help us if we need break return approvals
+        $expectedCheckInTime = Carbon::parse($closedLog->shiftBreak?->window_end_time); // use break window end time as expected check-in time after break
+        $gracePeriodEndTime = Carbon::parse($actualBreakStartTime)->addMinutes($closedLog->shiftBreak?->max_duration_minutes ?? 0); // use break max duration to calculate grace period end time
+        $expectedCheckOutTime = Carbon::parse($shift->end_time);
+        $earlyCheckoutThresholdTime = $shift->getEarlyCheckoutThreshold();
+
+        $isLateCheckin = false;
+        $minutesLate = 0;
+        $withinGracePeriod = false;
+
+        if ($shift->track_late_checkin) {
+            // now lets replace these values with actual break values
+            $withinGracePeriod = $expectedCheckInTime->diffInMinutes($checkInTimeCarbon) <= ($closedLog->shiftBreak?->max_duration_minutes ?? 0);
+            $isLateCheckin = $checkInTimeCarbon->gt($expectedCheckInTime) && !$withinGracePeriod;
+            $minutesLate = $isLateCheckin ? $expectedCheckInTime->diffInMinutes($checkInTimeCarbon) : 0;
+        }
+        $approvalService = app(CheckInApprovalService::class);
+        // true indicates this is for a break return check-in
+        $approvalSettings = $approvalService->shouldRequireApproval($employee, $minutesLate, true);
+
+        if ($approvalSettings !== null) {
+
+            // Add this BEFORE $approvalService->createRequest(...)
+            $existingPending = \App\Models\CheckInApprovalRequest::where('employee_id', $employee->id)
+                ->where('date', $checkInTimeCarbon->toDateString())
+                ->where('status', 'pending')
+                ->first();
+
+            if ($existingPending) {
+                return [
+                    'code' => 1002,
+                    'message' => 'You already have a pending Break Return check-in approval request. Please wait for approval.',
+                    'type' => 'check_in_held_for_approval',
+                    'data' => [
+                        'request_id' => $existingPending->id,
+                        'status' => 'pending',
+                        'submitted_at' => $existingPending->submitted_at->toIso8601String(),
+                        'current_window' => $existingPending->current_window,
+                    ],
+                ];
+            }
+
+            $lastRejected = \App\Models\CheckInApprovalRequest::where('employee_id', $employee->id)
+                ->where('date', $checkInTimeCarbon->toDateString())
+                ->where('status', 'rejected')
+                ->latest()
+                ->first();
+
+            if ($lastRejected) {
+                return [
+                    'code' => 1003,
+                    'message' => 'Your Break Return check-in request was rejected. Please contact your manager.',
+                    'type' => 'check_in_rejected',
+                    'data' => [
+                        'request_id' => $lastRejected->id,
+                        'status' => 'rejected',
+                        'notes' => $lastRejected->notes,
+                    ],
+                ];
+            }
+
+            $request = $approvalService->createRequest(
+                employee: $employee,
+                checkInTime: $checkInTimeCarbon,
+                minutesLate: $minutesLate,
+                isLateCheckin: $isLateCheckin,
+                withinGracePeriod: $withinGracePeriod,
+                shiftTimes: [
+                    'expected_check_in_time' => $expectedCheckInTime->format('H:i:s'),
+                    'grace_period_end_time' => $gracePeriodEndTime->format('H:i:s'),
+                    'expected_check_out_time' => $expectedCheckOutTime->format('H:i:s'),
+                    'early_checkout_threshold_time' => $earlyCheckoutThresholdTime->format('H:i:s'),
+                ],
+                latitude: (float)$latitude,
+                longitude: (float)$longitude,
+                deviceId: $deviceId,
+                workLocationId: $work_location_id,
+                settings: $approvalSettings,
+            );
+
+            return [
+                'code' => 1002, // "pending" — not success (1000/1001), not failure (1003)
+                'message' => "You are {$minutesLate} minute(s) late, which exceeds the grace period. "
+                    . "Your check-in has been submitted to your {$approvalSettings['windows'][0]['approver_role']} for approval. "
+                    . "You are NOT checked in yet.",
+                'type' => 'check_in_held_for_approval',
+                'data' => [
+                    'request_id' => $request->id,
+                    'status' => 'pending',
+                    'submitted_at' => $request->submitted_at->toIso8601String(),
+                    'current_window' => $request->current_window,
+                ],
+            ];
+        }
+
+        // return with success if check-in does not require approval or is within the grace period
+        return [
+            'code' => 1000,
+            'message' => 'Checkin does not require approval or is within the grace period.'
+        ];
     }
 
 
