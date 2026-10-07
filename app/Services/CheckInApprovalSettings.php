@@ -37,6 +37,8 @@ class CheckInApprovalSettings
     {
         return [
             'enabled'                    => false,
+            'trigger_shift_clock_ins'    => false,
+            'trigger_break_returns'      => false,
             'auto_reject_after_minutes'  => null,   // null = disabled
             'department_ids'             => [],
             'windows'                    => [
@@ -156,6 +158,8 @@ class CheckInApprovalSettings
 
         // Normalize other types
         $merged['enabled']        = (bool) $merged['enabled'];
+        $merged['trigger_shift_clock_ins'] = (bool) $merged['trigger_shift_clock_ins'];
+        $merged['trigger_break_returns'] = (bool) $merged['trigger_break_returns'];
         $merged['department_ids'] = array_values(array_map('intval', $merged['department_ids'] ?? []));
 
         return $merged;
