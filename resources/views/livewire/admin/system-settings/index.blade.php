@@ -223,6 +223,18 @@ new class extends Component {
     {
         $this->validate([
             'approval.enabled'                          => 'boolean',
+            'approval.trigger_shift_clock_ins'          => [
+                'required',
+                'boolean',
+                function ($attribute, $value, $fail) {
+                    if (($this->approval['enabled'] ?? false)
+                        && !$value
+                        && !($this->approval['trigger_break_returns'] ?? false)) {
+                        $fail('Select at least one policy trigger while approval is enabled for this tenant.');
+                    }
+                },
+            ],
+            'approval.trigger_break_returns'            => 'required|boolean',
             'approval.auto_reject_after_minutes'        => 'nullable|integer|min:1|max:1440',
             'approval.department_ids'                   => 'array',
             'approval.windows'                          => 'array|size:3',
@@ -1084,7 +1096,13 @@ new class extends Component {
                         <div class="col-lg-12">
 
                             {{-- Approval system master toggle --}}
-                            <div class="card border shadow-none mb-4">
+                            <div class="card border shadow-none mb-4"
+                                 x-data="{
+                                     enabled: $wire.entangle('approval.enabled'),
+                                     shiftClockIns: $wire.entangle('approval.trigger_shift_clock_ins'),
+                                     breakReturns: $wire.entangle('approval.trigger_break_returns')
+                                 }"
+                                 x-effect="if (enabled && !shiftClockIns && !breakReturns) shiftClockIns = true">
                                 <div class="card-body p-4">
                                     <div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
                                         <h5 class="mb-0 d-flex align-items-center gap-2">
@@ -1095,7 +1113,7 @@ new class extends Component {
                                         <div class="form-check form-switch m-0">
                                             <input class="form-check-input" type="checkbox" role="switch"
                                                    id="approvalEnabled"
-                                                   wire:model="approval.enabled"
+                                                   x-model="enabled"
                                                    style="width:3em;height:1.5em;">
                                             <label class="form-check-label fw-semibold ms-2" for="approvalEnabled">
                                                 Enabled for this tenant
@@ -1177,6 +1195,39 @@ new class extends Component {
         Clock-ins beyond the <strong>shift's grace period</strong> automatically
         create an approval request and notify approvers.
     </span>
+                                    </div>
+                                    <div class="mt-4">
+                                        <h6 class="fw-semibold text-uppercase small text-muted mb-3">Policy Triggers</h6>
+                                        <div class="form-check mb-3">
+                                            <input class="form-check-input" type="checkbox"
+                                                   id="approvalShiftClockIns"
+                                                   x-model="shiftClockIns"
+                                                   :disabled="enabled && shiftClockIns && !breakReturns">
+                                            <label class="form-check-label fw-semibold" for="approvalShiftClockIns">
+                                                Shift Clock-ins
+                                            </label>
+                                            <div class="text-muted mt-1">
+                                                Triggers an approval request when clocking in past the shift grace period.
+                                            </div>
+                                        </div>
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox"
+                                                   id="approvalBreakReturns"
+                                                   x-model="breakReturns"
+                                                   :disabled="enabled && breakReturns && !shiftClockIns">
+                                            <label class="form-check-label fw-semibold" for="approvalBreakReturns">
+                                                Break Returns
+                                            </label>
+                                            <div class="text-muted mt-1">
+                                                Triggers an approval request when returning past the allowed break duration.
+                                            </div>
+                                        </div>
+                                        @error('approval.trigger_shift_clock_ins')
+                                            <div class="text-danger small mt-2">{{ $message }}</div>
+                                        @enderror
+                                        @error('approval.trigger_break_returns')
+                                            <div class="text-danger small mt-2">{{ $message }}</div>
+                                        @enderror
                                     </div>
                                 </div>
                             </div>
