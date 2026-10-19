@@ -773,7 +773,7 @@ class LeaveApprovalService
         $recipients = [];
 
         // LOG CONFIG DETAILS FOR DEBUGGING
-        Log::info('LEAVE CONFIG DETAILS NI:', json_encode($config));
+        // Log::info('LEAVE CONFIG DETAILS NI:', json_encode($config));
 
         if ($config['approver_type'] === 'user' && $config['approver_user_id']) {
             $user = User::find($config['approver_user_id']);
@@ -813,10 +813,10 @@ class LeaveApprovalService
             $approverRoleLabel = $config['approver_type'] === 'role' ? ($config['approver_role'] ?? null) : null;
 
             // LOG RECIPIENTS FOR DEBUGGING
-            Log::error('LEAVE APPROVAL RECIPIENTS:', ['recipients' => $recipients]);
 
             // use for each since I want to send customized email to each approver with their email in the review link --> SIR-DOMMY
             foreach ($recipients as $recipientEmail) {
+                Log::info('SENDING LEAVE APPROVAL NOTIFICATION TO:', ['recipient' => $recipientEmail]);
                 Notification::route('mail', $recipientEmail)
                     ->notify(new LeaveApprovalRequiredNotification($leave, $level, $approverRoleLabel));
             }
