@@ -590,6 +590,9 @@ class LeaveApprovalService
 
         $remaining = $entitled - (float) $used - (float) $pending;
 
+        // log entitled, used, pending, and remaining for debugging
+        Log::error("Leave balance check for employee {$employee->id}, leave type {$leaveType->id}, year {$year}: entitled={$entitled}, used={$used}, pending={$pending}, remaining={$remaining}, requested={$requestedDays}");
+
         return ['ok' => $remaining >= $requestedDays, 'remaining' => $remaining];
     }
 
