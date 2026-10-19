@@ -243,7 +243,7 @@ new class extends Component {
             ? (($this->startDate && $this->endDate) ? (float) $this->calculateWorkingDays() : 0.0)
             : (float) ($this->numberOfDays ?: 0);
 
-        $remainingBefore = $balanceRow['remaining_days'];
+        $remainingBefore = $balanceRow['entitled_days'] === null ? null : $balanceRow['entitled_days'] - $balanceRow['used_days'];
 
         return [
             'employee_name' => $employee->name,
