@@ -154,7 +154,7 @@ class LeaveApprovalService
             return $log;
         }
 
-        $this->sendNotifications($leave, $config, $level);
+        $this->sendNotifications($leave, $log, $config, $level);
 
         return $log;
     }
@@ -770,7 +770,7 @@ class LeaveApprovalService
         return $rows;
     }
 
-    private function sendNotifications(Leave $leave, array $config, int $level): void
+    private function sendNotifications(Leave $leave, LeaveApprovalLog $log, array $config, int $level): void
     {
         $recipients = [];
 
@@ -782,13 +782,24 @@ class LeaveApprovalService
             if ($user?->email) {
                 $recipients[] = $user->email;
             }
-        } elseif ($config['approver_type'] === 'role' && $config['approver_role']) {
-            $recipients = Employee::where('organization_id', $leave->organization_id)
-                    ->where('job_title_id', $config['approver_role'])
+        } elseif ($config['approver_type'] === 'role') {
+            if ($log->approver_user_id) {
+                $recipients = Employee::where('organization_id', $leave->organization_id)
+                    ->where('job_title_id', $log->approver_role)
+                    ->where('user_id', $log->approver_user_id)
                     ->pluck('email')
                     ->filter()
                     ->all();
-        } 
+
+            } else {
+                $recipients = Employee::where('organization_id', $leave->organization_id)
+                    ->where('job_title_id', $log->approver_role)
+                    ->pluck('email')
+                    ->filter()
+                    ->all();
+            }
+            
+        }
 
         if (empty($recipients)) {
             Log::error('WUEH!!! NO RECIPIENTS FOUND FOR LEAVE TO APPROVE LEAVE', ['leave_id' => $leave->id, 'config' => $config]);
