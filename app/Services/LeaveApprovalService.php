@@ -586,10 +586,9 @@ class LeaveApprovalService
             ->where('leave_type_id', $leaveType->id)
             ->where('status', 'pending')
             ->whereYear('start_date', $year)
-            ->get()
-            ->sum(fn ($l) => $l->start_date->diffInDays($l->end_date) + 1);
+            ->sum('num_of_days');
 
-        $remaining = $entitled - (float) $used - $pending;
+        $remaining = $entitled - (float) $used - (float) $pending;
 
         return ['ok' => $remaining >= $requestedDays, 'remaining' => $remaining];
     }
