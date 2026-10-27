@@ -271,7 +271,10 @@ class AttendanceController extends Controller
                 ], 200);
             } 
 
-            Log::error("NORMAL CHECKIN PROCESS HII SIO BREAK:::::");
+            $kunaBreak = $breakCheckoutAttendance ? 1 : 2;
+            $breakEnabled = BreakDetector::isEnabled($employee);
+
+            Log::error("NORMAL CHECKIN PROCESS HII SIO BREAK KUNA BREAK??? ". $kunaBreak . " BREAK ENABLED: " . ($breakEnabled ? 'YES' : 'NO'));
 
             /* 8. ---------------------------------------------------------------
                NORMAL FIRST CHECK-IN OF THE DAY
