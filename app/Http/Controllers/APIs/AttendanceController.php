@@ -209,15 +209,35 @@ class AttendanceController extends Controller
 
             if ($breakCheckoutAttendance && BreakDetector::isEnabled($employee)) {
                 /* ---- RETURNING FROM BREAK ------------------------------------ */
+                Log::info("RETURNING FROM BREAK FOR EMPLOYEE: {$employee->id} AT TIME: {$checkInTimeCarbon}");
 
                 // Close the open break log
                 $closedLog = BreakDetector::closeBreakLog($breakCheckoutAttendance, $checkInTimeCarbon);
+
+                // if there is no $closed log, check if user has pending break return approval
+                if (!$closedLog) {
+                    $pendingApproval = \App\Models\CheckInApprovalRequest::where('employee_id', $employee->id)
+                        ->where('date', $checkInTimeCarbon->toDateString())
+                        ->where('status', 'pending')
+                        ->first();
+                    if ($pendingApproval) {
+                        DB::commit(); // commit transaction before returning
+                        return response()->json([
+                            'code' => 1004,
+                            'message' => 'You have a pending break return approval.',
+                        ], 403);
+                    }
+                }
 
                 $breakApprovalResult = $this->handleBreakReturnApproval($employee, $checkInTimeCarbon, $shift, $closedLog, $latitude, $longitude, $deviceId, $work_location_id);
 
                 // Log::info('BREAK APPROVAL RESULT NI: ', json_encode($breakApprovalResult));
                 Log::info('BREAK APPROVAL RESULT CODE: ', ['code' => $breakApprovalResult['code']]);
                 if ($breakApprovalResult['code'] != 1000) {
+                    // reopen closed break log if necessary
+                    if ($closedLog) {
+                        $closedLog->update(['is_closed' => false]);
+                    }
                     // commit transaction before returning
                     DB::commit();
                     return response()->json([
@@ -249,7 +269,9 @@ class AttendanceController extends Controller
                         'matched_break' => $closedLog?->shiftBreak?->name ?? 'Unscheduled Break',
                     ],
                 ], 200);
-            }
+            } 
+
+            Log::info("NORMAL CHECKIN PROCESS HII SIO BREAK:::::");
 
             /* 8. ---------------------------------------------------------------
                NORMAL FIRST CHECK-IN OF THE DAY
