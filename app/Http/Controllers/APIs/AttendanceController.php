@@ -209,7 +209,7 @@ class AttendanceController extends Controller
 
             if ($breakCheckoutAttendance && BreakDetector::isEnabled($employee)) {
                 /* ---- RETURNING FROM BREAK ------------------------------------ */
-                Log::info("RETURNING FROM BREAK FOR EMPLOYEE: {$employee->id} AT TIME: {$checkInTimeCarbon}");
+                Log::error("RETURNING FROM BREAK FOR EMPLOYEE: {$employee->id} AT TIME: {$checkInTimeCarbon}");
 
                 // Close the open break log
                 $closedLog = BreakDetector::closeBreakLog($breakCheckoutAttendance, $checkInTimeCarbon);
@@ -271,7 +271,7 @@ class AttendanceController extends Controller
                 ], 200);
             } 
 
-            Log::info("NORMAL CHECKIN PROCESS HII SIO BREAK:::::");
+            Log::error("NORMAL CHECKIN PROCESS HII SIO BREAK:::::");
 
             /* 8. ---------------------------------------------------------------
                NORMAL FIRST CHECK-IN OF THE DAY
