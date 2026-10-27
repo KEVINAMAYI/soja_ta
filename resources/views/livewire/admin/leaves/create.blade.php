@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\Leave;
+use App\Models\LeaveType;
 use App\Models\Employee;
 use App\Models\Department;
 use App\Services\AttendanceSeeder;
@@ -25,17 +26,7 @@ new class extends Component {
     public $searchTerm = '';
     public $sendNotifications = true;
     public $notifyManagers = true;
-    public $leaveTypes = [
-        ['id' => 'sick', 'name' => 'Sick Off', 'icon' => '🤒'],
-        ['id' => 'offshift', 'name' => 'Off Shift', 'icon' => '🌙'],
-        ['id' => 'annual', 'name' => 'Annual Leave', 'icon' => '🏖️'],
-        ['id' => 'maternity', 'name' => 'Maternity Leave', 'icon' => '🤰'],
-        ['id' => 'paternity', 'name' => 'Paternity Leave', 'icon' => '👨‍🍼'],
-        ['id' => 'compassionate', 'name' => 'Compassionate Leave', 'icon' => '🕯️'],
-        ['id' => 'study', 'name' => 'Study Leave', 'icon' => '📚'],
-        ['id' => 'unpaid', 'name' => 'Unpaid Leave', 'icon' => '💸'],
-        ['id' => 'personal', 'name' => 'Personal Leave', 'icon' => '👤'],
-    ];
+    public $leaveTypes = [];
 
     // --- Properties for New Form Fields (Optional, but included for complete logic) ---
     public $reason = '';
@@ -48,6 +39,7 @@ new class extends Component {
     {
 
         $orgId = auth()->user()->employee->organization_id ?? null;
+        $this->leaveTypes = array_values(LeaveType::options((int) $orgId));
 
         $this->startDate = $this->startDate ?: now()->toDateString();
 
@@ -285,6 +277,7 @@ new class extends Component {
                         'leave_type' => $leaveTypeName,
                         'start_date' => $this->startDate,
                         'end_date' => $endDate,
+                        'num_of_days' => Carbon::parse($this->startDate)->diffInDays(Carbon::parse($endDate)) + 1,
                         'reason' => $this->reason,
                         'contact_during_leave' => $this->contact_during_leave ?? null,
                         'emergency_contact' => $this->emergency_contact ?? null,
@@ -770,4 +763,3 @@ new class extends Component {
         });
     </script>
 @endpush
-

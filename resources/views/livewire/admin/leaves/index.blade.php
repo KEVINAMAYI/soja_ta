@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\Leave;
+use App\Models\LeaveType;
 use App\Models\Employee;
 use App\Models\Department;
 use App\Models\Attendance;
@@ -13,6 +14,7 @@ use Jantinnerezo\LivewireAlert\Facades\LivewireAlert;
 new class extends Component {
 
     public $departments, $employees, $leaves;
+    public $leaveTypes = [];
     public $department_id, $from_date, $to_date;
     public $employee_id, $leave_type, $start_date, $end_date, $reason, $contact_during_leave, $emergency_contact, $handover_to;
     public $editId = null;
@@ -33,6 +35,10 @@ new class extends Component {
     {
         $this->departments = Department::where('organization_id', $org->id)->get();
         $this->employees = Employee::where('organization_id', $org->id)->get();
+        $this->leaveTypes = collect(LeaveType::options($org->id))->pluck('name')
+            ->merge(['Sick Leave'])
+            ->merge(Leave::where('organization_id', $org->id)->whereNotNull('leave_type')->distinct()->pluck('leave_type'))
+            ->unique()->sort()->values()->all();
         $this->filterLeaves();
     }
 
@@ -253,6 +259,11 @@ new class extends Component {
                 if ($this->editId && !str_starts_with($this->editId, 'emp_')) {
                     // Updating existing leave record
                     $leave = Leave::findOrFail($this->editId);
+                    if ($leave->start_date->toDateString() !== $this->start_date
+                        || $leave->end_date->toDateString() !== $this->end_date) {
+                        $data['leave_days'] = null;
+                        $data['num_of_days'] = Carbon::parse($this->start_date)->diffInDays(Carbon::parse($this->end_date)) + 1;
+                    }
                     $leave->update($data);
 
                     if (auth()->user()->can('view-employees')) {
@@ -264,6 +275,7 @@ new class extends Component {
                 } else {
                     // Creating new leave record
                     $data['status'] = 'pending';
+                    $data['num_of_days'] = Carbon::parse($this->start_date)->diffInDays(Carbon::parse($this->end_date)) + 1;
                     Leave::create($data);
                     $message = 'Leave request saved successfully.';
                 }
@@ -441,13 +453,9 @@ new class extends Component {
                 <label class="form-label">Leave Type</label>
                 <select class="form-control" wire:model="leave_type" wire:change="$dispatch('filterChanged')">
                     <option value="">All Types</option>
-                    <option value="Annual Leave">Annual Leave</option>
-                    <option value="Sick Leave">Sick Leave</option>
-                    <option value="Maternity Leave">Maternity Leave</option>
-                    <option value="Paternity Leave">Paternity Leave</option>
-                    <option value="Compassionate Leave">Compassionate Leave</option>
-                    <option value="Study Leave">Study Leave</option>
-                    <option value="Unpaid Leave">Unpaid Leave</option>
+                    @foreach($leaveTypes as $type)
+                        <option value="{{ $type }}">{{ $type }}</option>
+                    @endforeach
                 </select>
             </div>
 
@@ -621,15 +629,9 @@ new class extends Component {
                                     <label class="form-label">Type</label>
                                     <select wire:model="leave_type" class="form-control">
                                         <option value="">-- Select Type --</option>
-                                        <option value="Annual Leave">Annual Leave</option>
-                                        <option value="Sick Leave">Sick Leave</option>
-                                        <option value="Sick Off">Sick Off</option>
-                                        <option value="Off Shift">Off Shift</option>
-                                        <option value="Maternity Leave">Maternity Leave</option>
-                                        <option value="Paternity Leave">Paternity Leave</option>
-                                        <option value="Compassionate Leave">Compassionate Leave</option>
-                                        <option value="Study Leave">Study Leave</option>
-                                        <option value="Unpaid Leave">Unpaid Leave</option>
+                                        @foreach($leaveTypes as $type)
+                                            <option value="{{ $type }}">{{ $type }}</option>
+                                        @endforeach
                                     </select>
                                     @error('leave_type') <small class="text-danger">{{ $message }}</small>@enderror
                                 </div>
