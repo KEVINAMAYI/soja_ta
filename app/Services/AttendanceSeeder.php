@@ -158,7 +158,8 @@ class AttendanceSeeder
             ->where('status', 'approved')
             ->whereDate('start_date', '<=', $today)
             ->whereDate('end_date', '>=', $today)
-            ->exists();
+            ->get()
+            ->contains(fn (Leave $leave) => $leave->daysInRange($today, $today) > 0);
 
         if ($onLeave) {
             $attendance->fill(['status' => 'on_leave', 'check_in_time' => null, 'check_out_time' => null, 'worked_hours' => 0, 'overtime_hours' => 0])->save();

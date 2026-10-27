@@ -177,15 +177,20 @@ new class extends Component {
             $leaveStart = Carbon::parse($leave->start_date)->max($rangeStart);
             $leaveEnd   = Carbon::parse($leave->end_date)->min($rangeEnd);
             $days = [];
+            $totalDays = 0;
             for ($d = $leaveStart->copy(); $d->lte($leaveEnd); $d->addDay()) {
-                if ($d->isWeekday()) $days[] = $d->format('D, M j');
+                $dayCount = $leave->daysInRange($d, $d);
+                if ($d->isWeekday() && $dayCount > 0) {
+                    $days[] = $d->format('D, M j').($dayCount < 1 ? ' (0.5)' : '');
+                    $totalDays += $dayCount;
+                }
             }
             if (!empty($days)) {
                 $employeesOnLeaveData->push([
                     'employee'   => $leave->employee,
                     'leave_type' => $leave->leave_type,
                     'days'       => $days,
-                    'total_days' => count($days),
+                    'total_days' => $totalDays,
                 ]);
             }
         }

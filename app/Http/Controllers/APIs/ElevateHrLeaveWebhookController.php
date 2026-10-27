@@ -1,0 +1,104 @@
+<?php
+
+namespace App\Http\Controllers\APIs;
+
+use App\Http\Controllers\Controller;
+use App\Models\Employee;
+use App\Models\Leave;
+use App\Models\LeaveType;
+use App\Models\Organization;
+use Carbon\Carbon;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Validator;
+use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
+
+class ElevateHrLeaveWebhookController extends Controller
+{
+    public function __invoke(Request $request, string $organization): JsonResponse
+    {
+        $validator = Validator::make($request->json()->all(), [
+            'event_id' => ['required', 'uuid'],
+            'sequence' => ['required', 'integer', 'min:1', 'max:9223372036854775807'],
+            'event_type' => ['required', Rule::in(['leave.approved', 'leave.recalled', 'leave.partial_recall'])],
+            'occurred_at' => ['required', 'date'],
+            'leave' => ['required', 'array'],
+            'leave.leave_reference' => ['required', 'uuid'],
+            'leave.employee_number' => ['required', 'string', 'regex:/^[1-9][0-9]{0,17}$/'],
+            'leave.employee_name' => ['required', 'string', 'max:255'],
+            'leave.leave_type_code' => ['required', 'string', 'max:255'],
+            'leave.leave_type_name' => ['required', 'string', 'max:255'],
+            'leave.is_paid' => ['required', 'boolean'],
+            'leave.start_date' => ['required', 'date_format:Y-m-d'],
+            'leave.end_date' => ['required', 'date_format:Y-m-d', 'after_or_equal:leave.start_date'],
+            'leave.total_days' => ['required', 'numeric', 'min:0', 'max:999999.99', 'decimal:0,2'],
+            'leave.status' => ['required', 'string', 'max:32'],
+            'leave.approved_at' => ['nullable', 'date'],
+            'leave.days' => ['present', 'array', 'max:3660'],
+            'leave.days.*' => ['required', 'array:date,day_part,hours,is_holiday'],
+            'leave.days.*.date' => ['required', 'date_format:Y-m-d', 'distinct', 'after_or_equal:leave.start_date', 'before_or_equal:leave.end_date'],
+            'leave.days.*.day_part' => ['required', Rule::in(['FULL_DAY', 'HALF_DAY_MORNING', 'HALF_DAY_AFTERNOON'])],
+            'leave.days.*.hours' => ['required', 'numeric', 'min:0', 'max:24', 'decimal:0,2'],
+            'leave.days.*.is_holiday' => ['required', 'boolean'],
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['message' => 'Invalid leave event.', 'errors' => $validator->errors()], 422);
+        }
+
+        $data = $validator->validated();
+        $snapshot = $data['leave'];
+        $recalled = $data['event_type'] === 'leave.recalled';
+
+        if (! $recalled && ($snapshot['status'] !== 'APPROVED'
+            || (float) $snapshot['total_days'] <= 0 || $snapshot['days'] === [])) {
+            return response()->json(['message' => 'Active leave must be approved and contain remaining leave days.'], 422);
+        }
+
+        DB::transaction(function () use ($organization, $data, $snapshot, $recalled) {
+            // Serialise this organisation's events, including first deliveries and type creation.
+            Organization::whereKey($organization)->lockForUpdate()->firstOrFail();
+
+            $employee = Employee::where('organization_id', $organization)
+                ->whereKey($snapshot['employee_number'])->first();
+
+            if (! $employee) {
+                throw ValidationException::withMessages(['leave.employee_number' => 'Employee not found in this organisation.']);
+            }
+
+            $leave = Leave::where('organization_id', $organization)
+                ->where('elevatehr_reference', $snapshot['leave_reference'])->first();
+
+            if ($leave && $leave->employee_id !== $employee->id) {
+                throw ValidationException::withMessages(['leave.leave_reference' => 'Leave reference belongs to another employee.']);
+            }
+
+            if ($leave && $data['sequence'] <= $leave->elevatehr_sequence) {
+                return;
+            }
+
+            $leave ??= new Leave;
+            $leave->fill([
+                'organization_id' => $organization,
+                'employee_id' => $employee->id,
+                'department_id' => $employee->department_id,
+                'leave_type' => LeaveType::resolveName((int) $organization, $snapshot['leave_type_name']),
+                'start_date' => $snapshot['start_date'],
+                'end_date' => $snapshot['end_date'],
+                'expected_resumption' => $recalled ? null : Carbon::parse(collect($snapshot['days'])->max('date'))->addDay()->toDateString(),
+                'status' => $recalled ? 'cancelled' : 'approved',
+                'num_of_days' => $recalled ? 0 : $snapshot['total_days'],
+                'leave_days' => $recalled ? [] : $snapshot['days'],
+                'elevatehr_reference' => $snapshot['leave_reference'],
+                'elevatehr_event_id' => $data['event_id'],
+                'elevatehr_sequence' => $data['sequence'],
+            ]);
+            $leave->cancelled_at = $recalled ? Carbon::parse($data['occurred_at']) : null;
+            $leave->save();
+        }, 3);
+
+        return response()->json(['message' => 'Leave event processed.']);
+    }
+}
