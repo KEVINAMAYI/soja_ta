@@ -6,10 +6,12 @@ use App\Http\Controllers\Controller;
 use App\Jobs\SendLeaveNotificationJob;
 use App\Models\Employee;
 use App\Models\Leave;
+use App\Models\LeaveType;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Validation\Rule;
 
 class LeaveController extends Controller
 {
@@ -25,7 +27,7 @@ class LeaveController extends Controller
             // Validation rules
             $validator = Validator::make($request->all(), [
                 'employee_id' => 'required|exists:employees,id',
-                'leave_type' => 'required|in:sick,offshift,annual,maternity,paternity,compassionate,study,unpaid,personal',
+                'leave_type' => ['required', Rule::in(array_keys($this->getAllLeaveTypes()))],
                 'start_date' => 'required|date|after_or_equal:today',
                 'duration_type' => 'required|in:dateRange,numberOfDays',
                 'end_date' => 'required_if:duration_type,dateRange|nullable|date|after_or_equal:start_date',
@@ -129,6 +131,7 @@ class LeaveController extends Controller
                     'leave_type' => $leaveTypeDetails['name'],
                     'start_date' => $startDate,
                     'end_date' => $endDate,
+                    'num_of_days' => Carbon::parse($startDate)->diffInDays(Carbon::parse($endDate)) + 1,
                     'reason' => $request->reason,
                     'contact_during_leave' => $request->contact_during_leave,
                     'emergency_contact' => $request->emergency_contact,
@@ -418,17 +421,9 @@ class LeaveController extends Controller
      */
     private function getAllLeaveTypes(): array
     {
-        return [
-            'sick' => ['id' => 'sick', 'name' => 'Sick Off', 'icon' => '🤒'],
-            'offshift' => ['id' => 'offshift', 'name' => 'Off Shift', 'icon' => '🌙'],
-            'annual' => ['id' => 'annual', 'name' => 'Annual Leave', 'icon' => '🏖️'],
-            'maternity' => ['id' => 'maternity', 'name' => 'Maternity Leave', 'icon' => '🤰'],
-            'paternity' => ['id' => 'paternity', 'name' => 'Paternity Leave', 'icon' => '👨‍🍼'],
-            'compassionate' => ['id' => 'compassionate', 'name' => 'Compassionate Leave', 'icon' => '🕯️'],
-            'study' => ['id' => 'study', 'name' => 'Study Leave', 'icon' => '📚'],
-            'unpaid' => ['id' => 'unpaid', 'name' => 'Unpaid Leave', 'icon' => '💸'],
-            'personal' => ['id' => 'personal', 'name' => 'Personal Leave', 'icon' => '👤'],
-        ];
+        $organizationId = auth()->user()->employee?->organization_id;
+
+        return $organizationId ? LeaveType::options($organizationId) : LeaveType::defaults();
     }
 
     /**

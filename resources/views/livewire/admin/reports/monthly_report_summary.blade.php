@@ -114,9 +114,7 @@ new class extends Component {
             ->get();
 
         $totalLeaveDays = $monthLeaves->sum(function ($leave) use ($startOfMonth, $endOfMonth) {
-            $leaveStart = Carbon::parse($leave->start_date)->max($startOfMonth);
-            $leaveEnd = Carbon::parse($leave->end_date)->min($endOfMonth);
-            return $leaveStart->diffInDays($leaveEnd) + 1;
+            return $leave->daysInRange($startOfMonth, $endOfMonth);
         });
 
         $this->avgOnLeave = $workingDays > 0 ? round($totalLeaveDays / $workingDays) : 0;
@@ -210,9 +208,7 @@ new class extends Component {
             })
             ->get()
             ->map(function ($leave) use ($startOfMonth, $endOfMonth) {
-                $leaveStart = Carbon::parse($leave->start_date)->max($startOfMonth);
-                $leaveEnd = Carbon::parse($leave->end_date)->min($endOfMonth);
-                $totalDays = $leaveStart->diffInDays($leaveEnd) + 1;
+                $totalDays = $leave->daysInRange($startOfMonth, $endOfMonth);
 
                 return [
                     'name' => $leave->employee->name ?? 'N/A',
@@ -220,7 +216,7 @@ new class extends Component {
                     'leave_type' => ucfirst(str_replace('_', ' ', $leave->leave_type)),
                     'total_days' => $totalDays
                 ];
-            });
+            })->filter(fn ($leave) => $leave['total_days'] > 0);
 
         // Paginate leave data
         $leavePage = request()->get('leavePage', 1);
