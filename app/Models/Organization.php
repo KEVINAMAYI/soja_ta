@@ -44,6 +44,7 @@ class Organization extends Model
 
     protected $casts = [
         'active' => 'boolean',
+        'break_tracking_enabled' => 'boolean',
         'ad_sync_enabled' => 'boolean',
         'ad_client_secret' => 'encrypted',
         'api_docs_enabled' => 'boolean',
@@ -128,4 +129,3 @@ class Organization extends Model
     }
 
 }
-
