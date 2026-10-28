@@ -395,6 +395,22 @@ new class extends Component {
                                     <span class="d-none d-md-block">QR Token Management</span>
                                 </button>
                             </li>
+                            @can('manage-elevate-callback')
+                                <li class="nav-item" role="presentation">
+                                    <button
+                                        class="nav-link position-relative rounded-0 d-flex align-items-center justify-content-center bg-transparent fs-3 py-3"
+                                        id="elevate-webhook-tab"
+                                        data-bs-toggle="tab"
+                                        data-bs-target="#elevate-webhook"
+                                        type="button"
+                                        role="tab"
+                                        aria-controls="elevate-webhook"
+                                        aria-selected="false">
+                                        <i class="ti ti-webhook mx-1 fs-6"></i>
+                                        <span class="d-none d-md-block">ElevateHR Webhook</span>
+                                    </button>
+                                </li>
+                            @endcan
                         </ul>
 
                         <!-- Inner Tab Content -->
@@ -419,6 +435,12 @@ new class extends Component {
                             <div class="tab-pane fade" id="qr-token" role="tabpanel" aria-labelledby="qr-token-tab">
                                 <livewire:admin.account-settings.token_management/>
                             </div>
+                            @can('manage-elevate-callback')
+                                <div class="tab-pane fade" id="elevate-webhook" role="tabpanel"
+                                     aria-labelledby="elevate-webhook-tab">
+                                    <livewire:admin.account-settings.elevate_webhook/>
+                                </div>
+                            @endcan
                         </div>
 
                     </div>
