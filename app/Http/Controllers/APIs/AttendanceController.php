@@ -717,7 +717,7 @@ class AttendanceController extends Controller
                 ], 200);
             }
 
-            Log::error("HII NI NORMAL CHECKOUT HATA SIO BREAK");
+            Log::error("HII NI NORMAL CHECKOUT HATA SIO BREAK  CHECKOUT TIME NI: " . $checkOutTime->toDateTimeString());
 
             /* 5. ---------------------------------------------------------------
                FINAL CHECKOUT
@@ -850,6 +850,7 @@ class AttendanceController extends Controller
 
         } catch (\Exception $e) {
             DB::rollBack();
+            Log::error('CHECK-OUT ERROR: ' . $e->getMessage());
             return $this->errorResponse('Check-out failed', $e);
         }
     }
@@ -931,7 +932,7 @@ class AttendanceController extends Controller
             ], 200);
 
         } catch (\Exception $e) {
-            \Log::error('Error fetching attendance history: ' . $e->getMessage());
+            \Log::error('Error fetching attendance history1: ' . $e->getMessage());
             return $this->errorResponse('Error fetching attendance history', $e);
         }
     }
@@ -1031,7 +1032,7 @@ class AttendanceController extends Controller
             ], 200);
 
         } catch (\Exception $e) {
-            \Log::error('Error fetching attendance history: ' . $e->getMessage());
+            \Log::error('Error fetching attendance history2: ' . $e->getMessage());
             return $this->errorResponse('Error fetching attendance history', $e);
         }
     }
