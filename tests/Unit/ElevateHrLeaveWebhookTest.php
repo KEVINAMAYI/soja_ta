@@ -1,16 +1,20 @@
 <?php
 
+use App\Models\ElevateHrWebhook;
 use App\Models\Employee;
 use App\Models\Leave;
 use App\Models\LeaveType;
 use App\Models\OrganizationSetting;
 use App\Models\User;
+use App\Services\ElevateHrWebhookService;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
+use Livewire\Volt\Volt;
+use Spatie\Permission\PermissionRegistrar;
 use Tests\TestCase;
 
 uses(TestCase::class);
@@ -50,10 +54,16 @@ beforeEach(function () {
 
     (require database_path('migrations/2025_07_29_075436_create_organizations_table.php'))->up();
     (require database_path('migrations/2025_08_07_103748_create_organization_settings_table.php'))->up();
+    (require database_path('migrations/0001_01_01_000000_create_users_table.php'))->up();
+    (require database_path('migrations/2025_08_12_111634_create_permission_tables.php'))->up();
+    (require database_path('migrations/2025_08_29_035537_add_category_to_permissions_table.php'))->up();
+    (require database_path('migrations/2026_10_28_090100_add_manage_elevate_callback_permission.php'))->up();
+    app(PermissionRegistrar::class)->forgetCachedPermissions();
 
     Schema::create('employees', function (Blueprint $table) {
         $table->id();
         $table->unsignedBigInteger('organization_id');
+        $table->unsignedBigInteger('user_id')->nullable();
         $table->unsignedBigInteger('department_id')->nullable();
         $table->boolean('is_system_user')->default(false);
         $table->softDeletes();
@@ -91,8 +101,20 @@ beforeEach(function () {
         'key' => 'elevatehr_leave_webhook_token_hash',
         'value' => hash('sha256', str_repeat('a', 64)),
     ]);
+    (require database_path('migrations/2026_10_28_090000_create_elevate_hr_webhooks_table.php'))->up();
     $this->url = '/api/webhooks/elevatehr/leave/1?token='.str_repeat('a', 64);
 });
+
+function elevateWebhookManager(int $organizationId = 1, bool $grantPermission = true): User
+{
+    $user = User::factory()->create(['name' => 'Webhook Manager '.$organizationId]);
+    DB::table('employees')->where('organization_id', $organizationId)->update(['user_id' => $user->id]);
+    if ($grantPermission) {
+        $user->givePermissionTo('manage-elevate-callback');
+    }
+
+    return $user;
+}
 
 test('records approved half-day leave using the existing employee and department', function () {
     $payload = elevateHrPayload();
@@ -318,6 +340,154 @@ test('rotates a hashed secret using the setup command', function () {
     $newHash = OrganizationSetting::sole()->value;
     expect($newHash)->not->toBe($oldHash)->toHaveLength(64);
     $this->postJson($this->url, elevateHrPayload())->assertForbidden();
+    expect(ElevateHrWebhook::count())->toBe(2)
+        ->and(ElevateHrWebhook::latest('id')->first()->creator_name)->toBe('Command line')
+        ->and(ElevateHrWebhook::whereNull('revoked_at')->sole()->token_hash)->toBe($newHash);
+});
+
+test('imports the configured webhook as active legacy history without changing its credentials', function () {
+    $webhook = ElevateHrWebhook::sole();
+    expect($webhook->creator_name)->toBe('Legacy setup (creator unknown)')
+        ->and($webhook->created_by)->toBeNull()
+        ->and($webhook->revoked_at)->toBeNull()
+        ->and($webhook->token_hash)->toBe(OrganizationSetting::sole()->value);
+    $this->postJson($this->url, elevateHrPayload())->assertOk();
+});
+
+test('a permitted manager can generate and copy a replacement with an auditable creator', function () {
+    $this->freezeTime();
+    $user = elevateWebhookManager();
+    $legacy = ElevateHrWebhook::sole();
+    $component = Volt::actingAs($user)->test('admin.account-settings.elevate_webhook')
+        ->assertSee('Replace webhook')
+        ->call('generateWebhook')
+        ->assertSee('Copy URL')
+        ->assertSee('Webhook Manager 1');
+    $url = $component->get('generatedUrl');
+    parse_str(parse_url($url, PHP_URL_QUERY), $query);
+    $active = ElevateHrWebhook::whereNull('revoked_at')->sole();
+
+    expect($active->created_by)->toBe($user->id)
+        ->and($active->creator_name)->toBe($user->name)
+        ->and($active->token_hash)->toBe(hash('sha256', $query['token']))
+        ->and($active->created_at->equalTo(now()))->toBeTrue()
+        ->and($legacy->fresh()->revoked_at->equalTo(now()))->toBeTrue()
+        ->and($active->toArray())->not->toHaveKey('token_hash')
+        ->and(DB::table('elevate_hr_webhooks')->get()->toJson())->not->toContain($query['token']);
+    $this->postJson($url, elevateHrPayload())->assertOk();
+    $this->postJson($this->url, elevateHrPayload())->assertForbidden();
+
+    $this->travel(1)->minute();
+    $component->call('generateWebhook');
+    expect(ElevateHrWebhook::whereNull('revoked_at')->count())->toBe(1)
+        ->and($active->fresh()->revoked_at->equalTo(now()))->toBeTrue();
+    $this->postJson($url, elevateHrPayload())->assertForbidden();
+    $this->postJson($this->url, elevateHrPayload())->assertForbidden();
+    $this->postJson($component->get('generatedUrl'), elevateHrPayload())->assertOk();
+});
+
+test('can generate the first webhook when none is configured', function () {
+    OrganizationSetting::query()->delete();
+    ElevateHrWebhook::query()->delete();
+    Volt::actingAs(elevateWebhookManager())->test('admin.account-settings.elevate_webhook')
+        ->assertSee('No webhook has been generated yet.')
+        ->assertSee('Generate webhook')
+        ->assertSee('No webhooks generated yet.')
+        ->call('generateWebhook')
+        ->assertSee('An active webhook is configured.')
+        ->assertSee('Copy URL');
+    expect(ElevateHrWebhook::whereNull('revoked_at')->count())->toBe(1)
+        ->and(OrganizationSetting::sole()->value)->toBe(ElevateHrWebhook::sole()->token_hash);
+});
+
+test('webhook management requires permission even when accessed directly', function () {
+    Volt::test('admin.account-settings.elevate_webhook')->assertForbidden();
+    Volt::actingAs(elevateWebhookManager(grantPermission: false))
+        ->test('admin.account-settings.elevate_webhook')->assertForbidden();
+    expect(ElevateHrWebhook::count())->toBe(1);
+});
+
+test('generation rechecks permission on every action', function () {
+    $user = elevateWebhookManager();
+    $component = Volt::actingAs($user)->test('admin.account-settings.elevate_webhook');
+    $user->revokePermissionTo('manage-elevate-callback');
+    $component->call('generateWebhook')->assertForbidden();
+    expect(ElevateHrWebhook::count())->toBe(1);
+});
+
+test('webhook management rejects users without an organisation', function () {
+    $user = User::factory()->create();
+    $user->givePermissionTo('manage-elevate-callback');
+    Volt::actingAs($user)->test('admin.account-settings.elevate_webhook')->assertForbidden();
+});
+
+test('history returns exactly the latest ten records for the current organisation and retains older records', function () {
+    $service = app(ElevateHrWebhookService::class);
+    $manager = elevateWebhookManager();
+    foreach (range(1, 12) as $generation) {
+        $service->generate(1, $manager);
+    }
+    $service->generate(2, elevateWebhookManager(2));
+    $expectedIds = ElevateHrWebhook::where('organization_id', 1)->latest('id')->limit(10)->pluck('id')->all();
+    Volt::actingAs($manager)->test('admin.account-settings.elevate_webhook')
+        ->assertViewHas('history', fn ($history) => $history->pluck('id')->all() === $expectedIds)
+        ->assertSee('Webhook Manager 1')
+        ->assertDontSee('Webhook Manager 2')
+        ->assertDontSee('Legacy setup (creator unknown)')
+        ->assertDontSee('Copy URL');
+    expect(ElevateHrWebhook::where('organization_id', 1)->count())->toBe(13)
+        ->and(ElevateHrWebhook::where('organization_id', 1)->whereNull('revoked_at')->count())->toBe(1)
+        ->and(ElevateHrWebhook::where('organization_id', 2)->whereNull('revoked_at')->count())->toBe(1);
+});
+
+test('a manager cannot generate or revoke webhooks for another organisation', function () {
+    $otherUrl = app(ElevateHrWebhookService::class)->generate(2);
+    $otherWebhook = ElevateHrWebhook::where('organization_id', 2)->sole();
+    Volt::actingAs(elevateWebhookManager())->test('admin.account-settings.elevate_webhook')
+        ->call('generateWebhook');
+    expect($otherWebhook->fresh()->revoked_at)->toBeNull()
+        ->and(OrganizationSetting::where('organization_id', 2)->sole()->value)->toBe($otherWebhook->token_hash);
+    $this->postJson($otherUrl, elevateHrPayload(['leave' => ['employee_number' => '222']]))->assertOk();
+});
+
+test('a failed replacement rolls back revocation and preserves the previous active URL', function () {
+    $legacy = ElevateHrWebhook::sole();
+    Event::listen('eloquent.creating: '.ElevateHrWebhook::class, function () {
+        throw new RuntimeException('Simulated webhook history failure');
+    });
+    expect(fn () => app(ElevateHrWebhookService::class)->generate(1))
+        ->toThrow(RuntimeException::class, 'Simulated webhook history failure');
+    expect(ElevateHrWebhook::count())->toBe(1)
+        ->and($legacy->fresh()->revoked_at)->toBeNull()
+        ->and(OrganizationSetting::sole()->value)->toBe($legacy->token_hash);
+    $this->postJson($this->url, elevateHrPayload())->assertOk();
+});
+
+test('a URL replaced from another session is no longer offered for copying', function () {
+    $manager = elevateWebhookManager();
+    $component = Volt::actingAs($manager)->test('admin.account-settings.elevate_webhook')
+        ->call('generateWebhook')->assertSee('Copy URL');
+    $url = $component->get('generatedUrl');
+    $this->artisan('elevatehr:leave-webhook', ['organization' => 1])->assertSuccessful();
+    $component->call('$refresh')->assertDontSee('Copy URL')
+        ->assertSee('This URL has been replaced and can no longer be used.');
+    $this->postJson($url, elevateHrPayload())->assertForbidden();
+});
+
+test('creator audit details remain available after the user is deleted', function () {
+    $manager = elevateWebhookManager();
+    app(ElevateHrWebhookService::class)->generate(1, $manager);
+    $manager->delete();
+    $webhook = ElevateHrWebhook::whereNull('revoked_at')->sole();
+    expect($webhook->created_by)->toBeNull()
+        ->and($webhook->creator_name)->toBe('Webhook Manager 1');
+});
+
+test('rolling back webhook history preserves the active endpoint credentials', function () {
+    (require database_path('migrations/2026_10_28_090000_create_elevate_hr_webhooks_table.php'))->down();
+    expect(Schema::hasTable('elevate_hr_webhooks'))->toBeFalse()
+        ->and(OrganizationSetting::sole()->value)->toBe(hash('sha256', str_repeat('a', 64)));
+    $this->postJson($this->url, elevateHrPayload())->assertOk();
 });
 
 test('the new migration can be rolled back without dropping existing leave', function () {
