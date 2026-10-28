@@ -8,6 +8,7 @@ use App\Models\User;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Tests\TestCase;
@@ -44,6 +45,7 @@ beforeEach(function () {
     // The historical application migrations contain MySQL-only SQL. Build only
     // the pre-existing tables this endpoint needs, then run its real migration.
     config(['database.default' => 'sqlite', 'database.connections.sqlite.database' => ':memory:']);
+    config(['services.elevatehr.webhook_allowed_ips' => ['127.0.0.1']]);
     DB::purge('sqlite');
 
     (require database_path('migrations/2025_07_29_075436_create_organizations_table.php'))->up();
@@ -246,6 +248,35 @@ test('requires a configured secret URL and isolates organisations', function () 
     $this->postJson($this->url, elevateHrPayload(['leave' => ['employee_number' => '999']]))->assertUnprocessable();
     expect(Leave::whereNotNull('elevatehr_reference')->count())->toBe(0)
         ->and(LeaveType::count())->toBe(0);
+});
+
+test('rejects and logs webhook requests from IPs outside the allowlist', function () {
+    Log::shouldReceive('warning')
+        ->once()
+        ->with('Rejected ElevateHR webhook request from untrusted IP.', [
+            'ip' => '198.51.100.42',
+            'organization_id' => '1',
+        ]);
+
+    $this->withServerVariables(['REMOTE_ADDR' => '198.51.100.42'])
+        ->postJson($this->url, elevateHrPayload())
+        ->assertForbidden();
+
+    expect(Leave::whereNotNull('elevatehr_reference')->count())->toBe(0);
+});
+
+test('rejects webhook requests when the IP allowlist is empty', function () {
+    config(['services.elevatehr.webhook_allowed_ips' => []]);
+
+    $this->postJson($this->url, elevateHrPayload())->assertForbidden();
+});
+
+test('allows webhook requests from an IP inside an allowed CIDR range', function () {
+    config(['services.elevatehr.webhook_allowed_ips' => ['198.51.100.0/24']]);
+
+    $this->withServerVariables(['REMOTE_ADDR' => '198.51.100.42'])
+        ->postJson($this->url, elevateHrPayload())
+        ->assertOk();
 });
 
 test('cannot move an external leave reference to another employee', function () {
