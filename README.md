@@ -107,13 +107,26 @@ http://127.0.0.1:8000
    `leaves.num_of_days`, backfills existing calendar-day durations, and adds
    organisation-scoped leave types and webhook reference/day-detail columns.
 2. Set `APP_URL` to the public **HTTPS** address.
-3. Run `php artisan elevatehr:leave-webhook <organisation-id>`. Copy the generated
-   URL into that organisation's ElevateHR **Webhook URL**, save it, enable the
-   webhook, and save again.
+3. Grant `manage-elevate-callback` to the appropriate user role under Account
+   Settings > Access & Security > User Roles & Permissions. The migration registers
+   the permission without granting it to existing roles.
+4. Open Account Settings > Access & Security > **ElevateHR Webhook** (next to QR
+   Token Management) and choose **Generate webhook**, then **Copy URL**.
+   Alternatively, run `php artisan elevatehr:leave-webhook <organisation-id>`.
+   Copy the generated URL into that organisation's ElevateHR **Webhook URL**, save
+   it, enable the webhook, and save again.
 
 The endpoint is `POST /api/webhooks/elevatehr/leave/{organization}?token=...`.
 Each organisation has its own randomly generated token; only its SHA-256 hash is
 stored. Running the command again immediately rotates that organisation's token.
+The **Replace webhook** action does the same: replacement is atomic, leaving one
+active URL and permanently invalidating all older URLs. The URL is shown only
+immediately after generation; it cannot be recovered after leaving/reloading the
+page. If lost, generate a replacement and update ElevateHR.
+The tab shows the 10 most recent generations, including their creator, generation
+time, status, and replacement/revocation time; older audit records are retained.
+Command-line generations are labelled accordingly. Existing tokens are imported
+as legacy records with an unknown creator and the setting's last-updated time.
 Missing/invalid credentials are rejected with HTTP 403. JSON validation,
 a 256 KiB body limit, and a 120-request/minute/IP rate limit are also enforced.
 Configure a matching body limit at the reverse proxy.
@@ -189,4 +202,3 @@ Create a new branch:
   git commit -m "Add amazing feature"
   git push origin feature/amazing-feature
 ```
-
