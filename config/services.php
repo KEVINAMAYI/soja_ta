@@ -41,12 +41,18 @@ return [
         'from'     => env('SMS_FROM', 'IDENTIGATE'), // 👈 default sender fallback
 
     ],
-    
+
     'azure' => [
         'tenant_id'     => env('AZURE_TENANT_ID'),
         'client_id'     => env('AZURE_CLIENT_ID'),
         'client_secret' => env('AZURE_CLIENT_SECRET'),
     ],
 
+    'elevatehr' => [
+        'webhook_allowed_ips' => array_values(array_filter(array_map(
+            'trim',
+            explode(',', env('ELEVATEHR_WEBHOOK_ALLOWED_IPS', ''))
+        ))),
+    ],
 
 ];
