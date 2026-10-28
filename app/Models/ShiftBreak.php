@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\Log;
 
 class ShiftBreak extends Model
 {
@@ -103,6 +104,8 @@ class ShiftBreak extends Model
         if ($windowEnd->lt($windowStart)) {
             $windowEnd->addDay();
         }
+
+        Log::error("CHECKING IF CHECKIN TIME IS WITHIN BREAK WINDOW CHECKIN TIME: " . $time->toDateTimeString() . " WINDOW START: " . $windowStart->toDateTimeString() . " WINDOW END: " . $windowEnd->toDateTimeString());
 
         $checkTime = $time->copy()->setTimeFromTimeString($time->format('H:i:s'));
 
