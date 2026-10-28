@@ -717,6 +717,8 @@ class AttendanceController extends Controller
                 ], 200);
             }
 
+            Log::error("HII NI NORMAL CHECKOUT HATA SIO BREAK");
+
             /* 5. ---------------------------------------------------------------
                FINAL CHECKOUT
                Auto-close any still-open break log (employee forgot to check back in)
