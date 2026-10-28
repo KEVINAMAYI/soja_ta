@@ -241,6 +241,10 @@ new class extends Component {
                     'shift_id' => $this->selectedShift['id'],
                     'order' => $orderMax + 1,
                 ]));
+
+                Shift::findOrFail($this->selectedShift['id'])
+                    ->organization()
+                    ->update(['break_tracking_enabled' => true]);
             }
 
             $this->recalculateAndSaveDuration();
