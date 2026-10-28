@@ -118,6 +118,13 @@ Missing/invalid credentials are rejected with HTTP 403. JSON validation,
 a 256 KiB body limit, and a 120-request/minute/IP rate limit are also enforced.
 Configure a matching body limit at the reverse proxy.
 
+Set `ELEVATEHR_WEBHOOK_ALLOWED_IPS` to a comma-separated list of ElevateHR
+source IP addresses or CIDR ranges. Requests outside the list are rejected with
+HTTP 403 and logged with their source IP and organisation ID. An unset or empty
+list denies all webhook requests. If the application is behind a reverse proxy,
+configure Laravel to trust only that proxy so `$request->ip()` resolves the
+verified client IP; do not trust arbitrary forwarded-IP headers.
+
 **Security limitation:** ElevateHR supplies no signature, authentication headers,
 or published source IPs in the supplied contract. The secret URL is a bearer
 credential, not proof that ElevateHR sent a request. Keep it out of access logs,
@@ -182,5 +189,4 @@ Create a new branch:
   git commit -m "Add amazing feature"
   git push origin feature/amazing-feature
 ```
-
 
