@@ -17,8 +17,8 @@ class AttendanceResource extends JsonResource
         return [
             'attendance_id' => $this->id,
             'employee_id' => $this->employee->id,
-            'employee_name' => $this->employee->user->name,
-            'employee_email' => $this->employee->user->email,
+            'employee_name' => $this->employee->user?->name,
+            'employee_email' => $this->employee->user?->email,
             'employee_phone' => $this->employee->phone,
             'employee_id_number' => $this->employee->id_number,
             'employee_qr_code' => $this->employee->qr_code,
