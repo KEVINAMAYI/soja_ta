@@ -6,6 +6,7 @@ use App\Models\Attendance;
 use App\Models\AttendanceBreakLog;
 use App\Models\ShiftBreak;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\Log;
 
 class BreakDetector
 {
@@ -31,6 +32,8 @@ class BreakDetector
             }
         }
 
+        Log::error("Checkout time does not fall within any break window. ACTIVE BREAKS: " . json_encode($activeBreaks));
+
         return null; // checkout outside any window = final checkout (or spontaneous break)
     }
 
@@ -45,11 +48,13 @@ class BreakDetector
     public static function isBreakCheckout(Carbon $checkOutTime, $employee, $attendance): bool
     {
         if (!self::isEnabled($employee)) {
+            Log::error("Break tracking is not enabled for this employee's organization.");
             return false;
         }
 
         $shift = $employee->shift;
         if (!$shift) {
+            Log::error("No shift assigned to this employee.");
             return false;
         }
 
@@ -60,6 +65,7 @@ class BreakDetector
             ->exists();
 
         if ($openBreak) {
+            Log::error("Employee has an open break log; this must be a final checkout.");
             return false; // they're returning from break → this is a check-in, not checkout
         }
 
