@@ -18,6 +18,7 @@ A modern **Laravel-based** employee time & attendance management system with **l
 - 📊 **Overtime Tracking** – Automatically calculate extra hours worked.
 - **Break Scheduling** - Break windows in the same shift cannot overlap, including overnight windows.
   Back-to-back breaks are allowed. Set both window times or leave both blank for an unrestricted break.
+  Break checkout matching includes the window start and excludes its end, so a shared boundary belongs to the next break.
   A break missing either window time is unrestricted and must be the only break in its shift.
   Creating or editing a conflicting break shows the existing break names and times in a five-second error alert.
 
@@ -124,4 +125,3 @@ Create a new branch:
   git commit -m "Add amazing feature"
   git push origin feature/amazing-feature
 ```
-

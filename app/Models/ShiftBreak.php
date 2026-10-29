@@ -118,7 +118,7 @@ class ShiftBreak extends Model
     }
 
     /**
-     * Check if current time is within the break window
+     * Check the recurring break window using an inclusive start and exclusive end.
      */
     public function isWithinWindow(?Carbon $time = null): bool
     {
@@ -128,19 +128,21 @@ class ShiftBreak extends Model
             return true; // No window restriction
         }
 
-        $windowStart = Carbon::parse($this->window_start_time);
-        $windowEnd = Carbon::parse($this->window_end_time);
+        $windowStart = $time->copy()->setTimeFromTimeString($this->window_start_time->format('H:i:s'));
+        $windowEnd = $time->copy()->setTimeFromTimeString($this->window_end_time->format('H:i:s'));
 
         // Handle overnight windows
         if ($windowEnd->lt($windowStart)) {
-            $windowEnd->addDay();
+            if ($time->lt($windowEnd)) {
+                $windowStart->subDay();
+            } else {
+                $windowEnd->addDay();
+            }
         }
 
         Log::error("CHECKING IF CHECKIN TIME IS WITHIN BREAK WINDOW CHECKIN TIME: " . $time->toDateTimeString() . " WINDOW START: " . $windowStart->toDateTimeString() . " WINDOW END: " . $windowEnd->toDateTimeString());
 
-        $checkTime = $time->copy()->setTimeFromTimeString($time->format('H:i:s'));
-
-        return $checkTime->between($windowStart, $windowEnd);
+        return $time->gte($windowStart) && $time->lt($windowEnd);
     }
 
     /**
