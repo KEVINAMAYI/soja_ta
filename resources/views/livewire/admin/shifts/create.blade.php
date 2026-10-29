@@ -8,6 +8,8 @@ use Livewire\Volt\Component;
 use App\Models\Shift;
 use App\Models\ShiftBreak;
 use App\Models\Attendancebreaklog;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 new class extends Component {
 
@@ -65,8 +67,8 @@ new class extends Component {
             'currentBreak.type' => 'required|in:paid,unpaid,flexible',
             'currentBreak.duration_minutes' => 'required|integer|min:1|max:480',
             'currentBreak.max_duration_minutes' => 'nullable|integer|min:1|max:480',
-            'currentBreak.window_start_time' => 'nullable|date_format:H:i',
-            'currentBreak.window_end_time' => 'nullable|date_format:H:i',
+            'currentBreak.window_start_time' => 'nullable|required_with:currentBreak.window_end_time|date_format:H:i',
+            'currentBreak.window_end_time' => 'nullable|required_with:currentBreak.window_start_time|date_format:H:i|different:currentBreak.window_start_time',
             'currentBreak.penalty_type' => 'required|in:none,deduct_overtime,flag_review,auto_deduct',
         ];
     }
@@ -133,6 +135,7 @@ new class extends Component {
 
     public function openEditBreakModal($index)
     {
+        $this->resetValidation();
         $this->editingBreakIndex = $index;
         $this->currentBreak = $this->breaks[$index];
         $this->showAddBreakModal = true;
@@ -140,6 +143,7 @@ new class extends Component {
 
     public function resetBreakForm()
     {
+        $this->resetValidation();
         $this->currentBreak = [
             'name' => '',
             'type' => 'unpaid',
@@ -216,36 +220,53 @@ new class extends Component {
 
     public function saveBreak()
     {
+        $isEditing = $this->editingBreakIndex !== null;
         $this->validate([
             'currentBreak.name' => 'required|string|max:255',
             'currentBreak.type' => 'required|in:paid,unpaid,flexible',
             'currentBreak.duration_minutes' => 'required|integer|min:1|max:480',
+            'currentBreak.window_start_time' => $this->rules()['currentBreak.window_start_time'],
+            'currentBreak.window_end_time' => $this->rules()['currentBreak.window_end_time'],
         ]);
 
         try {
-            if ($this->editingBreakIndex !== null) {
-                // Update existing break
-                $breakId = $this->breaks[$this->editingBreakIndex]['id'] ?? null;
+            DB::transaction(function () {
+                // Serialize break saves for a shift before checking its current windows.
+                $shift = Shift::whereKey($this->selectedShift['id'])->lockForUpdate()->firstOrFail();
+                $breakId = $this->editingBreakIndex !== null
+                    ? $this->breaks[$this->editingBreakIndex]['id']
+                    : null;
 
-                if ($breakId) {
-                    $break = ShiftBreak::find($breakId);
-                    if ($break) {
-                        $break->update($this->currentBreak);
-                    }
+                $overlappingBreaks = $shift->breaks()
+                    ->when($breakId, fn ($query) => $query->where('id', '!=', $breakId))
+                    ->get()
+                    ->filter(fn (ShiftBreak $break) => $break->overlapsWindow(
+                        $this->currentBreak['window_start_time'] ?? null,
+                        $this->currentBreak['window_end_time'] ?? null,
+                    ));
+
+                if ($overlappingBreaks->isNotEmpty()) {
+                    $conflicts = $overlappingBreaks
+                        ->map(fn (ShiftBreak $break) => $break->name . ' (' . ($break->getWindowTimeFormatted() ?? 'Unrestricted - no complete time window') . ')')
+                        ->implode('; ');
+
+                    throw ValidationException::withMessages([
+                        'currentBreak.window_start_time' => 'This break overlaps with: ' . $conflicts . '. Please choose a different time window.',
+                    ]);
                 }
-            } else {
-                // Create new break
-                $orderMax = ShiftBreak::where('shift_id', $this->selectedShift['id'])->max('order') ?? 0;
 
-                ShiftBreak::create(array_merge($this->currentBreak, [
-                    'shift_id' => $this->selectedShift['id'],
-                    'order' => $orderMax + 1,
-                ]));
+                if ($breakId !== null) {
+                    $shift->breaks()->findOrFail($breakId)->update($this->currentBreak);
+                } else {
+                    $orderMax = $shift->breaks()->max('order') ?? 0;
 
-                Shift::findOrFail($this->selectedShift['id'])
-                    ->organization()
-                    ->update(['break_tracking_enabled' => true]);
-            }
+                    $shift->breaks()->create(array_merge($this->currentBreak, [
+                        'order' => $orderMax + 1,
+                    ]));
+
+                    $shift->organization()->update(['break_tracking_enabled' => true]);
+                }
+            });
 
             $this->recalculateAndSaveDuration();
             $this->loadBreaks();
@@ -256,12 +277,23 @@ new class extends Component {
             $this->resetBreakForm();
 
             LivewireAlert::title('Success!')
-                ->text($this->editingBreakIndex !== null ? 'Break updated successfully!' : 'Break added successfully!')
+                ->text($isEditing ? 'Break updated successfully!' : 'Break added successfully!')
                 ->success()
                 ->toast()
                 ->position('top-end')
                 ->show();
 
+        } catch (ValidationException $e) {
+            $message = $e->errors()['currentBreak.window_start_time'][0];
+            $this->addError('currentBreak.window_start_time', $message);
+
+            LivewireAlert::title('Overlapping break')
+                ->text($message)
+                ->error()
+                ->toast()
+                ->position('top-end')
+                ->timer(5000)
+                ->show();
         } catch (\Exception $e) {
             LivewireAlert::title('Error!')
                 ->text('Failed to save break: ' . $e->getMessage())
@@ -3590,7 +3622,9 @@ new class extends Component {
                                     <span>Time Window <span class="break-optional">(Optional)</span></span>
                                 </div>
                                 <p class="break-section-hint">Define when employees should take this break during their
-                                    shift</p>
+                                    shift. Set both times or leave both blank. Windows cannot overlap another break in this shift;
+                                    back-to-back and overnight windows are allowed. A break without a complete time window
+                                    must be the only break in this shift.</p>
 
                                 <div class="break-time-row">
                                     <div class="break-field-group">
@@ -3605,6 +3639,9 @@ new class extends Component {
                                                    wire:model="currentBreak.window_start_time"
                                                    class="break-input break-input-time">
                                         </div>
+                                        @error('currentBreak.window_start_time')
+                                        <span class="break-error">{{ $message }}</span>
+                                        @enderror
                                     </div>
                                     <div class="break-time-separator">
                                         <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"
@@ -3624,6 +3661,9 @@ new class extends Component {
                                                    wire:model="currentBreak.window_end_time"
                                                    class="break-input break-input-time">
                                         </div>
+                                        @error('currentBreak.window_end_time')
+                                        <span class="break-error">{{ $message }}</span>
+                                        @enderror
                                     </div>
                                 </div>
                             </div>
