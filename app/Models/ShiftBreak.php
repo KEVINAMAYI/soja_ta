@@ -87,6 +87,37 @@ class ShiftBreak extends Model
      */
 
     /**
+     * Compare recurring daily windows, including windows crossing midnight.
+     */
+    public function overlapsWindow(?string $startTime, ?string $endTime): bool
+    {
+        if (! $this->window_start_time || ! $this->window_end_time || ! $startTime || ! $endTime) {
+            return true;
+        }
+
+        $start = (int) Carbon::parse($startTime)->secondsSinceMidnight();
+        $end = (int) Carbon::parse($endTime)->secondsSinceMidnight();
+        $existingStart = (int) $this->window_start_time->secondsSinceMidnight();
+        $existingEnd = (int) $this->window_end_time->secondsSinceMidnight();
+
+        if ($end < $start) {
+            $end += 86400;
+        }
+        if ($existingEnd < $existingStart) {
+            $existingEnd += 86400;
+        }
+
+        // Compare adjacent days so an early-morning window matches an overnight one.
+        foreach ([-86400, 0, 86400] as $offset) {
+            if ($start < $existingEnd + $offset && $end > $existingStart + $offset) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
      * Check if current time is within the break window
      */
     public function isWithinWindow(?Carbon $time = null): bool
