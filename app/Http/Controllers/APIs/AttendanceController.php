@@ -296,11 +296,11 @@ class AttendanceController extends Controller
                 $lastCheckIn = Carbon::parse($recentUncheckedOut->check_in_time);
                 $hoursSince = $lastCheckIn->diffInHours($checkInTimeCarbon);
                 return response()->json([
-                    'code' => 1003,
+                    'code' => 1000,
                     'message' => "Already checked in from {$lastCheckIn->format('Y-m-d H:i')} ({$hoursSince}h ago). Please check out first.",
                     'last_check_in_time' => $lastCheckIn->toDateTimeString(),
                     'hours_since_check_in' => round($hoursSince, 2),
-                ], 409);
+                ], 200);
             }
 
             /* 9. Late / grace period ------------------------------------------ */
