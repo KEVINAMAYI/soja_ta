@@ -227,6 +227,13 @@ class AttendanceController extends Controller
                             'message' => 'You have a pending break return approval.',
                         ], 403);
                     }
+
+                    // else assume its rejected ... if it ever happens otherwise this is the place to check
+                    DB::commit(); // commit transaction before returning
+                    return response()->json([
+                        'code' => 1005,
+                        'message' => 'Your break return was rejected.',
+                    ], 403);
                 }
 
                 $breakApprovalResult = $this->handleBreakReturnApproval($employee, $checkInTimeCarbon, $shift, $closedLog, $latitude, $longitude, $deviceId, $work_location_id);
