@@ -482,8 +482,8 @@ class AttendanceController extends Controller
         if ($shift->track_late_checkin) {
             // now lets replace these values with actual break values
             $withinGracePeriod = $expectedCheckInTime->diffInMinutes($checkInTimeCarbon) <= ($closedLog->shiftBreak?->max_duration_minutes ?? 0);
-            $isLateCheckin = $checkInTimeCarbon->gt($expectedCheckInTime) && !$withinGracePeriod;
-            $minutesLate = $isLateCheckin ? $expectedCheckInTime->diffInMinutes($checkInTimeCarbon) : 0;
+            $isLateCheckin = $closedLog->excess_minutes ? $closedLog->excess_minutes > 0 : false;
+            $minutesLate = $closedLog->excess_minutes ?? 0;
         }
         $approvalService = app(CheckInApprovalService::class);
         // true indicates this is for a break return check-in
