@@ -297,7 +297,7 @@ class AttendanceController extends Controller
                 $hoursSince = $lastCheckIn->diffInHours($checkInTimeCarbon);
                 
                 // include attendance data
-                $data = $recentUncheckedOut;
+                $data = new AttendanceResource($recentUncheckedOut);
                 return response()->json([
                     'code' => 1000,
                     'message' => "Already checked in from {$lastCheckIn->format('Y-m-d H:i')} ({$hoursSince}h ago). Please check out first.",
