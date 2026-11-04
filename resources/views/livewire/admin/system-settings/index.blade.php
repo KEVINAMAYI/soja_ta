@@ -1194,6 +1194,9 @@ new class extends Component {
                                         <span style="color:#92400e;line-height:1.6;">
         Clock-ins beyond the <strong>shift's grace period</strong> automatically
         create an approval request and notify approvers.
+        When <strong>Track Late Check-ins</strong> is enabled on the shift, this also applies
+        while the tenant approval toggle is off. The <strong>Shift Clock-ins</strong> trigger
+        and department scope must still apply.
     </span>
                                     </div>
                                     <div class="mt-4">

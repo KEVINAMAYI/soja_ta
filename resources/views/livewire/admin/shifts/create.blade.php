@@ -3103,8 +3103,9 @@ new class extends Component {
                                 <div class="d-flex justify-content-between align-items-center pb-3 mb-3 border-bottom">
                                     <div>
                                         <h6 class="mb-1">Track Late Check-ins</h6>
-                                        <p class="text-muted small mb-0">Record and report when employees check in
-                                            late</p>
+                                        <p class="text-muted small mb-0">Record late check-ins and require approval beyond
+                                            the shift's grace period, even when the tenant approval policy is disabled.
+                                            The Shift Clock-ins trigger and department scope still apply.</p>
                                     </div>
                                     <label class="toggle-switch">
                                         <input type="checkbox"

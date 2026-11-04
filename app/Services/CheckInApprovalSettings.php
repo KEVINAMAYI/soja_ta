@@ -11,7 +11,8 @@ class CheckInApprovalSettings
     /**
      * Default shape of the settings JSON, matching the UI:
      *
-     * - enabled: bool — master toggle
+     * - enabled: bool — tenant toggle; tracked late shift check-ins bypass
+     *   this toggle but still honor the shift trigger and department scope
      * - auto_reject_after_minutes: int|null — if lateness >= this, skip all
      *   windows and auto-reject immediately (null = disabled)
      * - department_ids: int[] — policy scope (empty = all departments)
