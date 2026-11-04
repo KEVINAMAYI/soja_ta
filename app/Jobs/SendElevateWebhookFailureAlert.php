@@ -17,7 +17,7 @@ class SendElevateWebhookFailureAlert implements ShouldQueue
 
     public int $backoff = 60;
 
-    public function __construct(public string $organizationId, public string $date) {}
+    public function __construct(public string $organizationId, public string $organizationName, public string $date) {}
 
     public function handle(ElevateHrWebhookMonitor $monitor): void
     {
@@ -41,7 +41,7 @@ class SendElevateWebhookFailureAlert implements ShouldQueue
                 })->all();
 
             Notification::route('mail', $settings['emails'])->notify(new ElevateWebhookFailureAlert(
-                $this->organizationId, $this->date, (int) $stats->received, (int) $stats->failed, $failures,
+                $this->organizationName, $this->date, (int) $stats->received, (int) $stats->failed, $failures,
             ));
 
             DB::table('elevate_webhook_daily_stats')->where('id', $stats->id)

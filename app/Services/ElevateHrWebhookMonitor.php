@@ -60,9 +60,12 @@ class ElevateHrWebhookMonitor
         $stats = DB::table('elevate_webhook_daily_stats')
             ->where('organization_id', $organizationId)->where('date', $date)->first();
 
+        // get organization name
+        $organizationName = DB::table('organizations')->where('id', $organizationId)->value('name');
+
         if ($this->shouldAlert($settings, (int) $stats->failed, (int) $stats->last_notified_failed)) {
             try {
-                SendElevateWebhookFailureAlert::dispatch($organizationId, $date);
+                SendElevateWebhookFailureAlert::dispatch($organizationId, $organizationName, $date);
             } catch (\Throwable $exception) {
                 // Alert delivery must not change the result of a processed webhook.
                 report($exception);
