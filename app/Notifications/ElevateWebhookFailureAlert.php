@@ -8,7 +8,7 @@ use Illuminate\Notifications\Notification;
 class ElevateWebhookFailureAlert extends Notification
 {
     public function __construct(
-        public string $organizationId,
+        public string $organizationName,
         public string $date,
         public int $received,
         public int $failed,
@@ -24,7 +24,7 @@ class ElevateWebhookFailureAlert extends Notification
     {
         $mail = (new MailMessage)
             ->subject('ElevateHR leave webhook failure alert')
-            ->line("Organisation {$this->organizationId}: {$this->failed} failed of {$this->received} received leave webhooks on {$this->date}.")
+            ->line("Organisation {$this->organizationName}: {$this->failed} failed of {$this->received} received leave webhooks on {$this->date}.")
             ->line('Five most recent failure causes:');
 
         foreach ($this->reasons as $reason) {
