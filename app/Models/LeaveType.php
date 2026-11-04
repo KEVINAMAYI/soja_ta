@@ -6,7 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class LeaveType extends Model
 {
-    protected $fillable = ['organization_id', 'name', 'normalized_name'];
+    protected $fillable = ['organization_id', 'name', 'code'];
 
     public static function defaults(): array
     {
@@ -29,7 +29,7 @@ class LeaveType extends Model
         $names = array_map(fn ($option) => mb_strtolower($option['name']), $options);
 
         foreach (static::where('organization_id', $organizationId)->orderBy('name')->get() as $type) {
-            if (! in_array($type->normalized_name, $names, true)) {
+            if (! in_array($type->code, $names, true)) {
                 $id = 'custom_'.$type->id;
                 $options[$id] = ['id' => $id, 'name' => $type->name, 'icon' => '📄'];
             }
@@ -42,7 +42,7 @@ class LeaveType extends Model
     {
         $name = trim($name);
         $normalized = mb_strtolower($name);
-        $type = static::where('organization_id', $organizationId)->where('normalized_name', $normalized)->first();
+        $type = static::where('organization_id', $organizationId)->where('code', $normalized)->first();
 
         if ($type) {
             return $type->name;
@@ -53,7 +53,7 @@ class LeaveType extends Model
             ->whereRaw('LOWER(leave_type) = ?', [$normalized])->value('leave_type') ?? $name;
 
         return static::firstOrCreate(
-            ['organization_id' => $organizationId, 'normalized_name' => $normalized],
+            ['organization_id' => $organizationId, 'code' => $normalized],
             ['name' => $name],
         )->name;
     }
