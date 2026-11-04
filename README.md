@@ -131,6 +131,40 @@ Missing/invalid credentials are rejected with HTTP 403. JSON validation,
 a 256 KiB body limit, and a 120-request/minute/IP rate limit are also enforced.
 Configure a matching body limit at the reverse proxy.
 
+#### Webhook monitoring and failure alerts
+
+Run `php artisan migrate` to create `failed_elevate_webhooks` and
+`elevate_webhook_daily_stats`. On the same **ElevateHR Webhook** settings page:
+
+- View today's and overall received/failed totals, daily totals for the latest
+  30 days with deliveries, and the five most recent failure causes.
+- Set a daily failure threshold, up to 20 notification email addresses, and
+  either one email per day or repeat alerts at threshold multiples.
+- Save alert settings independently of webhook generation; leaving recipients
+  empty disables email alerts. The default threshold is 10 failures.
+
+Counts are per organisation, use the application's timezone, and start when
+monitoring is deployed (no historical backfill). Every delivery counts, including
+successful duplicates, authentication rejections, rate-limited requests, invalid
+payloads, and processing failures. Failed deliveries count only once, including
+validation exceptions and rolled-back leave transactions. Daily records are
+retained and summed for overall totals. Failures for nonexistent organisation
+IDs are retained for operators but are not shown to other organisations.
+
+Failure records retain source IP, HTTP status, a cause, and field validation
+errors, not secret tokens, URLs, or raw leave payloads. Unexpected server errors
+have a generic cause; use application error logs for technical diagnostics.
+Requests rejected before Laravel's route middleware (for example by the proxy,
+PHP body limits, maintenance mode, or unmatched routes) cannot be counted here.
+
+Configure a working Laravel mail transport and run `php artisan queue:work` in
+production. Alert jobs retry failed delivery three times with a 60-second
+backoff; inspect/retry exhausted jobs using Laravel's failed-job tooling.
+Alerts are deduplicated against each day's stored notification count; when
+workers lag, a single email can summarize multiple crossed thresholds. Mail
+transport failures do not change webhook outcomes. Settings changes apply to
+the next failure or pending alert job; saving alone does not send an alert.
+
 Set `ELEVATEHR_WEBHOOK_ALLOWED_IPS` to a comma-separated list of ElevateHR
 source IP addresses or CIDR ranges. Requests outside the list are rejected with
 HTTP 403 and logged with their source IP and organisation ID. An unset or empty
@@ -176,11 +210,33 @@ attendance statuses or rewrite historical attendance/punches. Half-day amounts
 are retained in leave records and reports. Existing manual leave entry remains
 whole-day based.
 
-Focused tests (PHP PDO SQLite is required; fixtures isolate this feature from
-historical MySQL-only migrations):
+Focused tests (fixtures isolate this feature from historical migrations):
+
+By default, the tests use an in-memory SQLite database and require PDO SQLite.
+Alternatively, create a separate **empty, disposable MySQL database** whose name
+ends in `_test` or `_testing`, copy `.env.testing.example` to `.env.testing`, and
+fill in the `ELEVATEHR_TEST_DB_*` connection settings. Do not use the application
+database: tests delete all tables in this disposable database after each test.
+`ELEVATEHR_TEST_DB_RESET=true` explicitly enables this cleanup; the suite refuses
+to start against a nonempty database. The test account needs schema/table
+creation and deletion privileges within that database, not server-wide privileges.
+Generate a test application key with `php artisan key:generate --env=testing`.
+The local `.env.testing` file is gitignored. Then run the same focused command:
 
 ```bash
-php artisan test tests/Unit/ElevateHrLeaveWebhookTest.php tests/Unit/AttendanceSeederMultiShiftWindowTest.php
+php artisan test tests/Unit/ElevateHrLeaveWebhookTest.php tests/Unit/ElevateHrWebhookAlertPolicyTest.php
+```
+
+Alert threshold logic can also be tested without any database:
+
+```bash
+php artisan test tests/Unit/ElevateHrWebhookAlertPolicyTest.php
+```
+
+For the related attendance regression tests (which still require PDO SQLite):
+
+```bash
+php artisan test tests/Unit/AttendanceSeederMultiShiftWindowTest.php
 ```
 
 ### 📜 License
