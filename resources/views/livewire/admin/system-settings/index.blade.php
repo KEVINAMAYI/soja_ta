@@ -1195,8 +1195,9 @@ new class extends Component {
         Clock-ins beyond the <strong>shift's grace period</strong> automatically
         create an approval request and notify approvers.
         When <strong>Track Late Check-ins</strong> is enabled on the shift, this also applies
-        while the tenant approval toggle is off. The <strong>Shift Clock-ins</strong> trigger
-        and department scope must still apply.
+        while the tenant approval toggle or <strong>Shift Clock-ins</strong> trigger is off.
+        Department scope still applies. Break returns require both the tenant approval
+        toggle and the <strong>Break Returns</strong> trigger.
     </span>
                                     </div>
                                     <div class="mt-4">

@@ -43,7 +43,7 @@ class CheckInApprovalService
 
         if ($isBreakReturn && !$settings['trigger_break_returns']) {
             return null;
-        } elseif (!$isBreakReturn && !$settings['trigger_shift_clock_ins']) {
+        } elseif (!$isBreakReturn && !$trackedLateCheckIn && !$settings['trigger_shift_clock_ins']) {
             return null;
         }
 

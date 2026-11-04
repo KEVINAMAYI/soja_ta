@@ -26,7 +26,7 @@ beforeEach(function () {
     $this->service = new CheckInApprovalService(Mockery::mock(AfricasTalkingSmsService::class));
 });
 
-test('tracked late shift check-ins bypass only the tenant enable toggle', function (
+test('tracked late shift check-ins bypass tenant and shift trigger toggles but honor scope', function (
     $enabled, $tracking, $trigger, $departments, $minutesLate, $requiresApproval
 ) {
     CheckInApprovalSettings::save($this->organization->id, [
@@ -44,8 +44,10 @@ test('tracked late shift check-ins bypass only the tenant enable toggle', functi
     'tenant enabled' => [true, true, true, [], 6, true],
     'tracking and tenant disabled' => [false, false, true, [], 6, false],
     'existing enabled policy without tracking' => [true, false, true, [], 6, true],
-    'shift trigger disabled' => [false, true, false, [], 6, false],
-    'shift trigger disabled with tenant enabled' => [true, true, false, [], 6, false],
+    'shift trigger disabled' => [false, true, false, [], 6, true],
+    'shift trigger disabled with tenant enabled' => [true, true, false, [], 6, true],
+    'tracking and shift trigger disabled' => [true, false, false, [], 6, false],
+    'both toggles disabled outside scope' => [false, true, false, [20], 6, false],
     'department included' => [false, true, true, [10], 6, true],
     'department excluded' => [false, true, true, [20], 6, false],
     'department excluded with tenant enabled' => [true, true, true, [20], 6, false],
@@ -81,8 +83,9 @@ test('late tracking does not bypass the tenant toggle for break returns', functi
     'break trigger disabled' => [true, false, false],
 ]);
 
-test('tracked late check-ins still require an explicitly configured shift trigger', function () {
-    expect($this->service->shouldRequireApproval($this->employee, 6))->toBeNull();
+test('tracked late check-ins require approval without saved tenant policy settings', function () {
+    expect($this->service->shouldRequireApproval($this->employee, 6))
+        ->toBe(CheckInApprovalSettings::defaults());
 });
 
 test('zero or disabled shift grace requires positive lateness for approval', function (
