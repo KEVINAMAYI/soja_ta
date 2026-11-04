@@ -1,16 +1,21 @@
 <?php
 
+use App\Jobs\SendElevateWebhookFailureAlert;
 use App\Models\ElevateHrWebhook;
 use App\Models\Employee;
 use App\Models\Leave;
 use App\Models\LeaveType;
 use App\Models\OrganizationSetting;
 use App\Models\User;
+use App\Notifications\ElevateWebhookFailureAlert;
+use App\Services\ElevateHrWebhookMonitor;
 use App\Services\ElevateHrWebhookService;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Notification;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Livewire\Volt\Volt;
@@ -48,9 +53,39 @@ function elevateHrPayload(array $overrides = []): array
 beforeEach(function () {
     // The historical application migrations contain MySQL-only SQL. Build only
     // the pre-existing tables this endpoint needs, then run its real migration.
-    config(['database.default' => 'sqlite', 'database.connections.sqlite.database' => ':memory:']);
+    $this->mysqlFixtures = false;
+    if (env('ELEVATEHR_TEST_DB_CONNECTION') === 'mysql') {
+        $database = env('ELEVATEHR_TEST_DB_DATABASE', '');
+        if (! is_string($database) || ! preg_match('/^[a-zA-Z0-9_]+_(test|testing)$/', $database)
+            || env('ELEVATEHR_TEST_DB_RESET') !== true) {
+            throw new RuntimeException('MySQL webhook tests require a disposable *_test or *_testing database and ELEVATEHR_TEST_DB_RESET=true.');
+        }
+        config([
+            'database.default' => 'elevatehr_testing',
+            'database.connections.elevatehr_testing' => [
+                'driver' => 'mysql',
+                'host' => env('ELEVATEHR_TEST_DB_HOST', '127.0.0.1'),
+                'port' => env('ELEVATEHR_TEST_DB_PORT', '3306'),
+                'database' => $database,
+                'username' => env('ELEVATEHR_TEST_DB_USERNAME', ''),
+                'password' => env('ELEVATEHR_TEST_DB_PASSWORD', ''),
+                'unix_socket' => env('ELEVATEHR_TEST_DB_SOCKET', ''),
+                'charset' => 'utf8mb4',
+                'collation' => 'utf8mb4_unicode_ci',
+                'prefix' => '',
+                'strict' => true,
+            ],
+        ]);
+        DB::purge('elevatehr_testing');
+        if (Schema::getTables() !== []) {
+            throw new RuntimeException('The MySQL webhook test database must be empty. No tables have been changed.');
+        }
+        $this->mysqlFixtures = true;
+    } else {
+        config(['database.default' => 'sqlite', 'database.connections.sqlite.database' => ':memory:']);
+        DB::purge('sqlite');
+    }
     config(['services.elevatehr.webhook_allowed_ips' => ['127.0.0.1']]);
-    DB::purge('sqlite');
 
     (require database_path('migrations/2025_07_29_075436_create_organizations_table.php'))->up();
     (require database_path('migrations/2025_08_07_103748_create_organization_settings_table.php'))->up();
@@ -102,7 +137,15 @@ beforeEach(function () {
         'value' => hash('sha256', str_repeat('a', 64)),
     ]);
     (require database_path('migrations/2026_10_28_090000_create_elevate_hr_webhooks_table.php'))->up();
+    (require database_path('migrations/2026_11_04_090000_create_elevate_webhook_monitoring_tables.php'))->up();
     $this->url = '/api/webhooks/elevatehr/leave/1?token='.str_repeat('a', 64);
+});
+
+afterEach(function () {
+    if ($this->mysqlFixtures ?? false) {
+        Schema::connection('elevatehr_testing')->dropAllTables();
+        DB::purge('elevatehr_testing');
+    }
 });
 
 function elevateWebhookManager(int $organizationId = 1, bool $grantPermission = true): User
@@ -273,9 +316,9 @@ test('requires a configured secret URL and isolates organisations', function () 
 });
 
 test('rejects and logs webhook requests from IPs outside the allowlist', function () {
-    Log::shouldReceive('warning')
+    Log::shouldReceive('error')
         ->once()
-        ->with('Rejected ElevateHR webhook request from untrusted IP.', [
+        ->with('REJECTED ELEVATE-HR WEBHOOK... REQUEST FROM UNKNOWN IP.', [
             'ip' => '198.51.100.42',
             'organization_id' => '1',
         ]);
@@ -495,4 +538,239 @@ test('the new migration can be rolled back without dropping existing leave', fun
     expect(Schema::hasTable('leave_types'))->toBeFalse()
         ->and(Schema::hasColumn('leaves', 'num_of_days'))->toBeFalse()
         ->and(DB::table('leaves')->count())->toBe(1);
+});
+
+function configureElevateAlerts(int $threshold = 2, string $frequency = 'once_daily'): void
+{
+    DB::table('organization_settings')->insert([
+        'organization_id' => 1,
+        'key' => ElevateHrWebhookMonitor::SETTINGS_KEY,
+        'type' => 'json',
+        'value' => json_encode([
+            'threshold' => $threshold,
+            'emails' => ['operations@example.test', 'hr@example.test'],
+            'frequency' => $frequency,
+        ]),
+    ]);
+}
+
+test('counts successful duplicate deliveries without recording failures', function () {
+    $payload = elevateHrPayload();
+    $this->postJson($this->url, $payload)->assertOk();
+    $this->postJson($this->url, $payload)->assertOk();
+
+    $stats = DB::table('elevate_webhook_daily_stats')->sole();
+    expect((int) $stats->received)->toBe(2)
+        ->and((int) $stats->failed)->toBe(0)
+        ->and($stats->date)->toBe(now()->toDateString())
+        ->and(DB::table('failed_elevate_webhooks')->count())->toBe(0);
+});
+
+test('persists middleware failures with their specific cause and no credentials or payload', function () {
+    $this->postJson('/api/webhooks/elevatehr/leave/1?token=wrong', elevateHrPayload())->assertForbidden();
+    $failure = DB::table('failed_elevate_webhooks')->sole();
+
+    expect($failure->reason)->toBe('Missing, invalid or revoked webhook token.')
+        ->and((int) $failure->status_code)->toBe(403)
+        ->and($failure->source_ip)->toBe('127.0.0.1')
+        ->and(json_encode($failure))->not->toContain('Nikita', 'wrong', 'token=');
+    expect((int) DB::table('elevate_webhook_daily_stats')->sole()->failed)->toBe(1);
+
+    config(['services.elevatehr.webhook_allowed_ips' => []]);
+    $this->postJson($this->url, elevateHrPayload())->assertForbidden();
+    expect(DB::table('failed_elevate_webhooks')->latest('id')->first()->reason)
+        ->toBe('Request source IP is not allowed.');
+});
+
+test('records content type and body size rejections', function () {
+    $this->post($this->url, elevateHrPayload())->assertStatus(415);
+    $this->postJson($this->url, ['padding' => str_repeat('x', 262145)])->assertStatus(413);
+    expect(DB::table('failed_elevate_webhooks')->orderBy('id')->pluck('reason')->all())
+        ->toBe(['A JSON payload is required.', 'Webhook payload is too large.']);
+    $stats = DB::table('elevate_webhook_daily_stats')->sole();
+    expect((int) $stats->received)->toBe(2)->and((int) $stats->failed)->toBe(2);
+});
+
+test('records controller validation and business rule failures exactly once', function () {
+    $this->postJson($this->url, elevateHrPayload(['event_id' => 'invalid']))->assertUnprocessable();
+    $this->postJson($this->url, elevateHrPayload(['leave' => ['status' => 'PENDING']]))->assertUnprocessable();
+    $this->postJson($this->url, elevateHrPayload(['leave' => ['employee_number' => '999']]))->assertUnprocessable();
+    $failures = DB::table('failed_elevate_webhooks')->orderBy('id')->get();
+
+    expect($failures)->toHaveCount(3)
+        ->and(json_decode($failures[0]->validation_errors, true))->toHaveKey('event_id')
+        ->and($failures[1]->reason)->toBe('Active leave must be approved and contain remaining leave days.')
+        ->and(json_decode($failures[2]->validation_errors, true)['leave.employee_number'])
+        ->toBe(['Employee not found in this organisation.']);
+    $stats = DB::table('elevate_webhook_daily_stats')->sole();
+    expect((int) $stats->received)->toBe(3)->and((int) $stats->failed)->toBe(3);
+});
+
+test('retains failure records after the leave transaction rolls back without leaking server errors', function () {
+    Event::listen('eloquent.saving: '.Leave::class, function () {
+        throw new RuntimeException('Sensitive database detail');
+    });
+
+    $this->postJson($this->url, elevateHrPayload())->assertStatus(500);
+    $failure = DB::table('failed_elevate_webhooks')->sole();
+    expect((int) $failure->status_code)->toBe(500)
+        ->and($failure->reason)->toStartWith('Unexpected webhook processing error')
+        ->and(json_encode($failure))->not->toContain('Sensitive database detail')
+        ->and(LeaveType::count())->toBe(0)
+        ->and(Leave::whereNotNull('elevatehr_reference')->count())->toBe(0)
+        ->and((int) DB::table('elevate_webhook_daily_stats')->sole()->failed)->toBe(1);
+});
+
+test('counts rate limited requests outside the validation middleware', function () {
+    foreach (range(1, 120) as $delivery) {
+        $this->postJson('/api/webhooks/elevatehr/leave/1?token=wrong', [])->assertForbidden();
+    }
+    $this->postJson($this->url, elevateHrPayload())->assertStatus(429);
+    expect((int) DB::table('failed_elevate_webhooks')->latest('id')->first()->status_code)->toBe(429)
+        ->and(DB::table('failed_elevate_webhooks')->count())->toBe(121);
+    $stats = DB::table('elevate_webhook_daily_stats')->sole();
+    expect((int) $stats->received)->toBe(121)->and((int) $stats->failed)->toBe(121);
+});
+
+test('keeps daily totals separate and retains failures for unknown organisation IDs', function () {
+    $this->travelTo(now()->startOfDay()->addHours(12));
+    $this->postJson($this->url, elevateHrPayload())->assertOk();
+    $this->travel(1)->day();
+    $this->postJson($this->url, [])->assertUnprocessable();
+    $this->postJson('/api/webhooks/elevatehr/leave/999?token=wrong', [])->assertForbidden();
+    expect(DB::table('elevate_webhook_daily_stats')->count())->toBe(3)
+        ->and((int) DB::table('elevate_webhook_daily_stats')->where('organization_id', '1')->sum('received'))->toBe(2)
+        ->and((int) DB::table('elevate_webhook_daily_stats')->where('organization_id', '1')->sum('failed'))->toBe(1)
+        ->and(DB::table('failed_elevate_webhooks')->where('organization_id', '999')->count())->toBe(1);
+});
+
+test('configures validated alerts on the generation page without rotating the token', function () {
+    $user = elevateWebhookManager();
+    $hash = OrganizationSetting::where('key', 'elevatehr_leave_webhook_token_hash')->value('value');
+    Volt::actingAs($user)->test('admin.account-settings.elevate_webhook')
+        ->set('failureThreshold', 3)
+        ->set('notificationEmails', "HR@example.test, operations@example.test\nhr@example.test")
+        ->set('alertFrequency', 'every_threshold')
+        ->call('saveAlertSettings')
+        ->assertHasNoErrors()
+        ->assertSee('Alert settings saved.');
+
+    expect(app(ElevateHrWebhookMonitor::class)->settings('1'))->toBe([
+        'threshold' => 3,
+        'emails' => ['hr@example.test', 'operations@example.test'],
+        'frequency' => 'every_threshold',
+    ])->and(OrganizationSetting::where('key', 'elevatehr_leave_webhook_token_hash')->value('value'))->toBe($hash)
+        ->and(ElevateHrWebhook::count())->toBe(1)
+        ->and(app(ElevateHrWebhookMonitor::class)->settings('2')['emails'])->toBe([]);
+    Volt::actingAs($user)->test('admin.account-settings.elevate_webhook')
+        ->assertSet('failureThreshold', 3)
+        ->assertSet('notificationEmails', 'hr@example.test, operations@example.test')
+        ->assertSet('alertFrequency', 'every_threshold');
+});
+
+test('rejects invalid alert settings', function ($field, $value, $error) {
+    Volt::actingAs(elevateWebhookManager())->test('admin.account-settings.elevate_webhook')
+        ->set($field, $value)->call('saveAlertSettings')->assertHasErrors([$error]);
+    expect(OrganizationSetting::where('key', ElevateHrWebhookMonitor::SETTINGS_KEY)->exists())->toBeFalse();
+})->with([
+    ['failureThreshold', 0, 'failureThreshold'],
+    ['failureThreshold', 1.5, 'failureThreshold'],
+    ['failureThreshold', 1000001, 'failureThreshold'],
+    ['notificationEmails', 'not-an-email', 'notificationEmails.0'],
+    ['notificationEmails', implode(',', array_map(fn ($n) => "person{$n}@example.test", range(1, 21))), 'notificationEmails'],
+    ['alertFrequency', 'every_request', 'alertFrequency'],
+]);
+
+test('saving alerts rechecks permission', function () {
+    $user = elevateWebhookManager();
+    $component = Volt::actingAs($user)->test('admin.account-settings.elevate_webhook');
+    $user->revokePermissionTo('manage-elevate-callback');
+    $component->call('saveAlertSettings')->assertForbidden();
+    expect(OrganizationSetting::where('key', ElevateHrWebhookMonitor::SETTINGS_KEY)->exists())->toBeFalse();
+});
+
+test('shows scoped daily overall statistics and exactly five latest failure causes', function () {
+    foreach (range(1, 6) as $delivery) {
+        $this->postJson($this->url, [])->assertUnprocessable();
+    }
+    $this->postJson('/api/webhooks/elevatehr/leave/2?token=wrong', [])->assertForbidden();
+    $expectedIds = DB::table('failed_elevate_webhooks')->where('organization_id', '1')
+        ->latest('id')->limit(5)->pluck('id')->all();
+    Volt::actingAs(elevateWebhookManager())->test('admin.account-settings.elevate_webhook')
+        ->assertViewHas('overallStats', fn ($stats) => (int) $stats->received === 6 && (int) $stats->failed === 6)
+        ->assertViewHas('todayStats', fn ($stats) => (int) $stats->received === 6)
+        ->assertViewHas('recentFailures', fn ($failures) => $failures->pluck('id')->all() === $expectedIds)
+        ->assertSee('Invalid leave event.')
+        ->assertDontSee('Missing, invalid or revoked webhook token.');
+});
+
+test('sends email to configured recipients exactly at threshold once daily and resets the next day', function () {
+    Notification::fake();
+    configureElevateAlerts();
+    $this->postJson($this->url, [])->assertUnprocessable();
+    Notification::assertNothingSent();
+    $this->postJson($this->url, [])->assertUnprocessable();
+    Notification::assertSentOnDemand(ElevateWebhookFailureAlert::class, function ($notification, $channels, $notifiable) {
+        return $notification->failed === 2 && $notification->received === 2
+            && $notifiable->routes['mail'] === ['operations@example.test', 'hr@example.test']
+            && count($notification->reasons) === 2;
+    });
+    $this->postJson($this->url, [])->assertUnprocessable();
+    Notification::assertCount(1);
+
+    $this->travel(1)->day();
+    $this->postJson($this->url, [])->assertUnprocessable();
+    Notification::assertCount(1);
+    $this->postJson($this->url, [])->assertUnprocessable();
+    Notification::assertCount(2);
+});
+
+test('repeats email at threshold multiples and deduplicates queued jobs', function () {
+    Notification::fake();
+    configureElevateAlerts(frequency: 'every_threshold');
+    foreach (range(1, 5) as $delivery) {
+        $this->postJson($this->url, [])->assertUnprocessable();
+    }
+    Notification::assertCount(2);
+    app()->call([new SendElevateWebhookFailureAlert('1', now()->toDateString()), 'handle']);
+    Notification::assertCount(2);
+    $this->postJson($this->url, [])->assertUnprocessable();
+    Notification::assertCount(3);
+});
+
+test('queues alerts and leaves the notification count unchanged until delivery succeeds', function () {
+    Queue::fake();
+    configureElevateAlerts(threshold: 1);
+    $this->postJson($this->url, [])->assertUnprocessable();
+    Queue::assertPushed(SendElevateWebhookFailureAlert::class);
+    expect((int) DB::table('elevate_webhook_daily_stats')->sole()->last_notified_failed)->toBe(0);
+});
+
+test('email failures preserve webhook results and remain retryable without losing failure logs', function () {
+    configureElevateAlerts(threshold: 1);
+    Notification::shouldReceive('route')->andThrow(new RuntimeException('Mail transport unavailable'));
+    $this->postJson($this->url, [])->assertUnprocessable();
+    expect(DB::table('failed_elevate_webhooks')->count())->toBe(1)
+        ->and((int) DB::table('elevate_webhook_daily_stats')->sole()->failed)->toBe(1)
+        ->and((int) DB::table('elevate_webhook_daily_stats')->sole()->last_notified_failed)->toBe(0);
+    expect(fn () => app()->call([new SendElevateWebhookFailureAlert('1', now()->toDateString()), 'handle']))
+        ->toThrow(RuntimeException::class, 'Mail transport unavailable');
+});
+
+test('empty recipient settings disable email without disabling monitoring', function () {
+    Notification::fake();
+    Volt::actingAs(elevateWebhookManager())->test('admin.account-settings.elevate_webhook')
+        ->set('failureThreshold', 1)->set('notificationEmails', '')
+        ->call('saveAlertSettings')->assertHasNoErrors();
+    $this->postJson($this->url, [])->assertUnprocessable();
+    Notification::assertNothingSent();
+    expect(DB::table('failed_elevate_webhooks')->count())->toBe(1);
+});
+
+test('monitoring migration rolls back without deleting leave or webhook generation history', function () {
+    (require database_path('migrations/2026_11_04_090000_create_elevate_webhook_monitoring_tables.php'))->down();
+    expect(Schema::hasTable('failed_elevate_webhooks'))->toBeFalse()
+        ->and(Schema::hasTable('elevate_webhook_daily_stats'))->toBeFalse()
+        ->and(ElevateHrWebhook::count())->toBe(1)
+        ->and(Leave::count())->toBe(1);
 });

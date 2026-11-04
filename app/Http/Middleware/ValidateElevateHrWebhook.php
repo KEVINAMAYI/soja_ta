@@ -21,6 +21,7 @@ class ValidateElevateHrWebhook
             );
 
         if (! $ipIsAllowed) {
+            $request->attributes->set('elevate_failure_reason', 'Request source IP is not allowed.');
             Log::error('REJECTED ELEVATE-HR WEBHOOK... REQUEST FROM UNKNOWN IP.', [
                 'ip' => $ip,
                 'organization_id' => $request->route('organization'),
@@ -36,6 +37,7 @@ class ValidateElevateHrWebhook
 
         if (! is_string($hash) || ! is_string($token) || strlen($token) !== 64
             || ! hash_equals($hash, hash('sha256', $token))) {
+            $request->attributes->set('elevate_failure_reason', 'Missing, invalid or revoked webhook token.');
             return response()->json(['message' => 'Invalid webhook credentials.'], 403);
         }
 
