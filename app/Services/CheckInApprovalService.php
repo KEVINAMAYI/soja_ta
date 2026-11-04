@@ -21,28 +21,33 @@ class CheckInApprovalService
      * approval instead of being clocked in immediately.
      *
      * Returns the configured settings array if approval should be triggered,
-     * or null if the check-in should proceed normally.
+     * or null if the check-in should proceed normally. Both shift check-ins
+     * and break returns must have positive minutes late to require approval.
      */
     public function shouldRequireApproval(Employee $employee, int $minutesLate, ?bool $isBreakReturn = false): ?array
     {
+        if ($minutesLate <= 0) {
+            return null;
+        }
+
         $orgId    = $employee->organization_id;
         $settings = CheckInApprovalSettings::get($orgId);
+        $shift = $employee->shift;
 
-        if ($settings['enabled']) {
-            if ($isBreakReturn && !$settings['trigger_break_returns']) {
-                return null;
-            } else if (!$isBreakReturn && !$settings['trigger_shift_clock_ins']) {
-                return null;
-            }
-        } else {
-            // Approval is not enabled at all for this organization
+        $trackedLateCheckIn = !$isBreakReturn
+            && $shift?->track_late_checkin;
+
+        if (!$settings['enabled'] && !$trackedLateCheckIn) {
+            return null;
+        }
+
+        if ($isBreakReturn && !$settings['trigger_break_returns']) {
+            return null;
+        } elseif (!$isBreakReturn && !$settings['trigger_shift_clock_ins']) {
             return null;
         }
 
         // Use the shift's own grace period — single source of truth
-        $shift             = $employee->shift;
-
-        // CHANGE TO:
         $shiftGraceEnabled = $shift?->grace_period_enabled ?? false;
         $shiftGraceMinutes = $shift?->grace_period_minutes ?? 0;
 

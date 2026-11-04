@@ -333,9 +333,9 @@ class AttendanceController extends Controller
 
             /* 9b. ---------------------------------------------------------------
                 APPROVAL GATE
-                 If the org has check-in approval enabled and this employee's
-                 lateness exceeds the configured grace period (org-level, independent
-                 of the shift's own grace settings), HOLD the check-in.
+                 Tracked late shift check-ins can require approval even when the
+                 tenant policy is disabled. The shift clock-in trigger, department
+                 scope, and shift's grace period still apply.
 
                  No attendance record is created or modified. Only a
                  CheckInApprovalRequest is stored, carrying everything needed to
