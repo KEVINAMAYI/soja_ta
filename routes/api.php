@@ -6,12 +6,13 @@ use App\Http\Controllers\APIs\DeviceController;
 use App\Http\Controllers\APIs\ElevateHrLeaveWebhookController;
 use App\Http\Controllers\APIs\LeaveController;
 use App\Http\Controllers\APIs\OrganizationController;
+use App\Http\Middleware\TrackElevateHrWebhook;
 use App\Http\Middleware\ValidateElevateHrWebhook;
 use Illuminate\Support\Facades\Route;
 
 Route::post('/webhooks/elevatehr/leave/{organization}', ElevateHrLeaveWebhookController::class)
-    ->whereNumber('organization')
-    ->middleware(['throttle:120,1', ValidateElevateHrWebhook::class])
+    ->where('organization', '[0-9]{1,20}')
+    ->middleware([TrackElevateHrWebhook::class, 'throttle:120,1', ValidateElevateHrWebhook::class])
     ->name('webhooks.elevatehr.leave');
 
 // Public authentication routes
