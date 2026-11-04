@@ -26,7 +26,7 @@ class ElevateHrLeaveWebhookController extends Controller
             'occurred_at' => ['required', 'date'],
             'leave' => ['required', 'array'],
             'leave.leave_reference' => ['required', 'uuid'],
-            'leave.employee_number' => ['required', 'string', 'regex:/^[1-9][0-9]{0,17}$/'],
+            'leave.employee_number' => ['required', 'string', 'max:255'],
             'leave.employee_name' => ['required', 'string', 'max:255'],
             'leave.leave_type_code' => ['required', 'string', 'max:255'],
             'leave.leave_type_name' => ['required', 'string', 'max:255'],
@@ -57,16 +57,33 @@ class ElevateHrLeaveWebhookController extends Controller
             return response()->json(['message' => 'Active leave must be approved and contain remaining leave days.'], 422);
         }
 
-        DB::transaction(function () use ($organization, $data, $snapshot, $recalled) {
+        DB::transaction(function () use ($request, $organization, $data, $snapshot, $recalled) {
             // Serialise this organisation's events, including first deliveries and type creation.
             Organization::whereKey($organization)->lockForUpdate()->firstOrFail();
 
-            $employee = Employee::where('organization_id', $organization)
-                ->whereKey($snapshot['employee_number'])->first();
+            $employees = Employee::where('organization_id', $organization)
+                ->where('ad_employee_id', $snapshot['employee_number'])
+                ->get(['id', 'department_id', 'name', 'email']);
 
-            if (! $employee) {
-                throw ValidationException::withMessages(['leave.employee_number' => 'Employee not found in this organisation.']);
+            if ($employees->count() !== 1) {
+                $reason = $employees->isEmpty()
+                    ? 'No employee found in this organisation for ad_employee_id ==> '.$snapshot['employee_number']
+                    : 'Multiple employees found in this organisation for ad_employee_id ==> '.$snapshot['employee_number'];
+                $request->attributes->set('elevate_failure_reason', $reason);
+                $request->attributes->set('elevate_failure_metadata', [
+                    'ad_employee_id' => $snapshot['employee_number'],
+                    'employee_name' => $snapshot['employee_name'],
+                    'matched_employees' => $employees->map(fn (Employee $employee) => [
+                        'id' => $employee->id,
+                        'name' => $employee->name,
+                        'email' => $employee->email,
+                    ])->all(),
+                ]);
+
+                throw ValidationException::withMessages(['leave.employee_number' => $reason]);
             }
+
+            $employee = $employees->sole();
 
             $leave = Leave::where('organization_id', $organization)
                 ->where('elevatehr_reference', $snapshot['leave_reference'])->first();
