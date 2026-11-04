@@ -33,7 +33,7 @@ function elevateHrPayload(array $overrides = []): array
         'occurred_at' => '2026-10-07T11:45:36Z',
         'leave' => [
             'leave_reference' => '611899b5-6e15-4d33-a4a0-68e268f7bc7c',
-            'employee_number' => '5555555',
+            'employee_number' => 'AD-00555',
             'employee_name' => 'Nikita Patidar',
             'leave_type_code' => 'STDY',
             'leave_type_name' => 'Study Leave',
@@ -100,6 +100,9 @@ beforeEach(function () {
         $table->unsignedBigInteger('organization_id');
         $table->unsignedBigInteger('user_id')->nullable();
         $table->unsignedBigInteger('department_id')->nullable();
+        $table->string('ad_employee_id')->nullable();
+        $table->string('name')->nullable();
+        $table->string('email')->nullable();
         $table->boolean('is_system_user')->default(false);
         $table->softDeletes();
     });
@@ -122,8 +125,8 @@ beforeEach(function () {
         ['id' => 2, 'name' => 'Other', 'email' => 'two@example.test', 'phone_number' => '2'],
     ]);
     DB::table('employees')->insert([
-        ['id' => 5555555, 'organization_id' => 1, 'department_id' => 4],
-        ['id' => 222, 'organization_id' => 2, 'department_id' => 5],
+        ['id' => 5555555, 'organization_id' => 1, 'department_id' => 4, 'ad_employee_id' => 'AD-00555'],
+        ['id' => 222, 'organization_id' => 2, 'department_id' => 5, 'ad_employee_id' => '222'],
     ]);
     DB::table('leaves')->insert([
         'employee_id' => 5555555, 'organization_id' => 1, 'leave_type' => 'Annual Leave',
@@ -138,6 +141,7 @@ beforeEach(function () {
     ]);
     (require database_path('migrations/2026_10_28_090000_create_elevate_hr_webhooks_table.php'))->up();
     (require database_path('migrations/2026_11_04_090000_create_elevate_webhook_monitoring_tables.php'))->up();
+    (require database_path('migrations/2026_11_04_100000_add_metadata_to_failed_elevate_webhooks_table.php'))->up();
     $this->url = '/api/webhooks/elevatehr/leave/1?token='.str_repeat('a', 64);
 });
 
@@ -172,6 +176,84 @@ test('records approved half-day leave using the existing employee and department
         ->and($leave->leave_days)->toBe($payload['leave']['days'])
         ->and($leave->expected_resumption->toDateString())->toBe('2026-10-22')
         ->and($leave->daysInRange('2026-10-21', '2026-10-22'))->toBe(0.5);
+});
+
+test('matches string AD identifiers without converting leading zeros to internal IDs', function (string $adEmployeeId) {
+    DB::table('employees')->where('id', 5555555)->update(['ad_employee_id' => $adEmployeeId]);
+    $this->postJson($this->url, elevateHrPayload(['leave' => ['employee_number' => $adEmployeeId]]))->assertOk();
+
+    expect(Leave::whereNotNull('elevatehr_reference')->sole()->employee_id)->toBe(5555555);
+})->with(['000123', 'M1ALI748']);
+
+test('does not count other organisations deleted employees or system users as AD matches', function () {
+    DB::table('employees')->insert([
+        ['id' => 333, 'organization_id' => 2, 'ad_employee_id' => 'AD-00555', 'deleted_at' => null, 'is_system_user' => false],
+        ['id' => 334, 'organization_id' => 1, 'ad_employee_id' => 'AD-00555', 'deleted_at' => now(), 'is_system_user' => false],
+        ['id' => 335, 'organization_id' => 1, 'ad_employee_id' => 'AD-00555', 'deleted_at' => null, 'is_system_user' => true],
+    ]);
+
+    $this->postJson($this->url, elevateHrPayload())->assertOk();
+    expect(Leave::whereNotNull('elevatehr_reference')->sole()->employee_id)->toBe(5555555);
+});
+
+test('records missing AD matches without falling back to internal IDs or excluded employees', function (string $employeeNumber) {
+    DB::table('employees')->insert([
+        ['id' => 333, 'organization_id' => 1, 'ad_employee_id' => 'DELETED', 'deleted_at' => now(), 'is_system_user' => false],
+        ['id' => 334, 'organization_id' => 1, 'ad_employee_id' => 'SYSTEM', 'deleted_at' => null, 'is_system_user' => true],
+    ]);
+    $reason = 'No employee found in this organisation for ad_employee_id ==> '.$employeeNumber;
+    $this->postJson($this->url, elevateHrPayload(['leave' => ['employee_number' => $employeeNumber]]))
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors('leave.employee_number');
+
+    $failure = DB::table('failed_elevate_webhooks')->sole();
+    expect($failure->reason)->toBe($reason)
+        ->and((int) $failure->status_code)->toBe(422)
+        ->and(json_decode($failure->validation_errors, true))->toBe(['leave.employee_number' => [$reason]])
+        ->and(json_decode($failure->metadata, true))->toBe([
+            'ad_employee_id' => $employeeNumber,
+            'employee_name' => 'Nikita Patidar',
+            'matched_employees' => [],
+        ])
+        ->and(Leave::whereNotNull('elevatehr_reference')->count())->toBe(0)
+        ->and(LeaveType::count())->toBe(0)
+        ->and((int) DB::table('elevate_webhook_daily_stats')->sole()->failed)->toBe(1);
+})->with(['5555555', '222', '999', 'DELETED', 'SYSTEM']);
+
+test('rejects duplicate AD matches and records names and emails without changing leave', function (string $eventType) {
+    $this->postJson($this->url, elevateHrPayload())->assertOk();
+    $original = Leave::whereNotNull('elevatehr_reference')->sole()->getAttributes();
+    DB::table('employees')->where('id', 5555555)->update(['name' => 'Nikita Patidar', 'email' => 'nikita@example.test']);
+    DB::table('employees')->insert([
+        'id' => 333, 'organization_id' => 1, 'ad_employee_id' => 'AD-00555',
+        'name' => 'Another Employee', 'email' => 'another@example.test',
+    ]);
+
+    $reason = 'Multiple employees found in this organisation for ad_employee_id ==> AD-00555';
+    $this->postJson($this->url, elevateHrPayload(['sequence' => 20, 'event_type' => $eventType]))
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors('leave.employee_number');
+    $failure = DB::table('failed_elevate_webhooks')->sole();
+    $metadata = json_decode($failure->metadata, true);
+    expect($failure->reason)->toBe($reason)
+        ->and((int) $failure->status_code)->toBe(422)
+        ->and(json_decode($failure->validation_errors, true))->toBe(['leave.employee_number' => [$reason]])
+        ->and($metadata['ad_employee_id'])->toBe('AD-00555')
+        ->and($metadata['employee_name'])->toBe('Nikita Patidar')
+        ->and(collect($metadata['matched_employees'])->sortBy('id')->values()->all())->toBe([
+            ['id' => 333, 'name' => 'Another Employee', 'email' => 'another@example.test'],
+            ['id' => 5555555, 'name' => 'Nikita Patidar', 'email' => 'nikita@example.test'],
+        ])
+        ->and(Leave::whereNotNull('elevatehr_reference')->sole()->getAttributes())->toBe($original)
+        ->and((int) DB::table('elevate_webhook_daily_stats')->sole()->failed)->toBe(1);
+})->with(['leave.approved', 'leave.partial_recall', 'leave.recalled']);
+
+test('duplicate AD matches cannot create leave or custom leave types', function () {
+    DB::table('employees')->insert(['id' => 333, 'organization_id' => 1, 'ad_employee_id' => 'AD-00555']);
+    $this->postJson($this->url, elevateHrPayload())->assertUnprocessable();
+    expect(Leave::whereNotNull('elevatehr_reference')->count())->toBe(0)
+        ->and(LeaveType::count())->toBe(0)
+        ->and(DB::table('failed_elevate_webhooks')->count())->toBe(1);
 });
 
 test('backfills whole day counts and keeps legacy range behaviour', function () {
@@ -346,7 +428,7 @@ test('allows webhook requests from an IP inside an allowed CIDR range', function
 
 test('cannot move an external leave reference to another employee', function () {
     $this->postJson($this->url, elevateHrPayload())->assertOk();
-    DB::table('employees')->insert(['id' => 333, 'organization_id' => 1]);
+    DB::table('employees')->insert(['id' => 333, 'organization_id' => 1, 'ad_employee_id' => '333']);
     $this->postJson($this->url, elevateHrPayload([
         'sequence' => 20, 'leave' => ['employee_number' => '333'],
     ]))->assertUnprocessable();
@@ -366,6 +448,8 @@ test('rejects malformed or unsupported payloads without saving anything', functi
     [['leave' => ['total_days' => '0.001']]],
     [['leave' => ['end_date' => '2026-10-20']]],
     [['leave' => ['employee_number' => '5555555 OR 1=1']]],
+    [['leave' => ['employee_number' => str_repeat('x', 256)]]],
+    [['leave' => ['employee_number' => 5555555]]],
     [['leave' => ['leave_type_name' => '   ']]],
     [['leave' => ['days' => [['day_part' => 'EVENING']]]]],
     [['leave' => ['days' => [['date' => '2026-10-25']]]]],
@@ -573,6 +657,7 @@ test('persists middleware failures with their specific cause and no credentials 
     expect($failure->reason)->toBe('Missing, invalid or revoked webhook token.')
         ->and((int) $failure->status_code)->toBe(403)
         ->and($failure->source_ip)->toBe('127.0.0.1')
+        ->and($failure->metadata)->toBeNull()
         ->and(json_encode($failure))->not->toContain('Nikita', 'wrong', 'token=');
     expect((int) DB::table('elevate_webhook_daily_stats')->sole()->failed)->toBe(1);
 
@@ -601,7 +686,7 @@ test('records controller validation and business rule failures exactly once', fu
         ->and(json_decode($failures[0]->validation_errors, true))->toHaveKey('event_id')
         ->and($failures[1]->reason)->toBe('Active leave must be approved and contain remaining leave days.')
         ->and(json_decode($failures[2]->validation_errors, true)['leave.employee_number'])
-        ->toBe(['Employee not found in this organisation.']);
+        ->toBe(['No employee found in this organisation for ad_employee_id ==> 999']);
     $stats = DB::table('elevate_webhook_daily_stats')->sole();
     expect((int) $stats->received)->toBe(3)->and((int) $stats->failed)->toBe(3);
 });
@@ -773,4 +858,12 @@ test('monitoring migration rolls back without deleting leave or webhook generati
         ->and(Schema::hasTable('elevate_webhook_daily_stats'))->toBeFalse()
         ->and(ElevateHrWebhook::count())->toBe(1)
         ->and(Leave::count())->toBe(1);
+});
+
+test('failure metadata migration rolls back without deleting existing failure records', function () {
+    $this->postJson($this->url, elevateHrPayload(['leave' => ['employee_number' => '999']]))->assertUnprocessable();
+    (require database_path('migrations/2026_11_04_100000_add_metadata_to_failed_elevate_webhooks_table.php'))->down();
+
+    expect(Schema::hasColumn('failed_elevate_webhooks', 'metadata'))->toBeFalse()
+        ->and(DB::table('failed_elevate_webhooks')->count())->toBe(1);
 });

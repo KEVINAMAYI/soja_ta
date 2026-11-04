@@ -32,8 +32,10 @@ class TrackElevateHrWebhook
             };
             $this->monitor->failed(
                 $organizationId, $date, $request->ip(), $status,
-                $status >= 500 ? 'Unexpected webhook processing error ('.$exception::class.').' : $exception->getMessage(),
+                $status >= 500 ? 'Unexpected webhook processing error ('.$exception::class.').'
+                    : $request->attributes->get('elevate_failure_reason', $exception->getMessage()),
                 $exception instanceof ValidationException ? $exception->errors() : null,
+                $request->attributes->get('elevate_failure_metadata'),
             );
 
             throw $exception;
@@ -49,6 +51,7 @@ class TrackElevateHrWebhook
                 $organizationId, $date, $request->ip(), $status,
                 $status >= 500 ? 'Unexpected webhook processing error.' : ($reason ?? ($data['message'] ?? Response::$statusTexts[$status] ?? 'Webhook failed.')),
                 $status < 500 && is_array($errors) ? $errors : null,
+                $request->attributes->get('elevate_failure_metadata'),
             );
         }
 
