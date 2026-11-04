@@ -154,6 +154,10 @@ IDs are retained for operators but are not shown to other organisations.
 Failure records retain source IP, HTTP status, a cause, and field validation
 errors, not secret tokens, URLs, or raw leave payloads. Unexpected server errors
 have a generic cause; use application error logs for technical diagnostics.
+Employee lookup failures also retain metadata containing the attempted
+`ad_employee_id`, the supplied employee name, and matching employees' internal
+IDs, names, and emails (an empty list when no employee matches). Run
+`php artisan migrate` before deploying the updated webhook.
 Requests rejected before Laravel's route middleware (for example by the proxy,
 PHP body limits, maintenance mode, or unmatched routes) cannot be counted here.
 
@@ -182,9 +186,13 @@ verification would require provider-supported signatures or verified source IPs.
 
 Processing follows the existing `leaves` record format:
 
-- `leave.employee_number` matches `employees.id` (the value stored in
-  `leaves.employee_id`), **not** `id_number` or `ad_employee_id`. The employee must
-  belong to the organisation in the URL and must not be deleted/a system user.
+- `leave.employee_number` matches `employees.ad_employee_id`, **not** the internal
+  employee ID or `id_number`. This is a string of up to 255 characters, supporting
+  alphanumeric IDs and leading zeros. Exactly one employee must match within
+  the organisation in the URL, excluding deleted employees and system users.
+  Zero or multiple matches return HTTP 422 and record the reason and lookup
+  metadata without creating or changing leave. `leaves.employee_id` still stores
+  the matched employee's internal ID.
 - `leave.approved` creates or updates an **approved** leave. Names are matched
   case-insensitively against the organisation's saved and built-in leave types;
   unknown names are created and become available in the existing UI/API lists.

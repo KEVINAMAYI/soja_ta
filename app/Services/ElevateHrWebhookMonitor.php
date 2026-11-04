@@ -39,14 +39,16 @@ class ElevateHrWebhookMonitor
         int $status,
         string $reason,
         ?array $validationErrors = null,
+        ?array $metadata = null,
     ): void {
-        DB::transaction(function () use ($organizationId, $date, $ip, $status, $reason, $validationErrors) {
+        DB::transaction(function () use ($organizationId, $date, $ip, $status, $reason, $validationErrors, $metadata) {
             DB::table('failed_elevate_webhooks')->insert([
                 'organization_id' => $organizationId,
                 'source_ip' => $ip,
                 'status_code' => $status,
                 'reason' => mb_substr($reason, 0, 2000),
                 'validation_errors' => $validationErrors === null ? null : json_encode($validationErrors, JSON_THROW_ON_ERROR),
+                'metadata' => $metadata === null ? null : json_encode($metadata, JSON_THROW_ON_ERROR),
                 'created_at' => now(),
             ]);
             DB::table('elevate_webhook_daily_stats')
