@@ -33,7 +33,7 @@ return Application::configure(basePath: dirname(__DIR__))
         });
 
         $exceptions->renderable(function (ValidationException $e, $request) {
-            if ($request->expectsJson()) {
+            if ($request->expectsJson() || $request->routeIs('webhooks.elevatehr.leave')) {
                 return response()->json([
                     'code' => 1001,
                     'message' => 'Validation failed. Please check the provided data.',

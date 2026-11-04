@@ -11,6 +11,7 @@ use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
@@ -44,6 +45,11 @@ class ElevateHrLeaveWebhookController extends Controller
             'leave.days.*.is_holiday' => ['required', 'boolean'],
         ]);
 
+
+        Log::info('Received Elevate HR leave webhook.', [
+            'organization' => $organization,
+            'ip' => $request->ip(),
+        ]);
         if ($validator->fails()) {
             return response()->json(['message' => 'Invalid leave event.', 'errors' => $validator->errors()], 422);
         }
@@ -51,6 +57,8 @@ class ElevateHrLeaveWebhookController extends Controller
         $data = $validator->validated();
         $snapshot = $data['leave'];
         $recalled = $data['event_type'] === 'leave.recalled';
+
+        Log::info("TUKO AREA!!!");
 
         if (! $recalled && ($snapshot['status'] !== 'APPROVED'
             || (float) $snapshot['total_days'] <= 0 || $snapshot['days'] === [])) {
@@ -64,6 +72,7 @@ class ElevateHrLeaveWebhookController extends Controller
             $employees = Employee::where('organization_id', $organization)
                 ->where('ad_employee_id', $snapshot['employee_number'])
                 ->get(['id', 'department_id', 'name', 'email']);
+        Log::info("TUKO AREA!!!");
 
             if ($employees->count() !== 1) {
                 $reason = $employees->isEmpty()
@@ -79,9 +88,11 @@ class ElevateHrLeaveWebhookController extends Controller
                         'email' => $employee->email,
                     ])->all(),
                 ]);
+        Log::info("TUKO AREA111!!!");
 
                 throw ValidationException::withMessages(['leave.employee_number' => $reason]);
             }
+        Log::info("TUKO AREA1234!!!");
 
             $employee = $employees->sole();
 

@@ -220,6 +220,21 @@ test('records missing AD matches without falling back to internal IDs or exclude
         ->and((int) DB::table('elevate_webhook_daily_stats')->sole()->failed)->toBe(1);
 })->with(['5555555', '222', '999', 'DELETED', 'SYSTEM']);
 
+test('returns JSON validation errors for webhook requests that do not accept JSON', function () {
+    $response = $this->call(
+        'POST',
+        $this->url,
+        [],
+        [],
+        [],
+        ['HTTP_ACCEPT' => 'text/html', 'CONTENT_TYPE' => 'application/json'],
+        json_encode(elevateHrPayload(['leave' => ['employee_number' => '999']]))
+    );
+
+    $response->assertUnprocessable()
+        ->assertJsonValidationErrors('leave.employee_number');
+});
+
 test('rejects duplicate AD matches and records names and emails without changing leave', function (string $eventType) {
     $this->postJson($this->url, elevateHrPayload())->assertOk();
     $original = Leave::whereNotNull('elevatehr_reference')->sole()->getAttributes();
