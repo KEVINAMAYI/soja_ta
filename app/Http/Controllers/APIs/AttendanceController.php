@@ -324,12 +324,8 @@ class AttendanceController extends Controller
             $minutesLate = 0;
             $withinGracePeriod = false;
 
-            if ($shift->track_late_checkin) {
-                $withinGracePeriod = $shift->isWithinGracePeriod($checkInTimeCarbon);
-                $isLateCheckin = $shift->isLateCheckIn($checkInTimeCarbon);
-                $minutesLate = $shift->getMinutesLate($checkInTimeCarbon);
-            }
-
+            // No need to check what Shift settings are, we directly use the shift methods to determine late check-in and grace period status.
+            // for approvals we use should require approval???
             $withinGracePeriod = $shift->isWithinGracePeriod($checkInTimeCarbon);
             $isLateCheckin = $shift->isLateCheckIn($checkInTimeCarbon);
             $minutesLate = $shift->getMinutesLate($checkInTimeCarbon);
