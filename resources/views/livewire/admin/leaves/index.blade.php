@@ -525,6 +525,9 @@ new class extends Component {
                                             {{ $record['end_date']->format('d M Y') }}
                                         </span>
                                     <small class="text-muted mt-1">
+                                        Number of Days: {{ $record['num_of_days'] ?? '-' }}
+                                    </small>
+                                    <small class="text-muted mt-1">
                                         Return: {{ $record['expected_resumption']?->format('d M Y') ?? '-' }}
                                     </small>
                                 @else
