@@ -107,6 +107,17 @@ class ElevateHrLeaveWebhookController extends Controller
                 return;
             }
 
+            // if num of days is a decimal then return date should be same day otherwise add a day to end date for expected resumption
+            $expectedResumption = null;
+            if (!$recalled) {
+                $numOfDays = $snapshot['total_days'];
+                if (floor($numOfDays) != $numOfDays) {
+                    $expectedResumption = Carbon::parse($snapshot['end_date'])->toDateString();
+                } else {
+                    $expectedResumption = Carbon::parse($snapshot['end_date'])->addDay()->toDateString();
+                }
+            }
+
             $leave ??= new Leave;
             $leave->fill([
                 'organization_id' => $organization,
@@ -115,7 +126,9 @@ class ElevateHrLeaveWebhookController extends Controller
                 'leave_type' => LeaveType::resolveName((int) $organization, $snapshot['leave_type_name']),
                 'start_date' => $snapshot['start_date'],
                 'end_date' => $snapshot['end_date'],
-                'expected_resumption' => $recalled ? null : Carbon::parse($snapshot['end_date'])->addDay()->toDateString(),
+
+                // if number of days is 1.5 (point any number)
+                'expected_resumption' => $expectedResumption,
                 'status' => $recalled ? 'cancelled' : 'approved',
                 'num_of_days' => $recalled ? 0 : $snapshot['total_days'],
                 'leave_days' => $recalled ? [] : $snapshot['days'],
