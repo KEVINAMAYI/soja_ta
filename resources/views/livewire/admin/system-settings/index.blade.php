@@ -1206,6 +1206,7 @@ new class extends Component {
                                             <input class="form-check-input" type="checkbox"
                                                    id="approvalShiftClockIns"
                                                    x-model="shiftClockIns"
+                                                   @change="if ($event.target.checked && !enabled) enabled = true"
                                                    :disabled="enabled && shiftClockIns && !breakReturns">
                                             <label class="form-check-label fw-semibold" for="approvalShiftClockIns">
                                                 Shift Clock-ins
@@ -1218,6 +1219,7 @@ new class extends Component {
                                             <input class="form-check-input" type="checkbox"
                                                    id="approvalBreakReturns"
                                                    x-model="breakReturns"
+                                                   @change="if ($event.target.checked && !enabled) enabled = true"
                                                    :disabled="enabled && breakReturns && !shiftClockIns">
                                             <label class="form-check-label fw-semibold" for="approvalBreakReturns">
                                                 Break Returns
