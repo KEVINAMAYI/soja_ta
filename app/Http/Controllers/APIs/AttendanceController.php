@@ -330,6 +330,10 @@ class AttendanceController extends Controller
                 $minutesLate = $shift->getMinutesLate($checkInTimeCarbon);
             }
 
+            $withinGracePeriod = $shift->isWithinGracePeriod($checkInTimeCarbon);
+            $isLateCheckin = $shift->isLateCheckIn($checkInTimeCarbon);
+            $minutesLate = $shift->getMinutesLate($checkInTimeCarbon);
+
 
             /* 9b. ---------------------------------------------------------------
                 APPROVAL GATE
