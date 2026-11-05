@@ -115,7 +115,7 @@ class ElevateHrLeaveWebhookController extends Controller
                 'leave_type' => LeaveType::resolveName((int) $organization, $snapshot['leave_type_name']),
                 'start_date' => $snapshot['start_date'],
                 'end_date' => $snapshot['end_date'],
-                'expected_resumption' => $recalled ? null : Carbon::parse(collect($snapshot['days'])->max('date'))->addDay()->toDateString(),
+                'expected_resumption' => $recalled ? null : Carbon::parse(collect($snapshot['end_date']))->addDay()->toDateString(),
                 'status' => $recalled ? 'cancelled' : 'approved',
                 'num_of_days' => $recalled ? 0 : $snapshot['total_days'],
                 'leave_days' => $recalled ? [] : $snapshot['days'],
