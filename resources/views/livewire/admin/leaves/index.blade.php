@@ -115,6 +115,7 @@ new class extends Component {
                     'start_date' => $leave->start_date,
                     'end_date' => $leave->end_date,
                     'status' => $leave->status,
+                    'num_of_days' => $leave->num_of_days ?? null,
                     'expected_resumption' => $leave->expected_resumption,
                     'reason' => $leave->reason,
                     'original' => $leave
@@ -143,6 +144,7 @@ new class extends Component {
                     'start_date' => $employee->start_off_shift_date ? Carbon::parse($employee->start_off_shift_date) : null,
                     'end_date' => $employee->end_off_shift_date ? Carbon::parse($employee->end_off_shift_date) : null,
                     'status' => 'active',
+                    'num_of_days' => $employee->num_of_days ?? null,
                     'expected_resumption' => $employee->end_off_shift_date ? Carbon::parse($employee->end_off_shift_date)->addDay() : null,
                     'reason' => null,
                     'original' => $employee
