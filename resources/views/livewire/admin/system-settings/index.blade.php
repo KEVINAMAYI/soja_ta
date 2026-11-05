@@ -1114,6 +1114,7 @@ new class extends Component {
                                             <input class="form-check-input" type="checkbox" role="switch"
                                                    id="approvalEnabled"
                                                    x-model="enabled"
+                                                   @change="if (!$event.target.checked) { shiftClockIns = false; breakReturns = false }"
                                                    style="width:3em;height:1.5em;">
                                             <label class="form-check-label fw-semibold ms-2" for="approvalEnabled">
                                                 Enabled for this tenant
