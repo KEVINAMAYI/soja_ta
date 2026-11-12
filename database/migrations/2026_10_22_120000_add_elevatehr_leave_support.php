@@ -24,7 +24,7 @@ return new class extends Migration
             // $table->json('leave_days')->nullable();
             // $table->uuid('elevatehr_reference')->nullable();
             // $table->uuid('elevatehr_event_id')->nullable();
-            $table->unsignedBigInteger('elevatehr_sequence')->nullable();
+            // $table->unsignedBigInteger('elevatehr_sequence')->nullable();
             $table->unique(['organization_id', 'elevatehr_reference']);
         });
 
