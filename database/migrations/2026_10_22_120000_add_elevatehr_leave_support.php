@@ -10,17 +10,17 @@ return new class extends Migration
 {
     public function up(): void
     {
-        // Schema::create('leave_types', function (Blueprint $table) {
-        //     $table->id();
-        //     $table->foreignId('organization_id')->constrained()->cascadeOnDelete();
-        //     $table->string('name');
-        //     $table->string('code');
-        //     $table->unique(['organization_id', 'code']);
-        //     $table->timestamps();
-        // });
+        Schema::create('leave_types', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('organization_id')->constrained()->cascadeOnDelete();
+            $table->string('name');
+            $table->string('code');
+            $table->unique(['organization_id', 'code']);
+            $table->timestamps();
+        });
 
         Schema::table('leaves', function (Blueprint $table) {
-            // $table->decimal('num_of_days', 8, 2)->nullable();
+            $table->decimal('num_of_days', 8, 2)->nullable();
             $table->json('leave_days')->nullable();
             $table->uuid('elevatehr_reference')->nullable();
             $table->uuid('elevatehr_event_id')->nullable();
