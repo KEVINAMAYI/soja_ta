@@ -20,7 +20,7 @@ return new class extends Migration
         // });
 
         Schema::table('leaves', function (Blueprint $table) {
-            $table->decimal('num_of_days', 8, 2)->nullable();
+            // $table->decimal('num_of_days', 8, 2)->nullable();
             // $table->json('leave_days')->nullable();
             $table->uuid('elevatehr_reference')->nullable();
             $table->uuid('elevatehr_event_id')->nullable();
