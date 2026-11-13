@@ -40,7 +40,7 @@ class ElevateHrLeaveWebhookController extends Controller
             'leave.days' => ['present', 'array', 'max:3660'],
             'leave.days.*' => ['required', 'array:date,day_part,hours,is_holiday'],
             'leave.days.*.date' => ['required', 'date_format:Y-m-d', 'distinct', 'after_or_equal:leave.start_date', 'before_or_equal:leave.end_date'],
-            'leave.days.*.day_part' => ['required', Rule::in(['FULL_DAY', 'HALF_DAY_MORNING', 'HALF_DAY_AFTERNOON'])],
+            'leave.days.*.day_part' => ['required', 'string', 'max:50'],
             'leave.days.*.hours' => ['required', 'numeric', 'min:0', 'max:24', 'decimal:0,2'],
             'leave.days.*.is_holiday' => ['required', 'boolean'],
         ]);
