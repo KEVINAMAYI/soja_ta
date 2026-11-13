@@ -20,6 +20,8 @@ class ElevateHrLeaveWebhookController extends Controller
 {
     public function __invoke(Request $request, string $organization): JsonResponse
     {
+        Log::info("RECEIVED ELEVATE HR LEAVE WEBHOOK WITH DATA", $request->json()->all());
+        
         $validator = Validator::make($request->json()->all(), [
             'event_id' => ['required', 'uuid'],
             'sequence' => ['required', 'integer', 'min:1', 'max:9223372036854775807'],
